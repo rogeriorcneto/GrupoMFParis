@@ -1,9 +1,13 @@
 node_modules/
 dist/
+dist-ssr/
 .netlify/
 *.log
 *.zip
+*.local
 .env
-.env.local
+.env.*
 .DS_Store
 Thumbs.db
+.vscode
+.idea
