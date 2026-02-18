@@ -273,6 +273,17 @@ interface ClientesViewProps {
   onEditCliente: (cliente: Cliente) => void
 }
 
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const saved = localStorage.getItem(key)
+    return saved ? JSON.parse(saved) : fallback
+  } catch { return fallback }
+}
+
+function saveToStorage<T>(key: string, data: T) {
+  try { localStorage.setItem(key, JSON.stringify(data)) } catch {}
+}
+
 function App() {
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
   const [loginUsuario, setLoginUsuario] = useState('')
@@ -283,13 +294,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
-  const [atividades, setAtividades] = useState<Atividade[]>([
-    { id: 1, tipo: 'moveu', descricao: 'SuperBH Ltda movido para Negociação', vendedorNome: 'Carlos Silva', timestamp: new Date(Date.now() - 3600000).toISOString() },
-    { id: 2, tipo: 'adicionou', descricao: 'Novo lead: Rede Mineirão adicionado', vendedorNome: 'Ana Oliveira', timestamp: new Date(Date.now() - 7200000).toISOString() },
-    { id: 3, tipo: 'interacao', descricao: 'Email enviado para Distribuidora BH', vendedorNome: 'Roberto Lima', timestamp: new Date(Date.now() - 10800000).toISOString() },
-    { id: 4, tipo: 'tarefa', descricao: 'Tarefa concluída: Preparar proposta comercial', vendedorNome: 'Carlos Silva', timestamp: new Date(Date.now() - 14400000).toISOString() },
-    { id: 5, tipo: 'editou', descricao: 'Dados atualizados: Atacadão MG', vendedorNome: 'Fernanda Costa', timestamp: new Date(Date.now() - 18000000).toISOString() },
-  ])
+  const [atividades, setAtividades] = useState<Atividade[]>(() => loadFromStorage('crm_atividades', []))
   const [templates, setTemplates] = useState<Template[]>([
     { id: 1, nome: 'Primeiro Contato', canal: 'email', etapa: 'prospecção', assunto: 'Apresentação MF Paris — Soluções para seu negócio', corpo: 'Olá {nome},\n\nSou {vendedor} da MF Paris. Gostaria de apresentar nossas soluções em lácteos, compostos e café para {empresa}.\n\nPodemos agendar uma conversa?\n\nAtt,\n{vendedor}' },
     { id: 2, nome: 'Envio de Amostra', canal: 'email', etapa: 'amostra', assunto: 'Confirmação de envio de amostras — MF Paris', corpo: 'Olá {nome},\n\nConfirmamos o envio das amostras solicitadas para {empresa}. Prazo estimado: 3 dias úteis.\n\nQualquer dúvida, estou à disposição.\n\nAtt,\n{vendedor}' },
@@ -329,112 +334,8 @@ function App() {
   const [showAIModal, setShowAIModal] = useState(false)
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null)
   const [draggedItem, setDraggedItem] = useState<DragItem | null>(null)
-  const [clientes, setClientes] = useState<Cliente[]>([
-    {
-      id: 1, razaoSocial: 'SuperBH Ltda', nomeFantasia: 'SuperBH Matriz', cnpj: '12.345.678/0001-90',
-      contatoNome: 'João Silva', contatoTelefone: '(31) 99999-1111', contatoEmail: 'joao@superbh.com.br',
-      endereco: 'Av. Afonso Pena, 1000 - Centro, BH - MG', etapa: 'prospecção', vendedorId: 1,
-      score: 55, ultimaInteracao: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0], diasInativo: 5,
-      valorEstimado: 150000, produtosInteresse: ['Leite em Pó Integral 25kg', 'Okey Lac Cream 25kg'],
-      dataEntradaEtapa: new Date(Date.now() - 8 * 86400000).toISOString(), historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 8 * 86400000).toISOString() }]
-    },
-    {
-      id: 2, razaoSocial: 'MegaMart Comercial', nomeFantasia: 'MegaMart', cnpj: '98.765.432/0001-10',
-      contatoNome: 'Maria Santos', contatoTelefone: '(31) 99999-2222', contatoEmail: 'maria@megamart.com.br',
-      endereco: 'Rua Rio de Janeiro, 500 - Lourdes, BH - MG', etapa: 'amostra', vendedorId: 2,
-      score: 70, ultimaInteracao: new Date(Date.now() - 2 * 86400000).toISOString().split('T')[0], diasInativo: 2,
-      valorEstimado: 85000, produtosInteresse: ['Café Belveder 250g', 'Chocominas 400g', 'Okey Lac Panificação e Culinária 1kg'],
-      dataEntradaEtapa: new Date(Date.now() - 12 * 86400000).toISOString(), etapaAnterior: 'prospecção',
-      dataEnvioAmostra: new Date(Date.now() - 12 * 86400000).toISOString().split('T')[0], statusAmostra: 'aguardando_resposta',
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 20 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 12 * 86400000).toISOString(), de: 'prospecção' }]
-    },
-    {
-      id: 3, razaoSocial: 'Padaria Pão de Minas', nomeFantasia: 'Pão de Minas', cnpj: '11.222.333/0001-44',
-      contatoNome: 'Carlos Ferreira', contatoTelefone: '(31) 99999-3333', contatoEmail: 'carlos@paodeminas.com.br',
-      endereco: 'Rua Paraíba, 200 - Funcionários, BH - MG', etapa: 'amostra', vendedorId: 1,
-      score: 60, ultimaInteracao: new Date(Date.now() - 26 * 86400000).toISOString().split('T')[0], diasInativo: 26,
-      valorEstimado: 42000, produtosInteresse: ['Okey Lac Panificação e Culinária 1kg', 'Leite em Pó Integral 25kg'],
-      dataEntradaEtapa: new Date(Date.now() - 27 * 86400000).toISOString(), etapaAnterior: 'prospecção',
-      dataEnvioAmostra: new Date(Date.now() - 27 * 86400000).toISOString().split('T')[0], statusAmostra: 'enviada',
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 35 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 27 * 86400000).toISOString(), de: 'prospecção' }]
-    },
-    {
-      id: 4, razaoSocial: 'Distribuidora Horizonte', nomeFantasia: 'Horizonte', cnpj: '44.555.666/0001-77',
-      contatoNome: 'Ana Costa', contatoTelefone: '(31) 99999-4444', contatoEmail: 'ana@horizonte.com.br',
-      endereco: 'Av. Cristiano Machado, 3000 - Cidade Nova, BH - MG', etapa: 'homologado', vendedorId: 1,
-      score: 85, ultimaInteracao: new Date(Date.now() - 10 * 86400000).toISOString().split('T')[0], diasInativo: 10,
-      valorEstimado: 220000, produtosInteresse: ['Leite em Pó Integral 25kg', 'Leite em Pó Desnatado 25kg', 'Soro de Leite 25kg'],
-      dataEntradaEtapa: new Date(Date.now() - 30 * 86400000).toISOString(), etapaAnterior: 'amostra',
-      dataHomologacao: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
-      proximoPedidoPrevisto: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-      dataEnvioAmostra: new Date(Date.now() - 50 * 86400000).toISOString().split('T')[0], statusAmostra: 'aprovada',
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 60 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 50 * 86400000).toISOString(), de: 'prospecção' }, { etapa: 'homologado', data: new Date(Date.now() - 30 * 86400000).toISOString(), de: 'amostra' }]
-    },
-    {
-      id: 5, razaoSocial: 'Rede Sabor & Cia', nomeFantasia: 'Sabor & Cia', cnpj: '55.666.777/0001-88',
-      contatoNome: 'Pedro Mendes', contatoTelefone: '(31) 99999-5555', contatoEmail: 'pedro@saborecia.com.br',
-      endereco: 'Rua Espírito Santo, 800 - Centro, BH - MG', etapa: 'negociacao', vendedorId: 2,
-      score: 90, ultimaInteracao: new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0], diasInativo: 3,
-      valorEstimado: 180000, produtosInteresse: ['Okey Lac Cream 25kg', 'Okey Lac Pro 25kg', 'Café Molito 250g'],
-      dataEntradaEtapa: new Date(Date.now() - 7 * 86400000).toISOString(), etapaAnterior: 'homologado',
-      valorProposta: 165000, dataProposta: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
-      dataHomologacao: new Date(Date.now() - 45 * 86400000).toISOString().split('T')[0],
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 90 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 75 * 86400000).toISOString(), de: 'prospecção' }, { etapa: 'homologado', data: new Date(Date.now() - 45 * 86400000).toISOString(), de: 'amostra' }, { etapa: 'negociacao', data: new Date(Date.now() - 7 * 86400000).toISOString(), de: 'homologado' }]
-    },
-    {
-      id: 6, razaoSocial: 'Cafeteria Expresso BH', nomeFantasia: 'Expresso BH', cnpj: '66.777.888/0001-99',
-      contatoNome: 'Fernanda Rocha', contatoTelefone: '(31) 99999-6666', contatoEmail: 'fernanda@expressobh.com.br',
-      endereco: 'Av. do Contorno, 2500 - Savassi, BH - MG', etapa: 'pos_venda', vendedorId: 1,
-      score: 95, ultimaInteracao: new Date(Date.now() - 1 * 86400000).toISOString().split('T')[0], diasInativo: 1,
-      valorEstimado: 65000, produtosInteresse: ['Café Belveder 250g', 'Café Molito 250g'],
-      dataEntradaEtapa: new Date(Date.now() - 14 * 86400000).toISOString(), etapaAnterior: 'negociacao',
-      statusEntrega: 'entregue', dataUltimoPedido: new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0],
-      valorProposta: 62000, dataProposta: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 120 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 100 * 86400000).toISOString(), de: 'prospecção' }, { etapa: 'homologado', data: new Date(Date.now() - 70 * 86400000).toISOString(), de: 'amostra' }, { etapa: 'negociacao', data: new Date(Date.now() - 35 * 86400000).toISOString(), de: 'homologado' }, { etapa: 'pos_venda', data: new Date(Date.now() - 14 * 86400000).toISOString(), de: 'negociacao' }]
-    },
-    {
-      id: 7, razaoSocial: 'Mercado do Produtor', nomeFantasia: 'Merc. Produtor', cnpj: '77.888.999/0001-00',
-      contatoNome: 'Roberto Alves', contatoTelefone: '(31) 99999-7777', contatoEmail: 'roberto@mercprod.com.br',
-      endereco: 'Rua Carijós, 150 - Centro, BH - MG', etapa: 'perdido', vendedorId: 2,
-      score: 30, ultimaInteracao: new Date(Date.now() - 40 * 86400000).toISOString().split('T')[0], diasInativo: 40,
-      valorEstimado: 95000, produtosInteresse: ['Maltodextrina 25kg', 'Glucose 25kg'],
-      dataEntradaEtapa: new Date(Date.now() - 15 * 86400000).toISOString(), etapaAnterior: 'amostra',
-      motivoPerda: 'Preço acima do concorrente', categoriaPerda: 'preco',
-      dataPerda: new Date(Date.now() - 15 * 86400000).toISOString().split('T')[0],
-      dataEnvioAmostra: new Date(Date.now() - 55 * 86400000).toISOString().split('T')[0], statusAmostra: 'rejeitada',
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 65 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 55 * 86400000).toISOString(), de: 'prospecção' }, { etapa: 'perdido', data: new Date(Date.now() - 15 * 86400000).toISOString(), de: 'amostra' }]
-    },
-    {
-      id: 8, razaoSocial: 'Atacadão MG', nomeFantasia: 'Atacadão', cnpj: '88.999.000/0001-11',
-      contatoNome: 'Lucia Martins', contatoTelefone: '(31) 99999-8888', contatoEmail: 'lucia@atacadaomg.com.br',
-      endereco: 'Rod. BR-040, km 12 - Contagem - MG', etapa: 'homologado', vendedorId: 2,
-      score: 80, ultimaInteracao: new Date(Date.now() - 65 * 86400000).toISOString().split('T')[0], diasInativo: 65,
-      valorEstimado: 310000, produtosInteresse: ['Leite em Pó Integral 25kg', 'Okey Lac Cream 25kg', 'Soro de Leite 25kg', 'Maltodextrina 25kg'],
-      dataEntradaEtapa: new Date(Date.now() - 70 * 86400000).toISOString(), etapaAnterior: 'amostra',
-      dataHomologacao: new Date(Date.now() - 70 * 86400000).toISOString().split('T')[0],
-      dataEnvioAmostra: new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0], statusAmostra: 'aprovada',
-      historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 100 * 86400000).toISOString() }, { etapa: 'amostra', data: new Date(Date.now() - 90 * 86400000).toISOString(), de: 'prospecção' }, { etapa: 'homologado', data: new Date(Date.now() - 70 * 86400000).toISOString(), de: 'amostra' }]
-    },
-    {
-      id: 9, razaoSocial: 'Sorveteria Gelato', nomeFantasia: 'Gelato BH', cnpj: '99.000.111/0001-22',
-      contatoNome: 'Marcos Souza', contatoTelefone: '(31) 99999-9999', contatoEmail: 'marcos@gelatobh.com.br',
-      endereco: 'Av. Raja Gabaglia, 1200 - Luxemburgo, BH - MG', etapa: 'prospecção', vendedorId: 1,
-      score: 45, ultimaInteracao: new Date(Date.now() - 3 * 86400000).toISOString().split('T')[0], diasInativo: 3,
-      valorEstimado: 55000, produtosInteresse: ['Okey Lac Açaí 25kg', 'Okey Lac Gourmet 25kg'],
-      dataEntradaEtapa: new Date(Date.now() - 3 * 86400000).toISOString(), historicoEtapas: [{ etapa: 'prospecção', data: new Date(Date.now() - 3 * 86400000).toISOString() }]
-    }
-  ])
-  const [interacoes, setInteracoes] = useState<Interacao[]>([
-    {
-      id: 1,
-      clienteId: 1,
-      tipo: 'email',
-      data: '2024-01-15T10:30:00',
-      assunto: 'Proposta inicial',
-      descricao: 'Envio de catálogo de produtos MF Paris',
-      automatico: false
-    }
-  ])
+  const [clientes, setClientes] = useState<Cliente[]>(() => loadFromStorage('crm_clientes', []))
+  const [interacoes, setInteracoes] = useState<Interacao[]>(() => loadFromStorage('crm_interacoes', []))
   const [aiCommands, setAICommands] = useState<AICommand[]>([])
   const [aiCommand, setAICommand] = useState('')
   const [aiResponse, setAIResponse] = useState('')
@@ -490,37 +391,12 @@ function App() {
   ])
 
   const [jobs, setJobs] = useState<JobAutomacao[]>([])
-  const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [tarefas, setTarefas] = useState<Tarefa[]>([
-    {
-      id: 1,
-      titulo: 'Follow-up SuperBH',
-      descricao: 'Ligar para João Silva sobre catálogo',
-      data: new Date().toISOString().split('T')[0],
-      hora: '10:00',
-      tipo: 'ligacao',
-      status: 'pendente',
-      prioridade: 'alta',
-      clienteId: 1
-    },
-    {
-      id: 2,
-      titulo: 'Enviar proposta MegaMart',
-      descricao: 'Preparar proposta comercial',
-      data: new Date().toISOString().split('T')[0],
-      hora: '14:00',
-      tipo: 'email',
-      status: 'pendente',
-      prioridade: 'media',
-      clienteId: 2
-    }
-  ])
-  const [vendedores, setVendedores] = useState<Vendedor[]>([
-    { id: 1, nome: 'Carlos Silva', email: 'carlos@mfparis.com.br', telefone: '(31) 99999-0001', cargo: 'vendedor', avatar: 'CS', usuario: 'carlos', senha: 'carlos123', metaVendas: 200000, metaLeads: 10, metaConversao: 20, ativo: true },
-    { id: 2, nome: 'Ana Oliveira', email: 'ana@mfparis.com.br', telefone: '(31) 99999-0002', cargo: 'vendedor', avatar: 'AO', usuario: 'ana', senha: 'ana123', metaVendas: 180000, metaLeads: 8, metaConversao: 18, ativo: true },
-    { id: 3, nome: 'Roberto Lima', email: 'roberto@mfparis.com.br', telefone: '(31) 99999-0003', cargo: 'sdr', avatar: 'RL', usuario: 'roberto', senha: 'roberto123', metaVendas: 120000, metaLeads: 15, metaConversao: 10, ativo: true },
-    { id: 4, nome: 'Fernanda Costa', email: 'fernanda@mfparis.com.br', telefone: '(31) 99999-0004', cargo: 'gerente', avatar: 'FC', usuario: 'admin', senha: 'admin123', metaVendas: 500000, metaLeads: 20, metaConversao: 15, ativo: true }
-  ])
+  const [pedidos, setPedidos] = useState<Pedido[]>(() => loadFromStorage('crm_pedidos', []))
+  const [tarefas, setTarefas] = useState<Tarefa[]>(() => loadFromStorage('crm_tarefas', []))
+  const defaultVendedores: Vendedor[] = [
+    { id: 1, nome: 'Rafael', email: 'rafael@mfparis.com.br', telefone: '(31) 99999-0001', cargo: 'gerente', avatar: 'RA', usuario: 'admin', senha: 'admin123', metaVendas: 500000, metaLeads: 20, metaConversao: 15, ativo: true }
+  ]
+  const [vendedores, setVendedores] = useState<Vendedor[]>(() => loadFromStorage('crm_vendedores', defaultVendedores))
 
   const [showMotivoPerda, setShowMotivoPerda] = useState(false)
   const [motivoPerdaTexto, setMotivoPerdaTexto] = useState('')
@@ -541,6 +417,14 @@ function App() {
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
   const [panelTab, setPanelTab] = useState<'info' | 'atividades' | 'tarefas'>('info')
   const [transicaoInvalida, setTransicaoInvalida] = useState('')
+
+  // Persist data to localStorage
+  useEffect(() => { saveToStorage('crm_clientes', clientes) }, [clientes])
+  useEffect(() => { saveToStorage('crm_interacoes', interacoes) }, [interacoes])
+  useEffect(() => { saveToStorage('crm_tarefas', tarefas) }, [tarefas])
+  useEffect(() => { saveToStorage('crm_vendedores', vendedores) }, [vendedores])
+  useEffect(() => { saveToStorage('crm_pedidos', pedidos) }, [pedidos])
+  useEffect(() => { saveToStorage('crm_atividades', atividades) }, [atividades])
 
   // Generate notifications from data
   useEffect(() => {
@@ -751,12 +635,13 @@ function App() {
       } else if (command.toLowerCase().includes('follow-up')) {
         response = 'Follow-ups agendados com sucesso! 3 emails serão enviados hoje e 2 amanhã. Usarei templates personalizados para cada cliente.'
       } else if (command.toLowerCase().includes('priorizar')) {
-        response = 'Clientes priorizados por score:\n\n1. MegaMart (Score: 85) - Negociação avançada\n2. SuperBH (Score: 75) - Aguardando amostra\n\nFoco de hoje: MegaMart'
+        const top = clientes.filter(c => c.etapa !== 'perdido').sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3)
+        response = top.length ? `Clientes priorizados por score:\n\n${top.map((c, i) => `${i+1}. ${c.razaoSocial} (Score: ${c.score || 0}) - ${c.etapa}`).join('\n')}\n\nFoco de hoje: ${top[0].razaoSocial}` : 'Nenhum cliente cadastrado ainda. Adicione clientes para priorizar.'
       } else if (command.toLowerCase().includes('relatório')) {
         const total = clientes.length
         const ativos = clientes.filter(c => (c.diasInativo || 0) <= 15).length
         const conversao = clientes.filter(c => c.etapa === 'pos_venda').length
-        response = `📊 Relatório Semanal:\n\n• Total leads: ${total}\n• Leads ativos: ${ativos}\n• Taxa ativação: ${((ativos/total) * 100).toFixed(1)}%\n• Conversões: ${conversao}\n• Ticket médio: R$ ${(clientes.reduce((sum, c) => sum + (c.valorEstimado || 0), 0) / clientes.length).toFixed(2)}`
+        response = total > 0 ? `📊 Relatório Semanal:\n\n• Total leads: ${total}\n• Leads ativos: ${ativos}\n• Taxa ativação: ${((ativos/total) * 100).toFixed(1)}%\n• Conversões: ${conversao}\n• Ticket médio: R$ ${(clientes.reduce((sum, c) => sum + (c.valorEstimado || 0), 0) / total).toFixed(2)}` : 'Nenhum cliente cadastrado ainda. Adicione clientes para gerar relatórios.'
       } else {
         response = 'Entendido! Posso ajudar com:\n\n• 📋 Listar leads inativos\n• 📤 Enviar follow-ups\n• 🎯 Priorizar clientes\n• 📊 Gerar relatórios\n• 🔍 Buscar clientes\n\nO que você precisa?'
       }
@@ -1232,26 +1117,16 @@ function App() {
             </div>
 
             <div className="mt-6 pt-4 border-t border-gray-200">
-              <p className="text-xs text-gray-500 text-center mb-2">Acesso de demonstração:</p>
+              <p className="text-xs text-gray-500 text-center mb-2">Acesso rápido:</p>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded-apple">
                   <span className="text-sm">👑</span>
                   <div className="flex-1">
-                    <p className="text-xs font-semibold text-amber-800">Gerente — acesso total</p>
+                    <p className="text-xs font-semibold text-amber-800">Rafael — Gerente</p>
                     <p className="text-xs text-amber-600">admin / admin123</p>
                   </div>
                   <button onClick={() => { setLoginUsuario('admin'); setLoginSenha('admin123') }} className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-apple px-2 py-1 transition-colors font-medium">
-                    Usar
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-apple">
-                  <span className="text-sm">👤</span>
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-blue-800">Vendedor — acesso restrito</p>
-                    <p className="text-xs text-blue-600">carlos / carlos123</p>
-                  </div>
-                  <button onClick={() => { setLoginUsuario('carlos'); setLoginSenha('carlos123') }} className="text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-apple px-2 py-1 transition-colors font-medium">
-                    Usar
+                    Entrar
                   </button>
                 </div>
               </div>
@@ -1499,7 +1374,7 @@ function App() {
                       value={formData.nomeFantasia}
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Ex: SuperBH"
+                      placeholder="Ex: Nome Fantasia"
                     />
                   </div>
 
@@ -3724,7 +3599,7 @@ const TarefasView: React.FC<{
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Título *</label>
-                <input value={newTitulo} onChange={(e) => setNewTitulo(e.target.value)} placeholder="Ex: Ligar para SuperBH" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                <input value={newTitulo} onChange={(e) => setNewTitulo(e.target.value)} placeholder="Ex: Ligar para cliente" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
