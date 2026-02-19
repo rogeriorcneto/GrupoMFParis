@@ -2798,9 +2798,9 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                     return (
                       <div
                         key={cliente.id}
-                        className={`p-2.5 rounded-apple cursor-move hover:shadow-apple transition-all duration-200 ${urgenciaBorder(urgencia)} group`}
-                        draggable
-                        onDragStart={(e) => onDragStart(e, cliente, stage.key)}
+                        className={`p-2.5 rounded-apple ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-apple transition-all duration-200 ${urgenciaBorder(urgencia)} group`}
+                        draggable={isGerente}
+                        onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
                         onClick={() => onClickCliente?.(cliente)}
                       >
                         <div className="flex items-start justify-between">
