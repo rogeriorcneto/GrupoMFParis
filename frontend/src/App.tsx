@@ -220,6 +220,7 @@ interface Tarefa {
   status: 'pendente' | 'concluida'
   prioridade: 'alta' | 'media' | 'baixa'
   clienteId?: number
+  vendedorId?: number
 }
 
 interface Vendedor {
@@ -1029,7 +1030,7 @@ function App() {
           />
         )
       case 'tarefas':
-        return <TarefasView tarefas={tarefas} clientes={clientes} onUpdateTarefa={(t) => setTarefas(prev => prev.map(x => x.id === t.id ? t : x))} onAddTarefa={(t) => setTarefas(prev => [t, ...prev])} />
+        return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} onUpdateTarefa={(t) => setTarefas(prev => prev.map(x => x.id === t.id ? t : x))} onAddTarefa={(t) => setTarefas(prev => [t, ...prev])} />
       case 'social':
         return <SocialSearchView onAddLead={(nome, telefone, endereco) => {
           const novo: Cliente = { id: Date.now(), razaoSocial: nome, cnpj: '', contatoNome: '', contatoTelefone: telefone, contatoEmail: '', endereco, etapa: 'prospecção', ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 20 }
@@ -3484,9 +3485,11 @@ const AutomacoesView: React.FC<{
 const TarefasView: React.FC<{
   tarefas: Tarefa[]
   clientes: Cliente[]
+  vendedores: Vendedor[]
+  loggedUser: Vendedor | null
   onUpdateTarefa: (t: Tarefa) => void
   onAddTarefa: (t: Tarefa) => void
-}> = ({ tarefas, clientes, onUpdateTarefa, onAddTarefa }) => {
+}> = ({ tarefas, clientes, vendedores, loggedUser, onUpdateTarefa, onAddTarefa }) => {
   const [showModal, setShowModal] = React.useState(false)
   const [filterStatus, setFilterStatus] = React.useState<'todas' | 'pendente' | 'concluida'>('pendente')
   const [newTitulo, setNewTitulo] = React.useState('')
@@ -3496,11 +3499,15 @@ const TarefasView: React.FC<{
   const [newTipo, setNewTipo] = React.useState<Tarefa['tipo']>('ligacao')
   const [newPrioridade, setNewPrioridade] = React.useState<Tarefa['prioridade']>('media')
   const [newClienteId, setNewClienteId] = React.useState<number | ''>(clientes[0]?.id ?? '')
+  const [newVendedorId, setNewVendedorId] = React.useState<number | ''>(loggedUser?.id ?? '')
+  const isGerente = loggedUser?.cargo === 'gerente'
 
   const hoje = new Date().toISOString().split('T')[0]
 
   const filteredTarefas = tarefas.filter(t => {
-    return filterStatus === 'todas' || t.status === filterStatus
+    const matchStatus = filterStatus === 'todas' || t.status === filterStatus
+    const matchVendedor = isGerente ? true : (!t.vendedorId || t.vendedorId === loggedUser?.id)
+    return matchStatus && matchVendedor
   })
 
   const tarefasPorData = filteredTarefas.reduce((acc, t) => {
@@ -3522,11 +3529,13 @@ const TarefasView: React.FC<{
       tipo: newTipo,
       status: 'pendente',
       prioridade: newPrioridade,
-      clienteId: typeof newClienteId === 'number' ? newClienteId : undefined
+      clienteId: typeof newClienteId === 'number' ? newClienteId : undefined,
+      vendedorId: typeof newVendedorId === 'number' ? newVendedorId : undefined
     })
     setNewTitulo('')
     setNewDescricao('')
     setNewHora('')
+    setNewVendedorId(loggedUser?.id ?? '')
     setShowModal(false)
   }
 
@@ -3611,6 +3620,7 @@ const TarefasView: React.FC<{
               <div className="p-6 space-y-3">
                 {tarefasDia.map(tarefa => {
                   const cliente = clientes.find(c => c.id === tarefa.clienteId)
+                  const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
                   return (
                     <div key={tarefa.id} className={`p-4 rounded-apple border-2 transition-all ${tarefa.status === 'concluida' ? 'bg-gray-50 border-gray-200 opacity-60' : tarefa.prioridade === 'alta' ? 'bg-red-50 border-red-200' : tarefa.prioridade === 'media' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-200'}`}>
                       <div className="flex items-start gap-4">
@@ -3625,7 +3635,10 @@ const TarefasView: React.FC<{
                                 <h4 className={`font-semibold text-gray-900 ${tarefa.status === 'concluida' ? 'line-through' : ''}`}>{tarefa.titulo}</h4>
                               </div>
                               {tarefa.descricao && <p className="text-sm text-gray-600 mt-1">{tarefa.descricao}</p>}
-                              {cliente && <p className="text-xs text-gray-500 mt-2">👤 {cliente.razaoSocial}</p>}
+                              <div className="flex items-center gap-3 mt-2">
+                                {cliente && <p className="text-xs text-gray-500">👤 {cliente.razaoSocial}</p>}
+                                {vendedor && <p className="text-xs text-primary-600 font-medium">🏷️ {vendedor.nome}</p>}
+                              </div>
                             </div>
                             <div className="text-right">
                               {tarefa.hora && <p className="text-sm font-semibold text-gray-900">🕐 {tarefa.hora}</p>}
@@ -3690,12 +3703,21 @@ const TarefasView: React.FC<{
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente (opcional)</label>
-                <select value={newClienteId} onChange={(e) => setNewClienteId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  <option value="">Sem cliente</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.razaoSocial}</option>)}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cliente (opcional)</label>
+                  <select value={newClienteId} onChange={(e) => setNewClienteId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    <option value="">Sem cliente</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{c.razaoSocial}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Responsável *</label>
+                  <select value={newVendedorId} onChange={(e) => setNewVendedorId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    <option value="">Todos (sem filtro)</option>
+                    {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome} {v.cargo === 'gerente' ? '(Gerente)' : ''}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 mt-6">
