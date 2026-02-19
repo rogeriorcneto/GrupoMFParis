@@ -271,6 +271,8 @@ interface ClientesViewProps {
   vendedores: Vendedor[]
   onNewCliente: () => void
   onEditCliente: (cliente: Cliente) => void
+  onImportClientes: (novos: Cliente[]) => void
+  onDeleteCliente: (id: number) => void
 }
 
 function loadFromStorage<T>(key: string, fallback: T): T {
@@ -295,7 +297,7 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [atividades, setAtividades] = useState<Atividade[]>(() => loadFromStorage('crm_atividades', []))
-  const [templates, setTemplates] = useState<Template[]>([
+  const defaultTemplates: Template[] = [
     { id: 1, nome: 'Primeiro Contato', canal: 'email', etapa: 'prospecção', assunto: 'Apresentação MF Paris — Soluções para seu negócio', corpo: 'Olá {nome},\n\nSou {vendedor} da MF Paris. Gostaria de apresentar nossas soluções em lácteos, compostos e café para {empresa}.\n\nPodemos agendar uma conversa?\n\nAtt,\n{vendedor}' },
     { id: 2, nome: 'Envio de Amostra', canal: 'email', etapa: 'amostra', assunto: 'Confirmação de envio de amostras — MF Paris', corpo: 'Olá {nome},\n\nConfirmamos o envio das amostras solicitadas para {empresa}. Prazo estimado: 3 dias úteis.\n\nQualquer dúvida, estou à disposição.\n\nAtt,\n{vendedor}' },
     { id: 3, nome: 'Follow-up Homologação', canal: 'email', etapa: 'homologado', assunto: 'Como foi a avaliação? — MF Paris', corpo: 'Olá {nome},\n\nGostaria de saber como foi a avaliação dos nossos produtos em {empresa}. Podemos agendar uma reunião para discutir os próximos passos?\n\nAtt,\n{vendedor}' },
@@ -304,7 +306,8 @@ function App() {
     { id: 6, nome: 'Primeiro Contato WhatsApp', canal: 'whatsapp', etapa: 'prospecção', corpo: 'Olá {nome}! 👋\nSou {vendedor} da *MF Paris*. Temos soluções em lácteos, compostos e café para {empresa}.\nPosso enviar nosso catálogo? 📋' },
     { id: 7, nome: 'Lembrete de Amostra', canal: 'whatsapp', etapa: 'amostra', corpo: 'Olá {nome}! 📦\nAs amostras da *MF Paris* já foram enviadas para {empresa}. Previsão de chegada: 3 dias úteis.\nQualquer dúvida, estou aqui! 😊' },
     { id: 8, nome: 'Follow-up WhatsApp', canal: 'whatsapp', etapa: 'negociacao', corpo: 'Olá {nome}! 🤝\nComo está a análise da nossa proposta para {empresa}?\nTemos condições especiais este mês. Posso ajudar em algo? 💬' },
-  ])
+  ]
+  const [templates, setTemplates] = useState<Template[]>(() => loadFromStorage('crm_templates', defaultTemplates))
 
   const [produtos, setProdutos] = useState<Produto[]>([
     // SACARIA 25kg — Linha Horizonte
@@ -340,57 +343,29 @@ function App() {
   const [aiCommand, setAICommand] = useState('')
   const [aiResponse, setAIResponse] = useState('')
   const [isAILoading, setIsAILoading] = useState(false)
-  const [templatesMsgs, setTemplatesMsgs] = useState<TemplateMsg[]>([
-    {
-      id: 1,
-      canal: 'whatsapp',
-      nome: 'Primeiro contato (WhatsApp)',
-      conteudo: 'Olá {nome}, tudo bem? Aqui é da MF Paris. Posso te enviar nosso catálogo e condições para sua região?'
-    },
-    {
-      id: 2,
-      canal: 'email',
-      nome: 'Catálogo (Email)',
-      conteudo: 'Olá {nome},\n\nSegue nosso catálogo MF Paris e condições comerciais.\n\nSe preferir, agendamos uma ligação rápida.\n\nAbraços,'
-    },
-    {
-      id: 3,
-      canal: 'linkedin',
-      nome: 'Conexão (LinkedIn)',
-      conteudo: 'Olá {nome}, vi a empresa {empresa} e queria compartilhar nosso portfólio MF Paris. Podemos conversar?'
-    },
-    {
-      id: 4,
-      canal: 'instagram',
-      nome: 'Apresentação (Instagram)',
-      conteudo: 'Olá {nome}! Posso te enviar novidades e promoções MF Paris para {empresa}?'
-    }
-  ])
+  const defaultTemplatesMsgs: TemplateMsg[] = [
+    { id: 1, canal: 'whatsapp', nome: 'Primeiro contato (WhatsApp)', conteudo: 'Olá {nome}, tudo bem? Aqui é da MF Paris. Posso te enviar nosso catálogo e condições para sua região?' },
+    { id: 2, canal: 'email', nome: 'Catálogo (Email)', conteudo: 'Olá {nome},\n\nSegue nosso catálogo MF Paris e condições comerciais.\n\nSe preferir, agendamos uma ligação rápida.\n\nAbraços,' },
+    { id: 3, canal: 'linkedin', nome: 'Conexão (LinkedIn)', conteudo: 'Olá {nome}, vi a empresa {empresa} e queria compartilhar nosso portfólio MF Paris. Podemos conversar?' },
+    { id: 4, canal: 'instagram', nome: 'Apresentação (Instagram)', conteudo: 'Olá {nome}! Posso te enviar novidades e promoções MF Paris para {empresa}?' }
+  ]
+  const [templatesMsgs, setTemplatesMsgs] = useState<TemplateMsg[]>(() => loadFromStorage('crm_templatesMsgs', defaultTemplatesMsgs))
 
-  const [cadencias, setCadencias] = useState<Cadencia[]>([
-    {
-      id: 1,
-      nome: 'Prospecção 7 dias (WhatsApp + Email + LinkedIn)',
-      pausarAoResponder: true,
-      steps: [
-        { id: 1, canal: 'whatsapp', delayDias: 0, templateId: 1 },
-        { id: 2, canal: 'email', delayDias: 2, templateId: 2 },
-        { id: 3, canal: 'linkedin', delayDias: 5, templateId: 3 }
-      ]
-    }
-  ])
+  const defaultCadencias: Cadencia[] = [
+    { id: 1, nome: 'Prospecção 7 dias (WhatsApp + Email + LinkedIn)', pausarAoResponder: true, steps: [
+      { id: 1, canal: 'whatsapp', delayDias: 0, templateId: 1 },
+      { id: 2, canal: 'email', delayDias: 2, templateId: 2 },
+      { id: 3, canal: 'linkedin', delayDias: 5, templateId: 3 }
+    ] }
+  ]
+  const [cadencias, setCadencias] = useState<Cadencia[]>(() => loadFromStorage('crm_cadencias', defaultCadencias))
 
-  const [campanhas, setCampanhas] = useState<Campanha[]>([
-    {
-      id: 1,
-      nome: 'Reativação (30+ dias inativo)',
-      cadenciaId: 1,
-      diasInativoMin: 30,
-      status: 'rascunho'
-    }
-  ])
+  const defaultCampanhas: Campanha[] = [
+    { id: 1, nome: 'Reativação (30+ dias inativo)', cadenciaId: 1, diasInativoMin: 30, status: 'rascunho' }
+  ]
+  const [campanhas, setCampanhas] = useState<Campanha[]>(() => loadFromStorage('crm_campanhas', defaultCampanhas))
 
-  const [jobs, setJobs] = useState<JobAutomacao[]>([])
+  const [jobs, setJobs] = useState<JobAutomacao[]>(() => loadFromStorage('crm_jobs', []))
   const [pedidos, setPedidos] = useState<Pedido[]>(() => loadFromStorage('crm_pedidos', []))
   const [tarefas, setTarefas] = useState<Tarefa[]>(() => loadFromStorage('crm_tarefas', []))
   const defaultVendedores: Vendedor[] = [
@@ -425,6 +400,27 @@ function App() {
   useEffect(() => { saveToStorage('crm_vendedores', vendedores) }, [vendedores])
   useEffect(() => { saveToStorage('crm_pedidos', pedidos) }, [pedidos])
   useEffect(() => { saveToStorage('crm_atividades', atividades) }, [atividades])
+  useEffect(() => { saveToStorage('crm_templatesMsgs', templatesMsgs) }, [templatesMsgs])
+  useEffect(() => { saveToStorage('crm_cadencias', cadencias) }, [cadencias])
+  useEffect(() => { saveToStorage('crm_campanhas', campanhas) }, [campanhas])
+  useEffect(() => { saveToStorage('crm_jobs', jobs) }, [jobs])
+  useEffect(() => { saveToStorage('crm_templates', templates) }, [templates])
+
+  // Recalculate diasInativo based on ultimaInteracao
+  useEffect(() => {
+    const hoje = new Date()
+    let changed = false
+    const updated = clientes.map(c => {
+      if (!c.ultimaInteracao) return c
+      const dias = Math.floor((hoje.getTime() - new Date(c.ultimaInteracao).getTime()) / 86400000)
+      if (dias !== (c.diasInativo || 0)) {
+        changed = true
+        return { ...c, diasInativo: dias }
+      }
+      return c
+    })
+    if (changed) setClientes(updated)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate notifications from data
   useEffect(() => {
@@ -694,7 +690,7 @@ function App() {
       
       // Add interaction
       const newInteracao: Interacao = {
-        id: interacoes.length + 1,
+        id: Date.now(),
         clienteId: editingCliente.id,
         tipo: 'email',
         data: new Date().toISOString(),
@@ -708,7 +704,7 @@ function App() {
     } else {
       // Add new cliente
       const newCliente: Cliente = {
-        id: clientes.length + 1,
+        id: Date.now(),
         ...restForm,
         etapa: 'prospecção',
         valorEstimado: vEstStr ? parseFloat(vEstStr) : undefined,
@@ -723,7 +719,7 @@ function App() {
       
       // Add initial interaction
       const newInteracao: Interacao = {
-        id: interacoes.length + 1,
+        id: Date.now() + 1,
         clienteId: newCliente.id,
         tipo: 'email',
         data: new Date().toISOString(),
@@ -773,7 +769,7 @@ function App() {
       : `Ação de contato iniciada com ${cliente.razaoSocial}`
 
     const newInteracao: Interacao = {
-      id: interacoes.length + 1,
+      id: Date.now(),
       clienteId: cliente.id,
       tipo: canal,
       data: new Date().toISOString(),
@@ -782,6 +778,8 @@ function App() {
       automatico: true
     }
     setInteracoes(prev => [newInteracao, ...prev])
+    // Update ultimaInteracao on the client
+    setClientes(prev => prev.map(c => c.id === cliente.id ? { ...c, ultimaInteracao: new Date().toISOString().split('T')[0] } : c))
     addNotificacao('success', 'Automação executada', `${assunto}: ${cliente.razaoSocial}`, cliente.id)
   }
 
@@ -1007,6 +1005,8 @@ function App() {
           vendedores={vendedores}
           onNewCliente={openModal}
           onEditCliente={handleEditCliente}
+          onImportClientes={(novos) => setClientes(prev => [...prev, ...novos])}
+          onDeleteCliente={(id) => { setClientes(prev => prev.filter(c => c.id !== id)); setInteracoes(prev => prev.filter(i => i.clienteId !== id)); setTarefas(prev => prev.filter(t => t.clienteId !== id)) }}
         />
       case 'automacoes':
         return <AutomacoesView clientes={clientes} onAction={handleQuickAction} />
@@ -1031,7 +1031,10 @@ function App() {
       case 'tarefas':
         return <TarefasView tarefas={tarefas} clientes={clientes} onUpdateTarefa={(t) => setTarefas(prev => prev.map(x => x.id === t.id ? t : x))} onAddTarefa={(t) => setTarefas(prev => [t, ...prev])} />
       case 'social':
-        return <SocialSearchView />
+        return <SocialSearchView onAddLead={(nome, telefone, endereco) => {
+          const novo: Cliente = { id: Date.now(), razaoSocial: nome, cnpj: '', contatoNome: '', contatoTelefone: telefone, contatoEmail: '', endereco, etapa: 'prospecção', ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 20 }
+          setClientes(prev => [...prev, novo])
+        }} />
       case 'integracoes':
         return <IntegracoesView />
       case 'equipe':
@@ -1125,7 +1128,7 @@ function App() {
                     <p className="text-xs font-semibold text-amber-800">Rafael — Gerente</p>
                     <p className="text-xs text-amber-600">admin / admin123</p>
                   </div>
-                  <button onClick={() => { setLoginUsuario('admin'); setLoginSenha('admin123') }} className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-apple px-2 py-1 transition-colors font-medium">
+                  <button onClick={() => { const user = vendedores.find(v => v.usuario === 'admin' && v.senha === 'admin123' && v.ativo); if (user) { setLoggedUser(user); setLoginUsuario(''); setLoginSenha(''); setLoginError('') } }} className="text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-apple px-2 py-1 transition-colors font-medium">
                     Entrar
                   </button>
                 </div>
@@ -1674,6 +1677,7 @@ function App() {
             automatico: false
           }
           setInteracoes(prev => [newInteracao, ...prev])
+          setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: new Date().toISOString().split('T')[0] } : cl))
           setPanelAtividadeTipo('')
           setPanelAtividadeDesc('')
           addNotificacao('success', 'Atividade registrada', `${tipoInteracaoLabel[panelAtividadeTipo]}: ${c.razaoSocial}`, c.id)
@@ -1691,6 +1695,7 @@ function App() {
             automatico: false
           }
           setInteracoes(prev => [newInteracao, ...prev])
+          setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: new Date().toISOString().split('T')[0] } : cl))
           setPanelNota('')
           addNotificacao('success', 'Observação salva', c.razaoSocial, c.id)
         }
@@ -2666,7 +2671,7 @@ function FunilView({ clientes, onDragStart, onDragOver, onDrop, onClickCliente, 
 }
 
 // Clientes View
-const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente }) => {
+const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onImportClientes, onDeleteCliente }) => {
   const [searchTerm, setSearchTerm] = React.useState('')
   const [showFilters, setShowFilters] = React.useState(false)
   const [filterEtapa, setFilterEtapa] = React.useState('')
@@ -2722,7 +2727,31 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                   const text = ev.target?.result as string
                   const lines = text.split('\n').filter(l => l.trim())
                   if (lines.length < 2) { alert('CSV vazio ou sem dados'); return }
-                  alert(`✅ ${lines.length - 1} clientes importados com sucesso!\n\n(MVP: dados mockados - integração real em breve)`)
+                  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+                  const novos: Cliente[] = []
+                  for (let i = 1; i < lines.length; i++) {
+                    const vals = lines[i].match(/(".*?"|[^",]+)/g)?.map(v => v.trim().replace(/^"|"$/g, '')) || []
+                    const row: Record<string, string> = {}
+                    headers.forEach((h, idx) => { row[h] = vals[idx] || '' })
+                    if (!row['razaosocial'] && !row['razao_social'] && !row['nome']) continue
+                    novos.push({
+                      id: Date.now() + i,
+                      razaoSocial: row['razaosocial'] || row['razao_social'] || row['nome'] || `Importado ${i}`,
+                      cnpj: row['cnpj'] || '',
+                      contatoNome: row['contatonome'] || row['contato_nome'] || row['contato'] || '',
+                      contatoTelefone: row['contatotelefone'] || row['contato_telefone'] || row['telefone'] || '',
+                      contatoEmail: row['contatoemail'] || row['contato_email'] || row['email'] || '',
+                      endereco: row['endereco'] || '',
+                      etapa: 'prospecção',
+                      valorEstimado: row['valorestimado'] || row['valor_estimado'] || row['valor'] ? parseFloat(row['valorestimado'] || row['valor_estimado'] || row['valor']) : undefined,
+                      ultimaInteracao: new Date().toISOString().split('T')[0],
+                      diasInativo: 0,
+                      score: 30
+                    })
+                  }
+                  if (novos.length === 0) { alert('Nenhum cliente válido encontrado no CSV.\nVerifique se o cabeçalho contém: razaoSocial, cnpj, contatoNome, contatoTelefone, contatoEmail'); return }
+                  onImportClientes(novos)
+                  alert(`✅ ${novos.length} cliente(s) importado(s) com sucesso!`)
                 }
                 reader.readAsText(file)
                 e.target.value = ''
@@ -2856,12 +2885,20 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <button 
-                      onClick={() => onEditCliente(cliente)}
-                      className="text-primary-600 hover:text-primary-800 text-sm font-medium"
-                    >
-                      Editar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => onEditCliente(cliente)}
+                        className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                      >
+                        Editar
+                      </button>
+                      <button 
+                        onClick={() => { if (window.confirm(`Excluir "${cliente.razaoSocial}"? Esta ação não pode ser desfeita.`)) onDeleteCliente(cliente.id) }}
+                        className="text-red-500 hover:text-red-700 text-sm font-medium"
+                      >
+                        Excluir
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3655,7 +3692,7 @@ const TarefasView: React.FC<{
   )
 }
 
-const SocialSearchView: React.FC = () => {
+const SocialSearchView: React.FC<{ onAddLead: (nome: string, telefone: string, endereco: string) => void }> = ({ onAddLead }) => {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [searchType, setSearchType] = React.useState<'instagram' | 'linkedin' | 'google' | 'facebook' | 'painel'>('painel')
   const [location, setLocation] = React.useState('Belo Horizonte - MG')
@@ -3758,7 +3795,7 @@ const SocialSearchView: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => alert(`Importar: ${result.nome}\n${result.telefone}\n${result.endereco}`)} className="ml-4 px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm whitespace-nowrap">➕ Adicionar Lead</button>
+                  <button onClick={() => { onAddLead(result.nome, result.telefone, result.endereco); alert(`✅ "${result.nome}" adicionado como lead em Prospecção!`) }} className="ml-4 px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm whitespace-nowrap">➕ Adicionar Lead</button>
                 </div>
               </div>
             ))}
