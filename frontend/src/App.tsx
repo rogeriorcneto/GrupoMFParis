@@ -2761,6 +2761,23 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
           </label>
           <button
             onClick={() => {
+              const modelo = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado\n' +
+                '"Padaria Exemplo","12.345.678/0001-99","João Silva","(31) 99999-1234","joao@exemplo.com","Rua das Flores 100, Belo Horizonte - MG","15000"\n' +
+                '"Mercado Modelo","98.765.432/0001-11","Maria Santos","(31) 98888-5678","maria@modelo.com","Av. Brasil 500, Contagem - MG","25000"'
+              const blob = new Blob(['\uFEFF' + modelo], { type: 'text/csv;charset=utf-8' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'modelo_importacao_clientes.csv'
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            className="bg-white hover:bg-gray-50 text-gray-700 font-medium py-2 px-4 rounded-apple transition-colors duration-200 shadow-apple-sm border border-gray-300 flex items-center text-sm"
+          >
+            📋 Modelo CSV
+          </button>
+          <button
+            onClick={() => {
               const csv = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado,etapa,score\n' +
                 clientes.map(c => `"${c.razaoSocial}","${c.cnpj}","${c.contatoNome}","${c.contatoTelefone}","${c.contatoEmail}","${c.endereco || ''}","${c.valorEstimado || ''}","${c.etapa}","${c.score || 0}"`).join('\n')
               const blob = new Blob([csv], { type: 'text/csv' })
