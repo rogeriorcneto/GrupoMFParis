@@ -417,9 +417,30 @@ export async function insertHistoricoEtapa(clienteId: number, h: HistoricoEtapa)
 // ============================================
 
 export async function fetchInteracoes(): Promise<Interacao[]> {
-  const { data, error } = await supabase.from('interacoes').select('*').order('created_at', { ascending: false }).range(0, 19999)
-  if (error) throw error
-  return (data || []).map(interacaoFromDb)
+  const PAGE_SIZE = 1000
+  let allRows: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from('interacoes').select('*').order('created_at', { ascending: false }).range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allRows = allRows.concat(data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return allRows.map(interacaoFromDb)
+}
+
+export async function deleteAllClientes(): Promise<void> {
+  // Deletar dados relacionados primeiro (caso não tenha CASCADE)
+  const { error: e1 } = await supabase.from('historico_etapas').delete().neq('id', 0)
+  if (e1) console.error('Erro ao limpar historico_etapas:', e1)
+  const { error: e2 } = await supabase.from('interacoes').delete().neq('id', 0)
+  if (e2) console.error('Erro ao limpar interacoes:', e2)
+  const { error: e3 } = await supabase.from('tarefas').delete().neq('id', 0)
+  if (e3) console.error('Erro ao limpar tarefas:', e3)
+  const { error: e4 } = await supabase.from('clientes').delete().neq('id', 0)
+  if (e4) throw e4
 }
 
 export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interacao> {

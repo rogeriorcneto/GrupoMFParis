@@ -2,13 +2,16 @@ import React from 'react'
 import { PlusIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
 
-const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onImportClientes, onDeleteCliente }) => {
+const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
   const [searchTerm, setSearchTerm] = React.useState('')
   const [showFilters, setShowFilters] = React.useState(false)
   const [filterEtapa, setFilterEtapa] = React.useState('')
   const [filterVendedor, setFilterVendedor] = React.useState('')
   const [filterScoreMin, setFilterScoreMin] = React.useState('')
   const [filterValorMin, setFilterValorMin] = React.useState('')
+  const [showDeleteAllModal, setShowDeleteAllModal] = React.useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = React.useState('')
+  const [isDeleting, setIsDeleting] = React.useState(false)
 
   const filteredClientes = clientes.filter(cliente => {
     const matchSearch = cliente.razaoSocial.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -225,6 +228,14 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
             <PlusIcon className="h-4 w-4 mr-2" />
             Novo Cliente
           </button>
+          {onDeleteAll && clientes.length > 0 && (
+            <button
+              onClick={() => setShowDeleteAllModal(true)}
+              className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center text-sm"
+            >
+              🗑️ Apagar Todos
+            </button>
+          )}
         </div>
       </div>
 
@@ -348,6 +359,65 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
           </table>
         </div>
       </div>
+
+      {/* Modal de confirmação - Apagar Todos */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowDeleteAllModal(false)}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-3xl">⚠️</span>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Apagar TODOS os clientes?</h3>
+              <p className="text-sm text-gray-500 mt-2">
+                Esta ação vai remover <span className="font-bold text-red-600">{clientes.length} clientes</span> permanentemente,
+                junto com todas as interações, tarefas e histórico associados.
+              </p>
+              <p className="text-sm text-red-600 font-bold mt-3">Esta ação NÃO pode ser desfeita!</p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Digite <span className="font-bold text-red-600">APAGAR</span> para confirmar:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Digite APAGAR aqui"
+                className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-red-500 text-center font-bold"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowDeleteAllModal(false); setDeleteConfirmText('') }}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-apple font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (deleteConfirmText !== 'APAGAR' || !onDeleteAll) return
+                  setIsDeleting(true)
+                  try {
+                    await onDeleteAll()
+                    setShowDeleteAllModal(false)
+                    setDeleteConfirmText('')
+                  } catch (err) {
+                    alert('Erro ao apagar clientes. Tente novamente.')
+                  } finally {
+                    setIsDeleting(false)
+                  }
+                }}
+                disabled={deleteConfirmText !== 'APAGAR' || isDeleting}
+                className={`flex-1 px-4 py-2.5 rounded-apple font-medium transition-colors ${deleteConfirmText === 'APAGAR' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+              >
+                {isDeleting ? '⏳ Apagando...' : '🗑️ Apagar Tudo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

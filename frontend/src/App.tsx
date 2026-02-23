@@ -785,6 +785,15 @@ function App() {
               showToast('success', 'Cliente excluído com sucesso')
             } catch (err) { console.error('Erro ao deletar cliente:', err); showToast('error', 'Erro ao excluir cliente. Tente novamente.') }
           }}
+          onDeleteAll={async () => {
+            try {
+              await db.deleteAllClientes()
+              setClientes([])
+              setInteracoes([])
+              setTarefas(prev => prev.filter(t => !t.clienteId))
+              showToast('success', 'Todos os clientes foram apagados com sucesso!')
+            } catch (err) { console.error('Erro ao apagar todos:', err); showToast('error', 'Erro ao apagar clientes. Tente novamente.'); throw err }
+          }}
         />
       case 'automacoes':
         return <AutomacoesView clientes={clientes} onAction={handleQuickAction} />

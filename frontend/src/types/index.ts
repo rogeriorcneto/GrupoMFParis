@@ -249,4 +249,5 @@ export interface ClientesViewProps {
   onEditCliente: (cliente: Cliente) => void
   onImportClientes: (novos: Cliente[]) => void
   onDeleteCliente: (id: number) => void
+  onDeleteAll?: () => Promise<void>
 }
