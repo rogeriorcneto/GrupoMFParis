@@ -8,7 +8,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   produtos: Produto[]
   vendedores: Vendedor[]
   loggedUser: Vendedor
-  onAddPedido: (p: Pedido) => void
+  onAddPedido: (p: Omit<Pedido, 'id'>) => Promise<void>
   onUpdatePedido: (p: Pedido) => void
 }) {
   const isGerente = loggedUser.cargo === 'gerente'
@@ -23,6 +23,9 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   const [pedidoEnviado, setPedidoEnviado] = React.useState<Pedido | null>(null)
   const [filtroStatus, setFiltroStatus] = React.useState<string>('')
   const [filtroCliente, setFiltroCliente] = React.useState<string>('')
+  const [isSaving, setIsSaving] = React.useState(false)
+  const [searchCliente, setSearchCliente] = React.useState('')
+  const [showClienteDropdown, setShowClienteDropdown] = React.useState(false)
 
   const produtosFiltrados = produtosAtivos.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(searchProduto.toLowerCase()) || (p.sku || '').toLowerCase().includes(searchProduto.toLowerCase())
@@ -45,19 +48,22 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     }
   }
 
-  const handleEnviarPedido = (status: 'rascunho' | 'enviado') => {
-    if (!selectedClienteId || itensPedido.length === 0) return
+  const handleEnviarPedido = async (status: 'rascunho' | 'enviado') => {
+    if (!selectedClienteId || itensPedido.length === 0 || isSaving) return
+    setIsSaving(true)
     const numero = `PED-${Date.now().toString().slice(-6)}`
-    const novoPedido: Pedido = {
-      id: Date.now(), numero, clienteId: Number(selectedClienteId), vendedorId: loggedUser.id,
+    const novoPedido: Omit<Pedido, 'id'> = {
+      numero, clienteId: Number(selectedClienteId), vendedorId: loggedUser.id,
       itens: itensPedido, observacoes: observacoes.trim(), status,
       dataCriacao: new Date().toISOString(),
       dataEnvio: status === 'enviado' ? new Date().toISOString() : undefined,
       totalValor: totalPedido
     }
-    onAddPedido(novoPedido)
-    if (status === 'enviado') setPedidoEnviado(novoPedido)
-    setItensPedido([]); setObservacoes(''); setSelectedClienteId(clientesDisponiveis[0]?.id ?? '')
+    try {
+      await onAddPedido(novoPedido)
+      if (status === 'enviado') setPedidoEnviado({ ...novoPedido, id: 0 } as Pedido)
+      setItensPedido([]); setObservacoes(''); setSelectedClienteId(clientesDisponiveis[0]?.id ?? '')
+    } finally { setIsSaving(false) }
   }
 
   const pedidosFiltrados = pedidos
@@ -113,10 +119,30 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">👤 Cliente</h3>
               {clientesDisponiveis.length === 0 ? <p className="text-sm text-gray-500">Nenhum cliente atribuído a você.</p> : (
-                <select value={selectedClienteId} onChange={(e) => setSelectedClienteId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
-                  <option value="">Selecione um cliente...</option>
-                  {clientesDisponiveis.map(c => <option key={c.id} value={c.id}>{c.razaoSocial}</option>)}
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Buscar cliente por nome..."
+                    value={searchCliente}
+                    onChange={(e) => { setSearchCliente(e.target.value); setShowClienteDropdown(true) }}
+                    onFocus={() => setShowClienteDropdown(true)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                  />
+                  {showClienteDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowClienteDropdown(false)} />
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-apple shadow-lg border border-gray-200 z-20 max-h-48 overflow-y-auto">
+                        {clientesDisponiveis.filter(c => c.razaoSocial.toLowerCase().includes(searchCliente.toLowerCase())).length === 0 ? (
+                          <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
+                        ) : clientesDisponiveis.filter(c => c.razaoSocial.toLowerCase().includes(searchCliente.toLowerCase())).map(c => (
+                          <button key={c.id} onClick={() => { setSelectedClienteId(c.id); setSearchCliente(c.razaoSocial); setShowClienteDropdown(false) }} className={`w-full px-3 py-2 text-sm text-left hover:bg-primary-50 transition-colors ${selectedClienteId === c.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700'}`}>
+                            {c.razaoSocial} <span className="text-xs text-gray-400 ml-1">{c.contatoNome}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
               {clienteSelecionado && (
                 <div className="mt-3 p-3 bg-gray-50 rounded-apple border border-gray-200 space-y-1">
@@ -159,10 +185,10 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
               <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={3} placeholder="Condições de entrega, prazo, forma de pagamento..." className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none" />
             </div>
             <div className="space-y-2">
-              <button onClick={() => handleEnviarPedido('enviado')} disabled={!selectedClienteId || itensPedido.length === 0} className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-apple shadow-apple-sm transition-colors flex items-center justify-center gap-2">
-                <PaperAirplaneIcon className="h-5 w-5" /> Enviar Pedido — R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              <button onClick={() => handleEnviarPedido('enviado')} disabled={!selectedClienteId || itensPedido.length === 0 || isSaving} className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-apple shadow-apple-sm transition-colors flex items-center justify-center gap-2">
+                {isSaving ? <><svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando...</> : <><PaperAirplaneIcon className="h-5 w-5" /> Enviar Pedido — R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</>}
               </button>
-              <button onClick={() => handleEnviarPedido('rascunho')} disabled={!selectedClienteId || itensPedido.length === 0} className="w-full py-2 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-medium rounded-apple transition-colors text-sm">💾 Salvar como Rascunho</button>
+              <button onClick={() => handleEnviarPedido('rascunho')} disabled={!selectedClienteId || itensPedido.length === 0 || isSaving} className="w-full py-2 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-medium rounded-apple transition-colors text-sm">{isSaving ? '⏳ Salvando...' : '💾 Salvar como Rascunho'}</button>
               {itensPedido.length > 0 && <button onClick={() => setItensPedido([])} className="w-full py-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors">🗑️ Limpar carrinho</button>}
             </div>
           </div>

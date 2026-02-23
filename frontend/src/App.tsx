@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react'
+﻿import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   HomeIcon,
   FunnelIcon,
@@ -227,10 +227,17 @@ function App() {
     persistOrphan()
   }, [clientes, vendedores, loggedUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generate notifications from data (limited to 20, prioritized)
+  // Generate notifications from data (limited to 20, prioritized) — preserves lida state via localStorage
   const notifGenRef = useRef<string>('')
+  const loadLidaKeys = (): Set<string> => {
+    try { return new Set(JSON.parse(localStorage.getItem('notif_lidas') || '[]')) } catch { return new Set() }
+  }
+  const saveLidaKeys = (keys: Set<string>) => {
+    localStorage.setItem('notif_lidas', JSON.stringify([...keys]))
+  }
   useEffect(() => {
-    const key = `${clientes.length}-${tarefas.length}-${vendedores.length}`
+    const etapasKey = clientes.map(c => `${c.id}:${c.etapa}:${c.diasInativo || 0}`).join(',')
+    const key = `${etapasKey}-${tarefas.length}-${vendedores.length}`
     if (notifGenRef.current === key) return
     notifGenRef.current = key
 
@@ -267,7 +274,12 @@ function App() {
     clientes.filter(c => (c.diasInativo || 0) > 10).sort((a, b) => (b.diasInativo || 0) - (a.diasInativo || 0)).slice(0, 10).forEach(c => {
       novas.push({ id: nId++, tipo: 'warning', titulo: 'Cliente inativo', mensagem: `${c.razaoSocial} está inativo há ${c.diasInativo} dias`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
     })
-    setNotificacoes(novas.slice(0, 20))
+    // Merge: preserve lida state from localStorage + previous state
+    const lidaKeys = loadLidaKeys()
+    setNotificacoes(prev => {
+      prev.forEach(n => { if (n.lida) lidaKeys.add(`${n.titulo}|${n.mensagem}`) })
+      return novas.slice(0, 20).map(n => ({ ...n, lida: lidaKeys.has(`${n.titulo}|${n.mensagem}`) }))
+    })
   }, [clientes, tarefas, vendedores])
 
   // Item 2: Movimentação automática pelo sistema (prazos vencidos)
@@ -321,13 +333,14 @@ function App() {
         }
       }
       persistAutoMoves()
-      setTimeout(() => { autoMoveRef.current = false }, 500)
     }
   }, [clientes])
 
   // Item 4: Score dinâmico — recalcula automaticamente e persiste (debounced, threshold 5pts)
   const scoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scoreCalcRef = useRef(false)
   useEffect(() => {
+    if (scoreCalcRef.current) return
     const baseEtapa: Record<string, number> = { 'prospecção': 10, 'amostra': 25, 'homologado': 50, 'negociacao': 70, 'pos_venda': 90, 'perdido': 5 }
     // Pre-build interaction count map O(n) instead of O(n²)
     const interCountMap = new Map<number, number>()
@@ -344,7 +357,9 @@ function App() {
       return c
     })
     if (changedIds.length > 0) {
+      scoreCalcRef.current = true
       setClientes(updated)
+      requestAnimationFrame(() => { scoreCalcRef.current = false })
       // Persist only scores that changed by 5+ points, debounced
       const significantChanges = changedIds.filter(({ id, score }) => {
         const original = clientes.find(c => c.id === id)
@@ -374,18 +389,13 @@ function App() {
     vendedorId: ''
   })
 
-  // Dashboard Metrics Calculation
-  const calculateDashboardMetrics = (): DashboardMetrics => {
+  // Dashboard Metrics Calculation (memoized)
+  const dashboardMetrics = useMemo((): DashboardMetrics => {
     const totalLeads = clientes.length
     const leadsAtivos = clientes.filter(c => (c.diasInativo || 0) <= 15).length
-    const leadsNovosHoje = clientes.filter(c => {
-      const hoje = new Date().toISOString().split('T')[0]
-      return c.dataEntradaEtapa?.startsWith(hoje)
-    }).length
-    const interacoesHoje = interacoes.filter(c => {
-      const hoje = new Date().toISOString().split('T')[0]
-      return c.data.startsWith(hoje)
-    }).length
+    const hoje = new Date().toISOString().split('T')[0]
+    const leadsNovosHoje = clientes.filter(c => c.dataEntradaEtapa?.startsWith(hoje)).length
+    const interacoesHoje = interacoes.filter(c => c.data.startsWith(hoje)).length
     const valorTotal = clientes.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
     const ticketMedio = totalLeads > 0 ? valorTotal / totalLeads : 0
     const taxaConversao = totalLeads > 0 ? (clientes.filter(c => c.etapa === 'pos_venda').length / totalLeads) * 100 : 0
@@ -399,7 +409,7 @@ function App() {
       leadsNovosHoje,
       interacoesHoje
     }
-  }
+  }, [clientes, interacoes])
 
   // Notification System
   const addNotificacao = (tipo: Notificacao['tipo'], titulo: string, mensagem: string, clienteId?: number) => {
@@ -416,9 +426,13 @@ function App() {
     
     // Auto-dismiss after 5 seconds
     setTimeout(() => {
-      setNotificacoes(prev => prev.map(n => 
-        n.id === novaNotificacao.id ? { ...n, lida: true } : n
-      ))
+      setNotificacoes(prev => {
+        const updated = prev.map(n => n.id === novaNotificacao.id ? { ...n, lida: true } : n)
+        const keys = loadLidaKeys()
+        updated.filter(n => n.lida).forEach(n => keys.add(`${n.titulo}|${n.mensagem}`))
+        saveLidaKeys(keys)
+        return updated
+      })
     }, 5000)
   }
 
@@ -462,11 +476,30 @@ function App() {
     }, 1500)
   }
 
+  const formatCNPJ = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 14)
+    if (d.length <= 2) return d
+    if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`
+    if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`
+    if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
+  }
+
+  const formatTelefone = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 11)
+    if (d.length <= 2) return d.length ? `(${d}` : ''
+    if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
+    let formatted = value
+    if (name === 'cnpj') formatted = formatCNPJ(value)
+    if (name === 'contatoTelefone') formatted = formatTelefone(value)
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: formatted
     }))
   }
 
@@ -550,6 +583,8 @@ function App() {
       const hoje = new Date().toISOString().split('T')[0]
       await db.updateCliente(cliente.id, { ultimaInteracao: hoje })
       setClientes(prev => prev.map(c => c.id === cliente.id ? { ...c, ultimaInteracao: hoje } : c))
+      const savedAtiv = await db.insertAtividade({ tipo: tipo === 'propaganda' ? 'propaganda' : 'contato', descricao: `${assunto}: ${cliente.razaoSocial}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: new Date().toISOString() })
+      setAtividades(prev => [savedAtiv, ...prev])
     } catch (err) { console.error('Erro quickAction:', err) }
     addNotificacao('success', 'Automação executada', `${assunto}: ${cliente.razaoSocial}`, cliente.id)
   }
@@ -652,19 +687,19 @@ function App() {
     const dataDaqui = (dias: number) => new Date(Date.now() + dias * 86400000).toISOString().split('T')[0]
     const tarefaDefs: Omit<Tarefa, 'id'>[] = []
     if (toStage === 'amostra') {
-      tarefaDefs.push({ titulo: `Follow-up amostra — ${nome}`, descricao: 'Verificar se o cliente recebeu e analisou a amostra', data: dataDaqui(15), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId })
-      tarefaDefs.push({ titulo: `Cobrar resposta amostra — ${nome}`, descricao: 'Prazo de 30 dias se aproximando. Cobrar retorno urgente.', data: dataDaqui(25), hora: '09:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId })
+      tarefaDefs.push({ titulo: `Follow-up amostra — ${nome}`, descricao: 'Verificar se o cliente recebeu e analisou a amostra', data: dataDaqui(15), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Cobrar resposta amostra — ${nome}`, descricao: 'Prazo de 30 dias se aproximando. Cobrar retorno urgente.', data: dataDaqui(25), hora: '09:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (toStage === 'homologado') {
-      tarefaDefs.push({ titulo: `Agendar reunião 1º pedido — ${nome}`, descricao: 'Cliente homologado. Agendar reunião para fechar primeiro pedido.', data: dataDaqui(30), hora: '14:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId })
-      tarefaDefs.push({ titulo: `Verificar prazo 75d — ${nome}`, descricao: 'Verificar se o cliente vai fazer pedido antes do prazo de 75 dias.', data: dataDaqui(60), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId })
+      tarefaDefs.push({ titulo: `Agendar reunião 1º pedido — ${nome}`, descricao: 'Cliente homologado. Agendar reunião para fechar primeiro pedido.', data: dataDaqui(30), hora: '14:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Verificar prazo 75d — ${nome}`, descricao: 'Verificar se o cliente vai fazer pedido antes do prazo de 75 dias.', data: dataDaqui(60), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (toStage === 'negociacao') {
-      tarefaDefs.push({ titulo: `Cobrar resposta proposta — ${nome}`, descricao: 'Verificar retorno da proposta comercial enviada.', data: dataDaqui(7), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId })
+      tarefaDefs.push({ titulo: `Cobrar resposta proposta — ${nome}`, descricao: 'Verificar retorno da proposta comercial enviada.', data: dataDaqui(7), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (toStage === 'pos_venda') {
-      tarefaDefs.push({ titulo: `Confirmar entrega — ${nome}`, descricao: 'Confirmar que o pedido foi entregue corretamente.', data: dataDaqui(10), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId })
-      tarefaDefs.push({ titulo: `Pós-venda: satisfação — ${nome}`, descricao: 'Pesquisa de satisfação e abrir porta para próximo pedido.', data: dataDaqui(20), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId })
+      tarefaDefs.push({ titulo: `Confirmar entrega — ${nome}`, descricao: 'Confirmar que o pedido foi entregue corretamente.', data: dataDaqui(10), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Pós-venda: satisfação — ${nome}`, descricao: 'Pesquisa de satisfação e abrir porta para próximo pedido.', data: dataDaqui(20), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (tarefaDefs.length > 0) {
       try {
@@ -768,7 +803,6 @@ function App() {
   }
 
   const renderContent = () => {
-    const dashboardMetrics = calculateDashboardMetrics()
     switch (activeView) {
       case 'dashboard':
         return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} loggedUser={loggedUser} />
@@ -893,7 +927,7 @@ function App() {
         return <SocialSearchView onAddLead={async (nome, telefone, endereco) => {
           try {
             const saved = await db.insertCliente({
-              razaoSocial: nome, cnpj: '', contatoNome: '', contatoTelefone: telefone, contatoEmail: '', endereco, etapa: 'prospecção', ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 20
+              razaoSocial: nome, cnpj: '', contatoNome: '', contatoTelefone: telefone, contatoEmail: '', endereco, etapa: 'prospecção', ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 20, vendedorId: loggedUser?.id
             } as Omit<Cliente, 'id'>)
             setClientes(prev => [...prev, saved])
           } catch (err) { console.error('Erro ao add lead social:', err) }
@@ -1247,13 +1281,13 @@ function App() {
                 <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-apple shadow-apple border border-gray-200 z-50 max-h-[70vh] overflow-y-auto">
                   <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">Notificações</h3>
-                    <button onClick={() => setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))} className="text-xs text-primary-600 hover:text-primary-800">Marcar todas como lidas</button>
+                    <button onClick={() => setNotificacoes(prev => { const keys = loadLidaKeys(); prev.forEach(n => keys.add(`${n.titulo}|${n.mensagem}`)); saveLidaKeys(keys); return prev.map(n => ({ ...n, lida: true })) })} className="text-xs text-primary-600 hover:text-primary-800">Marcar todas como lidas</button>
                   </div>
                   {notificacoes.length === 0 ? (
                     <div className="p-6 text-center text-gray-500 text-sm">Nenhuma notificação</div>
                   ) : (
                     notificacoes.map(n => (
-                      <div key={n.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!n.lida ? 'bg-blue-50' : ''}`} onClick={() => setNotificacoes(prev => prev.map(x => x.id === n.id ? { ...x, lida: true } : x))}>
+                      <div key={n.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!n.lida ? 'bg-blue-50' : ''}`} onClick={() => setNotificacoes(prev => { const keys = loadLidaKeys(); const updated = prev.map(x => { if (x.id === n.id) { keys.add(`${x.titulo}|${x.mensagem}`); return { ...x, lida: true } } return x }); saveLidaKeys(keys); return updated })}>
                         <div className="flex items-start gap-2">
                           <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === 'warning' ? 'bg-yellow-500' : n.tipo === 'error' ? 'bg-red-500' : n.tipo === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
                           <div className="min-w-0">
@@ -1663,7 +1697,7 @@ function App() {
           try {
             const saved = await db.insertTarefa({
               titulo: panelTarefaTitulo.trim(), data: panelTarefaData,
-              tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id
+              tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id
             })
             setTarefas(prev => [saved, ...prev])
           } catch (err) { console.error('Erro ao criar tarefa:', err) }

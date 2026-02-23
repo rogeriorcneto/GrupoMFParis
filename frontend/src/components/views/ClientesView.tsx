@@ -14,6 +14,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   const [isDeleting, setIsDeleting] = React.useState(false)
   const [showMenu, setShowMenu] = React.useState(false)
   const [openCardMenu, setOpenCardMenu] = React.useState<number | null>(null)
+  const [deleteClienteModal, setDeleteClienteModal] = React.useState<Cliente | null>(null)
   const importRef = React.useRef<HTMLInputElement>(null)
 
   const filteredClientes = clientes.filter(cliente => {
@@ -335,7 +336,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                     </td>
                     <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
                       <button
-                        onClick={() => { if (window.confirm(`Excluir "${cliente.razaoSocial}"? Esta ação não pode ser desfeita.`)) onDeleteCliente(cliente.id) }}
+                        onClick={() => setDeleteClienteModal(cliente)}
                         className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1 rounded-apple text-sm"
                         title="Excluir"
                       >
@@ -386,7 +387,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                             <button onClick={() => { onEditCliente(cliente); setOpenCardMenu(null) }} className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
                               ✏️ Editar
                             </button>
-                            <button onClick={() => { if (window.confirm(`Excluir "${cliente.razaoSocial}"?`)) onDeleteCliente(cliente.id); setOpenCardMenu(null) }} className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
+                            <button onClick={() => { setDeleteClienteModal(cliente); setOpenCardMenu(null) }} className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
                               🗑️ Excluir
                             </button>
                           </div>
@@ -465,6 +466,26 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
               >
                 {isDeleting ? '⏳ Apagando...' : '🗑️ Apagar Tudo'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Confirmar Exclusão de Cliente Individual */}
+      {deleteClienteModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteClienteModal(null)}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">🗑️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Excluir Cliente</h3>
+              <p className="text-sm text-gray-600 mt-2">Tem certeza que deseja excluir <strong>{deleteClienteModal.razaoSocial}</strong>?</p>
+              <p className="text-xs text-gray-400 mt-1">Esta ação não pode ser desfeita. Interações, tarefas e histórico serão removidos.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteClienteModal(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-apple font-medium transition-colors">Cancelar</button>
+              <button onClick={() => { onDeleteCliente(deleteClienteModal.id); setDeleteClienteModal(null) }} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-apple font-medium transition-colors">Excluir</button>
             </div>
           </div>
         </div>

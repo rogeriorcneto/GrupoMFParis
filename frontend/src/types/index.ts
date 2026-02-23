@@ -15,6 +15,8 @@ export interface Cliente {
   contatoTelefone: string
   contatoEmail: string
   endereco?: string
+  whatsapp?: string
+  omieCodigo?: string
   etapa: string
   score?: number
   ultimaInteracao?: string
@@ -199,7 +201,7 @@ export interface Vendedor {
   cargo: 'vendedor' | 'gerente' | 'sdr'
   avatar: string
   usuario: string
-  senha: string
+  senha?: string
   metaVendas: number
   metaLeads: number
   metaConversao: number

@@ -20,6 +20,8 @@ function clienteFromDb(row: any): Cliente {
     contatoTelefone: row.contato_telefone || '',
     contatoEmail: row.contato_email || '',
     endereco: row.endereco || '',
+    whatsapp: row.whatsapp || '',
+    omieCodigo: row.omie_codigo || '',
     etapa: row.etapa,
     etapaAnterior: row.etapa_anterior || '',
     dataEntradaEtapa: row.data_entrada_etapa || '',
@@ -55,6 +57,8 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.contatoTelefone !== undefined) row.contato_telefone = c.contatoTelefone
   if (c.contatoEmail !== undefined) row.contato_email = c.contatoEmail
   if (c.endereco !== undefined) row.endereco = c.endereco
+  if (c.whatsapp !== undefined) row.whatsapp = c.whatsapp
+  if (c.omieCodigo !== undefined) row.omie_codigo = c.omieCodigo
   if (c.etapa !== undefined) row.etapa = c.etapa
   if (c.etapaAnterior !== undefined) row.etapa_anterior = c.etapaAnterior
   if (c.dataEntradaEtapa !== undefined) row.data_entrada_etapa = c.dataEntradaEtapa
@@ -364,15 +368,33 @@ export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<
 // ============================================
 
 export async function fetchClientes(): Promise<Cliente[]> {
-  const { data, error } = await supabase.from('clientes').select('*').order('id').range(0, 9999)
-  if (error) throw error
-  const clientes = (data || []).map(clienteFromDb)
+  const PAGE_SIZE = 1000
+  let allRows: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from('clientes').select('*').order('id').range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allRows = allRows.concat(data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  const clientes = allRows.map(clienteFromDb)
 
-  // Buscar histórico de etapas para todos os clientes
-  const { data: hist } = await supabase.from('historico_etapas').select('*').order('data').range(0, 49999)
-  if (hist) {
+  // Buscar histórico de etapas para todos os clientes (paginado)
+  let allHist: any[] = []
+  from = 0
+  while (true) {
+    const { data: hist, error } = await supabase.from('historico_etapas').select('*').order('data').range(from, from + PAGE_SIZE - 1)
+    if (error) break
+    if (!hist || hist.length === 0) break
+    allHist = allHist.concat(hist)
+    if (hist.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  if (allHist.length > 0) {
     const histMap = new Map<number, HistoricoEtapa[]>()
-    hist.forEach((h: any) => {
+    allHist.forEach((h: any) => {
       const arr = histMap.get(h.cliente_id) || []
       arr.push(historicoFromDb(h))
       histMap.set(h.cliente_id, arr)
@@ -455,19 +477,28 @@ export async function fetchInteracoes(): Promise<Interacao[]> {
 }
 
 export async function deleteAllClientes(): Promise<void> {
-  // Deletar dados relacionados primeiro (caso não tenha CASCADE)
-  const { error: e1 } = await supabase.from('historico_etapas').delete().neq('id', 0)
+  // Buscar IDs dos clientes existentes para escopo correto
+  const { data: clienteRows } = await supabase.from('clientes').select('id')
+  const clienteIds = (clienteRows || []).map((c: any) => c.id)
+  if (clienteIds.length === 0) return
+
+  // Deletar dados relacionados em batches (escopo: apenas clientes existentes)
+  const { error: e1 } = await supabase.from('historico_etapas').delete().in('cliente_id', clienteIds)
   if (e1) console.error('Erro ao limpar historico_etapas:', e1)
-  const { error: e2 } = await supabase.from('interacoes').delete().neq('id', 0)
+  const { error: e2 } = await supabase.from('interacoes').delete().in('cliente_id', clienteIds)
   if (e2) console.error('Erro ao limpar interacoes:', e2)
   // Só deletar tarefas vinculadas a clientes (preserva tarefas avulsas)
   const { error: e3 } = await supabase.from('tarefas').delete().not('cliente_id', 'is', null)
   if (e3) console.error('Erro ao limpar tarefas:', e3)
-  // Deletar itens de pedido e pedidos
-  const { error: e5 } = await supabase.from('itens_pedido').delete().neq('id', 0)
-  if (e5) console.error('Erro ao limpar itens_pedido:', e5)
-  const { error: e6 } = await supabase.from('pedidos').delete().neq('id', 0)
-  if (e6) console.error('Erro ao limpar pedidos:', e6)
+  // Deletar itens de pedido e pedidos vinculados a esses clientes
+  const { data: pedidoRows } = await supabase.from('pedidos').select('id').in('cliente_id', clienteIds)
+  const pedidoIds = (pedidoRows || []).map((p: any) => p.id)
+  if (pedidoIds.length > 0) {
+    const { error: e5 } = await supabase.from('itens_pedido').delete().in('pedido_id', pedidoIds)
+    if (e5) console.error('Erro ao limpar itens_pedido:', e5)
+    const { error: e6 } = await supabase.from('pedidos').delete().in('id', pedidoIds)
+    if (e6) console.error('Erro ao limpar pedidos:', e6)
+  }
   const { error: e4 } = await supabase.from('clientes').delete().neq('id', 0)
   if (e4) throw e4
 }
@@ -489,9 +520,18 @@ export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interac
 // ============================================
 
 export async function fetchTarefas(): Promise<Tarefa[]> {
-  const { data, error } = await supabase.from('tarefas').select('*').order('data').range(0, 9999)
-  if (error) throw error
-  return (data || []).map(tarefaFromDb)
+  const PAGE_SIZE = 1000
+  let allRows: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from('tarefas').select('*').order('data').range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allRows = allRows.concat(data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  return allRows.map(tarefaFromDb)
 }
 
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
@@ -589,15 +629,29 @@ export async function deleteProduto(id: number): Promise<void> {
 // ============================================
 
 export async function fetchPedidos(): Promise<Pedido[]> {
-  const { data: pedidosRaw, error } = await supabase.from('pedidos').select('*').order('data_criacao', { ascending: false }).range(0, 9999)
-  if (error) throw error
-  if (!pedidosRaw || pedidosRaw.length === 0) return []
+  const PAGE_SIZE = 1000
+  let allPedidos: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from('pedidos').select('*').order('data_criacao', { ascending: false }).range(from, from + PAGE_SIZE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allPedidos = allPedidos.concat(data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
+  if (allPedidos.length === 0) return []
 
-  const pedidoIds = pedidosRaw.map((p: any) => p.id)
-  const { data: itensRaw } = await supabase.from('itens_pedido').select('*').in('pedido_id', pedidoIds)
+  // Fetch itens in batches of 500 pedido IDs (Supabase .in() limit)
+  let allItens: any[] = []
+  for (let i = 0; i < allPedidos.length; i += 500) {
+    const ids = allPedidos.slice(i, i + 500).map((p: any) => p.id)
+    const { data: itensRaw } = await supabase.from('itens_pedido').select('*').in('pedido_id', ids)
+    if (itensRaw) allItens = allItens.concat(itensRaw)
+  }
 
-  return pedidosRaw.map((p: any) => {
-    const itens = (itensRaw || []).filter((i: any) => i.pedido_id === p.id)
+  return allPedidos.map((p: any) => {
+    const itens = allItens.filter((i: any) => i.pedido_id === p.id)
     return pedidoFromDb(p, itens)
   })
 }
