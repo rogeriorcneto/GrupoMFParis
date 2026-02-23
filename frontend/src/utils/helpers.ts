@@ -1,44 +1,20 @@
 import type { Cliente } from '../types'
 
-// Unified Lead Scoring Algorithm
+// Unified Lead Scoring Algorithm — mirrors App.tsx useEffect (lines 340-351)
 export function calculateLeadScore(cliente: Cliente, interacoesCount: number = 0): number {
-  let score = 0
-
-  // Score base por etapa (40%)
-  const etapaScores: Record<string, number> = {
-    'prospecção': 20,
-    'amostra': 40,
-    'homologado': 60,
-    'negociacao': 80,
-    'pos_venda': 100
+  const baseEtapa: Record<string, number> = {
+    'prospecção': 10,
+    'amostra': 25,
+    'homologado': 50,
+    'negociacao': 70,
+    'pos_venda': 90,
+    'perdido': 5
   }
-  score += etapaScores[cliente.etapa] || 0
-
-  // Score por valor estimado (30%)
-  if (cliente.valorEstimado) {
-    if (cliente.valorEstimado > 100000) score += 30
-    else if (cliente.valorEstimado > 50000) score += 20
-    else if (cliente.valorEstimado > 20000) score += 10
-  }
-
-  // Score por engajamento / inatividade (20%)
-  if (cliente.diasInativo !== undefined) {
-    if (cliente.diasInativo <= 7) score += 20
-    else if (cliente.diasInativo <= 15) score += 15
-    else if (cliente.diasInativo <= 30) score += 10
-    else if (cliente.diasInativo > 30) score -= 10
-  }
-
-  // Score por produtos de interesse (10%)
-  if (cliente.produtosInteresse && cliente.produtosInteresse.length > 0) {
-    score += Math.min(cliente.produtosInteresse.length * 2, 10)
-  }
-
-  // Bonus por volume de interações
-  if (interacoesCount >= 5) score += 5
-  else if (interacoesCount >= 2) score += 2
-
-  return Math.max(0, Math.min(100, score))
+  const base = baseEtapa[cliente.etapa] || 10
+  const bonusValor = Math.min((cliente.valorEstimado || 0) / 10000, 15)
+  const bonusInteracoes = Math.min(interacoesCount * 3, 15)
+  const penalidade = Math.min((cliente.diasInativo || 0) * 0.5, 20)
+  return Math.max(0, Math.min(100, Math.round(base + bonusValor + bonusInteracoes - penalidade)))
 }
 
 // Date helper: days since a given ISO date string
