@@ -206,6 +206,27 @@ function App() {
     return () => clearInterval(interval)
   }, [recalcDiasInativo])
 
+  // Auto-atribuir clientes órfãos ao gerente (usuário master)
+  // O gerente de vendas é o dono padrão de todos os clientes até reatribuir manualmente
+  const orphanFixRef = useRef(false)
+  useEffect(() => {
+    if (orphanFixRef.current || !loggedUser || clientes.length === 0 || vendedores.length === 0) return
+    // Encontrar o gerente (master) — é o dono padrão de todos os clientes sem vendedor
+    const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo) || loggedUser
+    const orfaos = clientes.filter(c => !c.vendedorId)
+    if (orfaos.length === 0) { orphanFixRef.current = true; return }
+    orphanFixRef.current = true
+    // Atribuir em batch ao gerente e persistir
+    setClientes(prev => prev.map(c => !c.vendedorId ? { ...c, vendedorId: gerente.id } : c))
+    const persistOrphan = async () => {
+      for (const c of orfaos) {
+        try { await db.updateCliente(c.id, { vendedorId: gerente.id }) } catch (err) { console.error('Erro ao atribuir cliente órfão:', err) }
+      }
+      console.log(`✅ ${orfaos.length} cliente(s) sem vendedor atribuído(s) a ${gerente.nome} (gerente)`)
+    }
+    persistOrphan()
+  }, [clientes, vendedores, loggedUser]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Generate notifications from data (limited to 20, prioritized)
   const notifGenRef = useRef<string>('')
   useEffect(() => {
@@ -462,7 +483,7 @@ function App() {
         const updatedFields: Partial<Cliente> = {
           ...restForm,
           valorEstimado: vEstStr ? parseFloat(vEstStr) : undefined,
-          vendedorId: vIdStr ? Number(vIdStr) : undefined,
+          vendedorId: vIdStr ? Number(vIdStr) : (editingCliente.vendedorId || loggedUser?.id),
           produtosInteresse: produtosArray
         }
         await db.updateCliente(editingCliente.id, updatedFields)
@@ -479,15 +500,15 @@ function App() {
         const savedC = await db.insertCliente({
           ...restForm, etapa: 'prospecção',
           valorEstimado: vEstStr ? parseFloat(vEstStr) : undefined,
-          vendedorId: vIdStr ? Number(vIdStr) : undefined,
+          vendedorId: vIdStr ? Number(vIdStr) : loggedUser?.id,
           produtosInteresse: produtosArray,
           ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0
         } as Omit<Cliente, 'id'>)
         setClientes(prev => [...prev, savedC])
         
         const savedI = await db.insertInteracao({
-          clienteId: savedC.id, tipo: 'email', data: new Date().toISOString(),
-          assunto: 'Bem-vindo!', descricao: `Novo cliente cadastrado: ${formData.razaoSocial}`, automatico: true
+          clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),
+          assunto: 'Novo cliente', descricao: `Cliente cadastrado por ${loggedUser?.nome || 'Sistema'}: ${formData.razaoSocial}`, automatico: true
         })
         setInteracoes(prev => [savedI, ...prev])
         showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
@@ -770,9 +791,10 @@ function App() {
                 await db.updateCliente(clienteId, changes)
                 setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, ...changes } : c))
               }
-              // Criar novos clientes em batch
+              // Criar novos clientes em batch (auto-atribuir ao vendedor logado)
               if (novos.length > 0) {
-                const savedNovos = await db.insertClientesBatch(novos as Omit<Cliente, 'id'>[])
+                const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
+                const savedNovos = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
                 setClientes(prev => [...prev, ...savedNovos])
               }
               showToast('success', `Funil atualizado: ${updates.length} atualizados, ${novos.length} novos`)
@@ -790,7 +812,8 @@ function App() {
           onEditCliente={handleEditCliente}
           onImportClientes={async (novos) => {
             try {
-              const saved = await db.insertClientesBatch(novos as Omit<Cliente, 'id'>[])
+              const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
+              const saved = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
               setClientes(prev => [...prev, ...saved])
               showToast('success', `${saved.length} cliente(s) importado(s) com sucesso!`)
             } catch (err) { console.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
