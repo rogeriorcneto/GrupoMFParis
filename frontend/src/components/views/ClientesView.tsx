@@ -138,7 +138,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                         razaoSocial: razao || fantasia,
                         nomeFantasia: fantasia,
                         cnpj: (row['cnpj'] || '').replace(/[^\d./\-]/g, ''),
-                        contatoNome: row['usuário responsável'] || row['usuario responsavel'] || row['usuário responsáve'] || row['cadastrado por'] || '',
+                        contatoNome: '',
                         contatoTelefone: tel,
                         contatoEmail: row['e-mail'] || row['email'] || '',
                         endereco,
