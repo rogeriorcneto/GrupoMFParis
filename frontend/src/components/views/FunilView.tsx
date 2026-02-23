@@ -11,13 +11,16 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     const s = status.toLowerCase().trim()
     if (s === 'perdido' || s === 'lost') return 'perdido'
     const e = etapa.toLowerCase().trim()
+    // CONTATO → Prospecção
     if (e.includes('contato') || e.includes('prospec')) return 'prospecção'
-    if (e.includes('proposta')) return 'negociacao'
-    if (e.includes('envio') || e.includes('pedido')) return 'pos_venda'
+    // PROPOSTA ENVIADA → Negociação
+    if (e.includes('proposta') || e.includes('negocia')) return 'negociacao'
+    // ENVIO DO PEDIDO → Homologado (pedido enviado, aguardando confirmação)
+    if (e.includes('envio') || e.includes('pedido')) return 'homologado'
+    // FOLLOW-UP → Pós-Venda (cliente ativo, recompra)
     if (e.includes('follow') || e.includes('pós') || e.includes('pos')) return 'pos_venda'
     if (e.includes('amostra')) return 'amostra'
     if (e.includes('homolog')) return 'homologado'
-    if (e.includes('negocia')) return 'negociacao'
     return 'prospecção'
   }
 
@@ -131,9 +134,14 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
       let matchCount = 0, newCount = 0
 
       porEmpresa.forEach((deals, _key) => {
-        // Usar o deal mais recente (último no array ou com data mais recente)
-        const deal = deals.sort((a, b) => (a.dataUlt || '').localeCompare(b.dataUlt || '')).pop()!
+        // Usar o deal mais recente para etapa e dados, mas somar valores de todos
+        const sortedDeals = deals.sort((a, b) => (a.dataUlt || '').localeCompare(b.dataUlt || ''))
+        const deal = sortedDeals[sortedDeals.length - 1]
         const etapaCRM = mapEtapaAgendor(deal.etapa, deal.status)
+        // Somar valores de TODOS os negócios da empresa
+        const valorTotal = deals.reduce((sum, d) => sum + d.valor, 0)
+        // Coletar todos os produtos de todos os negócios
+        const allProdutos = [...new Set(deals.map(d => d.produto).filter(Boolean).flatMap(p => p.split(',').map(x => x.trim())))]
 
         // Normalizar nome para matching fuzzy
         const normalize = (s: string) => s.toLowerCase().trim()
@@ -165,8 +173,8 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         changes.contatoNome = deal.pessoa || ''
         if (deal.celular || deal.whatsapp || deal.telefone) changes.contatoTelefone = deal.celular || deal.whatsapp || deal.telefone
         if (deal.email) changes.contatoEmail = deal.email
-        if (deal.valor > 0) changes.valorEstimado = deal.valor
-        if (deal.produto) changes.produtosInteresse = deal.produto.split(',').map(p => p.trim()).filter(Boolean)
+        if (valorTotal > 0) changes.valorEstimado = valorTotal
+        if (allProdutos.length > 0) changes.produtosInteresse = allProdutos
         if (deal.origemCliente) changes.origemLead = deal.origemCliente
         if (etapaCRM === 'perdido') {
           changes.motivoPerda = deal.descMotivo || deal.motivoPerda || ''
