@@ -216,12 +216,12 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   }
 
   const stages = [
-    { title: 'Prospecção', key: 'prospecção', color: 'blue', icon: '📞', prob: 0.10 },
-    { title: 'Amostra', key: 'amostra', color: 'yellow', icon: '📦', prob: 0.25 },
-    { title: 'Homologado', key: 'homologado', color: 'green', icon: '✅', prob: 0.50 },
-    { title: 'Negociação', key: 'negociacao', color: 'purple', icon: '💰', prob: 0.75 },
-    { title: 'Pós-Venda', key: 'pos_venda', color: 'pink', icon: '🚚', prob: 0.95 },
-    { title: 'Perdido', key: 'perdido', color: 'red', icon: '❌', prob: 0 }
+    { title: 'Prospecção', key: 'prospecção', badge: 'bg-blue-100 text-blue-800', icon: '📞', prob: 0.10 },
+    { title: 'Amostra', key: 'amostra', badge: 'bg-yellow-100 text-yellow-800', icon: '📦', prob: 0.25 },
+    { title: 'Homologado', key: 'homologado', badge: 'bg-green-100 text-green-800', icon: '✅', prob: 0.50 },
+    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.75 },
+    { title: 'Pós-Venda', key: 'pos_venda', badge: 'bg-pink-100 text-pink-800', icon: '🚚', prob: 0.95 },
+    { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
   ]
 
   const prazosEtapa: Record<string, number> = { amostra: 30, homologado: 75, negociacao: 45 }
@@ -485,7 +485,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
               <div className="p-3">
                 <div className="flex items-center justify-between mb-0.5">
                   <h3 className="font-medium text-gray-900 text-sm">{stage.icon} {stage.title}</h3>
-                  <span className={`px-2 py-0.5 text-xs font-bold rounded-full bg-${stage.color}-100 text-${stage.color}-800`}>{stageClientes.length}</span>
+                  <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${stage.badge}`}>{stageClientes.length}</span>
                 </div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500">R$ {stageValor.toLocaleString('pt-BR')}</p>
