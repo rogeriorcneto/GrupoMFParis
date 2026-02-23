@@ -135,11 +135,26 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         const deal = deals.sort((a, b) => (a.dataUlt || '').localeCompare(b.dataUlt || '')).pop()!
         const etapaCRM = mapEtapaAgendor(deal.etapa, deal.status)
 
-        // Tentar match com cliente existente
+        // Normalizar nome para matching fuzzy
+        const normalize = (s: string) => s.toLowerCase().trim()
+          .replace(/\b(ltda|me|epp|eireli|s\.?a\.?|s\/a|cia|comercio|comércio|industria|indústria|distribui(dora|cao|ção)?|com\.?|ind\.?|imp\.?|exp\.?)\b/gi, '')
+          .replace(/[.\-\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
+
+        const dealNorm = normalize(deal.empresa)
+
+        // Tentar match com cliente existente (CNPJ exato > nome normalizado > nome contém)
         const clienteExistente = clientes.find(c => {
           if (deal.cnpj && c.cnpj && deal.cnpj.replace(/\D/g, '') === c.cnpj.replace(/\D/g, '')) return true
-          return c.razaoSocial.toLowerCase().trim() === deal.empresa.toLowerCase().trim() ||
-            (c.nomeFantasia && c.nomeFantasia.toLowerCase().trim() === deal.empresa.toLowerCase().trim())
+          const razaoNorm = normalize(c.razaoSocial)
+          const fantasiaNorm = c.nomeFantasia ? normalize(c.nomeFantasia) : ''
+          // Match exato normalizado
+          if (razaoNorm === dealNorm || fantasiaNorm === dealNorm) return true
+          // Match parcial: um contém o outro (mínimo 4 chars para evitar falsos positivos)
+          if (dealNorm.length >= 4 && razaoNorm.length >= 4) {
+            if (razaoNorm.includes(dealNorm) || dealNorm.includes(razaoNorm)) return true
+            if (fantasiaNorm && (fantasiaNorm.includes(dealNorm) || dealNorm.includes(fantasiaNorm))) return true
+          }
+          return false
         })
 
         const changes: Partial<Cliente> = {
