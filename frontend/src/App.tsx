@@ -197,28 +197,16 @@ function App() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generate notifications from data
+  // Generate notifications from data (limited to 20, prioritized)
+  const notifGenRef = useRef<string>('')
   useEffect(() => {
+    const key = `${clientes.length}-${tarefas.length}-${vendedores.length}`
+    if (notifGenRef.current === key) return
+    notifGenRef.current = key
+
     const novas: Notificacao[] = []
     let nId = 1
-    clientes.forEach(c => {
-      if ((c.diasInativo || 0) > 10) {
-        novas.push({ id: nId++, tipo: 'warning', titulo: 'Cliente inativo', mensagem: `${c.razaoSocial} está inativo há ${c.diasInativo} dias`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-      }
-    })
-    tarefas.forEach(t => {
-      if (t.status === 'pendente') {
-        novas.push({ id: nId++, tipo: 'info', titulo: 'Tarefa pendente', mensagem: `${t.titulo} — ${t.descricao}`, timestamp: new Date().toISOString(), lida: false, clienteId: t.clienteId })
-      }
-    })
-    vendedores.forEach(v => {
-      const clientesV = clientes.filter(c => c.vendedorId === v.id)
-      const valorPipeline = clientesV.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-      if (valorPipeline < v.metaVendas * 0.5 && v.ativo) {
-        novas.push({ id: nId++, tipo: 'error', titulo: 'Meta em risco', mensagem: `${v.nome} está abaixo de 50% da meta de vendas`, timestamp: new Date().toISOString(), lida: false })
-      }
-    })
-    // Item 5: Alertas de prazo nas notificações
+    // Prazos vencidos (alta prioridade)
     clientes.forEach(c => {
       if (c.etapa === 'amostra' && c.dataEntradaEtapa) {
         const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
@@ -237,7 +225,19 @@ function App() {
         }
       }
     })
-    setNotificacoes(novas)
+    // Meta em risco
+    vendedores.forEach(v => {
+      const clientesV = clientes.filter(c => c.vendedorId === v.id)
+      const valorPipeline = clientesV.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+      if (valorPipeline < v.metaVendas * 0.5 && v.ativo) {
+        novas.push({ id: nId++, tipo: 'error', titulo: 'Meta em risco', mensagem: `${v.nome} está abaixo de 50% da meta de vendas`, timestamp: new Date().toISOString(), lida: false })
+      }
+    })
+    // Clientes inativos (top 10 mais inativos)
+    clientes.filter(c => (c.diasInativo || 0) > 10).sort((a, b) => (b.diasInativo || 0) - (a.diasInativo || 0)).slice(0, 10).forEach(c => {
+      novas.push({ id: nId++, tipo: 'warning', titulo: 'Cliente inativo', mensagem: `${c.razaoSocial} está inativo há ${c.diasInativo} dias`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+    })
+    setNotificacoes(novas.slice(0, 20))
   }, [clientes, tarefas, vendedores])
 
   // Item 2: Movimentação automática pelo sistema (prazos vencidos)
@@ -771,7 +771,7 @@ function App() {
           onEditCliente={handleEditCliente}
           onImportClientes={async (novos) => {
             try {
-              const saved = await Promise.all(novos.map(n => db.insertCliente(n as Omit<Cliente, 'id'>)))
+              const saved = await db.insertClientesBatch(novos as Omit<Cliente, 'id'>[])
               setClientes(prev => [...prev, ...saved])
               showToast('success', `${saved.length} cliente(s) importado(s) com sucesso!`)
             } catch (err) { console.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
@@ -1028,29 +1028,7 @@ function App() {
             </div>
 
             <div className="mt-6 pt-4 border-t border-gray-200">
-              <p className="text-xs text-gray-500 text-center mb-3">Acesso rápido:</p>
-              <div className="space-y-2">
-                <button
-                  onClick={() => { setLoginUsuario('rafael@mfparis.com.br'); setLoginSenha(''); setLoginError('') }}
-                  className="w-full flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-apple hover:bg-amber-100 transition-colors text-left"
-                >
-                  <span className="text-lg">👑</span>
-                  <div className="flex-1">
-                    <p className="text-xs font-bold text-amber-800">Gerente — Rafael</p>
-                    <p className="text-[10px] text-amber-600">rafael@mfparis.com.br</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => { setLoginUsuario(''); setLoginSenha(''); setLoginError('') }}
-                  className="w-full flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-apple hover:bg-green-100 transition-colors text-left"
-                >
-                  <span className="text-lg">🧑‍💼</span>
-                  <div className="flex-1">
-                    <p className="text-xs font-bold text-green-800">Vendedor / SDR</p>
-                    <p className="text-[10px] text-green-600">Use o email e senha cadastrados pelo gerente</p>
-                  </div>
-                </button>
-              </div>
+              <p className="text-xs text-gray-500 text-center">Use o email e senha cadastrados pelo administrador.</p>
             </div>
           </div>
 

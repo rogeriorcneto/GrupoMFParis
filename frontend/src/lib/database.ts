@@ -390,6 +390,18 @@ export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
   return clienteFromDb(data)
 }
 
+export async function insertClientesBatch(clientes: Omit<Cliente, 'id'>[]): Promise<Cliente[]> {
+  const BATCH_SIZE = 100
+  const allSaved: Cliente[] = []
+  for (let i = 0; i < clientes.length; i += BATCH_SIZE) {
+    const batch = clientes.slice(i, i + BATCH_SIZE).map(c => clienteToDb(c))
+    const { data, error } = await supabase.from('clientes').insert(batch).select()
+    if (error) throw error
+    if (data) allSaved.push(...data.map(clienteFromDb))
+  }
+  return allSaved
+}
+
 export async function updateCliente(id: number, c: Partial<Cliente>): Promise<void> {
   const row = clienteToDb(c)
   row.updated_at = new Date().toISOString()
