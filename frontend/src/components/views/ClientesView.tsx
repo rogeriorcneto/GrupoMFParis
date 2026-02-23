@@ -57,34 +57,122 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                   const text = ev.target?.result as string
                   const lines = text.split('\n').filter(l => l.trim())
                   if (lines.length < 2) { alert('CSV vazio ou sem dados'); return }
-                  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+
+                  // Auto-detectar separador (;  ,  ou tab)
+                  const firstLine = lines[0]
+                  const countSemicolon = (firstLine.match(/;/g) || []).length
+                  const countComma = (firstLine.match(/,/g) || []).length
+                  const countTab = (firstLine.match(/\t/g) || []).length
+                  const sep = countTab > countComma && countTab > countSemicolon ? '\t' : countSemicolon > countComma ? ';' : ','
+
+                  const parseLine = (line: string): string[] => {
+                    const result: string[] = []
+                    let current = '', inQuotes = false
+                    for (let j = 0; j < line.length; j++) {
+                      const ch = line[j]
+                      if (ch === '"') { inQuotes = !inQuotes; continue }
+                      if (ch === sep && !inQuotes) { result.push(current.trim()); current = ''; continue }
+                      current += ch
+                    }
+                    result.push(current.trim())
+                    return result
+                  }
+
+                  const headers = parseLine(firstLine).map(h => h.replace(/^\uFEFF/, '').toLowerCase().trim())
+
+                  // Detectar formato Agendor
+                  const isAgendor = headers.some(h => h.includes('código da empresa') || h.includes('codigo da empresa')) ||
+                    (headers.some(h => h.includes('razão social') || h.includes('razao social')) && 
+                     headers.some(h => h.includes('nome fantasia')))
+
                   const novos: Cliente[] = []
                   for (let i = 1; i < lines.length; i++) {
-                    const vals = lines[i].match(/(".*?"|[^",]+)/g)?.map(v => v.trim().replace(/^"|"$/g, '')) || []
+                    const vals = parseLine(lines[i])
                     const row: Record<string, string> = {}
                     headers.forEach((h, idx) => { row[h] = vals[idx] || '' })
-                    if (!row['razaosocial'] && !row['razao_social'] && !row['nome']) continue
-                    novos.push({
-                      id: Date.now() + i,
-                      razaoSocial: row['razaosocial'] || row['razao_social'] || row['nome'] || `Importado ${i}`,
-                      nomeFantasia: '',
-                      cnpj: row['cnpj'] || '',
-                      contatoNome: row['contatonome'] || row['contato_nome'] || row['contato'] || '',
-                      contatoTelefone: row['contatotelefone'] || row['contato_telefone'] || row['telefone'] || '',
-                      contatoEmail: row['contatoemail'] || row['contato_email'] || row['email'] || '',
-                      endereco: row['endereco'] || '',
-                      etapa: 'prospecção',
-                      valorEstimado: row['valorestimado'] || row['valor_estimado'] || row['valor'] ? parseFloat(row['valorestimado'] || row['valor_estimado'] || row['valor']) : undefined,
-                      ultimaInteracao: new Date().toISOString().split('T')[0],
-                      diasInativo: 0,
-                      score: 30
-                    })
+
+                    if (isAgendor) {
+                      const razao = row['razão social'] || row['razao social'] || ''
+                      const fantasia = row['nome fantasia'] || ''
+                      if (!razao && !fantasia) continue
+
+                      const endParts = [
+                        row['rua'], row['número'] || row['numero'],
+                        row['complemento'] ? `(${row['complemento']})` : '',
+                        row['bairro'], row['cidade'],
+                        row['estado'], row['cep'] ? `CEP ${row['cep']}` : ''
+                      ].filter(Boolean)
+                      const endereco = endParts.join(', ')
+
+                      const tel = row['celular'] || row['whatsapp'] || row['telefone'] || ''
+
+                      const ranking = parseInt(row['ranking'] || '0')
+                      const score = ranking > 0 ? Math.min(ranking * 20, 100) : 30
+
+                      const notasParts: string[] = []
+                      if (row['setor']) notasParts.push(`Setor: ${row['setor']}`)
+                      if (row['descrição'] || row['descricao']) notasParts.push(`Obs: ${row['descrição'] || row['descricao']}`)
+                      if (row['website']) notasParts.push(`Site: ${row['website']}`)
+                      if (row['categoria']) notasParts.push(`Cat: ${row['categoria']}`)
+                      if (row['facebook']) notasParts.push(`FB: ${row['facebook']}`)
+                      if (row['instagram']) notasParts.push(`IG: ${row['instagram']}`)
+                      if (row['linkedin']) notasParts.push(`LI: ${row['linkedin']}`)
+                      if (row['fax']) notasParts.push(`Fax: ${row['fax']}`)
+                      if (row['ramal']) notasParts.push(`Ramal: ${row['ramal']}`)
+                      if (row['rádio'] || row['radio']) notasParts.push(`Rádio: ${row['rádio'] || row['radio']}`)
+                      if (row['skype']) notasParts.push(`Skype: ${row['skype']}`)
+                      if (row['nível de interesse'] || row['nivel de interesse']) notasParts.push(`Interesse: ${row['nível de interesse'] || row['nivel de interesse']}`)
+
+                      let ultInteracao = new Date().toISOString().split('T')[0]
+                      const dataStr = row['ultima atualização'] || row['ultima atualizacao'] || row['ultima atualização '] || row['data de cadastro'] || ''
+                      if (dataStr) {
+                        const match = dataStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+                        if (match) {
+                          const ano = match[3].length === 2 ? '20' + match[3] : match[3]
+                          ultInteracao = `${ano}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
+                        }
+                      }
+
+                      novos.push({
+                        id: Date.now() + i,
+                        razaoSocial: razao || fantasia,
+                        nomeFantasia: fantasia,
+                        cnpj: (row['cnpj'] || '').replace(/[^\d./\-]/g, ''),
+                        contatoNome: row['usuário responsável'] || row['usuario responsavel'] || row['usuário responsáve'] || row['cadastrado por'] || '',
+                        contatoTelefone: tel,
+                        contatoEmail: row['e-mail'] || row['email'] || '',
+                        endereco,
+                        etapa: 'prospecção',
+                        origemLead: row['origem do cliente'] || row['origem do lead'] || row['origem'] || 'Agendor',
+                        notas: notasParts.length > 0 ? notasParts.join(' | ') : undefined,
+                        ultimaInteracao: ultInteracao,
+                        diasInativo: 0,
+                        score
+                      })
+                    } else {
+                      if (!row['razaosocial'] && !row['razao_social'] && !row['nome'] && !row['razão social']) continue
+                      novos.push({
+                        id: Date.now() + i,
+                        razaoSocial: row['razaosocial'] || row['razao_social'] || row['razão social'] || row['nome'] || `Importado ${i}`,
+                        nomeFantasia: row['nomefantasia'] || row['nome_fantasia'] || row['nome fantasia'] || '',
+                        cnpj: row['cnpj'] || '',
+                        contatoNome: row['contatonome'] || row['contato_nome'] || row['contato'] || '',
+                        contatoTelefone: row['contatotelefone'] || row['contato_telefone'] || row['telefone'] || '',
+                        contatoEmail: row['contatoemail'] || row['contato_email'] || row['email'] || row['e-mail'] || '',
+                        endereco: row['endereco'] || '',
+                        etapa: 'prospecção',
+                        valorEstimado: (row['valorestimado'] || row['valor_estimado'] || row['valor']) ? parseFloat(row['valorestimado'] || row['valor_estimado'] || row['valor']) : undefined,
+                        ultimaInteracao: new Date().toISOString().split('T')[0],
+                        diasInativo: 0,
+                        score: 30
+                      })
+                    }
                   }
-                  if (novos.length === 0) { alert('Nenhum cliente válido encontrado no CSV.\nVerifique se o cabeçalho contém: razaoSocial, cnpj, contatoNome, contatoTelefone, contatoEmail'); return }
+                  if (novos.length === 0) { alert('Nenhum cliente válido encontrado no CSV.\nFormatos aceitos: CSV padrão ou exportação do Agendor.'); return }
                   onImportClientes(novos)
-                  alert(`✅ ${novos.length} cliente(s) importado(s) com sucesso!`)
+                  alert(`✅ ${novos.length} cliente(s) importado(s) com sucesso!${isAgendor ? '\n📋 Formato Agendor detectado automaticamente.' : ''}`)
                 }
-                reader.readAsText(file)
+                reader.readAsText(file, 'UTF-8')
                 e.target.value = ''
               }}
             />
