@@ -50,25 +50,65 @@
 /* DARK MODE — global overrides                 */
 /* ============================================ */
 
-/* Backgrounds */
+/* ---- Backgrounds ---- */
 .dark body { @apply bg-gray-900 text-gray-100; }
 .dark .bg-white { background-color: #1f2937 !important; }
 .dark .bg-gray-50 { background-color: #111827 !important; }
 .dark .bg-gray-100 { background-color: #1a2332 !important; }
+.dark .bg-gray-200 { background-color: #283548 !important; }
+.dark .bg-gray-300 { background-color: #374151 !important; }
 
-/* Text */
-.dark .text-gray-900 { color: #f3f4f6 !important; }
-.dark .text-gray-800 { color: #e5e7eb !important; }
-.dark .text-gray-700 { color: #d1d5db !important; }
-.dark .text-gray-600 { color: #9ca3af !important; }
+/* ---- Text (full gray scale) ---- */
+.dark .text-gray-900 { color: #f9fafb !important; }
+.dark .text-gray-800 { color: #f3f4f6 !important; }
+.dark .text-gray-700 { color: #e5e7eb !important; }
+.dark .text-gray-600 { color: #d1d5db !important; }
 .dark .text-gray-500 { color: #9ca3af !important; }
+.dark .text-gray-400 { color: #9ca3af !important; }
+.dark .text-gray-300 { color: #6b7280 !important; }
+.dark .text-gray-200 { color: #4b5563 !important; }
+.dark .text-white { color: #ffffff !important; }
 
-/* Borders */
+/* ---- Primary text (brighter in dark) ---- */
+.dark .text-primary-600 { color: #93a8e8 !important; }
+.dark .text-primary-700 { color: #a8baf0 !important; }
+.dark .text-primary-800 { color: #c5d0f5 !important; }
+
+/* ---- Colored text (ensure contrast) ---- */
+.dark .text-blue-700 { color: #93c5fd !important; }
+.dark .text-blue-800 { color: #93c5fd !important; }
+.dark .text-yellow-700 { color: #fde047 !important; }
+.dark .text-yellow-800 { color: #fde047 !important; }
+.dark .text-yellow-900 { color: #fef08a !important; }
+.dark .text-green-600 { color: #4ade80 !important; }
+.dark .text-green-700 { color: #86efac !important; }
+.dark .text-green-800 { color: #86efac !important; }
+.dark .text-purple-700 { color: #c4b5fd !important; }
+.dark .text-purple-800 { color: #c4b5fd !important; }
+.dark .text-pink-700 { color: #f9a8d4 !important; }
+.dark .text-pink-800 { color: #f9a8d4 !important; }
+.dark .text-red-500 { color: #f87171 !important; }
+.dark .text-red-600 { color: #fca5a5 !important; }
+.dark .text-red-700 { color: #fca5a5 !important; }
+.dark .text-red-800 { color: #fca5a5 !important; }
+.dark .text-orange-700 { color: #fdba74 !important; }
+.dark .text-orange-800 { color: #fdba74 !important; }
+
+/* ---- Borders (full scale) ---- */
+.dark .border-gray-100 { border-color: #1f2937 !important; }
 .dark .border-gray-200 { border-color: #374151 !important; }
 .dark .border-gray-300 { border-color: #4b5563 !important; }
-.dark .border-gray-100 { border-color: #1f2937 !important; }
+.dark .border-gray-400 { border-color: #6b7280 !important; }
+.dark .border-primary-200 { border-color: rgba(27, 42, 92, 0.4) !important; }
+.dark .border-primary-300 { border-color: rgba(27, 42, 92, 0.6) !important; }
+.dark .border-red-200 { border-color: rgba(239, 68, 68, 0.3) !important; }
 
-/* Form inputs & selects */
+/* ---- Dividers ---- */
+.dark .divide-gray-50 > :not([hidden]) ~ :not([hidden]) { border-color: #1f2937 !important; }
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1f2937 !important; }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #374151 !important; }
+
+/* ---- Form inputs & selects ---- */
 .dark input, .dark textarea, .dark select {
   background-color: #1a2332 !important;
   border-color: #4b5563 !important;
@@ -78,31 +118,56 @@
   color: #6b7280 !important;
 }
 
-/* Hover states */
+/* ---- Hover states ---- */
 .dark .hover\:bg-gray-50:hover { background-color: #1a2332 !important; }
 .dark .hover\:bg-gray-100:hover { background-color: #283548 !important; }
+.dark .hover\:bg-gray-200:hover { background-color: #374151 !important; }
+.dark .hover\:bg-gray-300:hover { background-color: #4b5563 !important; }
+.dark .hover\:bg-red-50:hover { background-color: rgba(239, 68, 68, 0.15) !important; }
+.dark .hover\:bg-red-100:hover { background-color: rgba(239, 68, 68, 0.2) !important; }
+.dark .hover\:text-gray-600:hover { color: #d1d5db !important; }
+.dark .hover\:text-gray-900:hover { color: #f9fafb !important; }
+.dark .hover\:text-red-600:hover { color: #fca5a5 !important; }
+.dark .hover\:text-red-700:hover { color: #fca5a5 !important; }
+.dark .hover\:text-primary-800:hover { color: #c5d0f5 !important; }
 
-/* Cards & panels with gray backgrounds */
+/* ---- Disabled states ---- */
+.dark .disabled\:bg-gray-300:disabled { background-color: #374151 !important; }
+
+/* ---- Cards & panels ---- */
 .dark .bg-gray-50.rounded-apple,
 .dark .bg-gray-50.border { background-color: #1a2332 !important; }
 
-/* Colored badges — keep readable in dark */
-.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2) !important; }
-.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.2) !important; }
-.dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.2) !important; }
-.dark .bg-purple-100 { background-color: rgba(168, 85, 247, 0.2) !important; }
-.dark .bg-pink-100 { background-color: rgba(236, 72, 153, 0.2) !important; }
-.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2) !important; }
-.dark .bg-orange-100 { background-color: rgba(249, 115, 22, 0.2) !important; }
-.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.1) !important; }
-.dark .bg-yellow-50 { background-color: rgba(234, 179, 8, 0.1) !important; }
-.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.1) !important; }
-.dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.1) !important; }
-.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.1) !important; }
+/* ---- Colored badge backgrounds (translucent in dark) ---- */
 .dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.1) !important; }
+.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.2) !important; }
+.dark .bg-yellow-50 { background-color: rgba(234, 179, 8, 0.1) !important; }
+.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.2) !important; }
+.dark .bg-yellow-400 { background-color: rgba(234, 179, 8, 0.3) !important; }
+.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.1) !important; }
+.dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.2) !important; }
+.dark .bg-green-600 { background-color: #16a34a !important; }
+.dark .bg-purple-50 { background-color: rgba(168, 85, 247, 0.1) !important; }
+.dark .bg-purple-100 { background-color: rgba(168, 85, 247, 0.2) !important; }
+.dark .bg-pink-50 { background-color: rgba(236, 72, 153, 0.1) !important; }
+.dark .bg-pink-100 { background-color: rgba(236, 72, 153, 0.2) !important; }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.1) !important; }
+.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.2) !important; }
+.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.1) !important; }
+.dark .bg-orange-100 { background-color: rgba(249, 115, 22, 0.2) !important; }
 .dark .bg-primary-50 { background-color: rgba(27, 42, 92, 0.3) !important; }
+.dark .bg-primary-100 { background-color: rgba(27, 42, 92, 0.25) !important; }
 
-/* Recharts (SVG charts) */
+/* ---- Shadows (subtle in dark) ---- */
+.dark .shadow-apple-sm { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important; }
+.dark .shadow-apple-lg { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important; }
+.dark .shadow-lg { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important; }
+
+/* ---- Ring focus (visible in dark) ---- */
+.dark .focus\:ring-primary-500:focus { --tw-ring-color: rgba(99, 102, 241, 0.5) !important; }
+.dark .focus\:ring-red-500:focus { --tw-ring-color: rgba(239, 68, 68, 0.5) !important; }
+
+/* ---- Recharts (SVG charts) ---- */
 .dark .recharts-cartesian-grid line { stroke: #374151 !important; }
 .dark .recharts-text { fill: #9ca3af !important; }
 .dark .recharts-tooltip-wrapper .recharts-default-tooltip {
