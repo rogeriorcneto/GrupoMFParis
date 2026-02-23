@@ -962,10 +962,10 @@ function App() {
   // Tela de loading enquanto verifica sessão
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-600 via-primary-700 to-blue-800 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-primary-700 via-primary-800 to-primary-900 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="w-20 h-20 bg-white rounded-2xl shadow-lg mx-auto flex items-center justify-center mb-4 animate-pulse">
-            <span className="text-3xl font-bold text-primary-700">MF</span>
+          <div className="w-20 h-20 bg-white rounded-2xl shadow-lg mx-auto flex items-center justify-center mb-4 animate-pulse p-2">
+            <img src="/Logo_MFParis.jpg" alt="GMF" className="w-full h-full object-contain rounded-xl" />
           </div>
           <p className="text-primary-200 mt-4">Carregando...</p>
         </div>
@@ -975,7 +975,7 @@ function App() {
 
   if (!loggedUser) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary-600 via-primary-700 to-blue-800 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-primary-700 via-primary-800 to-primary-900 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <div className="w-24 h-24 bg-white rounded-2xl shadow-lg mx-auto flex items-center justify-center mb-4 p-2">
