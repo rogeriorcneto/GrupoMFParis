@@ -488,7 +488,7 @@ export async function deleteAllClientes(): Promise<void> {
   const { error: e2 } = await supabase.from('interacoes').delete().in('cliente_id', clienteIds)
   if (e2) console.error('Erro ao limpar interacoes:', e2)
   // Só deletar tarefas vinculadas a clientes (preserva tarefas avulsas)
-  const { error: e3 } = await supabase.from('tarefas').delete().not('cliente_id', 'is', null)
+  const { error: e3 } = await supabase.from('tarefas').delete().in('cliente_id', clienteIds)
   if (e3) console.error('Erro ao limpar tarefas:', e3)
   // Deletar itens de pedido e pedidos vinculados a esses clientes
   const { data: pedidoRows } = await supabase.from('pedidos').select('id').in('cliente_id', clienteIds)

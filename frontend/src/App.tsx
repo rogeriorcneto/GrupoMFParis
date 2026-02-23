@@ -13,8 +13,6 @@ import {
   DocumentTextIcon,
   CubeIcon,
   ShoppingCartIcon,
-  SunIcon,
-  MoonIcon
 } from '@heroicons/react/24/outline'
 import type {
   ViewType, Cliente, FormData, Interacao, DragItem, AICommand,
@@ -45,7 +43,6 @@ function App() {
     setTimeout(() => setToastMsg(null), 4000)
   }
 
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
@@ -283,20 +280,19 @@ function App() {
   }, [clientes, tarefas, vendedores])
 
   // Item 2: Movimentação automática pelo sistema (prazos vencidos)
-  const autoMoveRef = useRef(false)
+  const autoMovedIds = useRef<Set<number>>(new Set())
   useEffect(() => {
-    if (autoMoveRef.current) return
     const now = Date.now()
     const clientesParaMover: { id: number; dias: number; etapa: string }[] = []
     clientes.forEach(c => {
-      if (!c.dataEntradaEtapa) return
+      if (!c.dataEntradaEtapa || autoMovedIds.current.has(c.id)) return
       const dias = Math.floor((now - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
       if (c.etapa === 'amostra' && dias > 30) clientesParaMover.push({ id: c.id, dias, etapa: 'amostra' })
       if (c.etapa === 'homologado' && dias > 75) clientesParaMover.push({ id: c.id, dias, etapa: 'homologado' })
       if (c.etapa === 'negociacao' && dias > 45) clientesParaMover.push({ id: c.id, dias, etapa: 'negociacao' })
     })
     if (clientesParaMover.length > 0) {
-      autoMoveRef.current = true
+      clientesParaMover.forEach(m => autoMovedIds.current.add(m.id))
       const nowStr = new Date().toISOString()
       // Update local state immediately
       setClientes(prev => prev.map(c => {
@@ -1146,7 +1142,7 @@ function App() {
   }
 
   return (
-    <div className={`h-screen flex bg-gray-50 ${darkMode ? 'dark' : ''}`}>
+    <div className="h-screen flex bg-gray-50">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -1278,13 +1274,6 @@ function App() {
           </div>
           
           <div className="flex items-center space-x-1 sm:space-x-3">
-            <button
-              onClick={() => { setDarkMode(prev => { const next = !prev; localStorage.setItem('darkMode', String(next)); return next }); }}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-apple hover:bg-gray-100"
-              title={darkMode ? 'Modo claro' : 'Modo escuro'}
-            >
-              {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-            </button>
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}

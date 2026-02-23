@@ -4,7 +4,7 @@ import type { Produto } from '../../types'
 
 const ProdutosView: React.FC<{
   produtos: Produto[]
-  onAdd: (p: Produto) => void
+  onAdd: (p: Omit<Produto, 'id' | 'dataCadastro'>) => void
   onUpdate: (p: Produto) => void
   onDelete: (id: number) => void
   isGerente: boolean
@@ -61,16 +61,18 @@ const ProdutosView: React.FC<{
 
   const handleSave = () => {
     if (!fNome.trim() || !fDescricao.trim() || !fPreco) return
-    const prod: Produto = {
-      id: editing ? editing.id : Date.now(),
+    const base = {
       nome: fNome.trim(), descricao: fDescricao.trim(), categoria: fCategoria,
       preco: parseFloat(fPreco), unidade: fUnidade, foto: fFoto,
       sku: fSku.trim() || undefined, estoque: fEstoque ? parseInt(fEstoque) : undefined,
       pesoKg: fPesoKg ? parseFloat(fPesoKg) : undefined, margemLucro: fMargemLucro ? parseFloat(fMargemLucro) : undefined,
       ativo: fAtivo, destaque: fDestaque,
-      dataCadastro: editing ? editing.dataCadastro : new Date().toISOString().split('T')[0]
     }
-    if (editing) { onUpdate(prod) } else { onAdd(prod) }
+    if (editing) {
+      onUpdate({ ...base, id: editing.id, dataCadastro: editing.dataCadastro })
+    } else {
+      onAdd(base)
+    }
     setShowModal(false)
   }
 
