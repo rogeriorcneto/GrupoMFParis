@@ -978,10 +978,10 @@ function App() {
       <div className="min-h-screen bg-gradient-to-br from-primary-600 via-primary-700 to-blue-800 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-white rounded-2xl shadow-lg mx-auto flex items-center justify-center mb-4">
-              <span className="text-3xl font-bold text-primary-700">MF</span>
+            <div className="w-24 h-24 bg-white rounded-2xl shadow-lg mx-auto flex items-center justify-center mb-4 p-2">
+              <img src="/Logo_MFParis.jpg" alt="Grupo MF Paris" className="w-full h-full object-contain rounded-xl" />
             </div>
-            <h1 className="text-3xl font-bold text-white">MF Paris</h1>
+            <h1 className="text-3xl font-bold text-white">Grupo MF Paris</h1>
             <p className="text-primary-200 mt-2">CRM de Vendas</p>
           </div>
 
@@ -1054,7 +1054,7 @@ function App() {
             </div>
           </div>
 
-          <p className="text-center text-primary-200 text-xs mt-6">© 2026 MF Paris — CRM de Vendas</p>
+          <p className="text-center text-primary-200 text-xs mt-6">© 2026 Grupo MF Paris — CRM de Vendas</p>
         </div>
       </div>
     )
@@ -1070,8 +1070,11 @@ function App() {
       {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-r flex flex-col`}>
         {/* Logo */}
-        <div className={`h-16 flex items-center justify-between px-6 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <h1 className={`text-xl font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>MF Paris</h1>
+        <div className={`h-16 flex items-center justify-between px-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-2">
+            <img src="/Logo_MFParis.jpg" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
+            <h1 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Grupo MF Paris</h1>
+          </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-gray-400 hover:text-gray-600 rounded-apple">
             <XMarkIcon className="h-5 w-5" />
           </button>
