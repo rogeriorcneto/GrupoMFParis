@@ -204,7 +204,8 @@ const ProspeccaoView: React.FC<{
           {tab === 'fila' && (
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
               <div className="text-lg font-semibold text-gray-900">Fila do dia</div>
-              <div className="text-sm text-gray-600 mt-1">Jobs pendentes para execução (MVP: executar agora).</div>
+              <div className="text-sm text-gray-600 mt-1">Jobs pendentes para execução manual.</div>
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-apple text-xs text-yellow-800">⚠️ <strong>MVP:</strong> Os jobs são registros de ações planejadas. Clique "Executar" para registrar a interação no CRM. O envio real (WhatsApp/Email) requer integração futura.</div>
               <div className="mt-4 space-y-2">
                 {jobs.length === 0 && <div className="text-sm text-gray-500">Sem jobs agendados ainda.</div>}
                 {jobs.slice(0, 30).map((j) => {
@@ -229,8 +230,9 @@ const ProspeccaoView: React.FC<{
           {tab === 'campanhas' && (
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
               <div className="flex items-start justify-between">
-                <div><div className="text-lg font-semibold text-gray-900">Campanhas</div><div className="text-sm text-gray-600 mt-1">Defina audiência e inicie uma cadência automaticamente.</div></div>
+                <div><div className="text-lg font-semibold text-gray-900">Campanhas</div><div className="text-sm text-gray-600 mt-1">Defina audiência e inicie uma cadência.</div></div>
               </div>
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-apple text-xs text-yellow-800">⚠️ <strong>MVP:</strong> Campanhas agendam jobs na fila, mas o envio é manual. Vá na aba "Fila" e clique "Executar" para disparar cada ação.</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div className="rounded-apple border border-gray-200 p-4">
                   <div className="text-sm font-semibold text-gray-900">Nova campanha</div>
@@ -256,7 +258,7 @@ const ProspeccaoView: React.FC<{
                         </div>
                         <div className="text-xs text-gray-600 mt-1">Cadência: {cadencias.find(x => x.id === c.cadenciaId)?.nome || c.cadenciaId}</div>
                         <div className="flex flex-wrap gap-2 mt-3">
-                          <button onClick={() => onStartCampanha(c.id)} className="px-3 py-2 text-sm bg-primary-600 text-white rounded-apple hover:bg-primary-700">Iniciar</button>
+                          <button onClick={() => { if (window.confirm('Isso vai criar jobs na fila. Os envios devem ser executados manualmente na aba Fila. Continuar?')) onStartCampanha(c.id) }} className="px-3 py-2 text-sm bg-primary-600 text-white rounded-apple hover:bg-primary-700">Iniciar</button>
                         </div>
                       </div>
                     ))}

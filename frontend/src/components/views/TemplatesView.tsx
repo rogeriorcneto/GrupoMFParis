@@ -2,7 +2,7 @@ import React from 'react'
 import { XMarkIcon, PlusIcon } from '@heroicons/react/24/outline'
 import type { Template } from '../../types'
 
-const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Template) => void, onDelete: (id: number) => void }> = ({ templates, onAdd, onDelete }) => {
+const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template, 'id'>) => void, onDelete: (id: number) => void }> = ({ templates, onAdd, onDelete }) => {
   const [showModal, setShowModal] = React.useState(false)
   const [filterCanal, setFilterCanal] = React.useState<string>('')
   const [filterEtapa, setFilterEtapa] = React.useState<string>('')
@@ -19,7 +19,7 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Template) => v
 
   const handleAdd = () => {
     if (!newNome.trim() || !newCorpo.trim()) return
-    onAdd({ id: Date.now(), nome: newNome.trim(), canal: newCanal, etapa: newEtapa, assunto: newAssunto.trim() || undefined, corpo: newCorpo.trim() })
+    onAdd({ nome: newNome.trim(), canal: newCanal, etapa: newEtapa, assunto: newAssunto.trim() || undefined, corpo: newCorpo.trim() })
     setNewNome(''); setNewAssunto(''); setNewCorpo(''); setShowModal(false)
   }
 
