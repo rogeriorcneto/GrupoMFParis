@@ -364,12 +364,12 @@ export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<
 // ============================================
 
 export async function fetchClientes(): Promise<Cliente[]> {
-  const { data, error } = await supabase.from('clientes').select('*').order('id')
+  const { data, error } = await supabase.from('clientes').select('*').order('id').range(0, 9999)
   if (error) throw error
   const clientes = (data || []).map(clienteFromDb)
 
   // Buscar histórico de etapas para todos os clientes
-  const { data: hist } = await supabase.from('historico_etapas').select('*').order('data')
+  const { data: hist } = await supabase.from('historico_etapas').select('*').order('data').range(0, 49999)
   if (hist) {
     const histMap = new Map<number, HistoricoEtapa[]>()
     hist.forEach((h: any) => {
@@ -417,7 +417,7 @@ export async function insertHistoricoEtapa(clienteId: number, h: HistoricoEtapa)
 // ============================================
 
 export async function fetchInteracoes(): Promise<Interacao[]> {
-  const { data, error } = await supabase.from('interacoes').select('*').order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('interacoes').select('*').order('created_at', { ascending: false }).range(0, 19999)
   if (error) throw error
   return (data || []).map(interacaoFromDb)
 }
@@ -439,7 +439,7 @@ export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interac
 // ============================================
 
 export async function fetchTarefas(): Promise<Tarefa[]> {
-  const { data, error } = await supabase.from('tarefas').select('*').order('data')
+  const { data, error } = await supabase.from('tarefas').select('*').order('data').range(0, 9999)
   if (error) throw error
   return (data || []).map(tarefaFromDb)
 }
@@ -523,7 +523,7 @@ export async function deleteProduto(id: number): Promise<void> {
 // ============================================
 
 export async function fetchPedidos(): Promise<Pedido[]> {
-  const { data: pedidosRaw, error } = await supabase.from('pedidos').select('*').order('data_criacao', { ascending: false })
+  const { data: pedidosRaw, error } = await supabase.from('pedidos').select('*').order('data_criacao', { ascending: false }).range(0, 9999)
   if (error) throw error
   if (!pedidosRaw || pedidosRaw.length === 0) return []
 

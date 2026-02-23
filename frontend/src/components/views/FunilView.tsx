@@ -162,7 +162,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           dataEntradaEtapa: deal.dataUlt || new Date().toISOString().split('T')[0],
           ultimaInteracao: deal.dataUlt || new Date().toISOString().split('T')[0],
         }
-        if (deal.pessoa) changes.contatoNome = deal.pessoa
+        changes.contatoNome = deal.pessoa || ''
         if (deal.celular || deal.whatsapp || deal.telefone) changes.contatoTelefone = deal.celular || deal.whatsapp || deal.telefone
         if (deal.email) changes.contatoEmail = deal.email
         if (deal.valor > 0) changes.valorEstimado = deal.valor
