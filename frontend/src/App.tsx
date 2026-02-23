@@ -173,29 +173,38 @@ function App() {
   const [panelTab, setPanelTab] = useState<'info' | 'atividades' | 'tarefas'>('info')
   const [transicaoInvalida, setTransicaoInvalida] = useState('')
 
-  // Recalculate diasInativo based on ultimaInteracao and persist
-  useEffect(() => {
-    const hoje = new Date()
-    const changedIds: { id: number; diasInativo: number }[] = []
-    const updated = clientes.map(c => {
-      if (!c.ultimaInteracao) return c
-      const dias = Math.floor((hoje.getTime() - new Date(c.ultimaInteracao).getTime()) / 86400000)
-      if (dias !== (c.diasInativo || 0)) {
-        changedIds.push({ id: c.id, diasInativo: dias })
-        return { ...c, diasInativo: dias }
-      }
-      return c
-    })
-    if (changedIds.length > 0) {
-      setClientes(updated)
-      const persistDias = async () => {
-        for (const { id, diasInativo } of changedIds) {
-          try { await db.updateCliente(id, { diasInativo }) } catch (err) { console.error('Erro ao persistir diasInativo:', err) }
+  // Recalculate diasInativo based on ultimaInteracao and persist (runs on mount + every hour)
+  const recalcDiasInativo = useCallback(() => {
+    setClientes(prev => {
+      const hoje = new Date()
+      const changedIds: { id: number; diasInativo: number }[] = []
+      const updated = prev.map(c => {
+        if (!c.ultimaInteracao) return c
+        const dias = Math.floor((hoje.getTime() - new Date(c.ultimaInteracao).getTime()) / 86400000)
+        if (dias !== (c.diasInativo || 0)) {
+          changedIds.push({ id: c.id, diasInativo: dias })
+          return { ...c, diasInativo: dias }
         }
+        return c
+      })
+      if (changedIds.length > 0) {
+        const persistDias = async () => {
+          for (const { id, diasInativo } of changedIds) {
+            try { await db.updateCliente(id, { diasInativo }) } catch (err) { console.error('Erro ao persistir diasInativo:', err) }
+          }
+        }
+        persistDias()
+        return updated
       }
-      persistDias()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      return prev
+    })
+  }, [])
+
+  useEffect(() => {
+    recalcDiasInativo()
+    const interval = setInterval(recalcDiasInativo, 3600000) // recalcula a cada 1 hora
+    return () => clearInterval(interval)
+  }, [recalcDiasInativo])
 
   // Generate notifications from data (limited to 20, prioritized)
   const notifGenRef = useRef<string>('')
@@ -950,8 +959,11 @@ function App() {
     }
   }
 
+  const [loginLoading, setLoginLoading] = useState(false)
   const handleLogin = async () => {
+    if (loginLoading) return
     setLoginError('')
+    setLoginLoading(true)
     try {
       await db.signIn(loginUsuario.trim(), loginSenha)
       const vendedor = await db.getLoggedVendedor()
@@ -966,6 +978,8 @@ function App() {
       }
     } catch (err: any) {
       setLoginError(err?.message === 'Invalid login credentials' ? 'Email ou senha inválidos' : (err?.message || 'Erro ao fazer login'))
+    } finally {
+      setLoginLoading(false)
     }
   }
 
@@ -1031,9 +1045,15 @@ function App() {
 
               <button
                 onClick={handleLogin}
-                className="w-full py-3 bg-primary-600 text-white rounded-apple hover:bg-primary-700 transition-colors duration-200 shadow-apple-sm font-semibold text-base"
+                disabled={loginLoading}
+                className="w-full py-3 bg-primary-600 text-white rounded-apple hover:bg-primary-700 transition-colors duration-200 shadow-apple-sm font-semibold text-base disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                Entrar
+                {loginLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    Entrando...
+                  </span>
+                ) : 'Entrar'}
               </button>
             </div>
 
