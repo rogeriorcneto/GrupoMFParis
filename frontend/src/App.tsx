@@ -469,8 +469,8 @@ function App() {
         setClientes(prev => prev.map(c => c.id === editingCliente.id ? { ...c, ...updatedFields } : c))
         
         const savedI = await db.insertInteracao({
-          clienteId: editingCliente.id, tipo: 'email', data: new Date().toISOString(),
-          assunto: 'Dados atualizados', descricao: `Cliente atualizado: ${formData.razaoSocial}`, automatico: false
+          clienteId: editingCliente.id, tipo: 'nota', data: new Date().toISOString(),
+          assunto: 'Dados atualizados', descricao: `Cliente atualizado: ${formData.razaoSocial}`, automatico: true
         })
         setInteracoes(prev => [savedI, ...prev])
         setEditingCliente(null)
@@ -1598,8 +1598,8 @@ function App() {
         const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
         const clienteInteracoes = interacoes.filter(i => i.clienteId === c.id).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
         const clienteTarefas = tarefas.filter(t => t.clienteId === c.id).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
-        const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼' }
-        const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn' }
+        const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
+        const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação' }
 
         const handleRegistrarAtividade = async () => {
           if (!panelAtividadeTipo || !panelAtividadeDesc.trim()) return
@@ -1623,7 +1623,7 @@ function App() {
           if (!panelNota.trim()) return
           try {
             const savedI = await db.insertInteracao({
-              clienteId: c.id, tipo: 'email', data: new Date().toISOString(),
+              clienteId: c.id, tipo: 'nota', data: new Date().toISOString(),
               assunto: `📝 Observação - ${c.razaoSocial}`, descricao: panelNota.trim(), automatico: false
             })
             setInteracoes(prev => [savedI, ...prev])

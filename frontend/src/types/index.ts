@@ -56,7 +56,7 @@ export interface FormData {
 export interface Interacao {
   id: number
   clienteId: number
-  tipo: 'email' | 'whatsapp' | 'linkedin' | 'instagram' | 'ligacao' | 'reuniao'
+  tipo: 'email' | 'whatsapp' | 'linkedin' | 'instagram' | 'ligacao' | 'reuniao' | 'nota'
   data: string
   assunto: string
   descricao: string
