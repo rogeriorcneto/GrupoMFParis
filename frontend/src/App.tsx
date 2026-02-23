@@ -43,7 +43,6 @@ function App() {
     setTimeout(() => setToastMsg(null), 4000)
   }
 
-  const darkMode = false
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
@@ -297,11 +296,14 @@ function App() {
   const scoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const baseEtapa: Record<string, number> = { 'prospecção': 10, 'amostra': 25, 'homologado': 50, 'negociacao': 70, 'pos_venda': 90, 'perdido': 5 }
+    // Pre-build interaction count map O(n) instead of O(n²)
+    const interCountMap = new Map<number, number>()
+    interacoes.forEach(i => { interCountMap.set(i.clienteId, (interCountMap.get(i.clienteId) || 0) + 1) })
     const changedIds: { id: number; score: number }[] = []
     const updated = clientes.map(c => {
       const base = baseEtapa[c.etapa] || 10
       const bonusValor = Math.min((c.valorEstimado || 0) / 10000, 15)
-      const qtdInteracoes = interacoes.filter(i => i.clienteId === c.id).length
+      const qtdInteracoes = interCountMap.get(c.id) || 0
       const bonusInteracoes = Math.min(qtdInteracoes * 3, 15)
       const penalidade = Math.min((c.diasInativo || 0) * 0.5, 20)
       const newScore = Math.max(0, Math.min(100, Math.round(base + bonusValor + bonusInteracoes - penalidade)))
@@ -345,7 +347,7 @@ function App() {
     const leadsAtivos = clientes.filter(c => (c.diasInativo || 0) <= 15).length
     const leadsNovosHoje = clientes.filter(c => {
       const hoje = new Date().toISOString().split('T')[0]
-      return c.ultimaInteracao === hoje
+      return c.dataEntradaEtapa?.startsWith(hoje)
     }).length
     const interacoesHoje = interacoes.filter(c => {
       const hoje = new Date().toISOString().split('T')[0]
@@ -1950,15 +1952,15 @@ function App() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {([
-                { key: 'preco', label: '💲 Preço', color: 'yellow' },
-                { key: 'prazo', label: '⏰ Prazo', color: 'orange' },
-                { key: 'qualidade', label: '⭐ Qualidade', color: 'blue' },
-                { key: 'concorrencia', label: '🏁 Concorrência', color: 'red' },
-                { key: 'sem_resposta', label: '📵 Sem resposta', color: 'gray' },
-                { key: 'outro', label: '📝 Outro', color: 'purple' },
-              ] as { key: NonNullable<Cliente['categoriaPerda']>; label: string; color: string }[]).map(cat => (
+                { key: 'preco', label: '💲 Preço', active: 'border-yellow-500 bg-yellow-50 text-yellow-800' },
+                { key: 'prazo', label: '⏰ Prazo', active: 'border-orange-500 bg-orange-50 text-orange-800' },
+                { key: 'qualidade', label: '⭐ Qualidade', active: 'border-blue-500 bg-blue-50 text-blue-800' },
+                { key: 'concorrencia', label: '🏁 Concorrência', active: 'border-red-500 bg-red-50 text-red-800' },
+                { key: 'sem_resposta', label: '📵 Sem resposta', active: 'border-gray-500 bg-gray-50 text-gray-800' },
+                { key: 'outro', label: '📝 Outro', active: 'border-purple-500 bg-purple-50 text-purple-800' },
+              ] as { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[]).map(cat => (
                 <button key={cat.key} onClick={() => setCategoriaPerdaSel(cat.key)}
-                  className={`px-2 py-2 text-xs font-medium rounded-apple border-2 transition-all ${categoriaPerdaSel === cat.key ? `border-${cat.color}-500 bg-${cat.color}-50 text-${cat.color}-800` : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}
+                  className={`px-2 py-2 text-xs font-medium rounded-apple border-2 transition-all ${categoriaPerdaSel === cat.key ? cat.active : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}
                 >{cat.label}</button>
               ))}
             </div>
