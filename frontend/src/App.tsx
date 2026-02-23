@@ -10,8 +10,6 @@ import {
   BellIcon,
   XMarkIcon,
   SparklesIcon,
-  SunIcon,
-  MoonIcon,
   DocumentTextIcon,
   CubeIcon,
   ShoppingCartIcon
@@ -45,7 +43,7 @@ function App() {
     setTimeout(() => setToastMsg(null), 4000)
   }
 
-  const [darkMode, setDarkMode] = useState(false)
+  const darkMode = false
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
@@ -295,7 +293,8 @@ function App() {
     }
   }, [clientes])
 
-  // Item 4: Score dinâmico — recalcula automaticamente e persiste
+  // Item 4: Score dinâmico — recalcula automaticamente e persiste (debounced, threshold 5pts)
+  const scoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const baseEtapa: Record<string, number> = { 'prospecção': 10, 'amostra': 25, 'homologado': 50, 'negociacao': 70, 'pos_venda': 90, 'perdido': 5 }
     const changedIds: { id: number; score: number }[] = []
@@ -311,15 +310,21 @@ function App() {
     })
     if (changedIds.length > 0) {
       setClientes(updated)
-      // Persist scores to Supabase in background
-      const persistScores = async () => {
-        for (const { id, score } of changedIds) {
-          try { await db.updateCliente(id, { score }) } catch (err) { console.error('Erro ao persistir score:', err) }
-        }
+      // Persist only scores that changed by 5+ points, debounced
+      const significantChanges = changedIds.filter(({ id, score }) => {
+        const original = clientes.find(c => c.id === id)
+        return Math.abs((original?.score || 0) - score) >= 5
+      })
+      if (significantChanges.length > 0) {
+        if (scoreTimerRef.current) clearTimeout(scoreTimerRef.current)
+        scoreTimerRef.current = setTimeout(async () => {
+          for (const { id, score } of significantChanges) {
+            try { await db.updateCliente(id, { score }) } catch (err) { console.error('Erro ao persistir score:', err) }
+          }
+        }, 3000)
       }
-      persistScores()
     }
-  }, [interacoes])
+  }, [interacoes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [formData, setFormData] = useState<FormData>({
     razaoSocial: '',
@@ -751,10 +756,10 @@ function App() {
                 await db.updateCliente(clienteId, changes)
                 setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, ...changes } : c))
               }
-              // Criar novos clientes
-              for (const novo of novos) {
-                const saved = await db.insertCliente(novo as Omit<Cliente, 'id'>)
-                setClientes(prev => [...prev, saved])
+              // Criar novos clientes em batch
+              if (novos.length > 0) {
+                const savedNovos = await db.insertClientesBatch(novos as Omit<Cliente, 'id'>[])
+                setClientes(prev => [...prev, ...savedNovos])
               }
               showToast('success', `Funil atualizado: ${updates.length} atualizados, ${novos.length} novos`)
             } catch (err) {
@@ -1039,19 +1044,19 @@ function App() {
   }
 
   return (
-    <div className={`h-screen flex ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+    <div className="h-screen flex bg-gray-50">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-r flex flex-col`}>
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white border-gray-200 border-r flex flex-col`}>
         {/* Logo */}
-        <div className={`h-16 flex items-center justify-between px-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <img src="/Logo_MFParis.jpg" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
-            <h1 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Grupo MF Paris</h1>
+            <h1 className="text-lg font-bold text-gray-900">Grupo MF Paris</h1>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-gray-400 hover:text-gray-600 rounded-apple">
             <XMarkIcon className="h-5 w-5" />
@@ -1144,7 +1149,7 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <div className={`h-14 sm:h-16 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b flex items-center justify-between px-3 sm:px-6`}>
+        <div className="h-14 sm:h-16 bg-white border-gray-200 border-b flex items-center justify-between px-3 sm:px-6">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -1152,7 +1157,7 @@ function App() {
             >
               <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
             </button>
-            <h2 className={`text-base sm:text-lg font-semibold truncate ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            <h2 className="text-base sm:text-lg font-semibold truncate text-gray-900">
               {activeView === 'dashboard' && 'Visão Geral'}
               {activeView === 'funil' && 'Funil de Vendas'}
               {activeView === 'clientes' && 'Clientes'}
@@ -1171,13 +1176,6 @@ function App() {
           </div>
           
           <div className="flex items-center space-x-1 sm:space-x-3">
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-apple hover:bg-gray-100"
-              title={darkMode ? 'Modo claro' : 'Modo escuro'}
-            >
-              {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-            </button>
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}

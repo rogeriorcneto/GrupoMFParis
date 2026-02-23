@@ -117,10 +117,11 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
 
       {/* Metas de Vendas */}
       {(() => {
-        const metaVendasMensal = 500000
-        const metaLeadsMensal = 20
-        const metaConversaoMensal = 15
-        const metaTicketMedio = 80000
+        const vendedoresAtivos = vendedores.filter(v => v.ativo)
+        const metaVendasMensal = vendedoresAtivos.reduce((s, v) => s + v.metaVendas, 0) || 500000
+        const metaLeadsMensal = vendedoresAtivos.reduce((s, v) => s + v.metaLeads, 0) || 20
+        const metaConversaoMensal = vendedoresAtivos.length > 0 ? Math.round(vendedoresAtivos.reduce((s, v) => s + v.metaConversao, 0) / vendedoresAtivos.length) : 15
+        const metaTicketMedio = metaLeadsMensal > 0 ? Math.round(metaVendasMensal / metaLeadsMensal) : 80000
 
         const progressoVendas = Math.min((metrics.valorTotal / metaVendasMensal) * 100, 100)
         const progressoLeads = Math.min((metrics.totalLeads / metaLeadsMensal) * 100, 100)

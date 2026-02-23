@@ -410,6 +410,10 @@ export async function updateCliente(id: number, c: Partial<Cliente>): Promise<vo
 }
 
 export async function deleteCliente(id: number): Promise<void> {
+  // Cascade: delete related data first
+  await supabase.from('historico_etapas').delete().eq('cliente_id', id)
+  await supabase.from('interacoes').delete().eq('cliente_id', id)
+  await supabase.from('tarefas').delete().eq('cliente_id', id)
   const { error } = await supabase.from('clientes').delete().eq('id', id)
   if (error) throw error
 }
