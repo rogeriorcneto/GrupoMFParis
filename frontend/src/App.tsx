@@ -744,6 +744,24 @@ function App() {
           onQuickAction={handleQuickAction}
           onClickCliente={(c) => setSelectedClientePanel(c)}
           isGerente={loggedUser?.cargo === 'gerente'}
+          onImportNegocios={async (updates, novos) => {
+            try {
+              // Atualizar clientes existentes no Supabase
+              for (const { clienteId, changes } of updates) {
+                await db.updateCliente(clienteId, changes)
+                setClientes(prev => prev.map(c => c.id === clienteId ? { ...c, ...changes } : c))
+              }
+              // Criar novos clientes
+              for (const novo of novos) {
+                const saved = await db.insertCliente(novo as Omit<Cliente, 'id'>)
+                setClientes(prev => [...prev, saved])
+              }
+              showToast('success', `Funil atualizado: ${updates.length} atualizados, ${novos.length} novos`)
+            } catch (err) {
+              console.error('Erro ao importar negócios:', err)
+              showToast('error', 'Erro ao importar negócios. Verifique o CSV.')
+            }
+          }}
         />
       case 'clientes':
         return <ClientesView 

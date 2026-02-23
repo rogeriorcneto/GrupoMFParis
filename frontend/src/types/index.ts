@@ -239,6 +239,7 @@ export interface FunilViewProps {
   onQuickAction: (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => void
   onClickCliente?: (c: Cliente) => void
   isGerente?: boolean
+  onImportNegocios?: (updates: { clienteId: number; changes: Partial<Cliente> }[], novos: Omit<Cliente, 'id'>[]) => void
 }
 
 export interface ClientesViewProps {

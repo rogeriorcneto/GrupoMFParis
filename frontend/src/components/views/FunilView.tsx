@@ -1,9 +1,193 @@
 import React from 'react'
 import type { Cliente, Vendedor, Interacao, FunilViewProps } from '../../types'
 
-function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
+function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor'>('urgencia')
+  const [importStatus, setImportStatus] = React.useState<string | null>(null)
+
+  // Mapeamento Agendor → CRM
+  const mapEtapaAgendor = (etapa: string, status: string): string => {
+    const s = status.toLowerCase().trim()
+    if (s === 'perdido' || s === 'lost') return 'perdido'
+    const e = etapa.toLowerCase().trim()
+    if (e.includes('contato') || e.includes('prospec')) return 'prospecção'
+    if (e.includes('proposta')) return 'negociacao'
+    if (e.includes('envio') || e.includes('pedido')) return 'pos_venda'
+    if (e.includes('follow') || e.includes('pós') || e.includes('pos')) return 'pos_venda'
+    if (e.includes('amostra')) return 'amostra'
+    if (e.includes('homolog')) return 'homologado'
+    if (e.includes('negocia')) return 'negociacao'
+    return 'prospecção'
+  }
+
+  const mapCategoriaPerdaAgendor = (motivo: string): Cliente['categoriaPerda'] => {
+    const m = motivo.toLowerCase()
+    if (m.includes('preço') || m.includes('preco') || m.includes('valor') || m.includes('caro')) return 'preco'
+    if (m.includes('prazo') || m.includes('demor') || m.includes('tempo')) return 'prazo'
+    if (m.includes('qualidade') || m.includes('produto')) return 'qualidade'
+    if (m.includes('concorr')) return 'concorrencia'
+    if (m.includes('resposta') || m.includes('retorno') || m.includes('contato')) return 'sem_resposta'
+    return 'outro'
+  }
+
+  const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !onImportNegocios) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 2) { alert('CSV vazio ou sem dados'); return }
+
+      const firstLine = lines[0]
+      const countSemicolon = (firstLine.match(/;/g) || []).length
+      const countComma = (firstLine.match(/,/g) || []).length
+      const countTab = (firstLine.match(/\t/g) || []).length
+      const sep = countTab > countComma && countTab > countSemicolon ? '\t' : countSemicolon > countComma ? ';' : ','
+
+      const parseLine = (line: string): string[] => {
+        const result: string[] = []
+        let current = '', inQuotes = false
+        for (let j = 0; j < line.length; j++) {
+          const ch = line[j]
+          if (ch === '"') { inQuotes = !inQuotes; continue }
+          if (ch === sep && !inQuotes) { result.push(current.trim()); current = ''; continue }
+          current += ch
+        }
+        result.push(current.trim())
+        return result
+      }
+
+      const headers = parseLine(firstLine).map(h => h.replace(/^\uFEFF/, '').toLowerCase().trim())
+
+      if (!headers.some(h => h.includes('etapa') || h.includes('título do negócio') || h.includes('titulo do negocio'))) {
+        alert('Este CSV não parece ser uma exportação de Negócios do Agendor.\nUse: Agendor → Negócios → Exportar')
+        return
+      }
+
+      // Parsear todos os negócios
+      interface NegocioRow {
+        empresa: string; cnpj: string; etapa: string; status: string; valor: number
+        motivoPerda: string; descMotivo: string; produto: string; origemCliente: string
+        pessoa: string; telefone: string; celular: string; whatsapp: string; email: string
+        endereco: string; dataUlt: string; ranking: number
+      }
+
+      const negocios: NegocioRow[] = []
+      for (let i = 1; i < lines.length; i++) {
+        const vals = parseLine(lines[i])
+        const row: Record<string, string> = {}
+        headers.forEach((h, idx) => { row[h] = vals[idx] || '' })
+
+        const empresa = row['empresa relacionada'] || ''
+        if (!empresa) continue
+
+        const endParts = [row['rua'], row['número'] || row['numero'], row['complemento'] ? `(${row['complemento']})` : '', row['bairro'], row['cidade'], row['estado'], row['cep'] ? `CEP ${row['cep']}` : ''].filter(Boolean)
+
+        let dataUlt = ''
+        const dataStr = row['ultima atualização'] || row['ultima atualizacao'] || row['data de cadastro'] || ''
+        if (dataStr) {
+          const match = dataStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
+          if (match) {
+            const ano = match[3].length === 2 ? '20' + match[3] : match[3]
+            dataUlt = `${ano}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
+          }
+        }
+
+        negocios.push({
+          empresa,
+          cnpj: (row['cnpj'] || '').replace(/[^\d./\-]/g, ''),
+          etapa: row['etapa'] || '',
+          status: row['status'] || '',
+          valor: parseFloat(row['valor'] || '0') || 0,
+          motivoPerda: row['motivo de perda'] || '',
+          descMotivo: row['descrição do motivo de perda'] || row['descricao do motivo de perda'] || '',
+          produto: row['produto'] || '',
+          origemCliente: row['origem do cliente'] || '',
+          pessoa: row['pessoa relacionada'] || '',
+          telefone: row['telefone'] || '',
+          celular: row['celular'] || '',
+          whatsapp: row['whatsapp'] || '',
+          email: row['e-mail'] || row['email'] || '',
+          endereco: endParts.join(', '),
+          dataUlt,
+          ranking: parseInt(row['ranking'] || '0')
+        })
+      }
+
+      if (negocios.length === 0) { alert('Nenhum negócio válido encontrado no CSV.'); return }
+
+      // Agrupar por empresa — pegar o negócio mais recente de cada uma
+      const porEmpresa = new Map<string, NegocioRow[]>()
+      negocios.forEach(n => {
+        const key = n.cnpj || n.empresa.toLowerCase().trim()
+        if (!porEmpresa.has(key)) porEmpresa.set(key, [])
+        porEmpresa.get(key)!.push(n)
+      })
+
+      const updates: { clienteId: number; changes: Partial<Cliente> }[] = []
+      const novos: Omit<Cliente, 'id'>[] = []
+      let matchCount = 0, newCount = 0
+
+      porEmpresa.forEach((deals, _key) => {
+        // Usar o deal mais recente (último no array ou com data mais recente)
+        const deal = deals.sort((a, b) => (a.dataUlt || '').localeCompare(b.dataUlt || '')).pop()!
+        const etapaCRM = mapEtapaAgendor(deal.etapa, deal.status)
+
+        // Tentar match com cliente existente
+        const clienteExistente = clientes.find(c => {
+          if (deal.cnpj && c.cnpj && deal.cnpj.replace(/\D/g, '') === c.cnpj.replace(/\D/g, '')) return true
+          return c.razaoSocial.toLowerCase().trim() === deal.empresa.toLowerCase().trim() ||
+            (c.nomeFantasia && c.nomeFantasia.toLowerCase().trim() === deal.empresa.toLowerCase().trim())
+        })
+
+        const changes: Partial<Cliente> = {
+          etapa: etapaCRM,
+          dataEntradaEtapa: deal.dataUlt || new Date().toISOString().split('T')[0],
+          ultimaInteracao: deal.dataUlt || new Date().toISOString().split('T')[0],
+        }
+        if (deal.valor > 0) changes.valorEstimado = deal.valor
+        if (deal.produto) changes.produtosInteresse = deal.produto.split(',').map(p => p.trim()).filter(Boolean)
+        if (deal.origemCliente) changes.origemLead = deal.origemCliente
+        if (etapaCRM === 'perdido') {
+          changes.motivoPerda = deal.descMotivo || deal.motivoPerda || ''
+          changes.categoriaPerda = mapCategoriaPerdaAgendor(deal.motivoPerda)
+          changes.dataPerda = deal.dataUlt || new Date().toISOString().split('T')[0]
+        }
+        if (etapaCRM === 'negociacao' && deal.valor > 0) {
+          changes.valorProposta = deal.valor
+          changes.dataProposta = deal.dataUlt || undefined
+        }
+        if (deal.ranking > 0) changes.score = Math.min(deal.ranking * 20, 100)
+
+        if (clienteExistente) {
+          updates.push({ clienteId: clienteExistente.id, changes })
+          matchCount++
+        } else {
+          novos.push({
+            razaoSocial: deal.empresa,
+            nomeFantasia: '',
+            cnpj: deal.cnpj,
+            contatoNome: deal.pessoa,
+            contatoTelefone: deal.celular || deal.whatsapp || deal.telefone,
+            contatoEmail: deal.email,
+            endereco: deal.endereco,
+            diasInativo: 0,
+            ...changes
+          } as Omit<Cliente, 'id'>)
+          newCount++
+        }
+      })
+
+      setImportStatus(`Processando: ${matchCount} atualizados + ${newCount} novos...`)
+      onImportNegocios(updates, novos)
+      setTimeout(() => setImportStatus(null), 5000)
+      alert(`✅ Importação de Negócios concluída!\n\n📋 ${negocios.length} negócios processados\n🔄 ${matchCount} clientes atualizados no funil\n➕ ${newCount} novos clientes criados\n\nEtapas mapeadas automaticamente do Agendor.`)
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
 
   const stages = [
     { title: 'Prospecção', key: 'prospecção', color: 'blue', icon: '📞', prob: 0.10 },
@@ -242,13 +426,27 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
             <option value="score">⭐ Ordenar: Score</option>
             <option value="valor">💰 Ordenar: Valor</option>
           </select>
+          {isGerente && onImportNegocios && (
+            <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
+              <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
+              📥 Importar Negócios Agendor
+            </label>
+          )}
         </div>
-        {alertCount > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
-            <span>🚨</span>
-            <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {importStatus && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
+              <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin"></div>
+              <p className="text-xs text-indigo-800">{importStatus}</p>
+            </div>
+          )}
+          {alertCount > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
+              <span>🚨</span>
+              <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex lg:grid lg:grid-cols-6 gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0">
