@@ -12,7 +12,9 @@ import {
   SparklesIcon,
   DocumentTextIcon,
   CubeIcon,
-  ShoppingCartIcon
+  ShoppingCartIcon,
+  SunIcon,
+  MoonIcon
 } from '@heroicons/react/24/outline'
 import type {
   ViewType, Cliente, FormData, Interacao, DragItem, AICommand,
@@ -43,6 +45,7 @@ function App() {
     setTimeout(() => setToastMsg(null), 4000)
   }
 
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
@@ -1046,7 +1049,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className={`h-screen flex bg-gray-50 ${darkMode ? 'dark' : ''}`}>
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -1178,6 +1181,13 @@ function App() {
           </div>
           
           <div className="flex items-center space-x-1 sm:space-x-3">
+            <button
+              onClick={() => { setDarkMode(prev => { const next = !prev; localStorage.setItem('darkMode', String(next)); return next }); }}
+              className="p-2 text-gray-400 hover:text-gray-600 transition-colors rounded-apple hover:bg-gray-100"
+              title={darkMode ? 'Modo claro' : 'Modo escuro'}
+            >
+              {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
