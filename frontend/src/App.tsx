@@ -841,10 +841,10 @@ function App() {
           }}
           onImportTarefas={async (novas) => {
             try {
-              const saved = await Promise.all(novas.map(t => db.insertTarefa(t)))
+              const saved = await db.insertTarefasBatch(novas)
               setTarefas(prev => [...saved, ...prev])
               showToast('success', `${saved.length} tarefa(s) importada(s) com sucesso!`)
-            } catch (err) { console.error('Erro ao importar tarefas:', err); showToast('error', 'Erro ao importar tarefas.') }
+            } catch (err) { console.error('Erro ao importar tarefas:', err); showToast('error', 'Erro ao importar tarefas. Verifique o CSV.') }
           }}
         />
       case 'social':

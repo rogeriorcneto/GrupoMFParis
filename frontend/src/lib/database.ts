@@ -475,6 +475,22 @@ export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
   return tarefaFromDb(data)
 }
 
+export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise<Tarefa[]> {
+  const BATCH_SIZE = 100
+  const allSaved: Tarefa[] = []
+  for (let i = 0; i < tarefas.length; i += BATCH_SIZE) {
+    const batch = tarefas.slice(i, i + BATCH_SIZE).map(t => ({
+      titulo: t.titulo, descricao: t.descricao || null, data: t.data, hora: t.hora || null,
+      tipo: t.tipo, status: t.status, prioridade: t.prioridade,
+      cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
+    }))
+    const { data, error } = await supabase.from('tarefas').insert(batch).select()
+    if (error) throw error
+    if (data) allSaved.push(...data.map(tarefaFromDb))
+  }
+  return allSaved
+}
+
 export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void> {
   const row: any = {}
   if (t.titulo !== undefined) row.titulo = t.titulo
