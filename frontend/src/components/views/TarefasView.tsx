@@ -9,9 +9,136 @@ const TarefasView: React.FC<{
   loggedUser: Vendedor | null
   onUpdateTarefa: (t: Tarefa) => void
   onAddTarefa: (t: Tarefa) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, onUpdateTarefa, onAddTarefa }) => {
+  onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
+}> = ({ tarefas, clientes, vendedores, loggedUser, onUpdateTarefa, onAddTarefa, onImportTarefas }) => {
   const [showModal, setShowModal] = React.useState(false)
   const [filterStatus, setFilterStatus] = React.useState<'todas' | 'pendente' | 'concluida'>('pendente')
+  const [importStatus, setImportStatus] = React.useState<string | null>(null)
+
+  const handleImportTarefas = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !onImportTarefas) return
+    e.target.value = ''
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string
+        const lines = text.split(/\r?\n/).filter(l => l.trim())
+        if (lines.length < 2) { alert('CSV vazio'); return }
+
+        // Auto-detect separator
+        const header = lines[0]
+        const sep = header.includes('\t') ? '\t' : header.split(';').length > header.split(',').length ? ';' : ','
+        const headers = header.split(sep).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+
+        const getIdx = (keys: string[]) => headers.findIndex(h => keys.some(k => h.includes(k)))
+        const idxDescricao = getIdx(['descrição', 'descricao', 'description'])
+        const idxDataAgendamento = getIdx(['data de agendamento', 'agendamento'])
+        const idxDataFinalizacao = getIdx(['data de finalização', 'data de finalizacao', 'finalização', 'finalizacao'])
+        const idxTipo = getIdx(['tipo de tarefa', 'tipo'])
+        const idxEmpresa = getIdx(['empresa relacionada', 'empresa'])
+        const idxResponsavel = getIdx(['usuários responsáveis', 'usuarios responsaveis', 'responsáveis', 'responsaveis'])
+        const idxDataCadastro = getIdx(['data de cadastro'])
+
+        if (idxDescricao === -1) { alert('Coluna "Descrição" não encontrada no CSV'); return }
+
+        // Parse date DD/MM/YY or DD/MM/YYYY → YYYY-MM-DD
+        const parseDate = (s: string): string => {
+          if (!s || !s.trim()) return new Date().toISOString().split('T')[0]
+          const clean = s.trim().replace(/^"|"$/g, '')
+          const parts = clean.split('/')
+          if (parts.length === 3) {
+            let [d, m, y] = parts
+            if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+          }
+          return clean
+        }
+
+        // Map tipo de tarefa Agendor → CRM
+        const mapTipo = (t: string): Tarefa['tipo'] => {
+          const tl = t.toLowerCase().trim()
+          if (tl.includes('whatsapp') || tl.includes('whats')) return 'whatsapp'
+          if (tl.includes('ligaç') || tl.includes('ligac') || tl.includes('telefone') || tl.includes('ligar')) return 'ligacao'
+          if (tl.includes('email') || tl.includes('e-mail')) return 'email'
+          if (tl.includes('reunião') || tl.includes('reuniao') || tl.includes('visita')) return 'reuniao'
+          if (tl.includes('follow') || tl.includes('retorno')) return 'follow-up'
+          return 'outro'
+        }
+
+        // Normalize for fuzzy matching
+        const normalize = (s: string) => s.toLowerCase().trim()
+          .replace(/\b(ltda|me|epp|eireli|s\.?a\.?|s\/a|cia|comercio|comércio|industria|indústria|distribui(dora|cao|ção)?|com\.?|ind\.?|imp\.?|exp\.?)\b/gi, '')
+          .replace(/[.\-\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
+
+        const novasTarefas: Omit<Tarefa, 'id'>[] = []
+
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(sep).map(v => v.trim().replace(/^"|"$/g, ''))
+          const descricao = vals[idxDescricao] || ''
+          if (!descricao) continue
+
+          const dataAgendamento = idxDataAgendamento >= 0 ? parseDate(vals[idxDataAgendamento]) : (idxDataCadastro >= 0 ? parseDate(vals[idxDataCadastro]) : new Date().toISOString().split('T')[0])
+          const dataFinalizacao = idxDataFinalizacao >= 0 ? vals[idxDataFinalizacao]?.trim() : ''
+          const tipoRaw = idxTipo >= 0 ? vals[idxTipo] || '' : ''
+          const empresaRaw = idxEmpresa >= 0 ? vals[idxEmpresa] || '' : ''
+          const responsavelRaw = idxResponsavel >= 0 ? vals[idxResponsavel] || '' : ''
+
+          // Match cliente by empresa name (fuzzy)
+          let clienteId: number | undefined
+          if (empresaRaw) {
+            const empNorm = normalize(empresaRaw)
+            const match = clientes.find(c => {
+              const razaoNorm = normalize(c.razaoSocial)
+              const fantasiaNorm = c.nomeFantasia ? normalize(c.nomeFantasia) : ''
+              if (razaoNorm === empNorm || fantasiaNorm === empNorm) return true
+              if (empNorm.length >= 4 && razaoNorm.length >= 4) {
+                if (razaoNorm.includes(empNorm) || empNorm.includes(razaoNorm)) return true
+                if (fantasiaNorm && (fantasiaNorm.includes(empNorm) || empNorm.includes(fantasiaNorm))) return true
+              }
+              return false
+            })
+            if (match) clienteId = match.id
+          }
+
+          // Match vendedor by name
+          let vendedorId: number | undefined
+          if (responsavelRaw) {
+            const respLower = responsavelRaw.toLowerCase().trim()
+            const vMatch = vendedores.find(v => v.nome.toLowerCase().includes(respLower) || respLower.includes(v.nome.toLowerCase()))
+            if (vMatch) vendedorId = vMatch.id
+          }
+
+          novasTarefas.push({
+            titulo: descricao.length > 100 ? descricao.substring(0, 100) + '...' : descricao,
+            descricao: descricao,
+            data: dataAgendamento,
+            tipo: mapTipo(tipoRaw),
+            status: dataFinalizacao ? 'concluida' : 'pendente',
+            prioridade: 'media',
+            clienteId,
+            vendedorId,
+          })
+        }
+
+        if (novasTarefas.length === 0) { alert('Nenhuma tarefa encontrada no CSV'); return }
+
+        const comCliente = novasTarefas.filter(t => t.clienteId).length
+        const comVendedor = novasTarefas.filter(t => t.vendedorId).length
+        const pendentes = novasTarefas.filter(t => t.status === 'pendente').length
+
+        setImportStatus(`Importando ${novasTarefas.length} tarefas...`)
+        onImportTarefas(novasTarefas)
+        setImportStatus(`✅ ${novasTarefas.length} tarefas importadas (${comCliente} com cliente, ${comVendedor} com vendedor, ${pendentes} pendentes)`)
+        setTimeout(() => setImportStatus(null), 8000)
+      } catch (err) {
+        console.error('Erro ao importar tarefas:', err)
+        alert('Erro ao processar CSV de tarefas. Verifique o formato.')
+        setImportStatus(null)
+      }
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
   const [newTitulo, setNewTitulo] = React.useState('')
   const [newDescricao, setNewDescricao] = React.useState('')
   const [newData, setNewData] = React.useState(new Date().toISOString().split('T')[0])
@@ -82,6 +209,12 @@ const TarefasView: React.FC<{
           <p className="mt-1 text-sm text-gray-600">Organize suas atividades e nunca perca um follow-up</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {onImportTarefas && (
+            <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
+              <input type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImportTarefas} />
+              📥 Importar Tarefas Agendor
+            </label>
+          )}
           <button
             onClick={() => {
               const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -106,6 +239,12 @@ const TarefasView: React.FC<{
           </button>
         </div>
       </div>
+
+      {importStatus && (
+        <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-2 rounded-apple text-sm font-medium">
+          {importStatus}
+        </div>
+      )}
 
       <div className="flex gap-3">
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">

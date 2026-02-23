@@ -839,6 +839,13 @@ function App() {
               setTarefas(prev => [saved, ...prev])
             } catch (err) { console.error('Erro ao criar tarefa:', err) }
           }}
+          onImportTarefas={async (novas) => {
+            try {
+              const saved = await Promise.all(novas.map(t => db.insertTarefa(t)))
+              setTarefas(prev => [...saved, ...prev])
+              showToast('success', `${saved.length} tarefa(s) importada(s) com sucesso!`)
+            } catch (err) { console.error('Erro ao importar tarefas:', err); showToast('error', 'Erro ao importar tarefas.') }
+          }}
         />
       case 'social':
         return <SocialSearchView onAddLead={async (nome, telefone, endereco) => {
