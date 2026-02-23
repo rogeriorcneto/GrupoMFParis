@@ -38,6 +38,12 @@ function App() {
   const [loginError, setLoginError] = useState('')
   const [authChecked, setAuthChecked] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [toastMsg, setToastMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
+
+  const showToast = (tipo: 'success' | 'error', texto: string) => {
+    setToastMsg({ tipo, texto })
+    setTimeout(() => setToastMsg(null), 4000)
+  }
 
   const [darkMode, setDarkMode] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -449,6 +455,7 @@ function App() {
         })
         setInteracoes(prev => [savedI, ...prev])
         setEditingCliente(null)
+        showToast('success', `Cliente "${formData.razaoSocial}" atualizado com sucesso!`)
       } else {
         const savedC = await db.insertCliente({
           ...restForm, etapa: 'prospecção',
@@ -464,8 +471,9 @@ function App() {
           assunto: 'Bem-vindo!', descricao: `Novo cliente cadastrado: ${formData.razaoSocial}`, automatico: true
         })
         setInteracoes(prev => [savedI, ...prev])
+        showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
       }
-    } catch (err) { console.error('Erro ao salvar cliente:', err) }
+    } catch (err) { console.error('Erro ao salvar cliente:', err); showToast('error', 'Erro ao salvar cliente. Tente novamente.') }
     
     setFormData({ razaoSocial: '', nomeFantasia: '', cnpj: '', contatoNome: '', contatoTelefone: '', contatoEmail: '', endereco: '', valorEstimado: '', produtosInteresse: '', vendedorId: '' })
     setShowModal(false)
@@ -747,7 +755,8 @@ function App() {
             try {
               const saved = await Promise.all(novos.map(n => db.insertCliente(n as Omit<Cliente, 'id'>)))
               setClientes(prev => [...prev, ...saved])
-            } catch (err) { console.error('Erro ao importar:', err) }
+              showToast('success', `${saved.length} cliente(s) importado(s) com sucesso!`)
+            } catch (err) { console.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
           }}
           onDeleteCliente={async (id) => {
             try {
@@ -755,7 +764,8 @@ function App() {
               setClientes(prev => prev.filter(c => c.id !== id))
               setInteracoes(prev => prev.filter(i => i.clienteId !== id))
               setTarefas(prev => prev.filter(t => t.clienteId !== id))
-            } catch (err) { console.error('Erro ao deletar cliente:', err) }
+              showToast('success', 'Cliente excluído com sucesso')
+            } catch (err) { console.error('Erro ao deletar cliente:', err); showToast('error', 'Erro ao excluir cliente. Tente novamente.') }
           }}
         />
       case 'automacoes':
@@ -821,8 +831,10 @@ function App() {
               const saved = await db.createVendedorWithAuth(email, senha, vendedorData)
               setVendedores(prev => [...prev, saved])
               addNotificacao('success', 'Vendedor cadastrado', `${vendedorData.nome} já pode fazer login com ${email}`)
+              showToast('success', `Vendedor "${vendedorData.nome}" cadastrado com sucesso!`)
             } catch (err: any) {
               console.error('Erro ao adicionar vendedor:', err)
+              showToast('error', err?.message || 'Erro ao cadastrar vendedor')
               throw err // Re-throw para o VendedoresView exibir o erro
             }
           }}
@@ -856,7 +868,8 @@ function App() {
             try {
               const saved = await db.insertProduto(p)
               setProdutos(prev => [...prev, saved])
-            } catch (err) { console.error('Erro ao adicionar produto:', err) }
+              showToast('success', `Produto "${p.nome}" cadastrado!`)
+            } catch (err) { console.error('Erro ao adicionar produto:', err); showToast('error', 'Erro ao salvar produto. Tente novamente.') }
           }}
           onUpdate={async (p) => {
             try {
@@ -878,7 +891,8 @@ function App() {
             try {
               const saved = await db.insertPedido(p)
               setPedidos(prev => [...prev, saved])
-            } catch (err) { console.error('Erro ao criar pedido:', err) }
+              showToast('success', `Pedido ${p.numero} salvo com sucesso!`)
+            } catch (err) { console.error('Erro ao criar pedido:', err); showToast('error', 'Erro ao salvar pedido. Tente novamente.') }
           }}
           onUpdatePedido={async (p) => {
             try {
@@ -1190,7 +1204,14 @@ function App() {
 
         {/* Content Area */}
         <div className="flex-1 overflow-auto p-3 sm:p-6">
-          {renderContent()}
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-sm text-gray-500">Carregando dados...</p>
+              </div>
+            </div>
+          ) : renderContent()}
         </div>
       </div>
 
@@ -1951,6 +1972,16 @@ function App() {
               <button onClick={() => { setShowModalAmostra(false); setDraggedItem(null); setPendingDrop(null) }} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
               <button onClick={confirmAmostra} className="px-4 py-2 bg-yellow-600 text-white rounded-apple hover:bg-yellow-700 text-sm font-medium">Confirmar Envio</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast global de feedback */}
+      {toastMsg && (
+        <div className={`fixed bottom-6 right-6 z-[60] px-5 py-3 rounded-apple shadow-apple-lg max-w-sm animate-slide-in-right ${toastMsg.tipo === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+          <div className="flex items-center gap-2">
+            <span>{toastMsg.tipo === 'success' ? '✅' : '❌'}</span>
+            <p className="text-sm font-medium">{toastMsg.texto}</p>
           </div>
         </div>
       )}

@@ -59,7 +59,7 @@ const VendedoresView: React.FC<{
     setIsAdding(true)
     try {
       const initials = newNome.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-      onAddVendedor(newEmail.trim(), newSenha.trim(), {
+      await onAddVendedor(newEmail.trim(), newSenha.trim(), {
         nome: newNome.trim(), email: newEmail.trim(), telefone: newTelefone.trim(),
         cargo: newCargo, avatar: initials,
         metaVendas: Number(newMetaVendas) || 150000, metaLeads: Number(newMetaLeads) || 10,

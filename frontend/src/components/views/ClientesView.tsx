@@ -111,7 +111,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
             onClick={() => {
               const csv = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado,etapa,score\n' +
                 clientes.map(c => `"${c.razaoSocial}","${c.cnpj}","${c.contatoNome}","${c.contatoTelefone}","${c.contatoEmail}","${c.endereco || ''}","${c.valorEstimado || ''}","${c.etapa}","${c.score || 0}"`).join('\n')
-              const blob = new Blob([csv], { type: 'text/csv' })
+              const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
               const url = URL.createObjectURL(blob)
               const a = document.createElement('a')
               a.href = url
@@ -192,6 +192,12 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
               </tr>
             </thead>
             <tbody>
+              {filteredClientes.length === 0 && (
+                <tr><td colSpan={6} className="py-12 text-center">
+                  <p className="text-gray-400 text-lg mb-2">{clientes.length === 0 ? '📋 Nenhum cliente cadastrado ainda' : '🔍 Nenhum cliente encontrado'}</p>
+                  <p className="text-gray-400 text-sm">{clientes.length === 0 ? 'Clique em "Novo Cliente" ou importe um CSV para começar.' : 'Tente ajustar os filtros ou termo de busca.'}</p>
+                </td></tr>
+              )}
               {filteredClientes.map((cliente) => (
                 <tr key={cliente.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-3 px-4">
