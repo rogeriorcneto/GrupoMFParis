@@ -1,5 +1,7 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import { rateLimit } from './middleware/rate-limit.js'
 import { CONFIG } from './config.js'
 import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, sendWhatsAppMessage } from './whatsapp.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
@@ -24,6 +26,7 @@ app.use(cors({
   credentials: true,
 }))
 app.use(express.json())
+app.use(helmet())
 
 // ─── Health check ───
 app.get('/api/health', (_req, res) => {
@@ -59,7 +62,7 @@ app.get('/api/whatsapp/qr', requireAuth, (_req, res) => {
   res.json({ qr: null, status: status.status })
 })
 
-app.post('/api/whatsapp/connect', requireAuth, requireGerente, async (_req, res) => {
+app.post('/api/whatsapp/connect', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
   try {
     await connectWhatsApp()
     res.json({ success: true, message: 'Conexão iniciada. Aguarde o QR code.' })
@@ -68,7 +71,7 @@ app.post('/api/whatsapp/connect', requireAuth, requireGerente, async (_req, res)
   }
 })
 
-app.post('/api/whatsapp/disconnect', requireAuth, requireGerente, async (_req, res) => {
+app.post('/api/whatsapp/disconnect', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
   try {
     await disconnectWhatsApp()
     res.json({ success: true, message: 'WhatsApp desconectado.' })
@@ -77,7 +80,7 @@ app.post('/api/whatsapp/disconnect', requireAuth, requireGerente, async (_req, r
   }
 })
 
-app.post('/api/whatsapp/send', requireAuth, async (req, res) => {
+app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, res) => {
   const { number, text, clienteId, vendedorNome } = req.body
 
   if (!number || !text) {
@@ -122,7 +125,7 @@ app.get('/api/config', requireAuth, requireGerente, async (_req, res) => {
   })
 })
 
-app.post('/api/config', requireAuth, requireGerente, async (req, res) => {
+app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), async (req, res) => {
   const { emailHost, emailPort, emailUser, emailPass, emailFrom } = req.body
 
   try {
@@ -161,12 +164,12 @@ app.get('/api/email/status', requireAuth, (_req, res) => {
   res.json(getEmailStatus())
 })
 
-app.post('/api/email/test', requireAuth, requireGerente, async (_req, res) => {
+app.post('/api/email/test', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
   const result = await testEmailConnection()
   res.json(result)
 })
 
-app.post('/api/email/send', requireAuth, async (req, res) => {
+app.post('/api/email/send', requireAuth, rateLimit(15, 60_000), async (req, res) => {
   const { to, subject, body, clienteId, vendedorNome } = req.body
 
   if (!to || !subject || !body) {
@@ -178,7 +181,7 @@ app.post('/api/email/send', requireAuth, async (req, res) => {
   res.json(result)
 })
 
-app.post('/api/email/send-template', requireAuth, async (req, res) => {
+app.post('/api/email/send-template', requireAuth, rateLimit(15, 60_000), async (req, res) => {
   const { templateId, to, clienteId, vendedorNome } = req.body
 
   if (!templateId || !to || !clienteId || !vendedorNome) {

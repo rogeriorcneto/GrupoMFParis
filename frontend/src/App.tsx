@@ -31,6 +31,7 @@ import * as db from './lib/database'
 import { useNotificacoes } from './hooks/useNotificacoes'
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription'
 import { stageLabels, transicoesPermitidas } from './utils/constants'
+import { formatCNPJ, formatTelefone, validarCNPJ } from './utils/validators'
 
 function App() {
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
@@ -444,21 +445,6 @@ function App() {
     }, 1500)
   }
 
-  const formatCNPJ = (v: string) => {
-    const d = v.replace(/\D/g, '').slice(0, 14)
-    if (d.length <= 2) return d
-    if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`
-    if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`
-    if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`
-    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
-  }
-
-  const formatTelefone = (v: string) => {
-    const d = v.replace(/\D/g, '').slice(0, 11)
-    if (d.length <= 2) return d.length ? `(${d}` : ''
-    if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`
-    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
-  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -471,19 +457,6 @@ function App() {
     }))
   }
 
-  const validarCNPJ = (cnpj: string): boolean => {
-    const d = cnpj.replace(/\D/g, '')
-    if (d.length !== 14) return false
-    if (/^(\d)\1{13}$/.test(d)) return false
-    const calc = (len: number) => {
-      const pesos = len === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]
-      let soma = 0
-      for (let i = 0; i < len; i++) soma += Number(d[i]) * pesos[i]
-      const resto = soma % 11
-      return resto < 2 ? 0 : 11 - resto
-    }
-    return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

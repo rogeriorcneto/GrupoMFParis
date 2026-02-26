@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { encrypt, decrypt } from './crypto.js'
 
 export interface BotConfigData {
   emailHost: string
@@ -43,7 +44,7 @@ export async function loadConfig(): Promise<BotConfigData> {
       emailHost: data.email_host || process.env.EMAIL_HOST || '',
       emailPort: data.email_port || parseInt(process.env.EMAIL_PORT || '587', 10),
       emailUser: data.email_user || process.env.EMAIL_USER || '',
-      emailPass: data.email_pass || process.env.EMAIL_PASS || '',
+      emailPass: decrypt(data.email_pass) || process.env.EMAIL_PASS || '',
       emailFrom: data.email_from || process.env.EMAIL_FROM || '',
       whatsappNumero: data.whatsapp_numero || '',
     }
@@ -74,7 +75,7 @@ export async function saveConfig(data: Partial<BotConfigData>): Promise<BotConfi
         email_host: updated.emailHost,
         email_port: updated.emailPort,
         email_user: updated.emailUser,
-        email_pass: updated.emailPass,
+        email_pass: updated.emailPass ? encrypt(updated.emailPass) : '',
         email_from: updated.emailFrom,
         whatsapp_numero: updated.whatsappNumero,
         updated_at: new Date().toISOString(),
