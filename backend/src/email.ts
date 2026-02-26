@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import * as db from './database.js'
 import { getEmailConfig } from './config-store.js'
+import { STAGE_LABELS } from './constants.js'
 
 let transporter: Transporter | null = null
 let currentFrom: string = ''
@@ -59,10 +60,6 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
   return result
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado',
-  'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido',
-}
 
 export interface SendEmailParams {
   to: string
@@ -141,8 +138,7 @@ export async function sendTemplateEmail(params: {
     }
 
     // Buscar dados do cliente para as variáveis
-    const clientes = await db.fetchClientes()
-    const cliente = clientes.find(c => c.id === params.clienteId)
+    const cliente = await db.fetchClienteById(params.clienteId)
     if (!cliente) {
       return { success: false, error: 'Cliente não encontrado.' }
     }

@@ -1,20 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../../lib/supabase'
-
-const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3001'
-
-/** Helper: fetch com token de autenticação Supabase */
-async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const { data: { session } } = await supabase.auth.getSession()
-  const token = session?.access_token
-  return fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  })
-}
+import { authFetch, BOT_URL } from '../../lib/botApi'
 
 interface WhatsAppStatus {
   connected: boolean
@@ -49,6 +34,7 @@ const IntegracoesView: React.FC = () => {
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
   const [botOnline, setBotOnline] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Email config form
@@ -95,8 +81,19 @@ const IntegracoesView: React.FC = () => {
         } else {
           setQrData(null)
         }
-      } catch {
+      } catch (err: any) {
+        if (err?.message === 'AUTH_EXPIRED') {
+          setAuthError('Sessão expirada. Faça login novamente.')
+          if (pollRef.current) clearInterval(pollRef.current)
+          return
+        }
+        if (err?.message === 'FORBIDDEN') {
+          setAuthError('Acesso restrito. Apenas gerentes podem acessar Integrações.')
+          if (pollRef.current) clearInterval(pollRef.current)
+          return
+        }
         setBotOnline(false)
+        setAuthError(null)
       }
     }
 
@@ -200,8 +197,21 @@ const IntegracoesView: React.FC = () => {
         <p className="mt-1 text-sm text-gray-600">Conecte o CRM com suas ferramentas favoritas</p>
       </div>
 
+      {/* Auth Error Banner */}
+      {authError && (
+        <div className="bg-red-50 border border-red-200 rounded-apple p-4">
+          <div className="flex items-center gap-2">
+            <span className="text-red-500 text-lg">🔒</span>
+            <div>
+              <p className="text-sm font-medium text-red-800">{authError}</p>
+              <p className="text-xs text-red-600 mt-0.5">Recarregue a página ou faça login novamente.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bot Status Banner */}
-      {!botOnline && (
+      {!botOnline && !authError && (
         <div className="bg-yellow-50 rounded-apple border-2 border-yellow-200 p-4">
           <div className="flex items-center gap-3">
             <span className="text-2xl">⚠️</span>
@@ -437,20 +447,20 @@ const IntegracoesView: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-900 mb-3">Outras Integrações</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {otherIntegrations.map((int) => (
-            <div key={int.id} className="bg-white rounded-apple shadow-apple-sm border-2 border-gray-200 p-6 opacity-60">
+            <div key={int.id} className="bg-white rounded-apple shadow-apple-sm border-2 border-gray-200 p-6 hover:border-primary-300 transition-all">
               <div className="flex items-center gap-3">
                 <div className="text-4xl">{int.icon}</div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{int.nome}</h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="inline-block w-2 h-2 rounded-full bg-gray-300" />
-                    <span className="text-xs text-gray-600">Em breve</span>
+                    <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
+                    <span className="text-xs text-gray-600">Disponível</span>
                   </div>
                 </div>
               </div>
               <p className="text-sm text-gray-600 mt-3">{int.desc}</p>
-              <button disabled className="mt-4 w-full px-4 py-2 rounded-apple shadow-apple-sm font-semibold bg-gray-100 text-gray-400 border-2 border-gray-200 cursor-not-allowed">
-                Em breve
+              <button className="mt-4 w-full px-4 py-2 rounded-apple shadow-apple-sm font-semibold bg-primary-50 text-primary-700 border-2 border-primary-200 hover:bg-primary-100 transition-colors">
+                Configurar
               </button>
             </div>
           ))}

@@ -1,6 +1,7 @@
 import React from 'react'
 import { PlusIcon, AdjustmentsHorizontalIcon, MagnifyingGlassIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
+import { useDebounce } from '../../hooks/useDebounce'
 
 const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
   const [searchTerm, setSearchTerm] = React.useState('')
@@ -16,11 +17,12 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   const [openCardMenu, setOpenCardMenu] = React.useState<number | null>(null)
   const [deleteClienteModal, setDeleteClienteModal] = React.useState<Cliente | null>(null)
   const importRef = React.useRef<HTMLInputElement>(null)
+  const debouncedSearch = useDebounce(searchTerm, 250)
 
   const filteredClientes = clientes.filter(cliente => {
-    const matchSearch = cliente.razaoSocial.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cliente.contatoNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cliente.cnpj.includes(searchTerm)
+    const matchSearch = cliente.razaoSocial.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      cliente.contatoNome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+      cliente.cnpj.includes(debouncedSearch)
     const matchEtapa = !filterEtapa || cliente.etapa === filterEtapa
     const matchVendedor = !filterVendedor || String(cliente.vendedorId) === filterVendedor
     const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
@@ -149,7 +151,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   }
 
   const handleExportCSV = () => {
-    const exportData = filtersActive || searchTerm ? filteredClientes : clientes
+    const exportData = filtersActive || debouncedSearch ? filteredClientes : clientes
     const csv = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado,etapa,score\n' +
       exportData.map(c => `"${c.razaoSocial}","${c.cnpj}","${c.contatoNome}","${c.contatoTelefone}","${c.contatoEmail}","${c.endereco || ''}","${c.valorEstimado || ''}","${c.etapa}","${c.score || 0}"`).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })

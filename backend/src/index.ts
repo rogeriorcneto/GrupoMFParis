@@ -1,16 +1,28 @@
 import express from 'express'
 import cors from 'cors'
 import { CONFIG } from './config.js'
-import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl } from './whatsapp.js'
+import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, sendWhatsAppMessage } from './whatsapp.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
+import { processarJobsPendentes } from './cron.js'
 
 const app = express()
 
 // ─── Middleware ───
-app.use(cors({ origin: CONFIG.corsOrigins }))
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true)
+    // Allow any localhost or 127.0.0.1 origin (dev)
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
+    // Allow configured origins (production)
+    if (CONFIG.corsOrigins.includes(origin)) return callback(null, true)
+    callback(new Error(`CORS: origin ${origin} not allowed`))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 
 // ─── Health check ───
@@ -63,6 +75,34 @@ app.post('/api/whatsapp/disconnect', requireAuth, requireGerente, async (_req, r
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro ao desconectar' })
   }
+})
+
+app.post('/api/whatsapp/send', requireAuth, async (req, res) => {
+  const { number, text, clienteId, vendedorNome } = req.body
+
+  if (!number || !text) {
+    res.status(400).json({ success: false, error: 'Campos obrigatórios: number, text' })
+    return
+  }
+
+  const result = await sendWhatsAppMessage(number, text)
+
+  if (result.success && clienteId) {
+    // Register interaction in Supabase
+    try {
+      const { insertInteracao, updateCliente } = await import('./database.js')
+      await insertInteracao({
+        clienteId, tipo: 'whatsapp', data: new Date().toISOString(),
+        assunto: 'Mensagem WhatsApp', descricao: text.substring(0, 200),
+        automatico: false
+      })
+      await updateCliente(clienteId, { ultimaInteracao: new Date().toISOString().split('T')[0] })
+    } catch (err) {
+      console.error('Erro ao registrar interação WhatsApp:', err)
+    }
+  }
+
+  res.json(result)
 })
 
 // ─── Config Routes (somente gerente) ───
@@ -169,6 +209,7 @@ async function start() {
     console.log(`  GET  /api/whatsapp/qr`)
     console.log(`  POST /api/whatsapp/connect`)
     console.log(`  POST /api/whatsapp/disconnect`)
+    console.log(`  POST /api/whatsapp/send`)
     console.log(`  GET  /api/email/status`)
     console.log(`  POST /api/email/test`)
     console.log(`  POST /api/email/send`)
@@ -185,6 +226,12 @@ async function start() {
     console.error('Erro ao auto-conectar WhatsApp:', err)
     console.log('Use POST /api/whatsapp/connect ou a interface do CRM para conectar.')
   }
+
+  // Cron: processar jobs de automação a cada 5 minutos
+  setInterval(() => {
+    processarJobsPendentes()
+  }, 5 * 60 * 1000)
+  console.log('⏰ Scheduler de jobs: a cada 5 minutos')
 }
 
 start().catch(console.error)

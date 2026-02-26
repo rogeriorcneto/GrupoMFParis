@@ -324,9 +324,24 @@ export async function fetchClientesByVendedor(vendedorId: number): Promise<Clien
 }
 
 export async function searchClientes(term: string, vendedorId?: number): Promise<Cliente[]> {
-  let query = supabase.from('clientes').select('*').or(`razao_social.ilike.%${term}%,cnpj.ilike.%${term}%,contato_nome.ilike.%${term}%`).order('razao_social').limit(10)
+  // Escape PostgREST special characters to prevent query errors
+  const safeTerm = term.replace(/[%_\\]/g, c => `\\${c}`)
+  let query = supabase.from('clientes').select('*').or(`razao_social.ilike.%${safeTerm}%,cnpj.ilike.%${safeTerm}%,contato_nome.ilike.%${safeTerm}%`).order('razao_social').limit(10)
   if (vendedorId) query = query.eq('vendedor_id', vendedorId)
   const { data, error } = await query
+  if (error) throw error
+  return (data || []).map(clienteFromDb)
+}
+
+export async function fetchClienteById(id: number): Promise<Cliente | null> {
+  const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single()
+  if (error || !data) return null
+  return clienteFromDb(data)
+}
+
+export async function fetchClientesByIds(ids: number[]): Promise<Cliente[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase.from('clientes').select('*').in('id', ids)
   if (error) throw error
   return (data || []).map(clienteFromDb)
 }
@@ -459,4 +474,42 @@ export async function fetchTemplates(canal?: string): Promise<Template[]> {
   const { data, error } = await query
   if (error) throw error
   return (data || []).map(templateFromDb)
+}
+
+// ============================================
+// JOBS AUTOMAÇÃO (para cron)
+// ============================================
+
+interface JobPendente {
+  id: number
+  clienteId: number
+  canal: string
+  mensagem: string | null
+  assunto: string | null
+}
+
+export async function fetchJobsPendentes(): Promise<JobPendente[]> {
+  const now = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('jobs_automacao')
+    .select('id, cliente_id, canal, mensagem, assunto')
+    .eq('status', 'pendente')
+    .lte('agendado_para', now)
+    .order('agendado_para')
+    .limit(50)
+  if (error) { console.error('Erro fetchJobsPendentes:', error); return [] }
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    clienteId: r.cliente_id,
+    canal: r.canal,
+    mensagem: r.mensagem,
+    assunto: r.assunto,
+  }))
+}
+
+export async function updateJobStatus(id: number, status: string, erro?: string): Promise<void> {
+  const updates: any = { status, executado_em: new Date().toISOString() }
+  if (erro) updates.erro = erro
+  const { error } = await supabase.from('jobs_automacao').update(updates).eq('id', id)
+  if (error) console.error('Erro updateJobStatus:', error)
 }

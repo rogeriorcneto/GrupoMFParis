@@ -15,8 +15,14 @@ export async function handleTarefas(senderNumber: string, session: UserSession):
     return '✅ Nenhuma tarefa pendente! Bom trabalho.\n\n' + getMenuText()
   }
 
+  // Carregar nomes dos clientes em batch (1 query) ao invés de N queries
+  const allTarefas = [...atrasadas, ...deHoje, ...futuras]
+  const clienteIds = [...new Set(allTarefas.filter(t => t.clienteId).map(t => t.clienteId!))]
+  const clientes = clienteIds.length > 0 ? await db.fetchClientesByIds(clienteIds) : []
+  const clienteNomeMap = new Map(clientes.map(c => [c.id, c.razaoSocial]))
+
   // Guardar IDs para poder marcar como concluída
-  const allIds = [...atrasadas, ...deHoje, ...futuras].map(t => t.id)
+  const allIds = allTarefas.map(t => t.id)
   updateSession(senderNumber, {
     state: 'viewing_client_list',
     clientListIds: allIds,
@@ -30,7 +36,7 @@ export async function handleTarefas(senderNumber: string, session: UserSession):
     msg += `🔴 *Atrasadas (${atrasadas.length}):*\n`
     for (const t of atrasadas) {
       const diasAtraso = Math.floor((Date.now() - new Date(t.data).getTime()) / 86400000)
-      const cliente = t.clienteId ? await getClienteNome(t.clienteId) : ''
+      const cliente = t.clienteId ? clienteNomeMap.get(t.clienteId) || '' : ''
       msg += `*${idx}.* ${t.titulo}${cliente ? ` — ${cliente}` : ''} _(${diasAtraso}d atrás)_\n`
       idx++
     }
@@ -40,7 +46,7 @@ export async function handleTarefas(senderNumber: string, session: UserSession):
   if (deHoje.length > 0) {
     msg += `🟡 *Hoje (${deHoje.length}):*\n`
     for (const t of deHoje) {
-      const cliente = t.clienteId ? await getClienteNome(t.clienteId) : ''
+      const cliente = t.clienteId ? clienteNomeMap.get(t.clienteId) || '' : ''
       msg += `*${idx}.* ${t.titulo}${cliente ? ` — ${cliente}` : ''}${t.hora ? ` (${t.hora})` : ''}\n`
       idx++
     }
@@ -50,7 +56,7 @@ export async function handleTarefas(senderNumber: string, session: UserSession):
   if (futuras.length > 0) {
     msg += `🟢 *Próximas (${futuras.length}):*\n`
     for (const t of futuras) {
-      const cliente = t.clienteId ? await getClienteNome(t.clienteId) : ''
+      const cliente = t.clienteId ? clienteNomeMap.get(t.clienteId) || '' : ''
       msg += `*${idx}.* ${t.titulo}${cliente ? ` — ${cliente}` : ''} _(${formatDate(t.data)})_\n`
       idx++
     }
@@ -81,17 +87,6 @@ export async function handleTarefaConcluir(senderNumber: string, session: UserSe
   } catch (err) {
     console.error('Erro ao concluir tarefa:', err)
     return '❌ Erro ao concluir tarefa.\n\n' + getMenuText()
-  }
-}
-
-// Helper
-async function getClienteNome(clienteId: number): Promise<string> {
-  try {
-    const clientes = await db.fetchClientes()
-    const c = clientes.find(cl => cl.id === clienteId)
-    return c?.razaoSocial || ''
-  } catch {
-    return ''
   }
 }
 

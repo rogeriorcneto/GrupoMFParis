@@ -1,6 +1,7 @@
 import React from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts'
 import type { Cliente, Vendedor, Interacao, DashboardMetrics, Atividade, Produto, Tarefa } from '../../types'
+import { stageLabels } from '../../utils/constants'
 
 interface DashboardViewFullProps {
   clientes: Cliente[]
@@ -15,7 +16,6 @@ interface DashboardViewFullProps {
 
 const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, vendedores, atividades, interacoes, produtos, tarefas, loggedUser }) => {
   const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
-  const stageLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado', 'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido' }
   const pipelineData = stages.map(s => ({
     name: stageLabels[s] || s,
     valor: clientes.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0),

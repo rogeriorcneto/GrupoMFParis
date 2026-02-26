@@ -28,6 +28,9 @@ import {
 } from './components/views'
 import { supabase } from './lib/supabase'
 import * as db from './lib/database'
+import { useNotificacoes } from './hooks/useNotificacoes'
+import { useRealtimeSubscription } from './hooks/useRealtimeSubscription'
+import { stageLabels, transicoesPermitidas } from './utils/constants'
 
 function App() {
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
@@ -45,7 +48,7 @@ function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
-  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
+  const [dbNotificacoes, setDbNotificacoes] = useState<Notificacao[]>([])
   const [atividades, setAtividades] = useState<Atividade[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
@@ -61,6 +64,7 @@ function App() {
   const [aiCommand, setAICommand] = useState('')
   const [aiResponse, setAIResponse] = useState('')
   const [isAILoading, setIsAILoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [templatesMsgs, setTemplatesMsgs] = useState<TemplateMsg[]>([])
   const [cadencias, setCadencias] = useState<Cadencia[]>([])
   const [campanhas, setCampanhas] = useState<Campanha[]>([])
@@ -68,6 +72,8 @@ function App() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [vendedores, setVendedores] = useState<Vendedor[]>([])
+  const movingRef = useRef(false)
+  const quickActionRef = useRef(false)
 
   // Carregar todos os dados do Supabase após autenticação
   const loadAllData = useCallback(async () => {
@@ -76,7 +82,8 @@ function App() {
       const [
         clientesData, interacoesData, tarefasData, produtosData,
         pedidosData, vendedoresData, atividadesData, templatesData,
-        templatesMsgsData, cadenciasData, campanhasData, jobsData
+        templatesMsgsData, cadenciasData, campanhasData, jobsData,
+        notificacoesData
       ] = await Promise.all([
         db.fetchClientes(),
         db.fetchInteracoes(),
@@ -90,6 +97,7 @@ function App() {
         db.fetchCadencias(),
         db.fetchCampanhas(),
         db.fetchJobs(),
+        db.fetchNotificacoes(),
       ])
       setClientes(clientesData)
       setInteracoes(interacoesData)
@@ -103,6 +111,7 @@ function App() {
       setCadencias(cadenciasData)
       setCampanhas(campanhasData)
       setJobs(jobsData)
+      setDbNotificacoes(notificacoesData)
     } catch (err) {
       console.error('Erro ao carregar dados:', err)
     } finally {
@@ -150,6 +159,37 @@ function App() {
     return () => subscription.unsubscribe()
   }, [loadAllData])
 
+  // Realtime: auto-sync clientes, interacoes, tarefas from other users
+  const isLoggedIn = !!loggedUser
+  useRealtimeSubscription<any>('clientes', useCallback((payload) => {
+    if (payload.eventType === 'INSERT') {
+      // Only add if not already in local state (avoids duplicates from own inserts)
+      setClientes(prev => prev.some(c => c.id === payload.new.id) ? prev : [...prev, db.clienteFromDb(payload.new)])
+    } else if (payload.eventType === 'UPDATE') {
+      setClientes(prev => prev.map(c => c.id === payload.new.id ? { ...c, ...db.clienteFromDb(payload.new) } : c))
+    } else if (payload.eventType === 'DELETE') {
+      setClientes(prev => prev.filter(c => c.id !== payload.old.id))
+    }
+  }, []), isLoggedIn)
+
+  useRealtimeSubscription<any>('interacoes', useCallback((payload) => {
+    if (payload.eventType === 'INSERT') {
+      const newI = db.interacaoFromDb(payload.new)
+      setInteracoes(prev => prev.some(i => i.id === newI.id) ? prev : [newI, ...prev])
+    }
+  }, []), isLoggedIn)
+
+  useRealtimeSubscription<any>('tarefas', useCallback((payload) => {
+    if (payload.eventType === 'INSERT') {
+      const newT = db.tarefaFromDb(payload.new)
+      setTarefas(prev => prev.some(t => t.id === newT.id) ? prev : [newT, ...prev])
+    } else if (payload.eventType === 'UPDATE') {
+      setTarefas(prev => prev.map(t => t.id === payload.new.id ? db.tarefaFromDb(payload.new) : t))
+    } else if (payload.eventType === 'DELETE') {
+      setTarefas(prev => prev.filter(t => t.id !== payload.old.id))
+    }
+  }, []), isLoggedIn)
+
   const [showMotivoPerda, setShowMotivoPerda] = useState(false)
   const [motivoPerdaTexto, setMotivoPerdaTexto] = useState('')
   const [categoriaPerdaSel, setCategoriaPerdaSel] = useState<Cliente['categoriaPerda']>('outro')
@@ -185,12 +225,12 @@ function App() {
         return c
       })
       if (changedIds.length > 0) {
-        const persistDias = async () => {
+        // Persist outside setState via microtask to avoid side-effects in updater
+        queueMicrotask(async () => {
           for (const { id, diasInativo } of changedIds) {
             try { await db.updateCliente(id, { diasInativo }) } catch (err) { console.error('Erro ao persistir diasInativo:', err) }
           }
-        }
-        persistDias()
+        })
         return updated
       }
       return prev
@@ -224,68 +264,24 @@ function App() {
     persistOrphan()
   }, [clientes, vendedores, loggedUser]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generate notifications from data (limited to 20, prioritized) — preserves lida state via localStorage
-  const notifGenRef = useRef<string>('')
-  const loadLidaKeys = (): Set<string> => {
-    try { return new Set(JSON.parse(localStorage.getItem('notif_lidas') || '[]')) } catch { return new Set() }
-  }
-  const saveLidaKeys = (keys: Set<string>) => {
-    localStorage.setItem('notif_lidas', JSON.stringify([...keys]))
-  }
-  useEffect(() => {
-    const etapasKey = clientes.map(c => `${c.id}:${c.etapa}:${c.diasInativo || 0}`).join(',')
-    const key = `${etapasKey}-${tarefas.length}-${vendedores.length}`
-    if (notifGenRef.current === key) return
-    notifGenRef.current = key
-
-    const novas: Notificacao[] = []
-    let nId = 1
-    // Prazos vencidos (alta prioridade)
-    clientes.forEach(c => {
-      if (c.etapa === 'amostra' && c.dataEntradaEtapa) {
-        const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
-        if (dias >= 30) {
-          novas.push({ id: nId++, tipo: 'error', titulo: '🔴 Prazo vencido (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-        } else if (dias >= 25) {
-          novas.push({ id: nId++, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-        }
-      }
-      if (c.etapa === 'homologado' && c.dataEntradaEtapa) {
-        const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
-        if (dias >= 75) {
-          novas.push({ id: nId++, tipo: 'error', titulo: '🔴 Prazo vencido (Homologado)', mensagem: `${c.razaoSocial} está há ${dias} dias em Homologado (prazo: 75d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-        } else if (dias >= 60) {
-          novas.push({ id: nId++, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Homologado)', mensagem: `${c.razaoSocial} está há ${dias} dias em Homologado (prazo: 75d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-        }
-      }
-    })
-    // Meta em risco
-    vendedores.forEach(v => {
-      const clientesV = clientes.filter(c => c.vendedorId === v.id)
-      const valorPipeline = clientesV.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-      if (valorPipeline < v.metaVendas * 0.5 && v.ativo) {
-        novas.push({ id: nId++, tipo: 'error', titulo: 'Meta em risco', mensagem: `${v.nome} está abaixo de 50% da meta de vendas`, timestamp: new Date().toISOString(), lida: false })
-      }
-    })
-    // Clientes inativos (top 10 mais inativos)
-    clientes.filter(c => (c.diasInativo || 0) > 10).sort((a, b) => (b.diasInativo || 0) - (a.diasInativo || 0)).slice(0, 10).forEach(c => {
-      novas.push({ id: nId++, tipo: 'warning', titulo: 'Cliente inativo', mensagem: `${c.razaoSocial} está inativo há ${c.diasInativo} dias`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-    })
-    // Merge: preserve lida state from localStorage + previous state
-    const lidaKeys = loadLidaKeys()
-    setNotificacoes(prev => {
-      prev.forEach(n => { if (n.lida) lidaKeys.add(`${n.titulo}|${n.mensagem}`) })
-      return novas.slice(0, 20).map(n => ({ ...n, lida: lidaKeys.has(`${n.titulo}|${n.mensagem}`) }))
-    })
-  }, [clientes, tarefas, vendedores])
+  // Notification system — hook handles auto-generation + Supabase persistence
+  const { notificacoes, addNotificacao, markAllRead, markRead } = useNotificacoes(clientes, tarefas, vendedores, dbNotificacoes)
 
   // Item 2: Movimentação automática pelo sistema (prazos vencidos)
   const autoMovedIds = useRef<Set<number>>(new Set())
+  const autoMoveRunRef = useRef(false)
   useEffect(() => {
+    // Only run once per data load cycle, not on every clientes change (score, diasInativo, etc.)
+    if (autoMoveRunRef.current || clientes.length === 0) return
+    autoMoveRunRef.current = true
+    // Reset after 60s to allow re-check (e.g. if user stays on page for hours)
+    setTimeout(() => { autoMoveRunRef.current = false }, 60000)
+
     const now = Date.now()
     const clientesParaMover: { id: number; dias: number; etapa: string }[] = []
     clientes.forEach(c => {
       if (!c.dataEntradaEtapa || autoMovedIds.current.has(c.id)) return
+      if (c.etapa === 'perdido') return
       const dias = Math.floor((now - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
       if (c.etapa === 'amostra' && dias > 30) clientesParaMover.push({ id: c.id, dias, etapa: 'amostra' })
       if (c.etapa === 'homologado' && dias > 75) clientesParaMover.push({ id: c.id, dias, etapa: 'homologado' })
@@ -306,31 +302,34 @@ function App() {
           motivoPerda: `[Sistema] Prazo de ${match.etapa === 'amostra' ? '30' : match.etapa === 'negociacao' ? '45' : '75'} dias na etapa "${match.etapa === 'amostra' ? 'Amostra' : match.etapa === 'negociacao' ? 'Negociação' : 'Homologado'}" vencido — movido automaticamente`
         }
       }))
+      // Capture client names before state update (avoid stale closure)
+      const moveInfo = clientesParaMover.map(m => {
+        const cl = clientes.find(c => c.id === m.id)
+        return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', fromStage: m.etapa }
+      })
       // Persist each auto-move to Supabase
       const persistAutoMoves = async () => {
-        for (const m of clientesParaMover) {
-          const cl = clientes.find(c => c.id === m.id)
-          const fromStage = cl?.etapa || m.etapa
+        for (const m of moveInfo) {
           const motivo = `[Sistema] Prazo de ${m.etapa === 'amostra' ? '30' : m.etapa === 'negociacao' ? '45' : '75'} dias na etapa "${m.etapa === 'amostra' ? 'Amostra' : m.etapa === 'negociacao' ? 'Negociação' : 'Homologado'}" vencido — movido automaticamente`
           try {
             await db.updateCliente(m.id, {
-              etapa: 'perdido', etapaAnterior: fromStage, dataEntradaEtapa: nowStr,
+              etapa: 'perdido', etapaAnterior: m.fromStage, dataEntradaEtapa: nowStr,
               categoriaPerda: 'sem_resposta', dataPerda: nowStr.split('T')[0], motivoPerda: motivo
             })
-            await db.insertHistoricoEtapa(m.id, { etapa: 'perdido', data: nowStr, de: fromStage })
+            await db.insertHistoricoEtapa(m.id, { etapa: 'perdido', data: nowStr, de: m.fromStage })
             const savedAtiv = await db.insertAtividade({
               tipo: 'moveu',
-              descricao: `${cl?.razaoSocial} movido para Perdido automaticamente (prazo ${m.etapa === 'amostra' ? '30d' : m.etapa === 'negociacao' ? '45d' : '75d'} vencido)`,
+              descricao: `${m.razaoSocial} movido para Perdido automaticamente (prazo ${m.etapa === 'amostra' ? '30d' : m.etapa === 'negociacao' ? '45d' : '75d'} vencido)`,
               vendedorNome: 'Sistema', timestamp: nowStr
             })
             setAtividades(prev => [savedAtiv, ...prev])
           } catch (err) { console.error('Erro auto-move Supabase:', err) }
-          addNotificacao('error', 'Movido automaticamente', `${cl?.razaoSocial} → Perdido (prazo ${m.dias}d vencido)`, m.id)
+          addNotificacao('error', 'Movido automaticamente', `${m.razaoSocial} → Perdido (prazo ${m.dias}d vencido)`, m.id)
         }
       }
       persistAutoMoves()
     }
-  }, [clientes])
+  }, [clientes, addNotificacao])
 
   // Item 4: Score dinâmico — recalcula automaticamente e persiste (debounced, threshold 5pts)
   const scoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -341,7 +340,7 @@ function App() {
     // Pre-build interaction count map O(n) instead of O(n²)
     const interCountMap = new Map<number, number>()
     interacoes.forEach(i => { interCountMap.set(i.clienteId, (interCountMap.get(i.clienteId) || 0) + 1) })
-    const changedIds: { id: number; score: number }[] = []
+    const changedIds: { id: number; score: number; oldScore: number }[] = []
     const updated = clientes.map(c => {
       const base = baseEtapa[c.etapa] || 10
       const bonusValor = Math.min((c.valorEstimado || 0) / 10000, 15)
@@ -349,18 +348,16 @@ function App() {
       const bonusInteracoes = Math.min(qtdInteracoes * 3, 15)
       const penalidade = Math.min((c.diasInativo || 0) * 0.5, 20)
       const newScore = Math.max(0, Math.min(100, Math.round(base + bonusValor + bonusInteracoes - penalidade)))
-      if (c.score !== newScore) { changedIds.push({ id: c.id, score: newScore }); return { ...c, score: newScore } }
+      if (c.score !== newScore) { changedIds.push({ id: c.id, score: newScore, oldScore: c.score || 0 }); return { ...c, score: newScore } }
       return c
     })
     if (changedIds.length > 0) {
       scoreCalcRef.current = true
       setClientes(updated)
-      requestAnimationFrame(() => { scoreCalcRef.current = false })
+      // Reset guard after React commits the update (next tick, not same frame)
+      setTimeout(() => { scoreCalcRef.current = false }, 0)
       // Persist only scores that changed by 5+ points, debounced
-      const significantChanges = changedIds.filter(({ id, score }) => {
-        const original = clientes.find(c => c.id === id)
-        return Math.abs((original?.score || 0) - score) >= 5
-      })
+      const significantChanges = changedIds.filter(({ score, oldScore }) => Math.abs(oldScore - score) >= 5)
       if (significantChanges.length > 0) {
         if (scoreTimerRef.current) clearTimeout(scoreTimerRef.current)
         scoreTimerRef.current = setTimeout(async () => {
@@ -370,7 +367,7 @@ function App() {
         }, 3000)
       }
     }
-  }, [interacoes]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [interacoes, clientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [formData, setFormData] = useState<FormData>({
     razaoSocial: '',
@@ -406,31 +403,6 @@ function App() {
       interacoesHoje
     }
   }, [clientes, interacoes])
-
-  // Notification System
-  const addNotificacao = (tipo: Notificacao['tipo'], titulo: string, mensagem: string, clienteId?: number) => {
-    const novaNotificacao: Notificacao = {
-      id: Date.now(),
-      tipo,
-      titulo,
-      mensagem,
-      timestamp: new Date().toLocaleString('pt-BR'),
-      lida: false,
-      clienteId
-    }
-    setNotificacoes(prev => [novaNotificacao, ...prev.slice(0, 9)])
-    
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      setNotificacoes(prev => {
-        const updated = prev.map(n => n.id === novaNotificacao.id ? { ...n, lida: true } : n)
-        const keys = loadLidaKeys()
-        updated.filter(n => n.lida).forEach(n => keys.add(`${n.titulo}|${n.mensagem}`))
-        saveLidaKeys(keys)
-        return updated
-      })
-    }, 5000)
-  }
 
   // AI Command Processing
   const processAICommand = async (command: string) => {
@@ -515,10 +487,27 @@ function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSaving) return
 
+    // Validação de campos obrigatórios
+    if (!formData.razaoSocial.trim()) { showToast('error', 'Razão Social é obrigatória.'); return }
+
+    // Validação de CNPJ (se preenchido)
     const cnpjDigits = formData.cnpj.replace(/\D/g, '')
     if (cnpjDigits.length > 0 && !validarCNPJ(formData.cnpj)) {
       showToast('error', 'CNPJ inválido. Verifique os dígitos.')
+      return
+    }
+
+    // Validação de email (se preenchido)
+    if (formData.contatoEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contatoEmail.trim())) {
+      showToast('error', 'Email de contato inválido.')
+      return
+    }
+
+    // Validação de valor estimado (se preenchido)
+    if (formData.valorEstimado && (isNaN(Number(formData.valorEstimado)) || Number(formData.valorEstimado) < 0)) {
+      showToast('error', 'Valor estimado deve ser um número positivo.')
       return
     }
     
@@ -527,6 +516,7 @@ function App() {
       : []
     const { vendedorId: vIdStr, valorEstimado: vEstStr, produtosInteresse: _pi, ...restForm } = formData
     
+    setIsSaving(true)
     try {
       if (editingCliente) {
         const updatedFields: Partial<Cliente> = {
@@ -562,10 +552,9 @@ function App() {
         setInteracoes(prev => [savedI, ...prev])
         showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
       }
-    } catch (err) { console.error('Erro ao salvar cliente:', err); showToast('error', 'Erro ao salvar cliente. Tente novamente.') }
-    
-    setFormData({ razaoSocial: '', nomeFantasia: '', cnpj: '', contatoNome: '', contatoTelefone: '', contatoEmail: '', endereco: '', valorEstimado: '', produtosInteresse: '', vendedorId: '' })
-    setShowModal(false)
+      setFormData({ razaoSocial: '', nomeFantasia: '', cnpj: '', contatoNome: '', contatoTelefone: '', contatoEmail: '', endereco: '', valorEstimado: '', produtosInteresse: '', vendedorId: '' })
+      setShowModal(false)
+    } catch (err) { console.error('Erro ao salvar cliente:', err); showToast('error', 'Erro ao salvar cliente. Tente novamente.') } finally { setIsSaving(false) }
   }
 
   const handleEditCliente = (cliente: Cliente) => {
@@ -586,12 +575,36 @@ function App() {
   }
 
   const handleQuickAction = async (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => {
+    if (quickActionRef.current) return
+    quickActionRef.current = true
     const assunto = tipo === 'propaganda' ? `Propaganda - ${canal.toUpperCase()}` : `Contato - ${canal.toUpperCase()}`
     const descricao = tipo === 'propaganda'
       ? `Envio de propaganda automatizada para ${cliente.razaoSocial}`
       : `Ação de contato iniciada com ${cliente.razaoSocial}`
 
     try {
+      // Attempt real send via backend for email/whatsapp
+      if (canal === 'email' && cliente.contatoEmail) {
+        const { sendEmailViaBot } = await import('./lib/botApi')
+        const result = await sendEmailViaBot(
+          cliente.contatoEmail, assunto, descricao,
+          cliente.id, loggedUser?.nome
+        )
+        if (!result.success) {
+          console.warn('Email send failed (bot offline?), registering interaction only:', result.error)
+        }
+      } else if (canal === 'whatsapp' && (cliente.whatsapp || cliente.contatoTelefone)) {
+        const { sendWhatsApp } = await import('./lib/botApi')
+        const numero = cliente.whatsapp || cliente.contatoTelefone
+        const result = await sendWhatsApp(
+          numero, descricao,
+          cliente.id, loggedUser?.nome
+        )
+        if (!result.success) {
+          console.warn('WhatsApp send failed (bot offline?), registering interaction only:', result.error)
+        }
+      }
+
       const savedI = await db.insertInteracao({
         clienteId: cliente.id, tipo: canal, data: new Date().toISOString(), assunto, descricao, automatico: true
       })
@@ -601,8 +614,8 @@ function App() {
       setClientes(prev => prev.map(c => c.id === cliente.id ? { ...c, ultimaInteracao: hoje } : c))
       const savedAtiv = await db.insertAtividade({ tipo: tipo === 'propaganda' ? 'propaganda' : 'contato', descricao: `${assunto}: ${cliente.razaoSocial}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: new Date().toISOString() })
       setAtividades(prev => [savedAtiv, ...prev])
-    } catch (err) { console.error('Erro quickAction:', err) }
-    addNotificacao('success', 'Automação executada', `${assunto}: ${cliente.razaoSocial}`, cliente.id)
+      addNotificacao('success', 'Automação executada', `${assunto}: ${cliente.razaoSocial}`, cliente.id)
+    } catch (err) { console.error('Erro quickAction:', err); addNotificacao('error', 'Erro na automação', `Falha ao executar ${assunto} para ${cliente.razaoSocial}`, cliente.id) } finally { quickActionRef.current = false }
   }
 
   const scheduleJob = async (job: Omit<JobAutomacao, 'id' | 'status'>) => {
@@ -668,17 +681,11 @@ function App() {
     e.dataTransfer.dropEffect = 'move'
   }
 
-  const transicoesPermitidas: Record<string, string[]> = {
-    'prospecção': ['amostra', 'perdido'],
-    'amostra': ['homologado', 'perdido'],
-    'homologado': ['negociacao', 'perdido'],
-    'negociacao': ['pos_venda', 'homologado', 'perdido'],
-    'pos_venda': ['negociacao'],
-    'perdido': ['prospecção']
-  }
-  const stageLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado', 'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido' }
 
   const moverCliente = async (clienteId: number, toStage: string, extras: Partial<Cliente> = {}) => {
+    if (movingRef.current) return
+    movingRef.current = true
+    try {
     const now = new Date().toISOString()
     const cliente = clientes.find(c => c.id === clienteId)
     const fromStage = cliente?.etapa || ''
@@ -723,6 +730,7 @@ function App() {
         setTarefas(prev => [...savedTarefas, ...prev])
       } catch (err) { console.error('Erro ao criar tarefas automáticas:', err) }
     }
+    } finally { movingRef.current = false }
   }
 
   const handleDrop = (e: React.DragEvent, toStage: string) => {
@@ -1290,13 +1298,13 @@ function App() {
                 <div className="absolute right-0 top-12 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-apple shadow-apple border border-gray-200 z-50 max-h-[70vh] overflow-y-auto">
                   <div className="p-4 border-b border-gray-200 flex items-center justify-between">
                     <h3 className="font-semibold text-gray-900">Notificações</h3>
-                    <button onClick={() => setNotificacoes(prev => { const keys = loadLidaKeys(); prev.forEach(n => keys.add(`${n.titulo}|${n.mensagem}`)); saveLidaKeys(keys); return prev.map(n => ({ ...n, lida: true })) })} className="text-xs text-primary-600 hover:text-primary-800">Marcar todas como lidas</button>
+                    <button onClick={() => markAllRead()} className="text-xs text-primary-600 hover:text-primary-800">Marcar todas como lidas</button>
                   </div>
                   {notificacoes.length === 0 ? (
                     <div className="p-6 text-center text-gray-500 text-sm">Nenhuma notificação</div>
                   ) : (
                     notificacoes.map(n => (
-                      <div key={n.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!n.lida ? 'bg-blue-50' : ''}`} onClick={() => setNotificacoes(prev => { const keys = loadLidaKeys(); const updated = prev.map(x => { if (x.id === n.id) { keys.add(`${x.titulo}|${x.mensagem}`); return { ...x, lida: true } } return x }); saveLidaKeys(keys); return updated })}>
+                      <div key={n.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!n.lida ? 'bg-blue-50' : ''}`} onClick={() => markRead(n.id)}>
                         <div className="flex items-start gap-2">
                           <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === 'warning' ? 'bg-yellow-500' : n.tipo === 'error' ? 'bg-red-500' : n.tipo === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
                           <div className="min-w-0">
@@ -1540,9 +1548,10 @@ function App() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 transition-colors duration-200 shadow-apple-sm"
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 transition-colors duration-200 shadow-apple-sm disabled:opacity-70 disabled:cursor-not-allowed"
                   >
-                    Salvar Cliente
+                    {isSaving ? 'Salvando...' : 'Salvar Cliente'}
                   </button>
                 </div>
               </form>
@@ -2041,8 +2050,8 @@ function App() {
 
       {/* Modal Motivo de Perda */}
       {showMotivoPerda && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setShowMotivoPerda(false); setDraggedItem(null); setPendingDrop(null); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro') }}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">❌ Marcar como Perdido</h2>
             <p className="text-sm text-gray-600 mb-4">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
             <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
@@ -2072,8 +2081,8 @@ function App() {
 
       {/* Modal Envio de Amostra */}
       {showModalAmostra && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setShowModalAmostra(false); setDraggedItem(null); setPendingDrop(null) }}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">📦 Enviar Amostra</h2>
             <p className="text-sm text-gray-600 mb-4">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
             <label className="block text-sm font-medium text-gray-700 mb-1">Data de envio da amostra</label>
@@ -2099,8 +2108,8 @@ function App() {
 
       {/* Modal Valor da Proposta */}
       {showModalProposta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setShowModalProposta(false); setDraggedItem(null); setPendingDrop(null); setModalPropostaValor('') }}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">💰 Nova Negociação</h2>
             <p className="text-sm text-gray-600 mb-4">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
             <label className="block text-sm font-medium text-gray-700 mb-1">Valor da proposta (R$)</label>

@@ -204,7 +204,6 @@ export interface Vendedor {
   cargo: 'vendedor' | 'gerente' | 'sdr'
   avatar: string
   usuario: string
-  senha?: string
   metaVendas: number
   metaLeads: number
   metaConversao: number

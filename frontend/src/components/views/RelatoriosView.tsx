@@ -2,10 +2,10 @@ import React from 'react'
 import { SparklesIcon } from '@heroicons/react/24/outline'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import type { Cliente, Vendedor, Interacao, Produto } from '../../types'
+import { stageLabels } from '../../utils/constants'
 
 const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], interacoes: Interacao[], produtos?: Produto[] }> = ({ clientes, vendedores, interacoes, produtos = [] }) => {
   const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
-  const stageLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado', 'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido' }
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
 
   const pipelineData = stages.map(s => ({ name: stageLabels[s] || s, valor: clientes.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0), qtd: clientes.filter(c => c.etapa === s).length }))

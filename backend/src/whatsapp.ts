@@ -66,6 +66,19 @@ export async function disconnectWhatsApp(): Promise<void> {
   }
 }
 
+export async function sendWhatsAppMessage(number: string, text: string): Promise<{ success: boolean; error?: string }> {
+  if (!sock || connectionStatus !== 'connected') {
+    return { success: false, error: 'WhatsApp não está conectado' }
+  }
+  try {
+    const jid = number.replace(/\D/g, '') + '@s.whatsapp.net'
+    await sock.sendMessage(jid, { text })
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
+  }
+}
+
 export async function connectWhatsApp(): Promise<void> {
   if (connectionStatus === 'connected' || connectionStatus === 'connecting') {
     console.log('⚠️  WhatsApp já está conectado ou conectando.')

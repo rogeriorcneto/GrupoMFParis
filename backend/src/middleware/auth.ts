@@ -2,6 +2,11 @@ import type { Request, Response, NextFunction } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { CONFIG } from '../config.js'
 
+// Shared Supabase client for auth operations (no session persistence needed)
+const authClient = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+})
+
 /**
  * Middleware de autenticação para proteger endpoints da API.
  * Valida o token JWT do Supabase enviado no header Authorization.
@@ -18,13 +23,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const token = authHeader.slice(7) // Remove 'Bearer '
 
   try {
-    // Validate token by getting user from Supabase
-    const tempClient = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    })
-
-    const { data: { user }, error } = await tempClient.auth.getUser(token)
+    // Validate token by getting user from Supabase (reuses shared client)
+    const { data: { user }, error } = await authClient.auth.getUser(token)
 
     if (error || !user) {
       res.status(401).json({ success: false, error: 'Token inválido ou expirado.' })
@@ -54,11 +54,7 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
   }
 
   try {
-    const supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
-      auth: { persistSession: false },
-    })
-
-    const { data, error } = await supabase
+    const { data, error } = await authClient
       .from('vendedores')
       .select('cargo')
       .eq('auth_id', userId)

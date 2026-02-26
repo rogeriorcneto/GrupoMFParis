@@ -41,7 +41,7 @@ const SocialSearchView: React.FC<{ onAddLead: (nome: string, telefone: string, e
     <div className="space-y-6">
       <div>
         <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Busca por Redes Sociais</h1>
-        <p className="mt-1 text-sm text-gray-600">Encontre potenciais clientes através de buscas em redes sociais e Google (MVP - mock)</p>
+        <p className="mt-1 text-sm text-gray-600">Encontre potenciais clientes através de buscas em redes sociais e Google</p>
       </div>
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
         <div className="space-y-4">

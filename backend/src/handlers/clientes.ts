@@ -1,11 +1,7 @@
 import * as db from '../database.js'
 import { getSession, updateSession, type UserSession, type CreateClientData } from '../session.js'
 import { getMenuText } from './auth.js'
-
-const STAGE_LABELS: Record<string, string> = {
-  'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado',
-  'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido',
-}
+import { STAGE_LABELS } from '../constants.js'
 
 function formatCurrency(v: number): string {
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -95,13 +91,13 @@ export async function handleClientListNavigation(senderNumber: string, session: 
 // ============================================
 
 async function handleClienteInfo(senderNumber: string, session: UserSession, clienteId: number): Promise<string> {
-  const isGerente = session.vendedor.cargo === 'gerente'
-  const clientes = isGerente
-    ? await db.fetchClientes()
-    : await db.fetchClientesByVendedor(session.vendedor.id)
-
-  const c = clientes.find(cl => cl.id === clienteId)
+  const c = await db.fetchClienteById(clienteId)
   if (!c) {
+    return '❌ Cliente não encontrado.'
+  }
+
+  // Verificar permissão: vendedor só vê seus próprios clientes
+  if (session.vendedor.cargo !== 'gerente' && c.vendedorId !== session.vendedor.id) {
     return '❌ Cliente não encontrado.'
   }
 

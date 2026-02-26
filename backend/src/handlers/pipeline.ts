@@ -1,16 +1,13 @@
 import * as db from '../database.js'
 import type { UserSession } from '../session.js'
 import { getMenuText } from './auth.js'
+import { STAGE_LABELS } from '../constants.js'
 
 const STAGE_ICONS: Record<string, string> = {
   'prospecção': '🔵', 'amostra': '🟡', 'homologado': '🟢',
   'negociacao': '🟠', 'pos_venda': '✅', 'perdido': '🔴',
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado',
-  'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido',
-}
 
 function formatCurrency(v: number): string {
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`

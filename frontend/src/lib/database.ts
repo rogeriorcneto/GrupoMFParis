@@ -10,43 +10,43 @@ import type {
 // Helpers: converter snake_case (DB) ↔ camelCase (frontend)
 // ============================================
 
-function clienteFromDb(row: any): Cliente {
+export function clienteFromDb(row: any): Cliente {
   return {
     id: row.id,
-    razaoSocial: row.razao_social,
-    nomeFantasia: row.nome_fantasia || '',
-    cnpj: row.cnpj || '',
-    contatoNome: row.contato_nome || '',
-    contatoTelefone: row.contato_telefone || '',
-    contatoEmail: row.contato_email || '',
-    endereco: row.endereco || '',
-    whatsapp: row.whatsapp || '',
-    omieCodigo: row.omie_codigo || '',
+    razaoSocial: row.razao_social ?? '',
+    nomeFantasia: row.nome_fantasia ?? undefined,
+    cnpj: row.cnpj ?? '',
+    contatoNome: row.contato_nome ?? '',
+    contatoTelefone: row.contato_telefone ?? '',
+    contatoEmail: row.contato_email ?? '',
+    endereco: row.endereco ?? undefined,
+    whatsapp: row.whatsapp ?? undefined,
+    omieCodigo: row.omie_codigo ?? undefined,
     etapa: row.etapa,
-    etapaAnterior: row.etapa_anterior || '',
-    dataEntradaEtapa: row.data_entrada_etapa || '',
+    etapaAnterior: row.etapa_anterior ?? undefined,
+    dataEntradaEtapa: row.data_entrada_etapa ?? undefined,
     vendedorId: row.vendedor_id,
-    score: row.score || 0,
-    valorEstimado: row.valor_estimado || 0,
-    produtosInteresse: row.produtos_interesse || [],
-    ultimaInteracao: row.ultima_interacao || '',
-    diasInativo: row.dias_inativo || 0,
-    dataEnvioAmostra: row.data_envio_amostra || '',
-    statusAmostra: row.status_amostra || '',
-    dataHomologacao: row.data_homologacao || '',
-    proximoPedidoPrevisto: row.proximo_pedido_previsto || '',
-    valorProposta: row.valor_proposta || 0,
-    dataProposta: row.data_proposta || '',
-    statusEntrega: row.status_entrega || '',
-    dataEntregaPrevista: row.data_entrega_prevista || '',
-    dataEntregaRealizada: row.data_entrega_realizada || '',
-    statusFaturamento: row.status_faturamento || '',
-    dataUltimoPedido: row.data_ultimo_pedido || '',
-    motivoPerda: row.motivo_perda || '',
-    categoriaPerda: row.categoria_perda || '',
-    dataPerda: row.data_perda || '',
-    origemLead: row.origem_lead || '',
-    notas: row.notas || '',
+    score: row.score ?? 0,
+    valorEstimado: row.valor_estimado ?? undefined,
+    produtosInteresse: row.produtos_interesse ?? [],
+    ultimaInteracao: row.ultima_interacao ?? undefined,
+    diasInativo: row.dias_inativo ?? 0,
+    dataEnvioAmostra: row.data_envio_amostra ?? undefined,
+    statusAmostra: row.status_amostra ?? undefined,
+    dataHomologacao: row.data_homologacao ?? undefined,
+    proximoPedidoPrevisto: row.proximo_pedido_previsto ?? undefined,
+    valorProposta: row.valor_proposta ?? undefined,
+    dataProposta: row.data_proposta ?? undefined,
+    statusEntrega: row.status_entrega ?? undefined,
+    dataEntregaPrevista: row.data_entrega_prevista ?? undefined,
+    dataEntregaRealizada: row.data_entrega_realizada ?? undefined,
+    statusFaturamento: row.status_faturamento ?? undefined,
+    dataUltimoPedido: row.data_ultimo_pedido ?? undefined,
+    motivoPerda: row.motivo_perda ?? undefined,
+    categoriaPerda: row.categoria_perda ?? undefined,
+    dataPerda: row.data_perda ?? undefined,
+    origemLead: row.origem_lead ?? undefined,
+    notas: row.notas ?? undefined,
     historicoEtapas: [],
   }
 }
@@ -82,8 +82,8 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.dataEntregaRealizada !== undefined) row.data_entrega_realizada = c.dataEntregaRealizada || null
   if (c.statusFaturamento !== undefined) row.status_faturamento = c.statusFaturamento
   if (c.dataUltimoPedido !== undefined) row.data_ultimo_pedido = c.dataUltimoPedido || null
-  if (c.motivoPerda !== undefined) row.motivo_perda = c.motivoPerda
-  if (c.categoriaPerda !== undefined) row.categoria_perda = c.categoriaPerda
+  if (c.motivoPerda !== undefined) row.motivo_perda = c.motivoPerda ?? null
+  if (c.categoriaPerda !== undefined) row.categoria_perda = c.categoriaPerda ?? null
   if (c.dataPerda !== undefined) row.data_perda = c.dataPerda || null
   if (c.origemLead !== undefined) row.origem_lead = c.origemLead
   if (c.notas !== undefined) row.notas = c.notas
@@ -122,11 +122,10 @@ function vendedorFromDb(row: any): Vendedor {
     metaConversao: Number(row.meta_conversao) || 0,
     ativo: row.ativo,
     usuario: row.email, // usuario = email no Supabase Auth
-    senha: '', // Senha é gerenciada pelo Supabase Auth, não armazenamos aqui
   }
 }
 
-function interacaoFromDb(row: any): Interacao {
+export function interacaoFromDb(row: any): Interacao {
   return {
     id: row.id,
     clienteId: row.cliente_id,
@@ -138,7 +137,7 @@ function interacaoFromDb(row: any): Interacao {
   }
 }
 
-function tarefaFromDb(row: any): Tarefa {
+export function tarefaFromDb(row: any): Tarefa {
   return {
     id: row.id,
     titulo: row.titulo,

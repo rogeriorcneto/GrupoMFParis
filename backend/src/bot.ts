@@ -80,11 +80,16 @@ export async function handleMessage(senderNumber: string, text: string): Promise
       return handleSearch(senderNumber, session, text)
 
     case 'viewing_client_list':
-      if (lower === '+' || lower === '-' || !isNaN(parseInt(lower, 10))) {
-        // Route to correct handler based on list type
-        if (session.listType === 'tarefas') {
+      if (session.listType === 'tarefas') {
+        // Tarefas: só aceita números para concluir (não suporta +/-)
+        if (!isNaN(parseInt(lower, 10))) {
           return handleTarefaConcluir(senderNumber, session, text)
         }
+        // Qualquer outra coisa: volta ao menu
+        break
+      }
+      // Clientes: aceita +, -, e números
+      if (lower === '+' || lower === '-' || !isNaN(parseInt(lower, 10))) {
         return handleClientListNavigation(senderNumber, session, text)
       }
       // Fall through to menu commands

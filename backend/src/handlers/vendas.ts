@@ -25,6 +25,8 @@ async function getProdutos(): Promise<db.Produto[]> {
 // INICIAR VENDA
 // ============================================
 
+const SALE_PAGE_SIZE = 15
+
 export async function startCreateSale(senderNumber: string, session: UserSession): Promise<string> {
   const isGerente = session.vendedor.cargo === 'gerente'
   const clientes = isGerente
@@ -36,19 +38,31 @@ export async function startCreateSale(senderNumber: string, session: UserSession
     return '⚠️ Você não tem clientes ativos para registrar venda.\n\n' + getMenuText()
   }
 
-  // Salvar IDs para seleção
+  // Salvar IDs para seleção com paginação
   updateSession(senderNumber, {
     state: 'creating_sale',
     createSaleData: { step: 'selectClient', itens: [] },
     clientListIds: ativos.map(c => c.id),
+    clientListPage: 0,
   })
 
-  let msg = '🛒 *Nova Venda*\nSelecione o cliente (envie o *número*):\n\n'
-  ativos.slice(0, 20).forEach((c, i) => {
-    msg += `*${i + 1}.* ${c.razaoSocial}\n`
+  return buildClientSelectionPage(ativos, 0)
+}
+
+function buildClientSelectionPage(ativos: db.Cliente[], page: number): string {
+  const start = page * SALE_PAGE_SIZE
+  const pageClientes = ativos.slice(start, start + SALE_PAGE_SIZE)
+  const totalPages = Math.ceil(ativos.length / SALE_PAGE_SIZE)
+
+  let msg = `🛒 *Nova Venda* — Selecione o cliente:\n\n`
+  pageClientes.forEach((c, i) => {
+    msg += `*${start + i + 1}.* ${c.razaoSocial}\n`
   })
-  if (ativos.length > 20) msg += `\n_... e mais ${ativos.length - 20} clientes_`
-  msg += '\n\n❌ Envie *cancelar* para sair'
+  msg += `\n📄 Página ${page + 1}/${totalPages} (${ativos.length} clientes)`
+  if (page + 1 < totalPages) msg += `\n➡️ Envie *+* para próxima página`
+  if (page > 0) msg += `\n⬅️ Envie *-* para página anterior`
+  msg += `\n🔍 Envie *buscar [nome]* para filtrar`
+  msg += `\n❌ Envie *cancelar* para sair`
 
   return msg
 }
@@ -104,18 +118,52 @@ export async function handleCreateSaleStep(senderNumber: string, session: UserSe
 
 async function handleSelectClient(senderNumber: string, session: UserSession, text: string): Promise<string> {
   const ids = session.clientListIds || []
-  const num = parseInt(text, 10)
+  const currentPage = session.clientListPage || 0
+  const lower = text.toLowerCase().trim()
 
+  // Paginação: + e -
+  if (lower === '+') {
+    const maxPage = Math.ceil(ids.length / SALE_PAGE_SIZE) - 1
+    if (currentPage < maxPage) {
+      const newPage = currentPage + 1
+      updateSession(senderNumber, { clientListPage: newPage })
+      const clientes = await db.fetchClientesByIds(ids)
+      const ativos = ids.map(id => clientes.find(c => c.id === id)).filter(Boolean) as db.Cliente[]
+      return buildClientSelectionPage(ativos, newPage)
+    }
+    return '📄 Você já está na última página.'
+  }
+  if (lower === '-') {
+    if (currentPage > 0) {
+      const newPage = currentPage - 1
+      updateSession(senderNumber, { clientListPage: newPage })
+      const clientes = await db.fetchClientesByIds(ids)
+      const ativos = ids.map(id => clientes.find(c => c.id === id)).filter(Boolean) as db.Cliente[]
+      return buildClientSelectionPage(ativos, newPage)
+    }
+    return '📄 Você já está na primeira página.'
+  }
+
+  // Busca por nome
+  if (lower.startsWith('buscar ')) {
+    const termo = text.slice(7).trim()
+    if (!termo) return '⚠️ Envie *buscar [nome]* para filtrar.'
+    const isGerente = session.vendedor.cargo === 'gerente'
+    const results = await db.searchClientes(termo, isGerente ? undefined : session.vendedor.id)
+    const ativos = results.filter(c => c.etapa !== 'perdido')
+    if (ativos.length === 0) return `🔍 Nenhum cliente ativo encontrado para "${termo}". Tente outro nome.`
+    updateSession(senderNumber, { clientListIds: ativos.map(c => c.id), clientListPage: 0 })
+    return buildClientSelectionPage(ativos, 0)
+  }
+
+  // Seleção por número
+  const num = parseInt(text, 10)
   if (isNaN(num) || num < 1 || num > ids.length) {
-    return '⚠️ Número inválido. Envie o número do cliente ou *cancelar*.'
+    return '⚠️ Número inválido. Envie o número, *+*/*-* para navegar, ou *buscar [nome]*.'
   }
 
   const clienteId = ids[num - 1]
-  const isGerente = session.vendedor.cargo === 'gerente'
-  const clientes = isGerente
-    ? await db.fetchClientes()
-    : await db.fetchClientesByVendedor(session.vendedor.id)
-  const cliente = clientes.find(c => c.id === clienteId)
+  const cliente = await db.fetchClienteById(clienteId)
 
   if (!cliente) {
     return '❌ Cliente não encontrado.'
