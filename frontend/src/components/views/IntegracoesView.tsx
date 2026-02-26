@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { supabase } from '../../lib/supabase'
 
 const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3001'
+
+/** Helper: fetch com token de autenticação Supabase */
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+}
 
 interface WhatsAppStatus {
   connected: boolean
@@ -47,7 +61,7 @@ const IntegracoesView: React.FC = () => {
   // Carregar config salva do backend
   const loadConfig = useCallback(async () => {
     try {
-      const res = await fetch(`${BOT_URL}/api/config`)
+      const res = await authFetch(`${BOT_URL}/api/config`)
       const cfg = await res.json()
       setEmailForm({
         emailHost: cfg.emailHost || '',
@@ -65,8 +79,8 @@ const IntegracoesView: React.FC = () => {
     const fetchStatus = async () => {
       try {
         const [waRes, emailRes] = await Promise.all([
-          fetch(`${BOT_URL}/api/whatsapp/status`).then(r => r.json()),
-          fetch(`${BOT_URL}/api/email/status`).then(r => r.json()),
+          authFetch(`${BOT_URL}/api/whatsapp/status`).then(r => r.json()),
+          authFetch(`${BOT_URL}/api/email/status`).then(r => r.json()),
         ])
         setWaStatus(waRes)
         setEmailStatus(emailRes)
@@ -76,7 +90,7 @@ const IntegracoesView: React.FC = () => {
         if (!configLoadedRef.current) loadConfig()
 
         if (waRes.status === 'qr' || waRes.status === 'connecting') {
-          const qrRes: QRResponse = await fetch(`${BOT_URL}/api/whatsapp/qr`).then(r => r.json())
+          const qrRes: QRResponse = await authFetch(`${BOT_URL}/api/whatsapp/qr`).then(r => r.json())
           setQrData(qrRes.qr)
         } else {
           setQrData(null)
@@ -95,7 +109,7 @@ const IntegracoesView: React.FC = () => {
     setWaLoading(true)
     setWaError(null)
     try {
-      const res = await fetch(`${BOT_URL}/api/whatsapp/connect`, { method: 'POST' })
+      const res = await authFetch(`${BOT_URL}/api/whatsapp/connect`, { method: 'POST' })
       const data = await res.json()
       if (!data.success) setWaError(data.error || 'Erro ao conectar')
     } catch {
@@ -108,7 +122,7 @@ const IntegracoesView: React.FC = () => {
   const handleDisconnect = async () => {
     setWaLoading(true)
     try {
-      await fetch(`${BOT_URL}/api/whatsapp/disconnect`, { method: 'POST' })
+      await authFetch(`${BOT_URL}/api/whatsapp/disconnect`, { method: 'POST' })
       setQrData(null)
     } catch {
       setWaError('Erro ao desconectar.')
@@ -121,7 +135,7 @@ const IntegracoesView: React.FC = () => {
     setEmailSaving(true)
     setEmailMsg(null)
     try {
-      const res = await fetch(`${BOT_URL}/api/config`, {
+      const res = await authFetch(`${BOT_URL}/api/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,7 +165,7 @@ const IntegracoesView: React.FC = () => {
   const handleTestEmail = async () => {
     setEmailMsg(null)
     try {
-      const res = await fetch(`${BOT_URL}/api/email/test`, { method: 'POST' })
+      const res = await authFetch(`${BOT_URL}/api/email/test`, { method: 'POST' })
       const data = await res.json()
       setEmailMsg(data.success ? { type: 'success', text: 'Conexao SMTP OK!' } : { type: 'error', text: `Erro: ${data.error}` })
     } catch {

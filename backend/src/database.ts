@@ -1,4 +1,6 @@
 import { supabase } from './supabase.js'
+import { createClient } from '@supabase/supabase-js'
+import { CONFIG } from './config.js'
 
 // ============================================
 // Types (réplica simplificada do frontend)
@@ -258,7 +260,11 @@ function templateFromDb(row: any): Template {
 // ============================================
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  // Use isolated client per login to avoid overwriting the global auth session
+  const tempClient = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data, error } = await tempClient.auth.signInWithPassword({ email, password })
   if (error) throw error
   return data
 }

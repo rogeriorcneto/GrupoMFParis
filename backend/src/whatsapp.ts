@@ -114,7 +114,7 @@ export async function connectWhatsApp(): Promise<void> {
         } else if (reconnectAttempts < MAX_RECONNECT) {
           reconnectAttempts++
           console.log(`🔄 Reconectando... (tentativa ${reconnectAttempts}/${MAX_RECONNECT})`)
-          connectionStatus = 'connecting'
+          connectionStatus = 'disconnected'
           setTimeout(() => connectWhatsApp(), 3000 * reconnectAttempts)
         } else {
           console.log('❌ Máximo de tentativas de reconexão atingido.')

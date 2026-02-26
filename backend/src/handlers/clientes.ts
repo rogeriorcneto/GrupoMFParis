@@ -39,6 +39,7 @@ export async function handleListClientes(senderNumber: string, session: UserSess
     state: 'viewing_client_list',
     clientListPage: page,
     clientListIds: allIds,
+    listType: 'clientes',
   })
 
   let msg = `📋 *Seus clientes* (${ativos.length} ativos)\n\n`
@@ -279,6 +280,7 @@ export async function handleSearch(senderNumber: string, session: UserSession, t
     state: 'viewing_client_list',
     clientListPage: 0,
     clientListIds: results.map(c => c.id),
+    listType: 'clientes',
   })
 
   let msg = `🔍 *Resultados para "${text}":*\n\n`

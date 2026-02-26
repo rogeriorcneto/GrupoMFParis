@@ -5,6 +5,7 @@ import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl } 
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
+import { requireAuth, requireGerente } from './middleware/auth.js'
 
 const app = express()
 
@@ -23,13 +24,13 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
-// ─── WhatsApp Routes ───
+// ─── WhatsApp Routes (protegidos por auth) ───
 
-app.get('/api/whatsapp/status', (_req, res) => {
+app.get('/api/whatsapp/status', requireAuth, (_req, res) => {
   res.json(getWhatsAppStatus())
 })
 
-app.get('/api/whatsapp/qr', (_req, res) => {
+app.get('/api/whatsapp/qr', requireAuth, (_req, res) => {
   const qr = getQRDataUrl()
   const status = getWhatsAppStatus()
 
@@ -46,7 +47,7 @@ app.get('/api/whatsapp/qr', (_req, res) => {
   res.json({ qr: null, status: status.status })
 })
 
-app.post('/api/whatsapp/connect', async (_req, res) => {
+app.post('/api/whatsapp/connect', requireAuth, requireGerente, async (_req, res) => {
   try {
     await connectWhatsApp()
     res.json({ success: true, message: 'Conexão iniciada. Aguarde o QR code.' })
@@ -55,7 +56,7 @@ app.post('/api/whatsapp/connect', async (_req, res) => {
   }
 })
 
-app.post('/api/whatsapp/disconnect', async (_req, res) => {
+app.post('/api/whatsapp/disconnect', requireAuth, requireGerente, async (_req, res) => {
   try {
     await disconnectWhatsApp()
     res.json({ success: true, message: 'WhatsApp desconectado.' })
@@ -64,9 +65,9 @@ app.post('/api/whatsapp/disconnect', async (_req, res) => {
   }
 })
 
-// ─── Config Routes (gerente configura email pelo CRM) ───
+// ─── Config Routes (somente gerente) ───
 
-app.get('/api/config', (_req, res) => {
+app.get('/api/config', requireAuth, requireGerente, (_req, res) => {
   const cfg = loadConfig()
   // Nunca retornar a senha completa para o frontend
   const waStatus = getWhatsAppStatus()
@@ -81,7 +82,7 @@ app.get('/api/config', (_req, res) => {
   })
 })
 
-app.post('/api/config', (req, res) => {
+app.post('/api/config', requireAuth, requireGerente, (req, res) => {
   const { emailHost, emailPort, emailUser, emailPass, emailFrom } = req.body
 
   try {
@@ -114,18 +115,18 @@ app.post('/api/config', (req, res) => {
   }
 })
 
-// ─── Email Routes ───
+// ─── Email Routes (protegidos por auth) ───
 
-app.get('/api/email/status', (_req, res) => {
+app.get('/api/email/status', requireAuth, (_req, res) => {
   res.json(getEmailStatus())
 })
 
-app.post('/api/email/test', async (_req, res) => {
+app.post('/api/email/test', requireAuth, requireGerente, async (_req, res) => {
   const result = await testEmailConnection()
   res.json(result)
 })
 
-app.post('/api/email/send', async (req, res) => {
+app.post('/api/email/send', requireAuth, async (req, res) => {
   const { to, subject, body, clienteId, vendedorNome } = req.body
 
   if (!to || !subject || !body) {
@@ -137,7 +138,7 @@ app.post('/api/email/send', async (req, res) => {
   res.json(result)
 })
 
-app.post('/api/email/send-template', async (req, res) => {
+app.post('/api/email/send-template', requireAuth, async (req, res) => {
   const { templateId, to, clienteId, vendedorNome } = req.body
 
   if (!templateId || !to || !clienteId || !vendedorNome) {

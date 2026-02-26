@@ -18,8 +18,9 @@ export async function handleTarefas(senderNumber: string, session: UserSession):
   // Guardar IDs para poder marcar como concluída
   const allIds = [...atrasadas, ...deHoje, ...futuras].map(t => t.id)
   updateSession(senderNumber, {
-    state: 'viewing_client_list', // Reuse state for task selection
+    state: 'viewing_client_list',
     clientListIds: allIds,
+    listType: 'tarefas',
   })
 
   let msg = `📋 *Suas tarefas* (${pendentes.length} pendentes)\n\n`

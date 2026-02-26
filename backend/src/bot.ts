@@ -10,7 +10,8 @@ import {
   handleSearch,
 } from './handlers/clientes.js'
 import { startCreateSale, handleCreateSaleStep } from './handlers/vendas.js'
-import { handleTarefas, handleTarefaConcluir } from './handlers/tarefas.js'
+import { handleTarefas } from './handlers/tarefas.js'
+import { handleTarefaConcluir } from './handlers/tarefas.js'
 import { handlePipeline } from './handlers/pipeline.js'
 
 // Rate limiting: max 30 messages per minute per number
@@ -79,8 +80,11 @@ export async function handleMessage(senderNumber: string, text: string): Promise
       return handleSearch(senderNumber, session, text)
 
     case 'viewing_client_list':
-      // Check if it's a task list (tarefas uses same state)
       if (lower === '+' || lower === '-' || !isNaN(parseInt(lower, 10))) {
+        // Route to correct handler based on list type
+        if (session.listType === 'tarefas') {
+          return handleTarefaConcluir(senderNumber, session, text)
+        }
         return handleClientListNavigation(senderNumber, session, text)
       }
       // Fall through to menu commands

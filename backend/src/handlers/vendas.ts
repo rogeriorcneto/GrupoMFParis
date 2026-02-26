@@ -127,10 +127,10 @@ async function handleSelectClient(senderNumber: string, session: UserSession, te
   data.step = 'selectProduct'
   updateSession(senderNumber, { createSaleData: data })
 
-  return buildProductCatalog(cliente.razaoSocial)
+  return buildProductCatalog(cliente.razaoSocial, senderNumber)
 }
 
-async function buildProductCatalog(clienteNome: string): Promise<string> {
+async function buildProductCatalog(clienteNome: string, senderNumber: string): Promise<string> {
   const produtos = await getProdutos()
   if (produtos.length === 0) {
     return '⚠️ Nenhum produto ativo no catálogo.'
@@ -146,7 +146,7 @@ async function buildProductCatalog(clienteNome: string): Promise<string> {
 
   let msg = `📦 *Catálogo de Produtos* (${clienteNome})\n\n`
   let idx = 1
-  const indexMap: number[] = [] // Track product index → produto.id
+  const indexMap: number[] = [] // Track display index → produto.id
 
   for (const [cat, prods] of byCategory) {
     msg += `*${CAT_LABELS[cat] || cat}*\n`
@@ -156,6 +156,14 @@ async function buildProductCatalog(clienteNome: string): Promise<string> {
       idx++
     }
     msg += '\n'
+  }
+
+  // Store mapping in session so handleSelectProduct uses correct IDs
+  const { updateSession } = await import('../session.js')
+  const session = (await import('../session.js')).getSession(senderNumber)
+  if (session?.createSaleData) {
+    session.createSaleData.productIndexMap = indexMap
+    updateSession(senderNumber, { createSaleData: session.createSaleData })
   }
 
   msg += `Envie: *[número] [quantidade]*\nEx: _1 50_ = 50 unidades do item 1\n\n❌ Envie *cancelar* para sair`
@@ -177,12 +185,17 @@ async function handleSelectProduct(senderNumber: string, session: UserSession, t
   }
 
   const produtos = await getProdutos()
-  if (prodNum < 1 || prodNum > produtos.length) {
-    return `⚠️ Produto ${prodNum} não existe. Escolha entre 1 e ${produtos.length}.`
+  const data = session.createSaleData!
+  const indexMap = data.productIndexMap
+  const maxItems = indexMap ? indexMap.length : produtos.length
+
+  if (prodNum < 1 || prodNum > maxItems) {
+    return `⚠️ Produto ${prodNum} não existe. Escolha entre 1 e ${maxItems}.`
   }
 
-  const produto = produtos[prodNum - 1]
-  const data = session.createSaleData!
+  // Use indexMap for correct product lookup (matches category-grouped display order)
+  const produtoId = indexMap ? indexMap[prodNum - 1] : produtos[prodNum - 1].id
+  const produto = produtos.find(p => p.id === produtoId) || produtos[prodNum - 1]
 
   // Add or update item
   const existing = data.itens.find(i => i.produtoId === produto.id)

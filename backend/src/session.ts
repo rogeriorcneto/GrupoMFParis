@@ -30,6 +30,7 @@ export interface CreateSaleData {
   clienteNome?: string
   itens: Array<{ produtoId: number; nomeProduto: string; unidade: string; sku?: string; preco: number; quantidade: number }>
   observacoes?: string
+  productIndexMap?: number[]
 }
 
 export interface UserSession {
@@ -39,6 +40,7 @@ export interface UserSession {
   createSaleData?: CreateSaleData
   clientListPage?: number
   clientListIds?: number[]
+  listType?: 'clientes' | 'tarefas'
   lastActivity: number
 }
 
