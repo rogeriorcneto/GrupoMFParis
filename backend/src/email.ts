@@ -3,6 +3,7 @@ import type { Transporter } from 'nodemailer'
 import * as db from './database.js'
 import { getEmailConfig } from './config-store.js'
 import { STAGE_LABELS } from './constants.js'
+import { log } from './logger.js'
 
 let transporter: Transporter | null = null
 let currentFrom: string = ''
@@ -19,7 +20,7 @@ export async function reloadEmail(): Promise<boolean> {
   if (!cfg) {
     transporter = null
     currentFrom = ''
-    console.log('📧 Email não configurado.')
+    log.info('📧 Email não configurado.')
     return false
   }
 
@@ -34,7 +35,7 @@ export async function reloadEmail(): Promise<boolean> {
   })
 
   currentFrom = cfg.from || cfg.user
-  console.log(`📧 Email configurado: ${currentFrom}`)
+  log.info(`📧 Email configurado: ${currentFrom}`)
   return true
 }
 
@@ -99,7 +100,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
           ultimaInteracao: new Date().toISOString().split('T')[0],
         })
       } catch (err) {
-        console.error('Erro ao registrar interação de email:', err)
+        log.error({ err }, 'Erro ao registrar interação de email')
       }
     }
 
@@ -111,12 +112,12 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
         vendedorNome: params.vendedorNome || 'Sistema',
       })
     } catch (err) {
-      console.error('Erro ao registrar atividade de email:', err)
+      log.error({ err }, 'Erro ao registrar atividade de email')
     }
 
     return { success: true }
   } catch (err: any) {
-    console.error('Erro ao enviar email:', err)
+    log.error({ err }, 'Erro ao enviar email')
     return { success: false, error: err?.message || 'Erro desconhecido' }
   }
 }

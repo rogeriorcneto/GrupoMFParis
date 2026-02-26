@@ -10,11 +10,12 @@ import * as QRCode from 'qrcode'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { handleMessage } from './bot.js'
+import { log } from './logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info')
 
-const logger = pino({ level: 'silent' })
+const baileysLogger = pino({ level: 'silent' })
 
 // ============================================
 // Estado global da conexão WhatsApp
@@ -81,12 +82,12 @@ export async function sendWhatsAppMessage(number: string, text: string): Promise
 
 export async function connectWhatsApp(): Promise<void> {
   if (connectionStatus === 'connected' || connectionStatus === 'connecting') {
-    console.log('⚠️  WhatsApp já está conectado ou conectando.')
+    log.warn('WhatsApp já está conectado ou conectando')
     return
   }
 
   connectionStatus = 'connecting'
-  console.log('📱 Iniciando conexão WhatsApp...')
+  log.info('📱 Iniciando conexão WhatsApp...')
 
   try {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
@@ -96,9 +97,9 @@ export async function connectWhatsApp(): Promise<void> {
       version,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, logger),
+        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
       },
-      logger,
+      logger: baileysLogger,
       printQRInTerminal: true,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
@@ -111,7 +112,7 @@ export async function connectWhatsApp(): Promise<void> {
       if (qr) {
         connectionStatus = 'qr'
         qrDataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 2 })
-        console.log('📷 QR Code gerado. Escaneie com o WhatsApp.')
+        log.info('📷 QR Code gerado. Escaneie com o WhatsApp.')
       }
 
       if (connection === 'close') {
@@ -119,18 +120,18 @@ export async function connectWhatsApp(): Promise<void> {
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
 
         if (reason === DisconnectReason.loggedOut) {
-          console.log('🔴 WhatsApp deslogado pelo usuário.')
+          log.info('🔴 WhatsApp deslogado pelo usuário')
           connectionStatus = 'disconnected'
           connectedNumber = null
           startTime = null
           reconnectAttempts = 0
         } else if (reconnectAttempts < MAX_RECONNECT) {
           reconnectAttempts++
-          console.log(`🔄 Reconectando... (tentativa ${reconnectAttempts}/${MAX_RECONNECT})`)
+          log.info(`🔄 Reconectando... (tentativa ${reconnectAttempts}/${MAX_RECONNECT})`)
           connectionStatus = 'disconnected'
           setTimeout(() => connectWhatsApp(), 3000 * reconnectAttempts)
         } else {
-          console.log('❌ Máximo de tentativas de reconexão atingido.')
+          log.error('❌ Máximo de tentativas de reconexão atingido')
           connectionStatus = 'disconnected'
         }
       }
@@ -145,7 +146,7 @@ export async function connectWhatsApp(): Promise<void> {
         const me = sock?.user
         if (me) {
           connectedNumber = me.id.split(':')[0].split('@')[0]
-          console.log(`✅ WhatsApp conectado! Número: ${connectedNumber}`)
+          log.info(`✅ WhatsApp conectado! Número: ${connectedNumber}`)
         }
       }
     })
@@ -178,7 +179,7 @@ export async function connectWhatsApp(): Promise<void> {
             await sock.sendMessage(from, { text: reply })
           }
         } catch (err) {
-          console.error(`Erro ao processar mensagem de ${senderNumber}:`, err)
+          log.error({ err, senderNumber }, 'Erro ao processar mensagem')
           if (sock) {
             await sock.sendMessage(from, { text: '❌ Ocorreu um erro interno. Tente novamente.' })
           }
@@ -186,7 +187,7 @@ export async function connectWhatsApp(): Promise<void> {
       }
     })
   } catch (err) {
-    console.error('Erro ao conectar WhatsApp:', err)
+    log.error({ err }, 'Erro ao conectar WhatsApp')
     connectionStatus = 'disconnected'
   }
 }

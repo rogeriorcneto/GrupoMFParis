@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { log } from './logger.js'
 
 /**
  * Encriptação AES-256-GCM para dados sensíveis (ex: senha de email SMTP).
@@ -47,7 +48,7 @@ export function decrypt(data: string): string {
     return decrypted.toString('utf8')
   } catch {
     // Se falhar a decriptação (chave mudou, dados corrompidos), retorna string original
-    console.warn('⚠️ Falha ao decriptar valor — retornando como plain text')
+    log.warn('⚠️ Falha ao decriptar valor — retornando como plain text')
     return data
   }
 }

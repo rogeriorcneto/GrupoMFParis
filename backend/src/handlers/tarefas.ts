@@ -1,6 +1,7 @@
 import * as db from '../database.js'
 import { updateSession, type UserSession } from '../session.js'
 import { getMenuText } from './auth.js'
+import { log } from '../logger.js'
 
 export async function handleTarefas(senderNumber: string, session: UserSession): Promise<string> {
   const tarefas = await db.fetchTarefasByVendedor(session.vendedor.id)
@@ -85,7 +86,7 @@ export async function handleTarefaConcluir(senderNumber: string, session: UserSe
     updateSession(senderNumber, { state: 'logged_in' })
     return `✅ Tarefa #${num} marcada como concluída!\n\n` + getMenuText()
   } catch (err) {
-    console.error('Erro ao concluir tarefa:', err)
+    log.error({ err }, 'Erro ao concluir tarefa')
     return '❌ Erro ao concluir tarefa.\n\n' + getMenuText()
   }
 }

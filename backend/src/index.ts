@@ -9,6 +9,7 @@ import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
+import { log } from './logger.js'
 
 const app = express()
 
@@ -101,7 +102,7 @@ app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, r
       })
       await updateCliente(clienteId, { ultimaInteracao: new Date().toISOString().split('T')[0] })
     } catch (err) {
-      console.error('Erro ao registrar interação WhatsApp:', err)
+      log.error({ err }, 'Erro ao registrar interação WhatsApp')
     }
   }
 
@@ -196,45 +197,31 @@ app.post('/api/email/send-template', requireAuth, rateLimit(15, 60_000), async (
 // ─── Start server ───
 
 async function start() {
-  console.log('🚀 Iniciando CRM MF Paris Bot...')
-  console.log(`📡 Servidor na porta ${CONFIG.port}`)
+  log.info('🚀 Iniciando CRM MF Paris Bot...')
+  log.info(`📡 Servidor na porta ${CONFIG.port}`)
 
   // Init email (loads config from Supabase)
   await initEmail()
 
   // Start Express
   app.listen(CONFIG.port, () => {
-    console.log(`✅ API disponível em http://localhost:${CONFIG.port}`)
-    console.log('')
-    console.log('Endpoints:')
-    console.log(`  GET  /api/health`)
-    console.log(`  GET  /api/whatsapp/status`)
-    console.log(`  GET  /api/whatsapp/qr`)
-    console.log(`  POST /api/whatsapp/connect`)
-    console.log(`  POST /api/whatsapp/disconnect`)
-    console.log(`  POST /api/whatsapp/send`)
-    console.log(`  GET  /api/email/status`)
-    console.log(`  POST /api/email/test`)
-    console.log(`  POST /api/email/send`)
-    console.log(`  POST /api/email/send-template`)
-    console.log(`  GET  /api/config`)
-    console.log(`  POST /api/config`)
-    console.log('')
+    log.info(`✅ API disponível em http://localhost:${CONFIG.port}`)
+    log.info('Endpoints: GET /api/health, /api/whatsapp/status, /api/whatsapp/qr | POST /api/whatsapp/connect, /api/whatsapp/disconnect, /api/whatsapp/send | GET /api/email/status | POST /api/email/test, /api/email/send, /api/email/send-template | GET /api/config | POST /api/config')
   })
 
   // Auto-connect WhatsApp (se já tiver sessão salva)
   try {
     await connectWhatsApp()
   } catch (err) {
-    console.error('Erro ao auto-conectar WhatsApp:', err)
-    console.log('Use POST /api/whatsapp/connect ou a interface do CRM para conectar.')
+    log.error({ err }, 'Erro ao auto-conectar WhatsApp')
+    log.info('Use POST /api/whatsapp/connect ou a interface do CRM para conectar.')
   }
 
   // Cron: processar jobs de automação a cada 5 minutos
   setInterval(() => {
     processarJobsPendentes()
   }, 5 * 60 * 1000)
-  console.log('⏰ Scheduler de jobs: a cada 5 minutos')
+  log.info('⏰ Scheduler de jobs: a cada 5 minutos')
 }
 
-start().catch(console.error)
+start().catch(err => log.fatal({ err }, 'Falha ao iniciar servidor'))

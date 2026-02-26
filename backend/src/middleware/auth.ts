@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { CONFIG } from '../config.js'
+import { log } from '../logger.js'
 
 // Shared Supabase client for auth operations (no session persistence needed)
 const authClient = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
@@ -37,7 +38,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     next()
   } catch (err) {
-    console.error('Erro na autenticação:', err)
+    log.error({ err }, 'Erro na autenticação')
     res.status(401).json({ success: false, error: 'Erro ao validar token.' })
   }
 }
@@ -67,7 +68,7 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
 
     next()
   } catch (err) {
-    console.error('Erro ao verificar cargo:', err)
+    log.error({ err }, 'Erro ao verificar cargo')
     res.status(403).json({ success: false, error: 'Erro ao verificar permissões.' })
   }
 }

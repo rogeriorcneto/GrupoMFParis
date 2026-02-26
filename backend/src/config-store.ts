@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js'
 import { encrypt, decrypt } from './crypto.js'
+import { log } from './logger.js'
 
 export interface BotConfigData {
   emailHost: string
@@ -34,7 +35,7 @@ export async function loadConfig(): Promise<BotConfigData> {
       .single()
 
     if (error || !data) {
-      console.warn('⚠️ bot_config não encontrado no Supabase, usando defaults + env vars')
+      log.warn('⚠️ bot_config não encontrado no Supabase, usando defaults + env vars')
       cachedConfig = configFromEnv()
       cacheLoaded = true
       return { ...cachedConfig }
@@ -51,7 +52,7 @@ export async function loadConfig(): Promise<BotConfigData> {
     cacheLoaded = true
     return { ...cachedConfig }
   } catch (err) {
-    console.error('Erro ao carregar bot_config:', err)
+    log.error({ err }, 'Erro ao carregar bot_config')
     cachedConfig = configFromEnv()
     cacheLoaded = true
     return { ...cachedConfig }
@@ -82,14 +83,14 @@ export async function saveConfig(data: Partial<BotConfigData>): Promise<BotConfi
       })
 
     if (error) {
-      console.error('Erro ao salvar bot_config no Supabase:', error.message)
+      log.error({ error: error.message }, 'Erro ao salvar bot_config no Supabase')
       throw new Error(error.message)
     }
 
     cachedConfig = updated
-    console.log('💾 Configurações salvas no Supabase (bot_config)')
+    log.info('💾 Configurações salvas no Supabase (bot_config)')
   } catch (err) {
-    console.error('Erro ao salvar config:', err)
+    log.error({ err }, 'Erro ao salvar config')
     throw err
   }
   return updated

@@ -1,6 +1,7 @@
 import * as db from '../database.js'
 import { getSession, updateSession, type UserSession, type CreateSaleData } from '../session.js'
 import { getMenuText } from './auth.js'
+import { log } from '../logger.js'
 
 const CAT_LABELS: Record<string, string> = {
   sacaria: 'Sacaria 25kg', okey_lac: 'Okey Lac 25kg', varejo_lacteo: 'Varejo Lácteo', cafe: 'Café', outros: 'Outros',
@@ -327,7 +328,7 @@ async function saveSale(senderNumber: string, session: UserSession, data: Create
       (data.observacoes ? `└ Obs: ${data.observacoes}\n` : `└ Sem observações\n`) +
       `\n` + getMenuText()
   } catch (err) {
-    console.error('Erro ao criar pedido:', err)
+    log.error({ err }, 'Erro ao criar pedido')
     updateSession(senderNumber, { state: 'logged_in', createSaleData: undefined })
     return '❌ Erro ao criar pedido. Tente novamente.\n\n' + getMenuText()
   }

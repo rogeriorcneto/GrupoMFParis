@@ -1,6 +1,7 @@
 import * as db from './database.js'
 import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.js'
 import { sendEmail, getEmailStatus } from './email.js'
+import { log } from './logger.js'
 
 /**
  * Processa jobs de automação pendentes.
@@ -11,7 +12,7 @@ export async function processarJobsPendentes(): Promise<void> {
     const jobs = await db.fetchJobsPendentes()
     if (jobs.length === 0) return
 
-    console.log(`⏰ Processando ${jobs.length} job(s) pendente(s)...`)
+    log.info(`⏰ Processando ${jobs.length} job(s) pendente(s)...`)
 
     for (const job of jobs) {
       try {
@@ -81,13 +82,13 @@ export async function processarJobsPendentes(): Promise<void> {
           })
         }
 
-        console.log(`  ✅ Job #${job.id} (${job.canal}) → ${cliente.razaoSocial}`)
+        log.info({ jobId: job.id, canal: job.canal, cliente: cliente.razaoSocial }, '✅ Job processado')
       } catch (err) {
-        console.error(`  ❌ Job #${job.id} erro:`, err)
+        log.error({ err, jobId: job.id }, '❌ Job erro')
         await db.updateJobStatus(job.id, 'erro', String(err)).catch(() => {})
       }
     }
   } catch (err) {
-    console.error('Erro ao processar jobs pendentes:', err)
+    log.error({ err }, 'Erro ao processar jobs pendentes')
   }
 }

@@ -1,6 +1,7 @@
 import { supabase } from './supabase.js'
 import { createClient } from '@supabase/supabase-js'
 import { CONFIG } from './config.js'
+import { log } from './logger.js'
 
 // ============================================
 // Types (réplica simplificada do frontend)
@@ -497,7 +498,7 @@ export async function fetchJobsPendentes(): Promise<JobPendente[]> {
     .lte('agendado_para', now)
     .order('agendado_para')
     .limit(50)
-  if (error) { console.error('Erro fetchJobsPendentes:', error); return [] }
+  if (error) { log.error({ error }, 'Erro fetchJobsPendentes'); return [] }
   return (data || []).map((r: any) => ({
     id: r.id,
     clienteId: r.cliente_id,
@@ -511,5 +512,5 @@ export async function updateJobStatus(id: number, status: string, erro?: string)
   const updates: any = { status, executado_em: new Date().toISOString() }
   if (erro) updates.erro = erro
   const { error } = await supabase.from('jobs_automacao').update(updates).eq('id', id)
-  if (error) console.error('Erro updateJobStatus:', error)
+  if (error) log.error({ error }, 'Erro updateJobStatus')
 }

@@ -2,6 +2,7 @@ import * as db from '../database.js'
 import { getSession, updateSession, type UserSession, type CreateClientData } from '../session.js'
 import { getMenuText } from './auth.js'
 import { STAGE_LABELS } from '../constants.js'
+import { log } from '../logger.js'
 
 function formatCurrency(v: number): string {
   return `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
@@ -246,7 +247,7 @@ async function saveNewClient(senderNumber: string, session: UserSession, data: C
       `└ Score: 10\n\n` +
       getMenuText()
   } catch (err) {
-    console.error('Erro ao cadastrar cliente:', err)
+    log.error({ err }, 'Erro ao cadastrar cliente')
     updateSession(senderNumber, { state: 'logged_in', createClientData: undefined })
     return '❌ Erro ao cadastrar cliente. Tente novamente.\n\n' + getMenuText()
   }

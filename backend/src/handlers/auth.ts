@@ -1,5 +1,6 @@
 import * as db from '../database.js'
 import { createSession, deleteSession, getSession } from '../session.js'
+import { log } from '../logger.js'
 
 export async function handleLogin(senderNumber: string, text: string): Promise<string> {
   const parts = text.split(/\s+/)
@@ -35,7 +36,7 @@ export async function handleLogin(senderNumber: string, text: string): Promise<s
     if (msg.includes('Invalid login credentials')) {
       return '❌ Email ou senha inválidos.'
     }
-    console.error('Erro no login:', err)
+    log.error({ err }, 'Erro no login')
     return '❌ Erro ao fazer login. Tente novamente.'
   }
 }
