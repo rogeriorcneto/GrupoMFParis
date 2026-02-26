@@ -38,6 +38,9 @@ function clienteFromDb(row: any): Cliente {
     valorProposta: row.valor_proposta || 0,
     dataProposta: row.data_proposta || '',
     statusEntrega: row.status_entrega || '',
+    dataEntregaPrevista: row.data_entrega_prevista || '',
+    dataEntregaRealizada: row.data_entrega_realizada || '',
+    statusFaturamento: row.status_faturamento || '',
     dataUltimoPedido: row.data_ultimo_pedido || '',
     motivoPerda: row.motivo_perda || '',
     categoriaPerda: row.categoria_perda || '',
@@ -75,6 +78,9 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.valorProposta !== undefined) row.valor_proposta = c.valorProposta
   if (c.dataProposta !== undefined) row.data_proposta = c.dataProposta || null
   if (c.statusEntrega !== undefined) row.status_entrega = c.statusEntrega
+  if (c.dataEntregaPrevista !== undefined) row.data_entrega_prevista = c.dataEntregaPrevista || null
+  if (c.dataEntregaRealizada !== undefined) row.data_entrega_realizada = c.dataEntregaRealizada || null
+  if (c.statusFaturamento !== undefined) row.status_faturamento = c.statusFaturamento
   if (c.dataUltimoPedido !== undefined) row.data_ultimo_pedido = c.dataUltimoPedido || null
   if (c.motivoPerda !== undefined) row.motivo_perda = c.motivoPerda
   if (c.categoriaPerda !== undefined) row.categoria_perda = c.categoriaPerda
@@ -477,30 +483,49 @@ export async function fetchInteracoes(): Promise<Interacao[]> {
 }
 
 export async function deleteAllClientes(): Promise<void> {
-  // Buscar IDs dos clientes existentes para escopo correto
-  const { data: clienteRows } = await supabase.from('clientes').select('id')
-  const clienteIds = (clienteRows || []).map((c: any) => c.id)
-  if (clienteIds.length === 0) return
+  const BATCH = 300
 
-  // Deletar dados relacionados em batches (escopo: apenas clientes existentes)
-  const { error: e1 } = await supabase.from('historico_etapas').delete().in('cliente_id', clienteIds)
-  if (e1) console.error('Erro ao limpar historico_etapas:', e1)
-  const { error: e2 } = await supabase.from('interacoes').delete().in('cliente_id', clienteIds)
-  if (e2) console.error('Erro ao limpar interacoes:', e2)
-  // Só deletar tarefas vinculadas a clientes (preserva tarefas avulsas)
-  const { error: e3 } = await supabase.from('tarefas').delete().in('cliente_id', clienteIds)
-  if (e3) console.error('Erro ao limpar tarefas:', e3)
-  // Deletar itens de pedido e pedidos vinculados a esses clientes
-  const { data: pedidoRows } = await supabase.from('pedidos').select('id').in('cliente_id', clienteIds)
-  const pedidoIds = (pedidoRows || []).map((p: any) => p.id)
-  if (pedidoIds.length > 0) {
-    const { error: e5 } = await supabase.from('itens_pedido').delete().in('pedido_id', pedidoIds)
-    if (e5) console.error('Erro ao limpar itens_pedido:', e5)
-    const { error: e6 } = await supabase.from('pedidos').delete().in('id', pedidoIds)
-    if (e6) console.error('Erro ao limpar pedidos:', e6)
+  // Buscar todos os IDs dos clientes com paginação
+  let allClienteIds: number[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase.from('clientes').select('id').range(from, from + 999)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    allClienteIds = allClienteIds.concat(data.map((c: any) => c.id))
+    if (data.length < 1000) break
+    from += 1000
   }
-  const { error: e4 } = await supabase.from('clientes').delete().neq('id', 0)
-  if (e4) throw e4
+  if (allClienteIds.length === 0) return
+
+  // Helper: deletar em batches de BATCH para respeitar limite do .in()
+  const batchDelete = async (table: string, column: string, ids: number[]) => {
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const chunk = ids.slice(i, i + BATCH)
+      const { error } = await supabase.from(table).delete().in(column, chunk)
+      if (error) console.error(`Erro ao limpar ${table}:`, error)
+    }
+  }
+
+  // Deletar dados relacionados em batches
+  await batchDelete('historico_etapas', 'cliente_id', allClienteIds)
+  await batchDelete('interacoes', 'cliente_id', allClienteIds)
+  await batchDelete('tarefas', 'cliente_id', allClienteIds)
+
+  // Buscar pedidos vinculados (também em batches)
+  let allPedidoIds: number[] = []
+  for (let i = 0; i < allClienteIds.length; i += BATCH) {
+    const chunk = allClienteIds.slice(i, i + BATCH)
+    const { data } = await supabase.from('pedidos').select('id').in('cliente_id', chunk)
+    if (data) allPedidoIds = allPedidoIds.concat(data.map((p: any) => p.id))
+  }
+  if (allPedidoIds.length > 0) {
+    await batchDelete('itens_pedido', 'pedido_id', allPedidoIds)
+    await batchDelete('pedidos', 'id', allPedidoIds)
+  }
+
+  // Deletar clientes em batches (escopo exato, não .neq)
+  await batchDelete('clientes', 'id', allClienteIds)
 }
 
 export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interacao> {

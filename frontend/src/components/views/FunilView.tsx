@@ -305,9 +305,12 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         return { text: '💬 Aguardar decisão', color: 'text-gray-500' }
       case 'pos_venda': {
         const diasPedido = diasDesde(cliente.dataUltimoPedido)
+        if (!cliente.dataEntregaRealizada && !cliente.dataEntregaPrevista && cliente.statusEntrega !== 'entregue') return { text: '📅 Definir previsão de entrega', color: 'text-orange-600' }
+        if (!cliente.dataEntregaRealizada && cliente.statusEntrega !== 'entregue') return { text: '🚚 Confirmar entrega realizada', color: 'text-blue-600' }
+        if (cliente.statusFaturamento !== 'faturado') return { text: '💰 Faturar pedido', color: 'text-orange-600' }
         if (diasPedido >= 30) return { text: '🛒 Sugerir recompra — ' + diasPedido + 'd', color: 'text-purple-600' }
         if (diasPedido >= 20) return { text: '📞 Pós-venda — satisfação', color: 'text-blue-600' }
-        return { text: '✅ Acompanhar entrega', color: 'text-green-600' }
+        return { text: '✅ Entregue e faturado', color: 'text-green-600' }
       }
       case 'perdido': {
         const diasPerdido = diasDesde(cliente.dataPerda)
@@ -374,16 +377,31 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         )
       }
       case 'pos_venda': {
-        const statusLabel: Record<string, string> = { preparando: '📋 Preparando', enviado: '🚚 Enviado', entregue: '✅ Entregue' }
         const diasPedido = diasDesde(cliente.dataUltimoPedido)
         const cicloRecompra = 30
         const pctRecompra = Math.min((diasPedido / cicloRecompra) * 100, 100)
+        const entregaRealizada = cliente.dataEntregaRealizada
+        const entregaPrevista = cliente.dataEntregaPrevista
+        const faturamento = cliente.statusFaturamento
         return (
           <div className="mt-1.5 space-y-1">
-            {cliente.statusEntrega && <p className="text-[10px] font-medium text-gray-700">{statusLabel[cliente.statusEntrega]}</p>}
+            {entregaRealizada ? (
+              <p className="text-[10px] font-medium text-green-700">✅ Entregue em {new Date(entregaRealizada).toLocaleDateString('pt-BR')}</p>
+            ) : entregaPrevista ? (
+              <p className="text-[10px] font-medium text-blue-700">🚚 Entrega prevista: {new Date(entregaPrevista).toLocaleDateString('pt-BR')}</p>
+            ) : cliente.statusEntrega === 'enviado' ? (
+              <p className="text-[10px] font-medium text-orange-600">🚚 Enviado — aguardando entrega</p>
+            ) : cliente.statusEntrega === 'preparando' ? (
+              <p className="text-[10px] font-medium text-gray-600">📋 Preparando pedido</p>
+            ) : null}
+            {faturamento === 'faturado' ? (
+              <p className="text-[10px] font-bold text-green-700">💰 Faturado</p>
+            ) : (
+              <p className="text-[10px] font-bold text-orange-600">💰 A faturar</p>
+            )}
             {cliente.dataUltimoPedido && (
               <>
-                <p className="text-[10px] text-gray-500">📦 Último pedido: {diasPedido}d atrás</p>
+                <p className="text-[10px] text-gray-500">📦 Pedido: {diasPedido}d atrás</p>
                 <div className="flex items-center gap-1">
                   <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctRecompra >= 100 ? 'bg-purple-500' : pctRecompra >= 67 ? 'bg-blue-500' : 'bg-green-500'}`} style={{ width: `${pctRecompra}%` }} /></div>
                   <span className={`text-[9px] font-bold ${diasPedido >= cicloRecompra ? 'text-purple-600' : 'text-gray-500'}`}>{diasPedido >= cicloRecompra ? '🛒 Recompra!' : `${cicloRecompra - diasPedido}d`}</span>

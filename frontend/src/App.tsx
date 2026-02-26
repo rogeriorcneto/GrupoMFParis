@@ -757,7 +757,7 @@ function App() {
 
     const extras: Partial<Cliente> = {}
     if (toStage === 'homologado') { extras.dataHomologacao = new Date().toISOString().split('T')[0]; extras.statusAmostra = 'aprovada' }
-    if (toStage === 'pos_venda') { extras.statusEntrega = 'preparando'; extras.dataUltimoPedido = new Date().toISOString().split('T')[0] }
+    if (toStage === 'pos_venda') { extras.statusEntrega = 'preparando'; extras.dataUltimoPedido = new Date().toISOString().split('T')[0]; extras.statusFaturamento = 'a_faturar' }
     if (toStage === 'prospecção') { extras.motivoPerda = undefined; extras.categoriaPerda = undefined; extras.dataPerda = undefined }
 
     moverCliente(draggedItem.cliente.id, toStage, extras)
@@ -1012,7 +1012,7 @@ function App() {
           isGerente={loggedUser?.cargo === 'gerente'}
         />
       case 'pedidos':
-        return <PedidosView pedidos={pedidos} clientes={clientes} produtos={produtos} vendedores={vendedores} loggedUser={loggedUser!}
+        return <PedidosView pedidos={pedidos} clientes={clientes} produtos={produtos} vendedores={vendedores} loggedUser={loggedUser || { id: 0, nome: 'Sistema', email: '', cargo: 'vendedor', ativo: true, metaVendas: 0, metaLeads: 0, metaConversao: 0 } as Vendedor}
           onAddPedido={async (p) => {
             try {
               const saved = await db.insertPedido(p)

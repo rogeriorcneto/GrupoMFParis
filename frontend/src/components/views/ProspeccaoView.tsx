@@ -21,6 +21,11 @@ const ProspeccaoView: React.FC<{
   const [tab, setTab] = React.useState<'painel' | 'fila' | 'campanhas' | 'cadencias' | 'templates'>('painel')
   const [query, setQuery] = React.useState('')
   const [selectedLeadId, setSelectedLeadId] = React.useState<number>(clientes[0]?.id ?? 0)
+  React.useEffect(() => {
+    if (clientes.length > 0 && !clientes.find(c => c.id === selectedLeadId)) {
+      setSelectedLeadId(clientes[0].id)
+    }
+  }, [clientes])
   const selectedLead = clientes.find((c) => c.id === selectedLeadId) ?? null
 
   const [newTemplateNome, setNewTemplateNome] = React.useState('')
@@ -28,7 +33,12 @@ const ProspeccaoView: React.FC<{
   const [newTemplateConteudo, setNewTemplateConteudo] = React.useState('')
 
   const [newCampanhaNome, setNewCampanhaNome] = React.useState('')
-  const [newCampanhaCadenciaId, setNewCampanhaCadenciaId] = React.useState<number>(cadencias[0]?.id ?? 1)
+  const [newCampanhaCadenciaId, setNewCampanhaCadenciaId] = React.useState<number>(cadencias[0]?.id ?? 0)
+  React.useEffect(() => {
+    if (cadencias.length > 0 && !cadencias.find(c => c.id === newCampanhaCadenciaId)) {
+      setNewCampanhaCadenciaId(cadencias[0].id)
+    }
+  }, [cadencias])
   const [newCampanhaEtapa, setNewCampanhaEtapa] = React.useState<string>('')
   const [newCampanhaMinScore, setNewCampanhaMinScore] = React.useState<string>('')
   const [newCampanhaDiasInativo, setNewCampanhaDiasInativo] = React.useState<string>('')

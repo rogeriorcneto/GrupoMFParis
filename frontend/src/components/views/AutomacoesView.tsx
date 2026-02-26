@@ -6,6 +6,11 @@ const AutomacoesView: React.FC<{
   onAction: (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => void
 }> = ({ clientes, onAction }) => {
   const [selectedClienteId, setSelectedClienteId] = React.useState<number>(clientes[0]?.id ?? 0)
+  React.useEffect(() => {
+    if (clientes.length > 0 && !clientes.find(c => c.id === selectedClienteId)) {
+      setSelectedClienteId(clientes[0].id)
+    }
+  }, [clientes])
   const selectedCliente = clientes.find((c) => c.id === selectedClienteId) ?? null
 
   const disabled = !selectedCliente

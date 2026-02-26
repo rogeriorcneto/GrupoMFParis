@@ -12,6 +12,7 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
   const [newAssunto, setNewAssunto] = React.useState('')
   const [newCorpo, setNewCorpo] = React.useState('')
   const [previewId, setPreviewId] = React.useState<number | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = React.useState<number | null>(null)
 
   const filtered = templates.filter(t => {
     return (!filterCanal || t.canal === filterCanal) && (!filterEtapa || t.etapa === filterEtapa)
@@ -65,7 +66,7 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
                   {t.etapa}
                 </span>
               </div>
-              <button onClick={() => onDelete(t.id)} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
+              <button onClick={() => setDeleteConfirmId(t.id)} className="text-gray-400 hover:text-red-500 text-xs">✕</button>
             </div>
             <h3 className="font-semibold text-gray-900 mb-1">{t.nome}</h3>
             {t.assunto && <p className="text-xs text-gray-500 mb-2">Assunto: {t.assunto}</p>}
@@ -74,6 +75,25 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
           </div>
         ))}
       </div>
+
+      {deleteConfirmId !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setDeleteConfirmId(null)}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-4">
+              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">🗑️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Excluir Template</h3>
+              <p className="text-sm text-gray-600 mt-2">Tem certeza que deseja excluir <strong>{templates.find(t => t.id === deleteConfirmId)?.nome}</strong>?</p>
+              <p className="text-xs text-gray-400 mt-1">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-apple font-medium transition-colors">Cancelar</button>
+              <button onClick={() => { onDelete(deleteConfirmId); setDeleteConfirmId(null) }} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-apple font-medium transition-colors">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewTemplate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

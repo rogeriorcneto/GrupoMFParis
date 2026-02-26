@@ -3,6 +3,11 @@ import type { Cliente } from '../../types'
 
 const MapaView: React.FC<{ clientes: Cliente[] }> = ({ clientes }) => {
   const [selectedClienteId, setSelectedClienteId] = React.useState<number>(clientes[0]?.id ?? 0)
+  React.useEffect(() => {
+    if (clientes.length > 0 && !clientes.find(c => c.id === selectedClienteId)) {
+      setSelectedClienteId(clientes[0].id)
+    }
+  }, [clientes])
   const selectedCliente = clientes.find((c) => c.id === selectedClienteId) ?? null
   const [address, setAddress] = React.useState<string>(selectedCliente?.endereco || '')
   const [isLoading, setIsLoading] = React.useState(false)
@@ -77,6 +82,7 @@ const MapaView: React.FC<{ clientes: Cliente[] }> = ({ clientes }) => {
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && geocode()}
               className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="Rua, número, bairro, cidade - UF"
             />

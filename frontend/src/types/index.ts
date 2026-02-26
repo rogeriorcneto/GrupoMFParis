@@ -35,6 +35,9 @@ export interface Cliente {
   dataProposta?: string
   valorProposta?: number
   statusEntrega?: 'preparando' | 'enviado' | 'entregue'
+  dataEntregaPrevista?: string
+  dataEntregaRealizada?: string
+  statusFaturamento?: 'a_faturar' | 'faturado'
   dataUltimoPedido?: string
   etapaAnterior?: string
   categoriaPerda?: 'preco' | 'prazo' | 'qualidade' | 'concorrencia' | 'sem_resposta' | 'outro'
