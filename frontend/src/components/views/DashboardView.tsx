@@ -1,7 +1,26 @@
-import React from 'react'
+import React, { useState, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts'
 import type { Cliente, Vendedor, Interacao, DashboardMetrics, Atividade, Produto, Tarefa } from '../../types'
 import { stageLabels } from '../../utils/constants'
+
+type Periodo = 'semana' | 'mes' | 'trimestre' | 'total'
+
+function getDateThreshold(periodo: Periodo): Date | null {
+  if (periodo === 'total') return null
+  const now = new Date()
+  if (periodo === 'semana') now.setDate(now.getDate() - 7)
+  else if (periodo === 'mes') now.setMonth(now.getMonth() - 1)
+  else if (periodo === 'trimestre') now.setMonth(now.getMonth() - 3)
+  now.setHours(0, 0, 0, 0)
+  return now
+}
+
+const periodoLabels: Record<Periodo, string> = {
+  semana: 'Última semana',
+  mes: 'Último mês',
+  trimestre: 'Último trimestre',
+  total: 'Todo o período',
+}
 
 interface DashboardViewFullProps {
   clientes: Cliente[]
@@ -15,25 +34,71 @@ interface DashboardViewFullProps {
 }
 
 const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, vendedores, atividades, interacoes, produtos, tarefas, loggedUser }) => {
+  const [periodo, setPeriodo] = useState<Periodo>('total')
+
+  const { filteredClientes, filteredInteracoes, filteredMetrics } = useMemo(() => {
+    const threshold = getDateThreshold(periodo)
+    if (!threshold) return { filteredClientes: clientes, filteredInteracoes: interacoes, filteredMetrics: metrics }
+
+    const thresholdISO = threshold.toISOString()
+    const fc = clientes.filter(c => {
+      const ref = c.dataEntradaEtapa || c.ultimaInteracao
+      return ref ? ref >= thresholdISO.split('T')[0] : false
+    })
+    const fi = interacoes.filter(i => i.data >= thresholdISO)
+
+    const hoje = new Date().toISOString().split('T')[0]
+    const totalLeads = fc.length
+    const leadsAtivos = fc.filter(c => (c.diasInativo || 0) <= 15).length
+    const leadsNovosHoje = fc.filter(c => c.dataEntradaEtapa?.startsWith(hoje)).length
+    const interacoesHoje = fi.filter(i => i.data.startsWith(hoje)).length
+    const valorTotal = fc.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
+    const ticketMedio = totalLeads > 0 ? valorTotal / totalLeads : 0
+    const taxaConversao = totalLeads > 0 ? (fc.filter(c => c.etapa === 'pos_venda').length / totalLeads) * 100 : 0
+
+    return {
+      filteredClientes: fc,
+      filteredInteracoes: fi,
+      filteredMetrics: { totalLeads, leadsAtivos, taxaConversao, valorTotal, ticketMedio, leadsNovosHoje, interacoesHoje }
+    }
+  }, [clientes, interacoes, metrics, periodo])
+
   const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
   const pipelineData = stages.map(s => ({
     name: stageLabels[s] || s,
-    valor: clientes.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0),
-    qtd: clientes.filter(c => c.etapa === s).length
+    valor: filteredClientes.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0),
+    qtd: filteredClientes.filter(c => c.etapa === s).length
   }))
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
 
   const vendedorData = vendedores.filter(v => v.ativo).map(v => ({
     name: v.nome.split(' ')[0],
-    pipeline: clientes.filter(c => c.vendedorId === v.id).reduce((s, c) => s + (c.valorEstimado || 0), 0),
-    leads: clientes.filter(c => c.vendedorId === v.id).length
+    pipeline: filteredClientes.filter(c => c.vendedorId === v.id).reduce((s, c) => s + (c.valorEstimado || 0), 0),
+    leads: filteredClientes.filter(c => c.vendedorId === v.id).length
   }))
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-600">Visão geral das suas vendas e métricas em tempo real</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-600">Visão geral das suas vendas e métricas{periodo !== 'total' ? ` — ${periodoLabels[periodo]}` : ''}</p>
+        </div>
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-apple p-0.5 shadow-apple-sm">
+          {(['semana', 'mes', 'trimestre', 'total'] as Periodo[]).map(p => (
+            <button
+              key={p}
+              onClick={() => setPeriodo(p)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-all duration-200 ${
+                periodo === p
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              }`}
+            >
+              {p === 'semana' ? '7d' : p === 'mes' ? '30d' : p === 'trimestre' ? '90d' : 'Total'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Item 6: Painel Ações do Dia */}
@@ -100,13 +165,13 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {[
-          { label: 'Total Leads', value: metrics.totalLeads, icon: '📊', color: 'blue' },
-          { label: 'Leads Ativos', value: metrics.leadsAtivos, icon: '✓', color: 'green' },
-          { label: 'Conversão', value: `${metrics.taxaConversao.toFixed(1)}%`, icon: '📈', color: 'purple' },
-          { label: 'Valor Total', value: `R$ ${metrics.valorTotal.toLocaleString('pt-BR')}`, icon: '💰', color: 'gray' },
-          { label: 'Ticket Médio', value: `R$ ${metrics.ticketMedio.toLocaleString('pt-BR')}`, icon: '🎯', color: 'orange' },
-          { label: 'Novos Hoje', value: metrics.leadsNovosHoje, icon: '🆕', color: 'blue' },
-          { label: 'Interações', value: metrics.interacoesHoje, icon: '💬', color: 'indigo' },
+          { label: 'Total Leads', value: filteredMetrics.totalLeads, icon: '📊', color: 'blue' },
+          { label: 'Leads Ativos', value: filteredMetrics.leadsAtivos, icon: '✓', color: 'green' },
+          { label: 'Conversão', value: `${filteredMetrics.taxaConversao.toFixed(1)}%`, icon: '📈', color: 'purple' },
+          { label: 'Valor Total', value: `R$ ${filteredMetrics.valorTotal.toLocaleString('pt-BR')}`, icon: '💰', color: 'gray' },
+          { label: 'Ticket Médio', value: `R$ ${filteredMetrics.ticketMedio.toLocaleString('pt-BR')}`, icon: '🎯', color: 'orange' },
+          { label: 'Novos Hoje', value: filteredMetrics.leadsNovosHoje, icon: '🆕', color: 'blue' },
+          { label: 'Interações', value: filteredMetrics.interacoesHoje, icon: '💬', color: 'indigo' },
         ].map((m, i) => (
           <div key={i} className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4">
             <p className="text-xs font-medium text-gray-500">{m.label}</p>
@@ -123,12 +188,12 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
         const metaConversaoMensal = vendedoresAtivos.length > 0 ? Math.round(vendedoresAtivos.reduce((s, v) => s + v.metaConversao, 0) / vendedoresAtivos.length) : 15
         const metaTicketMedio = metaLeadsMensal > 0 ? Math.round(metaVendasMensal / metaLeadsMensal) : 80000
 
-        const progressoVendas = Math.min((metrics.valorTotal / metaVendasMensal) * 100, 100)
-        const progressoLeads = Math.min((metrics.totalLeads / metaLeadsMensal) * 100, 100)
-        const progressoConversao = Math.min((metrics.taxaConversao / metaConversaoMensal) * 100, 100)
-        const progressoTicket = Math.min((metrics.ticketMedio / metaTicketMedio) * 100, 100)
+        const progressoVendas = Math.min((filteredMetrics.valorTotal / metaVendasMensal) * 100, 100)
+        const progressoLeads = Math.min((filteredMetrics.totalLeads / metaLeadsMensal) * 100, 100)
+        const progressoConversao = Math.min((filteredMetrics.taxaConversao / metaConversaoMensal) * 100, 100)
+        const progressoTicket = Math.min((filteredMetrics.ticketMedio / metaTicketMedio) * 100, 100)
 
-        const faltaVendas = Math.max(metaVendasMensal - metrics.valorTotal, 0)
+        const faltaVendas = Math.max(metaVendasMensal - filteredMetrics.valorTotal, 0)
         const diasRestantesMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() - new Date().getDate()
 
         const getBarColor = (pct: number) => {
@@ -150,7 +215,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
             </div>
             <div className="mb-6 p-4 bg-gray-50 rounded-apple border border-gray-200">
               <div className="flex items-end justify-between mb-3">
-                <div><p className="text-sm font-medium text-gray-600">Meta de Vendas Mensal</p><p className="text-3xl font-bold text-gray-900">R$ {metrics.valorTotal.toLocaleString('pt-BR')}</p></div>
+                <div><p className="text-sm font-medium text-gray-600">Meta de Vendas Mensal</p><p className="text-3xl font-bold text-gray-900">R$ {filteredMetrics.valorTotal.toLocaleString('pt-BR')}</p></div>
                 <div className="text-right"><p className="text-sm text-gray-500">de R$ {metaVendasMensal.toLocaleString('pt-BR')}</p><p className="text-2xl font-bold text-primary-600">{progressoVendas.toFixed(1)}%</p></div>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden"><div className={`h-4 rounded-full transition-all duration-500 ${getBarColor(progressoVendas)}`} style={{ width: `${progressoVendas}%` }}></div></div>
@@ -158,17 +223,17 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-apple border border-gray-200">
-                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">📋 Leads</p><p className="text-sm font-bold text-gray-900">{metrics.totalLeads}/{metaLeadsMensal}</p></div>
+                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">📋 Leads</p><p className="text-sm font-bold text-gray-900">{filteredMetrics.totalLeads}/{metaLeadsMensal}</p></div>
                 <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden"><div className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(progressoLeads)}`} style={{ width: `${progressoLeads}%` }}></div></div>
                 <p className="text-xs text-gray-500 mt-1">{progressoLeads.toFixed(0)}% da meta</p>
               </div>
               <div className="p-4 rounded-apple border border-gray-200">
-                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">🔄 Conversão</p><p className="text-sm font-bold text-gray-900">{metrics.taxaConversao.toFixed(1)}%/{metaConversaoMensal}%</p></div>
+                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">🔄 Conversão</p><p className="text-sm font-bold text-gray-900">{filteredMetrics.taxaConversao.toFixed(1)}%/{metaConversaoMensal}%</p></div>
                 <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden"><div className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(progressoConversao)}`} style={{ width: `${progressoConversao}%` }}></div></div>
                 <p className="text-xs text-gray-500 mt-1">{progressoConversao.toFixed(0)}% da meta</p>
               </div>
               <div className="p-4 rounded-apple border border-gray-200">
-                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">💰 Ticket Médio</p><p className="text-sm font-bold text-gray-900">R$ {metrics.ticketMedio.toLocaleString('pt-BR')}</p></div>
+                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">💰 Ticket Médio</p><p className="text-sm font-bold text-gray-900">R$ {filteredMetrics.ticketMedio.toLocaleString('pt-BR')}</p></div>
                 <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden"><div className={`h-2.5 rounded-full transition-all duration-500 ${getBarColor(progressoTicket)}`} style={{ width: `${progressoTicket}%` }}></div></div>
                 <p className="text-xs text-gray-500 mt-1">{progressoTicket.toFixed(0)}% da meta (R$ {metaTicketMedio.toLocaleString('pt-BR')})</p>
               </div>
@@ -185,7 +250,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
         const projColors: Record<string, string> = { 'prospecção': '#93C5FD', 'amostra': '#FDE68A', 'homologado': '#86EFAC', 'negociacao': '#C4B5FD', 'pos_venda': '#FBCFE8' }
 
         const projecaoPorEtapa = etapasAtivas.map(etapa => {
-          const clientesEtapa = clientes.filter(c => c.etapa === etapa)
+          const clientesEtapa = filteredClientes.filter(c => c.etapa === etapa)
           const valor = clientesEtapa.reduce((s, c) => s + (c.valorEstimado || 0), 0)
           const projetado = valor * (probEtapa[etapa] || 0)
           return { etapa, label: etapaLabels[etapa], valor, prob: (probEtapa[etapa] || 0) * 100, projetado, qtd: clientesEtapa.length }
@@ -270,7 +335,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
           <div className="space-y-3">
             {(() => {
               const prodCount: Record<string, number> = {}
-              clientes.forEach(c => (c.produtosInteresse || []).forEach(p => { prodCount[p] = (prodCount[p] || 0) + 1 }))
+              filteredClientes.forEach(c => (c.produtosInteresse || []).forEach(p => { prodCount[p] = (prodCount[p] || 0) + 1 }))
               const ranked = Object.entries(prodCount).sort((a, b) => b[1] - a[1]).slice(0, 5)
               const maxCount = ranked.length > 0 ? ranked[0][1] : 1
               if (ranked.length === 0) return <p className="text-sm text-gray-500">Nenhum produto vinculado a leads ainda</p>

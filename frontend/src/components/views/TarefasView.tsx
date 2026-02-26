@@ -1,6 +1,7 @@
 import React from 'react'
 import { XMarkIcon, PlusIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor } from '../../types'
+import { logger } from '../../utils/logger'
 
 const TarefasView: React.FC<{
   tarefas: Tarefa[]
@@ -132,7 +133,7 @@ const TarefasView: React.FC<{
         setImportStatus(`✅ ${novasTarefas.length} tarefas importadas (${comCliente} com cliente, ${comVendedor} com vendedor, ${pendentes} pendentes)`)
         setTimeout(() => setImportStatus(null), 8000)
       } catch (err) {
-        console.error('Erro ao importar tarefas:', err)
+        logger.error('Erro ao importar tarefas:', err)
         alert('Erro ao processar CSV de tarefas. Verifique o formato.')
         setImportStatus(null)
       }

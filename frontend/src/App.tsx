@@ -32,6 +32,7 @@ import { useNotificacoes } from './hooks/useNotificacoes'
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription'
 import { stageLabels, transicoesPermitidas } from './utils/constants'
 import { formatCNPJ, formatTelefone, validarCNPJ } from './utils/validators'
+import { logger } from './utils/logger'
 
 function App() {
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
@@ -114,7 +115,7 @@ function App() {
       setJobs(jobsData)
       setDbNotificacoes(notificacoesData)
     } catch (err) {
-      console.error('Erro ao carregar dados:', err)
+      logger.error('Erro ao carregar dados:', err)
     } finally {
       setIsLoading(false)
     }
@@ -167,7 +168,7 @@ function App() {
       // Only add if not already in local state (avoids duplicates from own inserts)
       setClientes(prev => prev.some(c => c.id === payload.new.id) ? prev : [...prev, db.clienteFromDb(payload.new)])
     } else if (payload.eventType === 'UPDATE') {
-      setClientes(prev => prev.map(c => c.id === payload.new.id ? { ...c, ...db.clienteFromDb(payload.new) } : c))
+      setClientes(prev => prev.map(c => c.id === payload.new.id ? { ...c, ...db.clienteFromDb(payload.new), historicoEtapas: c.historicoEtapas } : c))
     } else if (payload.eventType === 'DELETE') {
       setClientes(prev => prev.filter(c => c.id !== payload.old.id))
     }
@@ -229,7 +230,7 @@ function App() {
         // Persist outside setState via microtask to avoid side-effects in updater
         queueMicrotask(async () => {
           for (const { id, diasInativo } of changedIds) {
-            try { await db.updateCliente(id, { diasInativo }) } catch (err) { console.error('Erro ao persistir diasInativo:', err) }
+            try { await db.updateCliente(id, { diasInativo }) } catch (err) { logger.error('Erro ao persistir diasInativo:', err) }
           }
         })
         return updated
@@ -258,9 +259,9 @@ function App() {
     setClientes(prev => prev.map(c => !c.vendedorId ? { ...c, vendedorId: gerente.id } : c))
     const persistOrphan = async () => {
       for (const c of orfaos) {
-        try { await db.updateCliente(c.id, { vendedorId: gerente.id }) } catch (err) { console.error('Erro ao atribuir cliente órfão:', err) }
+        try { await db.updateCliente(c.id, { vendedorId: gerente.id }) } catch (err) { logger.error('Erro ao atribuir cliente órfão:', err) }
       }
-      console.log(`✅ ${orfaos.length} cliente(s) sem vendedor atribuído(s) a ${gerente.nome} (gerente)`)
+      logger.log(`✅ ${orfaos.length} cliente(s) sem vendedor atribuído(s) a ${gerente.nome} (gerente)`)
     }
     persistOrphan()
   }, [clientes, vendedores, loggedUser]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -324,7 +325,7 @@ function App() {
               vendedorNome: 'Sistema', timestamp: nowStr
             })
             setAtividades(prev => [savedAtiv, ...prev])
-          } catch (err) { console.error('Erro auto-move Supabase:', err) }
+          } catch (err) { logger.error('Erro auto-move Supabase:', err) }
           addNotificacao('error', 'Movido automaticamente', `${m.razaoSocial} → Perdido (prazo ${m.dias}d vencido)`, m.id)
         }
       }
@@ -363,7 +364,7 @@ function App() {
         if (scoreTimerRef.current) clearTimeout(scoreTimerRef.current)
         scoreTimerRef.current = setTimeout(async () => {
           for (const { id, score } of significantChanges) {
-            try { await db.updateCliente(id, { score }) } catch (err) { console.error('Erro ao persistir score:', err) }
+            try { await db.updateCliente(id, { score }) } catch (err) { logger.error('Erro ao persistir score:', err) }
           }
         }, 3000)
       }
@@ -527,7 +528,7 @@ function App() {
       }
       setFormData({ razaoSocial: '', nomeFantasia: '', cnpj: '', contatoNome: '', contatoTelefone: '', contatoEmail: '', endereco: '', valorEstimado: '', produtosInteresse: '', vendedorId: '' })
       setShowModal(false)
-    } catch (err) { console.error('Erro ao salvar cliente:', err); showToast('error', 'Erro ao salvar cliente. Tente novamente.') } finally { setIsSaving(false) }
+    } catch (err) { logger.error('Erro ao salvar cliente:', err); showToast('error', 'Erro ao salvar cliente. Tente novamente.') } finally { setIsSaving(false) }
   }
 
   const handleEditCliente = (cliente: Cliente) => {
@@ -564,7 +565,7 @@ function App() {
           cliente.id, loggedUser?.nome
         )
         if (!result.success) {
-          console.warn('Email send failed (bot offline?), registering interaction only:', result.error)
+          logger.warn('Email send failed (bot offline?), registering interaction only:', result.error)
         }
       } else if (canal === 'whatsapp' && (cliente.whatsapp || cliente.contatoTelefone)) {
         const { sendWhatsApp } = await import('./lib/botApi')
@@ -574,7 +575,7 @@ function App() {
           cliente.id, loggedUser?.nome
         )
         if (!result.success) {
-          console.warn('WhatsApp send failed (bot offline?), registering interaction only:', result.error)
+          logger.warn('WhatsApp send failed (bot offline?), registering interaction only:', result.error)
         }
       }
 
@@ -588,7 +589,7 @@ function App() {
       const savedAtiv = await db.insertAtividade({ tipo: tipo === 'propaganda' ? 'propaganda' : 'contato', descricao: `${assunto}: ${cliente.razaoSocial}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: new Date().toISOString() })
       setAtividades(prev => [savedAtiv, ...prev])
       addNotificacao('success', 'Automação executada', `${assunto}: ${cliente.razaoSocial}`, cliente.id)
-    } catch (err) { console.error('Erro quickAction:', err); addNotificacao('error', 'Erro na automação', `Falha ao executar ${assunto} para ${cliente.razaoSocial}`, cliente.id) } finally { quickActionRef.current = false }
+    } catch (err) { logger.error('Erro quickAction:', err); addNotificacao('error', 'Erro na automação', `Falha ao executar ${assunto} para ${cliente.razaoSocial}`, cliente.id) } finally { quickActionRef.current = false }
   }
 
   const scheduleJob = async (job: Omit<JobAutomacao, 'id' | 'status'>) => {
@@ -597,14 +598,14 @@ function App() {
       setJobs(prev => [savedJob, ...prev])
       const cliente = clientes.find(c => c.id === job.clienteId)
       if (cliente) addNotificacao('info', 'Job agendado', `Agendado ${job.canal.toUpperCase()} para ${cliente.razaoSocial}`, cliente.id)
-    } catch (err) { console.error('Erro ao agendar job:', err) }
+    } catch (err) { logger.error('Erro ao agendar job:', err) }
   }
 
   const runJobNow = async (jobId: number) => {
     try {
       await db.updateJobStatus(jobId, 'enviado')
       setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: 'enviado' } : j))
-    } catch (err) { console.error('Erro ao executar job:', err) }
+    } catch (err) { logger.error('Erro ao executar job:', err) }
     const job = jobs.find(j => j.id === jobId)
     if (!job) return
     const cliente = clientes.find(c => c.id === job.clienteId)
@@ -639,7 +640,7 @@ function App() {
 
     try {
       await db.updateCampanhaStatus(campanhaId, 'ativa')
-    } catch (err) { console.error('Erro ao ativar campanha:', err) }
+    } catch (err) { logger.error('Erro ao ativar campanha:', err) }
     setCampanhas(prev => prev.map(c => c.id === campanhaId ? { ...c, status: 'ativa' } : c))
     addNotificacao('success', 'Campanha ativada', `${campanha.nome} iniciada para ${audience.length} leads`)
   }
@@ -676,7 +677,7 @@ function App() {
       await db.insertHistoricoEtapa(clienteId, { etapa: toStage, data: now, de: fromStage })
       const savedAtiv = await db.insertAtividade({ tipo: 'moveu', descricao: `${cliente?.razaoSocial} movido para ${stageLabels[toStage] || toStage}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: now })
       setAtividades(prev => [savedAtiv, ...prev])
-    } catch (err) { console.error('Erro ao mover cliente:', err) }
+    } catch (err) { logger.error('Erro ao mover cliente:', err) }
 
     // Item 3: Tarefas automáticas ao mover etapa
     const nome = cliente?.razaoSocial || 'Cliente'
@@ -701,7 +702,7 @@ function App() {
       try {
         const savedTarefas = await Promise.all(tarefaDefs.map(t => db.insertTarefa(t)))
         setTarefas(prev => [...savedTarefas, ...prev])
-      } catch (err) { console.error('Erro ao criar tarefas automáticas:', err) }
+      } catch (err) { logger.error('Erro ao criar tarefas automáticas:', err) }
     }
     } finally { movingRef.current = false }
   }
@@ -830,7 +831,7 @@ function App() {
               }
               showToast('success', `Funil atualizado: ${updates.length} atualizados, ${novos.length} novos`)
             } catch (err) {
-              console.error('Erro ao importar negócios:', err)
+              logger.error('Erro ao importar negócios:', err)
               showToast('error', 'Erro ao importar negócios. Verifique o CSV.')
             }
           }}
@@ -847,7 +848,7 @@ function App() {
               const saved = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
               setClientes(prev => [...prev, ...saved])
               showToast('success', `${saved.length} cliente(s) importado(s) com sucesso!`)
-            } catch (err) { console.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
+            } catch (err) { logger.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
           }}
           onDeleteCliente={async (id) => {
             try {
@@ -856,7 +857,7 @@ function App() {
               setInteracoes(prev => prev.filter(i => i.clienteId !== id))
               setTarefas(prev => prev.filter(t => t.clienteId !== id))
               showToast('success', 'Cliente excluído com sucesso')
-            } catch (err) { console.error('Erro ao deletar cliente:', err); showToast('error', 'Erro ao excluir cliente. Tente novamente.') }
+            } catch (err) { logger.error('Erro ao deletar cliente:', err); showToast('error', 'Erro ao excluir cliente. Tente novamente.') }
           }}
           onDeleteAll={async () => {
             try {
@@ -865,7 +866,7 @@ function App() {
               setInteracoes([])
               setTarefas(prev => prev.filter(t => !t.clienteId))
               showToast('success', 'Todos os clientes foram apagados com sucesso!')
-            } catch (err) { console.error('Erro ao apagar todos:', err); showToast('error', 'Erro ao apagar clientes. Tente novamente.'); throw err }
+            } catch (err) { logger.error('Erro ao apagar todos:', err); showToast('error', 'Erro ao apagar clientes. Tente novamente.'); throw err }
           }}
         />
       case 'automacoes':
@@ -888,13 +889,13 @@ function App() {
               try {
                 const saved = await db.insertTemplateMsg(t)
                 setTemplatesMsgs(prev => [saved, ...prev])
-              } catch (err) { console.error('Erro ao criar template msg:', err) }
+              } catch (err) { logger.error('Erro ao criar template msg:', err) }
             }}
             onCreateCampanha={async (c: Campanha) => {
               try {
                 const saved = await db.insertCampanha(c)
                 setCampanhas(prev => [saved, ...prev])
-              } catch (err) { console.error('Erro ao criar campanha:', err) }
+              } catch (err) { logger.error('Erro ao criar campanha:', err) }
             }}
           />
         )
@@ -904,20 +905,20 @@ function App() {
             try {
               await db.updateTarefa(t.id, t)
               setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
-            } catch (err) { console.error('Erro ao atualizar tarefa:', err) }
+            } catch (err) { logger.error('Erro ao atualizar tarefa:', err) }
           }}
           onAddTarefa={async (t) => {
             try {
               const saved = await db.insertTarefa(t)
               setTarefas(prev => [saved, ...prev])
-            } catch (err) { console.error('Erro ao criar tarefa:', err) }
+            } catch (err) { logger.error('Erro ao criar tarefa:', err) }
           }}
           onImportTarefas={async (novas) => {
             try {
               const saved = await db.insertTarefasBatch(novas)
               setTarefas(prev => [...saved, ...prev])
               showToast('success', `${saved.length} tarefa(s) importada(s) com sucesso!`)
-            } catch (err) { console.error('Erro ao importar tarefas:', err); showToast('error', 'Erro ao importar tarefas. Verifique o CSV.') }
+            } catch (err) { logger.error('Erro ao importar tarefas:', err); showToast('error', 'Erro ao importar tarefas. Verifique o CSV.') }
           }}
         />
       case 'social':
@@ -927,7 +928,7 @@ function App() {
               razaoSocial: nome, cnpj: '', contatoNome: '', contatoTelefone: telefone, contatoEmail: '', endereco, etapa: 'prospecção', ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 20, vendedorId: loggedUser?.id
             } as Omit<Cliente, 'id'>)
             setClientes(prev => [...prev, saved])
-          } catch (err) { console.error('Erro ao add lead social:', err) }
+          } catch (err) { logger.error('Erro ao add lead social:', err) }
         }} />
       case 'integracoes':
         return <IntegracoesView />
@@ -940,7 +941,7 @@ function App() {
               addNotificacao('success', 'Vendedor cadastrado', `${vendedorData.nome} já pode fazer login com ${email}`)
               showToast('success', `Vendedor "${vendedorData.nome}" cadastrado com sucesso!`)
             } catch (err: any) {
-              console.error('Erro ao adicionar vendedor:', err)
+              logger.error('Erro ao adicionar vendedor:', err)
               showToast('error', err?.message || 'Erro ao cadastrar vendedor')
               throw err // Re-throw para o VendedoresView exibir o erro
             }
@@ -949,7 +950,7 @@ function App() {
             try {
               await db.updateVendedor(v.id, v)
               setVendedores(prev => prev.map(x => x.id === v.id ? v : x))
-            } catch (err) { console.error('Erro ao atualizar vendedor:', err) }
+            } catch (err) { logger.error('Erro ao atualizar vendedor:', err) }
           }}
         />
       case 'relatorios':
@@ -960,13 +961,13 @@ function App() {
             try {
               const saved = await db.insertTemplate(t)
               setTemplates(prev => [...prev, saved])
-            } catch (err) { console.error('Erro ao criar template:', err) }
+            } catch (err) { logger.error('Erro ao criar template:', err) }
           }}
           onDelete={async (id) => {
             try {
               await db.deleteTemplate(id)
               setTemplates(prev => prev.filter(t => t.id !== id))
-            } catch (err) { console.error('Erro ao deletar template:', err) }
+            } catch (err) { logger.error('Erro ao deletar template:', err) }
           }}
         />
       case 'produtos':
@@ -976,19 +977,19 @@ function App() {
               const saved = await db.insertProduto(p)
               setProdutos(prev => [...prev, saved])
               showToast('success', `Produto "${p.nome}" cadastrado!`)
-            } catch (err) { console.error('Erro ao adicionar produto:', err); showToast('error', 'Erro ao salvar produto. Tente novamente.') }
+            } catch (err) { logger.error('Erro ao adicionar produto:', err); showToast('error', 'Erro ao salvar produto. Tente novamente.') }
           }}
           onUpdate={async (p) => {
             try {
               await db.updateProduto(p.id, p)
               setProdutos(prev => prev.map(x => x.id === p.id ? p : x))
-            } catch (err) { console.error('Erro ao atualizar produto:', err) }
+            } catch (err) { logger.error('Erro ao atualizar produto:', err) }
           }}
           onDelete={async (id) => {
             try {
               await db.deleteProduto(id)
               setProdutos(prev => prev.filter(p => p.id !== id))
-            } catch (err) { console.error('Erro ao deletar produto:', err) }
+            } catch (err) { logger.error('Erro ao deletar produto:', err) }
           }}
           isGerente={loggedUser?.cargo === 'gerente'}
         />
@@ -999,13 +1000,13 @@ function App() {
               const saved = await db.insertPedido(p)
               setPedidos(prev => [...prev, saved])
               showToast('success', `Pedido ${p.numero} salvo com sucesso!`)
-            } catch (err) { console.error('Erro ao criar pedido:', err); showToast('error', 'Erro ao salvar pedido. Tente novamente.') }
+            } catch (err) { logger.error('Erro ao criar pedido:', err); showToast('error', 'Erro ao salvar pedido. Tente novamente.') }
           }}
           onUpdatePedido={async (p) => {
             try {
               await db.updatePedidoStatus(p.id, p.status)
               setPedidos(prev => prev.map(x => x.id === p.id ? p : x))
-            } catch (err) { console.error('Erro ao atualizar pedido:', err) }
+            } catch (err) { logger.error('Erro ao atualizar pedido:', err) }
           }}
         />
       default:
@@ -1661,7 +1662,7 @@ function App() {
             const hoje = new Date().toISOString().split('T')[0]
             await db.updateCliente(c.id, { ultimaInteracao: hoje })
             setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
-          } catch (err) { console.error('Erro ao registrar atividade:', err) }
+          } catch (err) { logger.error('Erro ao registrar atividade:', err) }
           setPanelAtividadeTipo('')
           setPanelAtividadeDesc('')
           addNotificacao('success', 'Atividade registrada', `${tipoInteracaoLabel[panelAtividadeTipo]}: ${c.razaoSocial}`, c.id)
@@ -1678,7 +1679,7 @@ function App() {
             const hoje = new Date().toISOString().split('T')[0]
             await db.updateCliente(c.id, { ultimaInteracao: hoje })
             setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
-          } catch (err) { console.error('Erro ao salvar nota:', err) }
+          } catch (err) { logger.error('Erro ao salvar nota:', err) }
           setPanelNota('')
           addNotificacao('success', 'Observação salva', c.razaoSocial, c.id)
         }
@@ -1691,7 +1692,7 @@ function App() {
               tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id
             })
             setTarefas(prev => [saved, ...prev])
-          } catch (err) { console.error('Erro ao criar tarefa:', err) }
+          } catch (err) { logger.error('Erro ao criar tarefa:', err) }
           setPanelTarefaTitulo('')
           setPanelNovaTarefa(false)
           addNotificacao('success', 'Tarefa criada', `${panelTarefaTitulo.trim()} - ${c.razaoSocial}`, c.id)
@@ -1988,7 +1989,7 @@ function App() {
                           {clienteTarefas.map((t) => (
                             <div key={t.id} className={`bg-white rounded-apple border p-3 ${t.status === 'concluida' ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
                               <div className="flex items-start gap-2">
-                                <button onClick={async () => { const newStatus = t.status === 'concluida' ? 'pendente' : 'concluida'; try { await db.updateTarefa(t.id, { status: newStatus }); } catch (err) { console.error('Erro toggle tarefa:', err) } setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, status: newStatus } : x)) }} className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.status === 'concluida' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-primary-500'}`}>
+                                <button onClick={async () => { const newStatus = t.status === 'concluida' ? 'pendente' : 'concluida'; try { await db.updateTarefa(t.id, { status: newStatus }); } catch (err) { logger.error('Erro toggle tarefa:', err) } setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, status: newStatus } : x)) }} className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.status === 'concluida' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-primary-500'}`}>
                                   {t.status === 'concluida' && <span className="text-xs">✓</span>}
                                 </button>
                                 <div className="flex-1 min-w-0">

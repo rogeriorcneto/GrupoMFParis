@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { Notificacao, Cliente, Tarefa, Vendedor } from '../types'
 import * as db from '../lib/database'
+import { logger } from '../utils/logger'
 
 export function useNotificacoes(
   clientes: Cliente[],
@@ -97,7 +98,7 @@ export function useNotificacoes(
       // Replace temp with real DB record
       setNotificacoes(prev => prev.map(n => n.id === tempId ? saved : n))
     } catch (err) {
-      console.error('Erro ao persistir notificação:', err)
+      logger.error('Erro ao persistir notificação:', err)
     }
 
     // Auto-dismiss after 5 seconds
@@ -112,13 +113,13 @@ export function useNotificacoes(
 
   const markAllRead = useCallback(async () => {
     setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))
-    try { await db.markAllNotificacoesLidas() } catch (err) { console.error('Erro ao marcar todas lidas:', err) }
+    try { await db.markAllNotificacoesLidas() } catch (err) { logger.error('Erro ao marcar todas lidas:', err) }
   }, [])
 
   const markRead = useCallback(async (id: number) => {
     setNotificacoes(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n))
     if (id > 0) {
-      try { await db.markNotificacaoLida(id) } catch (err) { console.error('Erro ao marcar lida:', err) }
+      try { await db.markNotificacaoLida(id) } catch (err) { logger.error('Erro ao marcar lida:', err) }
     }
   }, [])
 

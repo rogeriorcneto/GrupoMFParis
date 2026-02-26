@@ -502,7 +502,7 @@ export async function deleteAllClientes(): Promise<void> {
     for (let i = 0; i < ids.length; i += BATCH) {
       const chunk = ids.slice(i, i + BATCH)
       const { error } = await supabase.from(table).delete().in(column, chunk)
-      if (error) console.error(`Erro ao limpar ${table}:`, error)
+      if (error && import.meta.env.DEV) console.error(`Erro ao limpar ${table}:`, error)
     }
   }
 
