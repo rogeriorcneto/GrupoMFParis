@@ -1,9 +1,4 @@
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CONFIG_FILE = path.join(__dirname, '..', 'bot-config.json')
+import { supabase } from './supabase.js'
 
 export interface BotConfigData {
   emailHost: string
@@ -23,46 +18,106 @@ const DEFAULT_CONFIG: BotConfigData = {
   whatsappNumero: '',
 }
 
-export function loadConfig(): BotConfigData {
+// In-memory cache to avoid hitting DB on every request
+let cachedConfig: BotConfigData = { ...DEFAULT_CONFIG }
+let cacheLoaded = false
+
+export async function loadConfig(): Promise<BotConfigData> {
+  if (cacheLoaded) return { ...cachedConfig }
+
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8')
-      const parsed = JSON.parse(raw)
-      return { ...DEFAULT_CONFIG, ...parsed }
+    const { data, error } = await supabase
+      .from('bot_config')
+      .select('*')
+      .eq('id', 1)
+      .single()
+
+    if (error || !data) {
+      console.warn('⚠️ bot_config não encontrado no Supabase, usando defaults + env vars')
+      cachedConfig = configFromEnv()
+      cacheLoaded = true
+      return { ...cachedConfig }
     }
+
+    cachedConfig = {
+      emailHost: data.email_host || process.env.EMAIL_HOST || '',
+      emailPort: data.email_port || parseInt(process.env.EMAIL_PORT || '587', 10),
+      emailUser: data.email_user || process.env.EMAIL_USER || '',
+      emailPass: data.email_pass || process.env.EMAIL_PASS || '',
+      emailFrom: data.email_from || process.env.EMAIL_FROM || '',
+      whatsappNumero: data.whatsapp_numero || '',
+    }
+    cacheLoaded = true
+    return { ...cachedConfig }
   } catch (err) {
-    console.error('Erro ao ler bot-config.json:', err)
+    console.error('Erro ao carregar bot_config:', err)
+    cachedConfig = configFromEnv()
+    cacheLoaded = true
+    return { ...cachedConfig }
   }
-  return { ...DEFAULT_CONFIG }
 }
 
-export function saveConfig(data: Partial<BotConfigData>): BotConfigData {
-  const current = loadConfig()
+/** Synchronous getter for cached config (used by email.ts after initial load) */
+export function loadConfigSync(): BotConfigData {
+  return { ...cachedConfig }
+}
+
+export async function saveConfig(data: Partial<BotConfigData>): Promise<BotConfigData> {
+  const current = await loadConfig()
   const updated = { ...current, ...data }
+
   try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2), 'utf-8')
-    console.log('💾 Configurações salvas em bot-config.json')
+    const { error } = await supabase
+      .from('bot_config')
+      .upsert({
+        id: 1,
+        email_host: updated.emailHost,
+        email_port: updated.emailPort,
+        email_user: updated.emailUser,
+        email_pass: updated.emailPass,
+        email_from: updated.emailFrom,
+        whatsapp_numero: updated.whatsappNumero,
+        updated_at: new Date().toISOString(),
+      })
+
+    if (error) {
+      console.error('Erro ao salvar bot_config no Supabase:', error.message)
+      throw new Error(error.message)
+    }
+
+    cachedConfig = updated
+    console.log('💾 Configurações salvas no Supabase (bot_config)')
   } catch (err) {
-    console.error('Erro ao salvar bot-config.json:', err)
+    console.error('Erro ao salvar config:', err)
     throw err
   }
   return updated
 }
 
-export function getEmailConfig(): { host: string; port: number; user: string; pass: string; from: string } | null {
-  const cfg = loadConfig()
-  // Prioridade: bot-config.json > env vars
-  const host = cfg.emailHost || process.env.EMAIL_HOST || ''
-  const user = cfg.emailUser || process.env.EMAIL_USER || ''
-  const pass = cfg.emailPass || process.env.EMAIL_PASS || ''
+export async function getEmailConfig(): Promise<{ host: string; port: number; user: string; pass: string; from: string } | null> {
+  const cfg = await loadConfig()
+  const host = cfg.emailHost || ''
+  const user = cfg.emailUser || ''
+  const pass = cfg.emailPass || ''
 
   if (!host || !user || !pass) return null
 
   return {
     host,
-    port: cfg.emailPort || parseInt(process.env.EMAIL_PORT || '587', 10),
+    port: cfg.emailPort || 587,
     user,
     pass,
-    from: cfg.emailFrom || process.env.EMAIL_FROM || user,
+    from: cfg.emailFrom || user,
+  }
+}
+
+function configFromEnv(): BotConfigData {
+  return {
+    emailHost: process.env.EMAIL_HOST || '',
+    emailPort: parseInt(process.env.EMAIL_PORT || '587', 10),
+    emailUser: process.env.EMAIL_USER || '',
+    emailPass: process.env.EMAIL_PASS || '',
+    emailFrom: process.env.EMAIL_FROM || '',
+    whatsappNumero: '',
   }
 }

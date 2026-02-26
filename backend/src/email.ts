@@ -7,15 +7,15 @@ import { STAGE_LABELS } from './constants.js'
 let transporter: Transporter | null = null
 let currentFrom: string = ''
 
-export function initEmail(): boolean {
+export async function initEmail(): Promise<boolean> {
   return reloadEmail()
 }
 
 /**
  * Recarrega a configuração de email (chamado ao salvar config pelo CRM)
  */
-export function reloadEmail(): boolean {
-  const cfg = getEmailConfig()
+export async function reloadEmail(): Promise<boolean> {
+  const cfg = await getEmailConfig()
   if (!cfg) {
     transporter = null
     currentFrom = ''

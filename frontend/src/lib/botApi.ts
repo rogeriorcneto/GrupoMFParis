@@ -9,13 +9,20 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   if (!token) {
     throw new Error('Não autenticado')
   }
-  return fetch(url, {
+  const res = await fetch(url, {
     ...options,
     headers: {
       ...options.headers,
       'Authorization': `Bearer ${token}`,
     },
   })
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('AUTH_EXPIRED')
+    if (res.status === 403) throw new Error('FORBIDDEN')
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error || `HTTP ${res.status}`)
+  }
+  return res
 }
 
 /** Send a WhatsApp message via backend */

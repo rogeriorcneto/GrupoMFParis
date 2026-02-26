@@ -107,8 +107,8 @@ app.post('/api/whatsapp/send', requireAuth, async (req, res) => {
 
 // ─── Config Routes (somente gerente) ───
 
-app.get('/api/config', requireAuth, requireGerente, (_req, res) => {
-  const cfg = loadConfig()
+app.get('/api/config', requireAuth, requireGerente, async (_req, res) => {
+  const cfg = await loadConfig()
   // Nunca retornar a senha completa para o frontend
   const waStatus = getWhatsAppStatus()
   res.json({
@@ -122,7 +122,7 @@ app.get('/api/config', requireAuth, requireGerente, (_req, res) => {
   })
 })
 
-app.post('/api/config', requireAuth, requireGerente, (req, res) => {
+app.post('/api/config', requireAuth, requireGerente, async (req, res) => {
   const { emailHost, emailPort, emailUser, emailPass, emailFrom } = req.body
 
   try {
@@ -134,10 +134,10 @@ app.post('/api/config', requireAuth, requireGerente, (req, res) => {
     if (emailPass !== undefined && emailPass !== '••••••••') updates.emailPass = emailPass
     if (emailFrom !== undefined) updates.emailFrom = emailFrom
 
-    const saved = saveConfig(updates)
+    const saved = await saveConfig(updates)
 
     // Recarregar transporter de email com novas configs
-    const emailOk = reloadEmail()
+    const emailOk = await reloadEmail()
 
     res.json({
       success: true,
@@ -196,8 +196,8 @@ async function start() {
   console.log('🚀 Iniciando CRM MF Paris Bot...')
   console.log(`📡 Servidor na porta ${CONFIG.port}`)
 
-  // Init email
-  initEmail()
+  // Init email (loads config from Supabase)
+  await initEmail()
 
   // Start Express
   app.listen(CONFIG.port, () => {
