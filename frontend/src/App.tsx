@@ -662,7 +662,13 @@ function App() {
     try {
     const now = new Date().toISOString()
     const cliente = clientes.find(c => c.id === clienteId)
-    const fromStage = cliente?.etapa || ''
+    if (!cliente) return
+
+    const fromStage = cliente.etapa || ''
+    const previousSnapshot: Cliente = {
+      ...cliente,
+      historicoEtapas: [...(cliente.historicoEtapas || [])],
+    }
 
     // Update local state immediately (optimistic)
     setClientes(prev => prev.map(c => {
@@ -671,13 +677,29 @@ function App() {
       return { ...c, etapa: toStage, etapaAnterior: c.etapa, dataEntradaEtapa: now, historicoEtapas: [...(c.historicoEtapas || []), hist], ...extras }
     }))
 
-    // Persist to Supabase
+    // Persist to Supabase (se falhar, faz rollback para evitar inconsistência de funil)
     try {
       await db.updateCliente(clienteId, { etapa: toStage, etapaAnterior: fromStage, dataEntradaEtapa: now, ...extras })
       await db.insertHistoricoEtapa(clienteId, { etapa: toStage, data: now, de: fromStage })
-      const savedAtiv = await db.insertAtividade({ tipo: 'moveu', descricao: `${cliente?.razaoSocial} movido para ${stageLabels[toStage] || toStage}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: now })
+    } catch (err) {
+      logger.error('Erro ao persistir movimento de cliente:', err)
+      setClientes(prev => prev.map(c => c.id === clienteId ? previousSnapshot : c))
+      try {
+        await loadAllData()
+      } catch (reloadErr) {
+        logger.error('Erro ao recarregar dados após rollback:', reloadErr)
+      }
+      addNotificacao('error', 'Falha ao mover cliente', `Não foi possível mover ${previousSnapshot.razaoSocial}. O funil foi restaurado.`)
+      return
+    }
+
+    // Atividade é importante, mas não deve invalidar a transição já persistida
+    try {
+      const savedAtiv = await db.insertAtividade({ tipo: 'moveu', descricao: `${cliente.razaoSocial} movido para ${stageLabels[toStage] || toStage}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: now })
       setAtividades(prev => [savedAtiv, ...prev])
-    } catch (err) { logger.error('Erro ao mover cliente:', err) }
+    } catch (err) {
+      logger.error('Erro ao registrar atividade de movimento:', err)
+    }
 
     // Item 3: Tarefas automáticas ao mover etapa
     const nome = cliente?.razaoSocial || 'Cliente'
