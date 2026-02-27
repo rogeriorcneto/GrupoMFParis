@@ -198,7 +198,8 @@ function App() {
   const {
     formData, setFormData, editingCliente, isSaving,
     showModal, setShowModal, handleInputChange, handleSubmit,
-    handleEditCliente, openModal
+    handleEditCliente, openModal,
+    isLoadingCep, isLoadingCnpj, buscarCep, buscarCnpj,
   } = useClienteForm({ loggedUser, setClientes, setInteracoes, showToast })
 
   // Funnel actions: drag/drop, mover, modals, quick actions, campaigns
@@ -822,174 +823,207 @@ function App() {
 
               {/* Form */}
               <form onSubmit={handleSubmit} className="px-4 sm:px-6 py-4">
-                <div className="space-y-4">
+                <div className="space-y-5">
+
+                  {/* ── Empresa ── */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Razão Social *
-                    </label>
-                    <input
-                      type="text"
-                      name="razaoSocial"
-                      value={formData.razaoSocial}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Ex: Supermercado BH Ltda"
-                    />
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Empresa</p>
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ</label>
+                          <div className="flex gap-1">
+                            <input type="text" name="cnpj" value={formData.cnpj} onChange={handleInputChange}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                              placeholder="00.000.000/0000-00" />
+                            <button type="button" onClick={() => buscarCnpj(formData.cnpj)}
+                              disabled={isLoadingCnpj}
+                              className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-xs font-medium disabled:opacity-50 whitespace-nowrap">
+                              {isLoadingCnpj ? '⏳' : '🔍 Buscar'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social *</label>
+                        <input type="text" name="razaoSocial" value={formData.razaoSocial} onChange={handleInputChange} required
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="Ex: Supermercado BH Ltda" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Nome Fantasia</label>
+                        <input type="text" name="nomeFantasia" value={formData.nomeFantasia} onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="Ex: Mercadão BH" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">CNAE Primário</label>
+                        <input type="text" name="cnaePrimario" value={formData.cnaePrimario} onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="Ex: 4711-3/02 - Comércio varejista de mercadorias" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">CNAE Secundário</label>
+                        <input type="text" name="cnaeSecundario" value={formData.cnaeSecundario} onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="Preenchido automaticamente pelo CNPJ" />
+                      </div>
+                    </div>
                   </div>
 
+                  {/* ── Contato ── */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nome Fantasia
-                    </label>
-                    <input
-                      type="text"
-                      name="nomeFantasia"
-                      value={formData.nomeFantasia}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Ex: Nome Fantasia"
-                    />
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Contato</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Nome do Contato</label>
+                        <input type="text" name="contatoNome" value={formData.contatoNome} onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="João Silva" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Celular</label>
+                          <input type="tel" name="contatoCelular" value={formData.contatoCelular} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="(00) 99999-0000" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Telefone Fixo</label>
+                          <input type="tel" name="contatoTelefoneFixo" value={formData.contatoTelefoneFixo} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="(00) 3333-0000" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">WhatsApp / Telefone Principal</label>
+                        <input type="tel" name="contatoTelefone" value={formData.contatoTelefone} onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="(00) 99999-0000" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
+                        <input type="email" name="contatoEmail" value={formData.contatoEmail} onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="email@empresa.com" />
+                      </div>
+                    </div>
                   </div>
 
+                  {/* ── Endereço ── */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      CNPJ *
-                    </label>
-                    <input
-                      type="text"
-                      name="cnpj"
-                      value={formData.cnpj}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="00.000.000/0000-00"
-                    />
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Endereço</p>
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <div className="w-36">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">CEP</label>
+                          <div className="flex gap-1">
+                            <input type="text" name="enderecoCep" value={formData.enderecoCep} onChange={handleInputChange}
+                              onBlur={() => buscarCep(formData.enderecoCep)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                              placeholder="00000-000" maxLength={9} />
+                            {isLoadingCep && <span className="text-xs text-gray-400 self-center">⏳</span>}
+                          </div>
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Rua / Logradouro</label>
+                          <input type="text" name="enderecoRua" value={formData.enderecoRua} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="Rua das Flores" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Número</label>
+                          <input type="text" name="enderecoNumero" value={formData.enderecoNumero} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="100" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Complemento</label>
+                          <input type="text" name="enderecoComplemento" value={formData.enderecoComplemento} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="Sala 2, Apto 301..." />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-1">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
+                          <input type="text" name="enderecoBairro" value={formData.enderecoBairro} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="Centro" />
+                        </div>
+                        <div className="col-span-1">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Cidade</label>
+                          <input type="text" name="enderecoCidade" value={formData.enderecoCidade} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="Belo Horizonte" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
+                          <input type="text" name="enderecoEstado" value={formData.enderecoEstado} onChange={handleInputChange}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="MG" maxLength={2} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
+                  {/* ── Produtos de Interesse ── */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nome do Contato *
-                    </label>
-                    <input
-                      type="text"
-                      name="contatoNome"
-                      value={formData.contatoNome}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="João Silva"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Telefone *
-                    </label>
-                    <input
-                      type="tel"
-                      name="contatoTelefone"
-                      value={formData.contatoTelefone}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="(00) 00000-0000"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      E-mail *
-                    </label>
-                    <input
-                      type="email"
-                      name="contatoEmail"
-                      value={formData.contatoEmail}
-                      onChange={handleInputChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="email@empresa.com"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Endereço
-                    </label>
-                    <input
-                      type="text"
-                      name="endereco"
-                      value={formData.endereco}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Rua, número, bairro, cidade - UF"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Valor Estimado (R$)
-                    </label>
-                    <input
-                      type="number"
-                      name="valorEstimado"
-                      value={formData.valorEstimado}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="0,00"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Produtos de Interesse
-                    </label>
-                    <div className="border border-gray-300 rounded-apple p-3 max-h-40 overflow-y-auto space-y-1">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Produtos de Interesse</p>
+                    <div className="border border-gray-300 rounded-apple overflow-hidden">
+                      {produtos.filter(p => p.ativo).length === 0 && (
+                        <p className="text-xs text-gray-400 p-3">Nenhum produto cadastrado</p>
+                      )}
                       {produtos.filter(p => p.ativo).map(p => {
                         const selected = formData.produtosInteresse.split(',').map(s => s.trim()).filter(Boolean)
                         const isChecked = selected.includes(p.nome)
+                        const qty = formData.produtosQuantidades?.[p.nome] || 1
                         return (
-                          <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                const updated = isChecked
-                                  ? selected.filter(s => s !== p.nome)
-                                  : [...selected, p.nome]
-                                setFormData(prev => ({ ...prev, produtosInteresse: updated.join(', ') }))
-                              }}
-                              className="w-4 h-4 text-primary-600 rounded"
-                            />
-                            <span className="text-sm text-gray-700">{p.nome}</span>
-                            <span className="text-xs text-gray-400 ml-auto">R$ {p.preco.toFixed(2).replace('.', ',')}/{p.unidade}</span>
-                          </label>
+                          <div key={p.id} className={`px-3 py-2 border-b border-gray-100 last:border-b-0 ${isChecked ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
+                            <div className="flex items-center gap-2">
+                              <input type="checkbox" checked={isChecked}
+                                onChange={() => {
+                                  const updated = isChecked
+                                    ? selected.filter(s => s !== p.nome)
+                                    : [...selected, p.nome]
+                                  setFormData(prev => ({ ...prev, produtosInteresse: updated.join(', ') }))
+                                }}
+                                className="w-4 h-4 text-primary-600 rounded flex-shrink-0" />
+                              <span className="text-sm text-gray-800 flex-1">{p.nome}</span>
+                              <span className="text-xs text-gray-400">R$ {p.preco.toFixed(2).replace('.', ',')}/{p.unidade}</span>
+                            </div>
+                            {isChecked && (
+                              <div className="flex items-center gap-2 mt-2 ml-6">
+                                <label className="text-xs text-gray-500">Qtd:</label>
+                                <div className="flex items-center border border-gray-300 rounded-apple overflow-hidden">
+                                  <button type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, produtosQuantidades: { ...prev.produtosQuantidades, [p.nome]: Math.max(1, (prev.produtosQuantidades?.[p.nome] || 1) - 1) } }))}
+                                    className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold">−</button>
+                                  <input type="number" min={1} value={qty}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, produtosQuantidades: { ...prev.produtosQuantidades, [p.nome]: Math.max(1, parseInt(e.target.value) || 1) } }))}
+                                    className="w-12 text-center text-sm py-0.5 border-x border-gray-300 focus:outline-none" />
+                                  <button type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, produtosQuantidades: { ...prev.produtosQuantidades, [p.nome]: (prev.produtosQuantidades?.[p.nome] || 1) + 1 } }))}
+                                    className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold">+</button>
+                                </div>
+                                <span className="text-xs text-primary-600 font-medium">
+                                  = R$ {(p.preco * qty).toFixed(2).replace('.', ',')}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         )
                       })}
-                      {produtos.filter(p => p.ativo).length === 0 && <p className="text-xs text-gray-400">Nenhum produto cadastrado</p>}
                     </div>
-                    {formData.produtosInteresse && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {formData.produtosInteresse.split(',').map(s => s.trim()).filter(Boolean).map(name => (
-                          <span key={name} className="px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full border border-primary-200 flex items-center gap-1">
-                            {name}
-                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, produtosInteresse: prev.produtosInteresse.split(',').map(s => s.trim()).filter(s => s && s !== name).join(', ') }))} className="text-primary-400 hover:text-primary-700">×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
+                  {/* ── Vendedor ── */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Vendedor Responsável
-                    </label>
-                    <select
-                      name="vendedorId"
-                      value={formData.vendedorId || ''}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    >
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Vendedor Responsável</label>
+                    <select name="vendedorId" value={formData.vendedorId || ''} onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
                       <option value="">Sem vendedor</option>
                       {vendedores.filter(v => v.ativo).map(v => (
                         <option key={v.id} value={v.id}>{v.nome} ({v.cargo === 'gerente' ? 'Gerente' : v.cargo === 'sdr' ? 'SDR' : 'Vendedor'})</option>

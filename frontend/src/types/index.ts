@@ -13,8 +13,19 @@ export interface Cliente {
   cnpj: string
   contatoNome: string
   contatoTelefone: string
+  contatoCelular?: string
+  contatoTelefoneFixo?: string
   contatoEmail: string
   endereco?: string
+  enderecoRua?: string
+  enderecoNumero?: string
+  enderecoComplemento?: string
+  enderecoBairro?: string
+  enderecoCidade?: string
+  enderecoEstado?: string
+  enderecoCep?: string
+  cnaePrimario?: string
+  cnaeSecundario?: string
   whatsapp?: string
   omieCodigo?: string
   etapa: string
@@ -51,10 +62,21 @@ export interface FormData {
   cnpj: string
   contatoNome: string
   contatoTelefone: string
+  contatoCelular: string
+  contatoTelefoneFixo: string
   contatoEmail: string
-  endereco: string
+  enderecoRua: string
+  enderecoNumero: string
+  enderecoComplemento: string
+  enderecoBairro: string
+  enderecoCidade: string
+  enderecoEstado: string
+  enderecoCep: string
+  cnaePrimario: string
+  cnaeSecundario: string
   valorEstimado?: string
   produtosInteresse: string
+  produtosQuantidades: Record<string, number>
   vendedorId?: string
 }
 

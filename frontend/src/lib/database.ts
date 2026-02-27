@@ -18,8 +18,19 @@ export function clienteFromDb(row: any): Cliente {
     cnpj: row.cnpj ?? '',
     contatoNome: row.contato_nome ?? '',
     contatoTelefone: row.contato_telefone ?? '',
+    contatoCelular: row.contato_celular ?? undefined,
+    contatoTelefoneFixo: row.contato_telefone_fixo ?? undefined,
     contatoEmail: row.contato_email ?? '',
     endereco: row.endereco ?? undefined,
+    enderecoRua: row.endereco_rua ?? undefined,
+    enderecoNumero: row.endereco_numero ?? undefined,
+    enderecoComplemento: row.endereco_complemento ?? undefined,
+    enderecoBairro: row.endereco_bairro ?? undefined,
+    enderecoCidade: row.endereco_cidade ?? undefined,
+    enderecoEstado: row.endereco_estado ?? undefined,
+    enderecoCep: row.endereco_cep ?? undefined,
+    cnaePrimario: row.cnae_primario ?? undefined,
+    cnaeSecundario: row.cnae_secundario ?? undefined,
     whatsapp: row.whatsapp ?? undefined,
     omieCodigo: row.omie_codigo ?? undefined,
     etapa: row.etapa,
@@ -58,8 +69,19 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.cnpj !== undefined) row.cnpj = c.cnpj
   if (c.contatoNome !== undefined) row.contato_nome = c.contatoNome
   if (c.contatoTelefone !== undefined) row.contato_telefone = c.contatoTelefone
+  if (c.contatoCelular !== undefined) row.contato_celular = c.contatoCelular
+  if (c.contatoTelefoneFixo !== undefined) row.contato_telefone_fixo = c.contatoTelefoneFixo
   if (c.contatoEmail !== undefined) row.contato_email = c.contatoEmail
   if (c.endereco !== undefined) row.endereco = c.endereco
+  if (c.enderecoRua !== undefined) row.endereco_rua = c.enderecoRua
+  if (c.enderecoNumero !== undefined) row.endereco_numero = c.enderecoNumero
+  if (c.enderecoComplemento !== undefined) row.endereco_complemento = c.enderecoComplemento
+  if (c.enderecoBairro !== undefined) row.endereco_bairro = c.enderecoBairro
+  if (c.enderecoCidade !== undefined) row.endereco_cidade = c.enderecoCidade
+  if (c.enderecoEstado !== undefined) row.endereco_estado = c.enderecoEstado
+  if (c.enderecoCep !== undefined) row.endereco_cep = c.enderecoCep
+  if (c.cnaePrimario !== undefined) row.cnae_primario = c.cnaePrimario
+  if (c.cnaeSecundario !== undefined) row.cnae_secundario = c.cnaeSecundario
   if (c.whatsapp !== undefined) row.whatsapp = c.whatsapp
   if (c.omieCodigo !== undefined) row.omie_codigo = c.omieCodigo
   if (c.etapa !== undefined) row.etapa = c.etapa

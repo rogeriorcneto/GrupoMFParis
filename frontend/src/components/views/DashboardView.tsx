@@ -66,12 +66,20 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
   const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
 
-  const { pipelineData, vendedorData } = useMemo(() => {
+  const { pipelineData, vendedorData, rankingProspeccao, rankingVendas } = useMemo(() => {
     // Uma única passada para acumular valor+qtd por etapa e por vendedor
     const etapaValor = new Map<string, number>()
     const etapaQtd = new Map<string, number>()
     const vendedorPipeline = new Map<number, number>()
     const vendedorLeads = new Map<number, number>()
+
+    // Rankings por tipo
+    const vendedorProspLeads = new Map<number, number>()   // qtd leads em prosp+amostra+homologado
+    const vendedorVendasQtd = new Map<number, number>()    // qtd em negociacao+pos_venda
+    const vendedorVendasValor = new Map<number, number>()  // valor em negociacao+pos_venda
+
+    const ETAPAS_PROSP = new Set(['prospecção', 'amostra', 'homologado'])
+    const ETAPAS_VENDA = new Set(['negociacao', 'pos_venda'])
 
     for (const c of filteredClientes) {
       const v = c.valorEstimado || 0
@@ -80,6 +88,13 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
       if (c.vendedorId) {
         vendedorPipeline.set(c.vendedorId, (vendedorPipeline.get(c.vendedorId) || 0) + v)
         vendedorLeads.set(c.vendedorId, (vendedorLeads.get(c.vendedorId) || 0) + 1)
+        if (ETAPAS_PROSP.has(c.etapa)) {
+          vendedorProspLeads.set(c.vendedorId, (vendedorProspLeads.get(c.vendedorId) || 0) + 1)
+        }
+        if (ETAPAS_VENDA.has(c.etapa)) {
+          vendedorVendasQtd.set(c.vendedorId, (vendedorVendasQtd.get(c.vendedorId) || 0) + 1)
+          vendedorVendasValor.set(c.vendedorId, (vendedorVendasValor.get(c.vendedorId) || 0) + v)
+        }
       }
     }
 
@@ -95,7 +110,32 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
       leads: vendedorLeads.get(v.id) || 0,
     }))
 
-    return { pipelineData, vendedorData }
+    const activeVendedores = vendedores.filter(v => v.ativo)
+
+    const rankingProspeccao = activeVendedores
+      .map(v => ({
+        id: v.id,
+        nome: v.nome,
+        cargo: v.cargo,
+        leads: vendedorProspLeads.get(v.id) || 0,
+        total: vendedorLeads.get(v.id) || 0,
+      }))
+      .filter(v => v.leads > 0 || v.total > 0)
+      .sort((a, b) => b.leads - a.leads)
+
+    const rankingVendas = activeVendedores
+      .map(v => ({
+        id: v.id,
+        nome: v.nome,
+        cargo: v.cargo,
+        qtd: vendedorVendasQtd.get(v.id) || 0,
+        valor: vendedorVendasValor.get(v.id) || 0,
+        totalLeads: vendedorLeads.get(v.id) || 0,
+      }))
+      .filter(v => v.qtd > 0 || v.totalLeads > 0)
+      .sort((a, b) => b.valor - a.valor || b.qtd - a.qtd)
+
+    return { pipelineData, vendedorData, rankingProspeccao, rankingVendas }
   }, [filteredClientes, vendedores, stages])
 
   return (
@@ -348,6 +388,101 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Ranking de Vendedores */}
+      {(rankingProspeccao.length > 0 || rankingVendas.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Ranking Prospecção */}
+          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">📞</span>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Ranking — Prospecção</h3>
+                <p className="text-xs text-gray-500">Prospecção · Amostra · Homologado</p>
+              </div>
+            </div>
+            {rankingProspeccao.length === 0 ? (
+              <p className="text-sm text-gray-400">Nenhum lead em prospecção no período</p>
+            ) : (
+              <div className="space-y-3">
+                {rankingProspeccao.map((v, i) => {
+                  const maxLeads = rankingProspeccao[0].leads || 1
+                  const medals = ['🥇', '🥈', '🥉']
+                  const barColors = ['bg-yellow-400', 'bg-gray-300', 'bg-amber-600', 'bg-primary-400']
+                  const pct = Math.round((v.leads / maxLeads) * 100)
+                  return (
+                    <div key={v.id} className="flex items-center gap-3">
+                      <span className="text-base w-6 text-center flex-shrink-0">{medals[i] || `${i + 1}.`}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900 truncate">{v.nome}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <span className="text-xs font-bold text-gray-900">{v.leads} leads</span>
+                            <span className="text-xs text-gray-400">/ {v.total} total</span>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-500 ${barColors[Math.min(i, barColors.length - 1)]}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Ranking Vendas */}
+          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">💰</span>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Ranking — Vendas</h3>
+                <p className="text-xs text-gray-500">Negociação · Pós-Venda · ordenado por valor</p>
+              </div>
+            </div>
+            {rankingVendas.length === 0 ? (
+              <p className="text-sm text-gray-400">Nenhum lead em negociação/pós-venda no período</p>
+            ) : (
+              <div className="space-y-3">
+                {rankingVendas.map((v, i) => {
+                  const maxValor = rankingVendas[0].valor || 1
+                  const medals = ['🥇', '🥈', '🥉']
+                  const barColors = ['bg-green-500', 'bg-green-300', 'bg-emerald-400', 'bg-primary-400']
+                  const pct = maxValor > 0 ? Math.round((v.valor / maxValor) * 100) : 0
+                  const taxaConv = v.totalLeads > 0 ? Math.round((v.qtd / v.totalLeads) * 100) : 0
+                  return (
+                    <div key={v.id} className="flex items-center gap-3">
+                      <span className="text-base w-6 text-center flex-shrink-0">{medals[i] || `${i + 1}.`}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-gray-900 truncate">{v.nome}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <span className="text-xs font-bold text-green-700">
+                              {v.valor > 0 ? `R$ ${v.valor.toLocaleString('pt-BR')}` : `${v.qtd} negócios`}
+                            </span>
+                            {taxaConv > 0 && <span className="text-xs text-gray-400">{taxaConv}% conv.</span>}
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-500 ${barColors[Math.min(i, barColors.length - 1)]}`}
+                            style={{ width: `${Math.max(pct, v.qtd > 0 ? 8 : 0)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{v.qtd} negócio{v.qtd !== 1 ? 's' : ''} em andamento</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Produtos Ranking + Activity Feed */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
