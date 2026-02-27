@@ -1,11 +1,31 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import type { Cliente, Vendedor, Interacao, FunilViewProps } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
+
+const STAGES_AMOSTRA = [
+  { title: 'Prospecção', key: 'prospecção', badge: 'bg-blue-100 text-blue-800', icon: '📞', prob: 0.10 },
+  { title: 'Amostra', key: 'amostra', badge: 'bg-yellow-100 text-yellow-800', icon: '📦', prob: 0.25 },
+  { title: 'Homologado', key: 'homologado', badge: 'bg-green-100 text-green-800', icon: '✅', prob: 0.50 },
+  { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 },
+] as const
+
+const STAGES_VENDA = [
+  { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.75 },
+  { title: 'Pós-Venda', key: 'pos_venda', badge: 'bg-pink-100 text-pink-800', icon: '🚚', prob: 0.95 },
+  { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 },
+] as const
+
+const STAGES_ALL = [...STAGES_AMOSTRA, ...STAGES_VENDA]
+
+type StageEntry = typeof STAGES_ALL[number]
 
 function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
+  const [funil, setFunil] = React.useState<'amostra' | 'venda'>('amostra')
+  const [showPerdidos, setShowPerdidos] = React.useState(false)
+  const [showPerdidosVenda, setShowPerdidosVenda] = React.useState(false)
 
   const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -188,36 +208,49 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     e.target.value = ''
   }
 
-  const stages = [
-    { title: 'Prospecção', key: 'prospecção', badge: 'bg-blue-100 text-blue-800', icon: '📞', prob: 0.10 },
-    { title: 'Amostra', key: 'amostra', badge: 'bg-yellow-100 text-yellow-800', icon: '📦', prob: 0.25 },
-    { title: 'Homologado', key: 'homologado', badge: 'bg-green-100 text-green-800', icon: '✅', prob: 0.50 },
-    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.75 },
-    { title: 'Pós-Venda', key: 'pos_venda', badge: 'bg-pink-100 text-pink-800', icon: '🚚', prob: 0.95 },
-    { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
-  ]
+  const { clientesFiltrados, activeClientes, totalPipeline, receitaPonderada, taxaConversao, tempoMedio } = useMemo(() => {
+    const clientesFiltrados = filterVendedorId ? clientes.filter(c => c.vendedorId === filterVendedorId) : clientes
 
-  const clientesFiltrados = filterVendedorId ? clientes.filter(c => c.vendedorId === filterVendedorId) : clientes
+    const etapaMap = new Map<string, number>()
+    let totalActive = 0
+    let posVendaCount = 0
+    for (const c of clientesFiltrados) {
+      const v = c.valorEstimado || 0
+      etapaMap.set(c.etapa, (etapaMap.get(c.etapa) || 0) + v)
+      if (c.etapa !== 'perdido') { totalActive++ }
+      if (c.etapa === 'pos_venda') posVendaCount++
+    }
 
-  const activeClientes = clientesFiltrados.filter(c => c.etapa !== 'perdido')
-  const totalPipeline = activeClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-  const receitaPonderada = stages.reduce((total, stage) => {
-    const stgClientes = clientesFiltrados.filter(c => c.etapa === stage.key)
-    return total + stgClientes.reduce((s, c) => s + (c.valorEstimado || 0) * stage.prob, 0)
-  }, 0)
-  const taxaConversao = clientes.length > 0 ? Math.round((clientesFiltrados.filter(c => c.etapa === 'pos_venda').length / Math.max(clientesFiltrados.filter(c => c.etapa !== 'perdido').length, 1)) * 100) : 0
-  const tempoMedio = (() => {
-    const comHistorico = clientesFiltrados.filter(c => c.historicoEtapas && c.historicoEtapas.length > 1)
-    if (comHistorico.length === 0) return 0
-    const totalDias = comHistorico.reduce((s, c) => {
-      const h = c.historicoEtapas!
-      if (h.length < 2) return s
-      const first = new Date(h[0].data).getTime()
-      const last = new Date(h[h.length - 1].data).getTime()
-      return s + Math.floor((last - first) / 86400000)
+    const totalPipeline = [...etapaMap.entries()]
+      .filter(([k]) => k !== 'perdido')
+      .reduce((s, [, v]) => s + v, 0)
+
+    const stagesAba = funil === 'amostra' ? STAGES_AMOSTRA : STAGES_VENDA
+    const receitaPonderada = stagesAba.reduce((total, stage) => {
+      return total + (etapaMap.get(stage.key) || 0) * stage.prob
     }, 0)
-    return Math.round(totalDias / comHistorico.length)
-  })()
+
+    const taxaConversao = clientes.length > 0
+      ? Math.round((posVendaCount / Math.max(totalActive, 1)) * 100)
+      : 0
+
+    const comHistorico = clientesFiltrados.filter(c => c.historicoEtapas && c.historicoEtapas.length > 1)
+    let tempoMedio = 0
+    if (comHistorico.length > 0) {
+      const totalDias = comHistorico.reduce((s, c) => {
+        const h = c.historicoEtapas!
+        if (h.length < 2) return s
+        const first = new Date(h[0].data).getTime()
+        const last = new Date(h[h.length - 1].data).getTime()
+        return s + Math.floor((last - first) / 86400000)
+      }, 0)
+      tempoMedio = Math.round(totalDias / comHistorico.length)
+    }
+
+    const activeClientes = clientesFiltrados.filter(c => c.etapa !== 'perdido')
+
+    return { clientesFiltrados, activeClientes, totalPipeline, receitaPonderada, taxaConversao, tempoMedio }
+  }, [clientes, filterVendedorId, funil])
 
   const urgenciaBorder = (u: string) => {
     if (u === 'critico') return 'border-l-4 border-l-red-500 bg-red-50'
@@ -333,10 +366,50 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     }
   }
 
+  const stagesAtivos: StageEntry[] = funil === 'amostra'
+    ? (showPerdidos ? [...STAGES_AMOSTRA] : STAGES_AMOSTRA.filter(s => s.key !== 'perdido'))
+    : (showPerdidosVenda ? [...STAGES_VENDA] : STAGES_VENDA.filter(s => s.key !== 'perdido'))
+
   const alertCount = clientesFiltrados.filter(c => getCardUrgencia(c) !== 'normal').length
+  const perdidosCount = clientesFiltrados.filter(c => c.etapa === 'perdido').length
 
   return (
     <div className="space-y-4">
+
+      {/* Seletor de funil */}
+      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-apple p-1 shadow-apple-sm w-fit">
+        <button
+          onClick={() => setFunil('amostra')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-apple text-sm font-semibold transition-all duration-200 ${
+            funil === 'amostra'
+              ? 'bg-yellow-500 text-white shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          📦 Amostra
+          <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+            funil === 'amostra' ? 'bg-yellow-400 text-white' : 'bg-gray-100 text-gray-500'
+          }`}>
+            {clientesFiltrados.filter(c => c.etapa === 'prospecção' || c.etapa === 'amostra' || c.etapa === 'homologado').length}
+          </span>
+        </button>
+        <button
+          onClick={() => setFunil('venda')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-apple text-sm font-semibold transition-all duration-200 ${
+            funil === 'venda'
+              ? 'bg-primary-600 text-white shadow-sm'
+              : 'text-gray-600 hover:bg-gray-50'
+          }`}
+        >
+          💰 Venda
+          <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+            funil === 'venda' ? 'bg-primary-500 text-white' : 'bg-gray-100 text-gray-500'
+          }`}>
+            {clientesFiltrados.filter(c => c.etapa === 'negociacao' || c.etapa === 'pos_venda').length}
+          </span>
+        </button>
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
           <p className="text-[10px] text-gray-500 uppercase font-semibold">Pipeline Total</p>
@@ -373,6 +446,32 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
             <option value="score">⭐ Ordenar: Score</option>
             <option value="valor">💰 Ordenar: Valor</option>
           </select>
+          {funil === 'amostra' && (
+            <button
+              onClick={() => setShowPerdidos(p => !p)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-apple text-sm font-medium border transition-colors duration-200 ${
+                showPerdidos
+                  ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100'
+                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              ❌ Perdidos
+              {perdidosCount > 0 && <span className="text-xs font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{perdidosCount}</span>}
+            </button>
+          )}
+          {funil === 'venda' && (
+            <button
+              onClick={() => setShowPerdidosVenda(p => !p)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-apple text-sm font-medium border transition-colors duration-200 ${
+                showPerdidosVenda
+                  ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100'
+                  : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              ❌ Perdidos
+              {perdidosCount > 0 && <span className="text-xs font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full">{perdidosCount}</span>}
+            </button>
+          )}
           {isGerente && onImportNegocios && (
             <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
               <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
@@ -396,8 +495,12 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         </div>
       </div>
 
-      <div className="flex lg:grid lg:grid-cols-6 gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0">
-        {stages.map((stage) => {
+      <div className={`flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0 ${
+        stagesAtivos.length === 2 ? 'lg:grid lg:grid-cols-2' :
+        stagesAtivos.length === 3 ? 'lg:grid lg:grid-cols-3' :
+        'lg:grid lg:grid-cols-3'
+      }`}>
+        {stagesAtivos.map((stage) => {
           const stageClientes = sortCards(clientesFiltrados.filter(c => c.etapa === stage.key), sortBy)
           const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
           const stageWeighted = Math.round(stageValor * stage.prob)

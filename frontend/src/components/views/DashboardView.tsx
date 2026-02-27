@@ -63,19 +63,40 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
     }
   }, [clientes, interacoes, metrics, periodo])
 
-  const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
-  const pipelineData = stages.map(s => ({
-    name: stageLabels[s] || s,
-    valor: filteredClientes.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0),
-    qtd: filteredClientes.filter(c => c.etapa === s).length
-  }))
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
+  const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
 
-  const vendedorData = vendedores.filter(v => v.ativo).map(v => ({
-    name: v.nome.split(' ')[0],
-    pipeline: filteredClientes.filter(c => c.vendedorId === v.id).reduce((s, c) => s + (c.valorEstimado || 0), 0),
-    leads: filteredClientes.filter(c => c.vendedorId === v.id).length
-  }))
+  const { pipelineData, vendedorData } = useMemo(() => {
+    // Uma única passada para acumular valor+qtd por etapa e por vendedor
+    const etapaValor = new Map<string, number>()
+    const etapaQtd = new Map<string, number>()
+    const vendedorPipeline = new Map<number, number>()
+    const vendedorLeads = new Map<number, number>()
+
+    for (const c of filteredClientes) {
+      const v = c.valorEstimado || 0
+      etapaValor.set(c.etapa, (etapaValor.get(c.etapa) || 0) + v)
+      etapaQtd.set(c.etapa, (etapaQtd.get(c.etapa) || 0) + 1)
+      if (c.vendedorId) {
+        vendedorPipeline.set(c.vendedorId, (vendedorPipeline.get(c.vendedorId) || 0) + v)
+        vendedorLeads.set(c.vendedorId, (vendedorLeads.get(c.vendedorId) || 0) + 1)
+      }
+    }
+
+    const pipelineData = stages.map(s => ({
+      name: stageLabels[s] || s,
+      valor: etapaValor.get(s) || 0,
+      qtd: etapaQtd.get(s) || 0,
+    }))
+
+    const vendedorData = vendedores.filter(v => v.ativo).map(v => ({
+      name: v.nome.split(' ')[0],
+      pipeline: vendedorPipeline.get(v.id) || 0,
+      leads: vendedorLeads.get(v.id) || 0,
+    }))
+
+    return { pipelineData, vendedorData }
+  }, [filteredClientes, vendedores, stages])
 
   return (
     <div className="space-y-6">

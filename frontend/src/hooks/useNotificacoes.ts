@@ -28,8 +28,12 @@ export function useNotificacoes(
 
   // Generate auto-notifications from data (computed, not persisted)
   useEffect(() => {
-    const etapasKey = clientes.map(c => `${c.id}:${c.etapa}:${c.diasInativo || 0}`).join(',')
-    const key = `${etapasKey}-${tarefas.length}-${vendedores.length}`
+    // Hash numérico O(n) simples — evita alocar string gigante a cada render
+    let hash = tarefas.length * 31 + vendedores.length
+    for (const c of clientes) {
+      hash = (hash * 31 + c.id + c.etapa.length + (c.diasInativo || 0)) | 0
+    }
+    const key = String(hash)
     if (notifGenRef.current === key) return
     notifGenRef.current = key
 

@@ -28,7 +28,7 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 describe('authFetch logic', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    global.fetch = vi.fn()
+    globalThis.fetch = vi.fn() as any
   })
 
   it('sem token dispara erro "Não autenticado"', async () => {
@@ -40,17 +40,17 @@ describe('authFetch logic', () => {
     vi.mocked(supabase.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'my-token' } }, error: null,
     } as any)
-    vi.mocked(global.fetch).mockResolvedValue(new Response('ok', { status: 200 }))
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response('ok', { status: 200 }))
 
     await authFetch('http://localhost:3001/api/test')
 
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       'http://localhost:3001/api/test',
       expect.objectContaining({
         headers: expect.any(Headers),
       }),
     )
-    const callHeaders = (vi.mocked(global.fetch).mock.calls[0][1] as any).headers as Headers
+    const callHeaders = (vi.mocked(globalThis.fetch).mock.calls[0][1] as any).headers as Headers
     expect(callHeaders.get('Authorization')).toBe('Bearer my-token')
   })
 
@@ -58,7 +58,7 @@ describe('authFetch logic', () => {
     vi.mocked(supabase.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'token' } }, error: null,
     } as any)
-    vi.mocked(global.fetch).mockResolvedValue(new Response('Unauthorized', { status: 401 }))
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response('Unauthorized', { status: 401 }))
     await expect(authFetch('/api/test')).rejects.toThrow('AUTH_EXPIRED')
   })
 
@@ -66,7 +66,7 @@ describe('authFetch logic', () => {
     vi.mocked(supabase.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'token' } }, error: null,
     } as any)
-    vi.mocked(global.fetch).mockResolvedValue(new Response('Forbidden', { status: 403 }))
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response('Forbidden', { status: 403 }))
     await expect(authFetch('/api/test')).rejects.toThrow('FORBIDDEN')
   })
 
@@ -74,7 +74,7 @@ describe('authFetch logic', () => {
     vi.mocked(supabase.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'token' } }, error: null,
     } as any)
-    vi.mocked(global.fetch).mockResolvedValue(new Response('{"ok":true}', { status: 200 }))
+    vi.mocked(globalThis.fetch).mockResolvedValue(new Response('{"ok":true}', { status: 200 }))
     const res = await authFetch('/api/test')
     expect(res.status).toBe(200)
     const body = await res.json()

@@ -1,0 +1,10 @@
+node_modules
+dist
+auth_info
+.env
+*.log
+*.md
+.gitignore
+migrations
+scripts
+src/__tests__

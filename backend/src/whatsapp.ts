@@ -1,5 +1,4 @@
 import makeWASocket, {
-  useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
@@ -7,13 +6,9 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import * as QRCode from 'qrcode'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import { handleMessage } from './bot.js'
 import { log } from './logger.js'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const AUTH_DIR = path.join(__dirname, '..', 'auth_info')
+import { useSupabaseAuthState } from './whatsapp-session-store.js'
 
 const baileysLogger = pino({ level: 'silent' })
 
@@ -58,10 +53,10 @@ export async function disconnectWhatsApp(): Promise<void> {
   startTime = null
   reconnectAttempts = 0
 
-  // Clean auth info to force new QR on next connect
-  const fs = await import('fs')
+  // Limpa a sessão do Supabase para forçar novo QR no próximo connect
   try {
-    fs.rmSync(AUTH_DIR, { recursive: true, force: true })
+    const { clearSession } = await useSupabaseAuthState()
+    await clearSession()
   } catch {
     // Ignore
   }
@@ -90,7 +85,7 @@ export async function connectWhatsApp(): Promise<void> {
   log.info('📱 Iniciando conexão WhatsApp...')
 
   try {
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
+    const { state, saveCreds } = await useSupabaseAuthState()
     const { version } = await fetchLatestBaileysVersion()
 
     sock = makeWASocket({

@@ -372,31 +372,32 @@ export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<
 // CLIENTES
 // ============================================
 
-export async function fetchClientes(): Promise<Cliente[]> {
+async function fetchAllPages<T>(table: string, extraQuery?: (q: any) => any): Promise<T[]> {
   const PAGE_SIZE = 1000
-  let allRows: any[] = []
+  let allRows: T[] = []
   let from = 0
   while (true) {
-    const { data, error } = await supabase.from('clientes').select('*').order('id').range(from, from + PAGE_SIZE - 1)
+    let q = supabase.from(table).select('*').range(from, from + PAGE_SIZE - 1)
+    if (extraQuery) q = extraQuery(q)
+    const { data, error } = await q
     if (error) throw error
     if (!data || data.length === 0) break
     allRows = allRows.concat(data)
     if (data.length < PAGE_SIZE) break
     from += PAGE_SIZE
   }
+  return allRows
+}
+
+export async function fetchClientes(): Promise<Cliente[]> {
+  // Busca clientes e histórico em paralelo
+  const [allRows, allHist] = await Promise.all([
+    fetchAllPages<any>('clientes', q => q.order('id')),
+    fetchAllPages<any>('historico_etapas', q => q.order('data')).catch(() => [] as any[]),
+  ])
+
   const clientes = allRows.map(clienteFromDb)
 
-  // Buscar histórico de etapas para todos os clientes (paginado)
-  let allHist: any[] = []
-  from = 0
-  while (true) {
-    const { data: hist, error } = await supabase.from('historico_etapas').select('*').order('data').range(from, from + PAGE_SIZE - 1)
-    if (error) break
-    if (!hist || hist.length === 0) break
-    allHist = allHist.concat(hist)
-    if (hist.length < PAGE_SIZE) break
-    from += PAGE_SIZE
-  }
   if (allHist.length > 0) {
     const histMap = new Map<number, HistoricoEtapa[]>()
     allHist.forEach((h: any) => {
@@ -437,11 +438,13 @@ export async function updateCliente(id: number, c: Partial<Cliente>): Promise<vo
 }
 
 export async function deleteCliente(id: number): Promise<void> {
-  // Cascade: delete related data first
-  await supabase.from('historico_etapas').delete().eq('cliente_id', id)
-  await supabase.from('interacoes').delete().eq('cliente_id', id)
-  await supabase.from('tarefas').delete().eq('cliente_id', id)
-  // Delete pedidos and their items
+  // Deletar dados sem FK entre si em paralelo
+  await Promise.all([
+    supabase.from('historico_etapas').delete().eq('cliente_id', id),
+    supabase.from('interacoes').delete().eq('cliente_id', id),
+    supabase.from('tarefas').delete().eq('cliente_id', id),
+  ])
+  // Pedidos precisam de delete sequencial (itens dependem do pedido)
   const { data: pedidosDoCliente } = await supabase.from('pedidos').select('id').eq('cliente_id', id)
   if (pedidosDoCliente && pedidosDoCliente.length > 0) {
     const pedidoIds = pedidosDoCliente.map((p: any) => p.id)
@@ -654,30 +657,21 @@ export async function deleteProduto(id: number): Promise<void> {
 
 export async function fetchPedidos(): Promise<Pedido[]> {
   const PAGE_SIZE = 1000
-  let allPedidos: any[] = []
+  let allRows: any[] = []
   let from = 0
   while (true) {
-    const { data, error } = await supabase.from('pedidos').select('*').order('data_criacao', { ascending: false }).range(from, from + PAGE_SIZE - 1)
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('*, itens_pedido(*)')
+      .order('data_criacao', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1)
     if (error) throw error
     if (!data || data.length === 0) break
-    allPedidos = allPedidos.concat(data)
+    allRows = allRows.concat(data)
     if (data.length < PAGE_SIZE) break
     from += PAGE_SIZE
   }
-  if (allPedidos.length === 0) return []
-
-  // Fetch itens in batches of 500 pedido IDs (Supabase .in() limit)
-  let allItens: any[] = []
-  for (let i = 0; i < allPedidos.length; i += 500) {
-    const ids = allPedidos.slice(i, i + 500).map((p: any) => p.id)
-    const { data: itensRaw } = await supabase.from('itens_pedido').select('*').in('pedido_id', ids)
-    if (itensRaw) allItens = allItens.concat(itensRaw)
-  }
-
-  return allPedidos.map((p: any) => {
-    const itens = allItens.filter((i: any) => i.pedido_id === p.id)
-    return pedidoFromDb(p, itens)
-  })
+  return allRows.map((p: any) => pedidoFromDb(p, p.itens_pedido || []))
 }
 
 export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {

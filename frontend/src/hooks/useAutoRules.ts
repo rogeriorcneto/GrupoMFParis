@@ -131,24 +131,23 @@ export function useAutoRules({
   }, [clientes, addNotificacao, setClientes, setAtividades])
 
   // Item 4: Score dinâmico — recalcula automaticamente e persiste (debounced, threshold 5pts)
+  // Deps: apenas interacoes. clientes é lido via setClientes funcional para evitar o ciclo
+  // render→effect→setClientes→render→effect.
   const scoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const scoreCalcRef = useRef(false)
   useEffect(() => {
-    if (scoreCalcRef.current) return
     // Pre-build interaction count map O(n) instead of O(n²)
     const interCountMap = new Map<number, number>()
     interacoes.forEach(i => { interCountMap.set(i.clienteId, (interCountMap.get(i.clienteId) || 0) + 1) })
-    const changedIds: { id: number; score: number; oldScore: number }[] = []
-    const updated = clientes.map(c => {
-      const newScore = calcScore(c.etapa, c.valorEstimado, interCountMap.get(c.id) || 0, c.diasInativo)
-      if (c.score !== newScore) { changedIds.push({ id: c.id, score: newScore, oldScore: c.score || 0 }); return { ...c, score: newScore } }
-      return c
-    })
-    if (changedIds.length > 0) {
-      scoreCalcRef.current = true
-      setClientes(updated)
-      // Reset guard after React commits the update (next tick, not same frame)
-      setTimeout(() => { scoreCalcRef.current = false }, 0)
+
+    setClientes(prev => {
+      const changedIds: { id: number; score: number; oldScore: number }[] = []
+      const updated = prev.map(c => {
+        const newScore = calcScore(c.etapa, c.valorEstimado, interCountMap.get(c.id) || 0, c.diasInativo)
+        if (c.score !== newScore) { changedIds.push({ id: c.id, score: newScore, oldScore: c.score || 0 }); return { ...c, score: newScore } }
+        return c
+      })
+      if (changedIds.length === 0) return prev
+
       // Persist only scores that changed by 5+ points, debounced
       const significantChanges = changedIds.filter(({ score, oldScore }) => Math.abs(oldScore - score) >= 5)
       if (significantChanges.length > 0) {
@@ -159,6 +158,7 @@ export function useAutoRules({
           }
         }, 3000)
       }
-    }
-  }, [interacoes, clientes, setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
+      return updated
+    })
+  }, [interacoes, setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
 }
