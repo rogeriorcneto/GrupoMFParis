@@ -207,6 +207,24 @@ function App() {
   // Notification system — hook handles auto-generation + Supabase persistence
   const { notificacoes, addNotificacao, markAllRead, markRead } = useNotificacoes(clientes, tarefas, vendedores, dbNotificacoes)
 
+  useRealtimeSubscription<any>('pedidos', useCallback((payload) => {
+    if (payload.eventType === 'INSERT') {
+      const newP = db.pedidoFromDb(payload.new)
+      setPedidos(prev => prev.some(p => p.id === newP.id) ? prev : [...prev, newP])
+      if (newP.status === 'enviado' && loggedUser?.cargo === 'gerente') {
+        addNotificacao('warning', '📦 Novo pedido aguardando aprovação', `Pedido #${newP.numero} foi enviado para aprovação`, newP.clienteId ?? undefined)
+      }
+    } else if (payload.eventType === 'UPDATE') {
+      const updP = db.pedidoFromDb(payload.new)
+      setPedidos(prev => prev.map(p => p.id === updP.id ? updP : p))
+      if (updP.status === 'confirmado' && loggedUser?.cargo !== 'gerente') {
+        addNotificacao('success', '✅ Pedido aprovado!', `Pedido #${updP.numero} foi aprovado pelo gerente`)
+      }
+    } else if (payload.eventType === 'DELETE') {
+      setPedidos(prev => prev.filter(p => p.id !== payload.old.id))
+    }
+  }, [loggedUser, addNotificacao]), isLoggedIn)
+
   // Auto business rules: diasInativo recalc, orphan fix, auto-move, score calc
   useAutoRules({ clientes, setClientes, interacoes, vendedores, loggedUser, setAtividades, addNotificacao })
 

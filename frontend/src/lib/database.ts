@@ -174,7 +174,7 @@ export function tarefaFromDb(row: any): Tarefa {
   }
 }
 
-function pedidoFromDb(row: any, itens: any[]): Pedido {
+export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
   return {
     id: row.id,
     numero: row.numero,
