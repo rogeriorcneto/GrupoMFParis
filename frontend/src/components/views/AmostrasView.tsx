@@ -294,7 +294,7 @@ function AmostrasView({
       </div>
 
       {/* Kanban */}
-      <div className="flex lg:grid lg:grid-cols-4 gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0">
+      <div className={`flex lg:grid gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0 ${hidePerdidos ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
         {AMOSTRAS_STAGES.filter(s => !(hidePerdidos && s.key === 'perdido')).map((stage) => {
           const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
           const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
