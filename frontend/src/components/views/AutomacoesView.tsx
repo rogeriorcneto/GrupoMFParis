@@ -6,6 +6,13 @@ const AutomacoesView: React.FC<{
   onAction: (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => void
 }> = ({ clientes, onAction }) => {
   const [selectedClienteId, setSelectedClienteId] = React.useState<number>(clientes[0]?.id ?? 0)
+  const [searchCliente, setSearchCliente] = React.useState('')
+  const clientesFiltrados = React.useMemo(() => {
+    const q = searchCliente.toLowerCase().trim()
+    const list = q ? clientes.filter(c => c.razaoSocial.toLowerCase().includes(q) || (c.contatoNome || '').toLowerCase().includes(q)) : clientes
+    return list.slice(0, 50)
+  }, [clientes, searchCliente])
+
   React.useEffect(() => {
     if (clientes.length > 0 && !clientes.find(c => c.id === selectedClienteId)) {
       setSelectedClienteId(clientes[0].id)
@@ -31,17 +38,26 @@ const AutomacoesView: React.FC<{
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1">
             <label className="block text-sm font-medium text-gray-700 mb-2">Lead / Empresa</label>
+            <input
+              type="text"
+              value={searchCliente}
+              onChange={e => setSearchCliente(e.target.value)}
+              placeholder="Buscar empresa..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent mb-1 text-sm"
+            />
             <select
               value={selectedClienteId}
-              onChange={(e) => setSelectedClienteId(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              onChange={(e) => { setSelectedClienteId(Number(e.target.value)); setSearchCliente('') }}
+              size={Math.min(clientesFiltrados.length, 6)}
+              className="w-full px-2 py-1 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
             >
-              {clientes.map((c) => (
+              {clientesFiltrados.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.razaoSocial}
                 </option>
               ))}
             </select>
+            {clientes.length > 50 && !searchCliente && <p className="text-xs text-gray-400 mt-1">Mostrando 50 de {clientes.length}. Use a busca para filtrar.</p>}
 
             {selectedCliente && (
               <div className="mt-4 rounded-apple border border-gray-200 bg-gray-50 p-4">

@@ -18,6 +18,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   const [deleteClienteModal, setDeleteClienteModal] = React.useState<Cliente | null>(null)
   const importRef = React.useRef<HTMLInputElement>(null)
   const debouncedSearch = useDebounce(searchTerm, 250)
+  const PAGE_SIZE = 50
+  const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE)
+
+  React.useEffect(() => { setVisibleCount(PAGE_SIZE) }, [debouncedSearch, filterEtapa, filterVendedor, filterScoreMin, filterValorMin])
 
   const filteredClientes = clientes.filter(cliente => {
     const matchSearch = cliente.razaoSocial.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
@@ -172,6 +176,8 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
 
   const filtersActive = !!(filterEtapa || filterVendedor || filterScoreMin || filterValorMin)
   const totalValor = filteredClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+  const visibleClientes = filteredClientes.slice(0, visibleCount)
+  const hasMore = visibleCount < filteredClientes.length
 
   return (
     <div className="space-y-3">
@@ -308,7 +314,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredClientes.map((cliente) => {
+              {visibleClientes.map((cliente) => {
                 const v = vendedores.find(v => v.id === cliente.vendedorId)
                 const cfg = etapaConfig[cliente.etapa] || { label: cliente.etapa, badge: 'bg-gray-50 text-gray-700', dot: 'bg-gray-400' }
                 const scoreColor = (cliente.score || 0) >= 70 ? 'text-green-600' : (cliente.score || 0) >= 40 ? 'text-yellow-600' : 'text-gray-400'
@@ -351,13 +357,23 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
               })}
             </tbody>
           </table>
+          {hasMore && (
+            <div className="p-4 text-center border-t border-gray-100">
+              <button
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                className="text-sm text-primary-600 hover:text-primary-800 font-medium"
+              >
+                Carregar mais ({filteredClientes.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* ===== MOBILE: Card list (< md) ===== */}
       {filteredClientes.length > 0 && (
         <div className="md:hidden space-y-2">
-          {filteredClientes.map((cliente) => {
+          {visibleClientes.map((cliente) => {
             const v = vendedores.find(v => v.id === cliente.vendedorId)
             const cfg = etapaConfig[cliente.etapa] || { label: cliente.etapa, badge: 'bg-gray-50 text-gray-700', dot: 'bg-gray-400' }
             const scoreColor = (cliente.score || 0) >= 70 ? 'text-green-600' : (cliente.score || 0) >= 40 ? 'text-yellow-600' : 'text-gray-400'
@@ -412,6 +428,16 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
               </div>
             )
           })}
+          {filteredClientes.length > visibleCount && (
+            <div className="pt-2 text-center">
+              <button
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                className="w-full py-3 text-sm text-primary-600 hover:text-primary-800 font-medium bg-white rounded-apple border border-gray-200"
+              >
+                Carregar mais ({filteredClientes.length - visibleCount} restantes)
+              </button>
+            </div>
+          )}
         </div>
       )}
 

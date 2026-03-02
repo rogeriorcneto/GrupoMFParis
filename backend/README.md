@@ -97,14 +97,78 @@ Os vendedores enviam mensagens para o número conectado:
 | POST | `/api/email/send` | Enviar email |
 | POST | `/api/email/send-template` | Enviar com template |
 
-## Produção
+## Produção — Railway (recomendado)
 
-Para rodar 24/7, suba o backend em um serviço como:
-- **Railway** (~$5/mês) — `railway up`
-- **Render** (~$7/mês)
-- **DigitalOcean App** (~$6/mês)
+Railway é a forma mais simples de rodar o backend 24/7 (~$5/mês).
 
-Configure `VITE_BOT_URL` no frontend (Netlify) apontando para a URL do serviço.
+### Primeiro deploy
+
+```bash
+# 1. Instalar Railway CLI (uma vez)
+npm install -g @railway/cli
+
+# 2. Login
+railway login
+
+# 3. Dentro da pasta backend
+cd backend
+
+# 4. Criar projeto
+railway init
+# Escolha "Empty Project", dê um nome (ex: crm-mfparis-backend)
+
+# 5. Deploy
+railway up
+```
+
+### Variáveis de ambiente no Railway
+
+Acesse o painel Railway → seu projeto → "Variables" e adicione:
+
+| Variável | Valor |
+|----------|-------|
+| `SUPABASE_URL` | `https://zeaeppmnetdhzwwdydmq.supabase.co` |
+| `SUPABASE_ANON_KEY` | `<chave anon do Supabase>` |
+| `CORS_ORIGINS` | `https://<seu-app>.netlify.app` |
+| `EMAIL_HOST` | `smtp.gmail.com` (opcional) |
+| `EMAIL_USER` | `seu@gmail.com` (opcional) |
+| `EMAIL_PASS` | `xxxx xxxx xxxx xxxx` (App Password do Gmail) |
+
+> **Nota**: `PORT` é definido automaticamente pelo Railway.
+
+### Configurar o frontend (Netlify)
+
+No painel Netlify → Site → "Environment variables":
+```
+VITE_BOT_URL = https://seu-app.railway.app
+```
+
+Após adicionar, faça um novo deploy no Netlify para a variável ter efeito.
+
+### Redeploy
+
+```bash
+cd backend
+railway up
+```
+
+### Conectar WhatsApp em produção
+
+1. Acesse `https://seu-app.railway.app/api/health` para confirmar que o serviço está rodando
+2. Vá em **Integrações** no CRM → seção WhatsApp → clique "Conectar"
+3. Escaneie o QR Code que aparece com o WhatsApp do celular
+4. A sessão fica salva no Railway — reconecta automaticamente
+
+### Verificar logs
+
+```bash
+railway logs
+# ou no painel Railway → seu projeto → "Deployments" → "View Logs"
+```
+
+### Outras opções
+- **Render** (~$7/mês) — similar ao Railway
+- **DigitalOcean App** (~$6/mês) — mais configuração necessária
 
 ## Estrutura
 

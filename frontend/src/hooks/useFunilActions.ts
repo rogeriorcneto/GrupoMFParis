@@ -53,6 +53,7 @@ export function useFunilActions({
 
     try {
       // Attempt real send via backend for email/whatsapp
+      let sendOk = true
       if (canal === 'email' && cliente.contatoEmail) {
         const { sendEmailViaBot } = await import('../lib/botApi')
         const result = await sendEmailViaBot(
@@ -60,7 +61,8 @@ export function useFunilActions({
           cliente.id, loggedUser?.nome
         )
         if (!result.success) {
-          logger.warn('Email send failed (bot offline?), registering interaction only:', result.error)
+          sendOk = false
+          addNotificacao('warning', 'Envio falhou', `Email para ${cliente.razaoSocial} falhou: ${result.error || 'bot offline'}`, cliente.id)
         }
       } else if (canal === 'whatsapp' && (cliente.whatsapp || cliente.contatoTelefone)) {
         const { sendWhatsApp } = await import('../lib/botApi')
@@ -70,9 +72,13 @@ export function useFunilActions({
           cliente.id, loggedUser?.nome
         )
         if (!result.success) {
-          logger.warn('WhatsApp send failed (bot offline?), registering interaction only:', result.error)
+          sendOk = false
+          addNotificacao('warning', 'Envio falhou', `WhatsApp para ${cliente.razaoSocial} falhou: ${result.error || 'bot offline'}`, cliente.id)
         }
       }
+
+      // Só registra interação se o envio real teve sucesso (ou se é canal sem envio real como ligação)
+      if (!sendOk) return
 
       const savedI = await db.insertInteracao({
         clienteId: cliente.id, tipo: canal, data: new Date().toISOString(), assunto, descricao, automatico: true
@@ -121,23 +127,31 @@ export function useFunilActions({
       return true
     })
 
+    // Build all jobs upfront, then batch insert (instead of N×M sequential calls)
     const now = new Date()
+    const allJobs: Omit<import('../types').JobAutomacao, 'id'>[] = []
     for (const step of cadencia.steps) {
       for (const cliente of audience) {
         const dt = new Date(now)
         dt.setDate(dt.getDate() + step.delayDias)
-        await scheduleJob({
+        allJobs.push({
           clienteId: cliente.id, canal: step.canal, tipo: 'propaganda',
-          agendadoPara: dt.toISOString(), templateId: step.templateId, campanhaId: campanha.id
+          status: 'pendente', agendadoPara: dt.toISOString(),
+          templateId: step.templateId, campanhaId: campanha.id
         })
       }
     }
 
     try {
+      const savedJobs = await db.insertJobsBatch(allJobs)
+      setJobs(prev => [...savedJobs, ...prev])
       await db.updateCampanhaStatus(campanhaId, 'ativa')
-    } catch (err) { logger.error('Erro ao ativar campanha:', err) }
-    setCampanhas(prev => prev.map(c => c.id === campanhaId ? { ...c, status: 'ativa' } : c))
-    addNotificacao('success', 'Campanha ativada', `${campanha.nome} iniciada para ${audience.length} leads`)
+      setCampanhas(prev => prev.map(c => c.id === campanhaId ? { ...c, status: 'ativa' } : c))
+      addNotificacao('success', 'Campanha ativada', `${campanha.nome} iniciada para ${audience.length} leads (${savedJobs.length} jobs criados)`)
+    } catch (err) {
+      logger.error('Erro ao iniciar campanha:', err)
+      addNotificacao('error', 'Erro na campanha', `Falha ao iniciar ${campanha.nome}`)
+    }
   }
 
   const handleDragStart = (e: React.DragEvent, cliente: Cliente, fromStage: string) => {
@@ -171,10 +185,9 @@ export function useFunilActions({
       return { ...c, etapa: toStage, etapaAnterior: c.etapa, dataEntradaEtapa: now, historicoEtapas: [...(c.historicoEtapas || []), hist], ...extras }
     }))
 
-    // Persist to Supabase (se falhar, faz rollback para evitar inconsistência de funil)
+    // Persist to Supabase atomicamente (se falhar, faz rollback para evitar inconsistência de funil)
     try {
-      await db.updateCliente(clienteId, { etapa: toStage, etapaAnterior: fromStage, dataEntradaEtapa: now, ...extras })
-      await db.insertHistoricoEtapa(clienteId, { etapa: toStage, data: now, de: fromStage })
+      await db.moverClienteAtomico(clienteId, toStage, fromStage, now, extras)
     } catch (err) {
       logger.error('Erro ao persistir movimento de cliente:', err)
       setClientes(prev => prev.map(c => c.id === clienteId ? previousSnapshot : c))

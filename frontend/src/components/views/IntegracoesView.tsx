@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { authFetch, BOT_URL } from '../../lib/botApi'
+import OmieIntegration from '../omie/OmieIntegration'
 
 interface WhatsAppStatus {
   connected: boolean
@@ -441,6 +442,9 @@ const IntegracoesView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ═══════════════ OMIE ERP ═══════════════ */}
+      <OmieIntegration botOnline={botOnline} />
 
       {/* ═══════════════ OTHER INTEGRATIONS ═══════════════ */}
       <div>

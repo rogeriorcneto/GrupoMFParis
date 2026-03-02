@@ -9,6 +9,8 @@ export interface BotConfigData {
   emailPass: string
   emailFrom: string
   whatsappNumero: string
+  omieAppKey: string
+  omieAppSecret: string
 }
 
 const DEFAULT_CONFIG: BotConfigData = {
@@ -18,6 +20,8 @@ const DEFAULT_CONFIG: BotConfigData = {
   emailPass: '',
   emailFrom: '',
   whatsappNumero: '',
+  omieAppKey: '',
+  omieAppSecret: '',
 }
 
 // In-memory cache to avoid hitting DB on every request
@@ -48,6 +52,8 @@ export async function loadConfig(): Promise<BotConfigData> {
       emailPass: decrypt(data.email_pass) || process.env.EMAIL_PASS || '',
       emailFrom: data.email_from || process.env.EMAIL_FROM || '',
       whatsappNumero: data.whatsapp_numero || '',
+      omieAppKey: data.omie_app_key || '',
+      omieAppSecret: data.omie_app_secret || '',
     }
     cacheLoaded = true
     return { ...cachedConfig }
@@ -79,6 +85,8 @@ export async function saveConfig(data: Partial<BotConfigData>): Promise<BotConfi
         email_pass: updated.emailPass ? encrypt(updated.emailPass) : '',
         email_from: updated.emailFrom,
         whatsapp_numero: updated.whatsappNumero,
+        omie_app_key: updated.omieAppKey ? encrypt(updated.omieAppKey) : '',
+        omie_app_secret: updated.omieAppSecret ? encrypt(updated.omieAppSecret) : '',
         updated_at: new Date().toISOString(),
       })
 
@@ -121,5 +129,7 @@ function configFromEnv(): BotConfigData {
     emailPass: process.env.EMAIL_PASS || '',
     emailFrom: process.env.EMAIL_FROM || '',
     whatsappNumero: '',
+    omieAppKey: process.env.OMIE_APP_KEY || '',
+    omieAppSecret: process.env.OMIE_APP_SECRET || '',
   }
 }

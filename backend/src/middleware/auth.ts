@@ -8,6 +8,18 @@ const authClient = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
+// P1-6: TTL cache to avoid 1-2 DB queries per request
+const AUTH_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const authCache = new Map<string, { userId: string; email: string; expiresAt: number }>()
+const cargoCache = new Map<string, { cargo: string; expiresAt: number }>()
+
+// Cleanup stale cache entries every 10 minutes
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of authCache) if (v.expiresAt < now) authCache.delete(k)
+  for (const [k, v] of cargoCache) if (v.expiresAt < now) cargoCache.delete(k)
+}, 10 * 60_000)
+
 /**
  * Middleware de autenticação para proteger endpoints da API.
  * Valida o token JWT do Supabase enviado no header Authorization.
@@ -23,14 +35,27 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const token = authHeader.slice(7) // Remove 'Bearer '
 
+  // Check cache first
+  const cached = authCache.get(token)
+  if (cached && cached.expiresAt > Date.now()) {
+    ;(req as any).userId = cached.userId
+    ;(req as any).userEmail = cached.email
+    next()
+    return
+  }
+
   try {
     // Validate token by getting user from Supabase (reuses shared client)
     const { data: { user }, error } = await authClient.auth.getUser(token)
 
     if (error || !user) {
+      authCache.delete(token)
       res.status(401).json({ success: false, error: 'Token inválido ou expirado.' })
       return
     }
+
+    // Cache the result
+    authCache.set(token, { userId: user.id, email: user.email || '', expiresAt: Date.now() + AUTH_CACHE_TTL })
 
     // Attach user to request for downstream use
     ;(req as any).userId = user.id
@@ -54,6 +79,17 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
     return
   }
 
+  // Check cargo cache first
+  const cached = cargoCache.get(userId)
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.cargo !== 'gerente') {
+      res.status(403).json({ success: false, error: 'Acesso restrito ao gerente.' })
+      return
+    }
+    next()
+    return
+  }
+
   try {
     const { data, error } = await authClient
       .from('vendedores')
@@ -61,7 +97,15 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
       .eq('auth_id', userId)
       .single()
 
-    if (error || !data || data.cargo !== 'gerente') {
+    if (error || !data) {
+      res.status(403).json({ success: false, error: 'Acesso restrito ao gerente.' })
+      return
+    }
+
+    // Cache the cargo
+    cargoCache.set(userId, { cargo: data.cargo, expiresAt: Date.now() + AUTH_CACHE_TTL })
+
+    if (data.cargo !== 'gerente') {
       res.status(403).json({ success: false, error: 'Acesso restrito ao gerente.' })
       return
     }

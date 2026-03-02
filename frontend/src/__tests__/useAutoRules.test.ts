@@ -218,10 +218,15 @@ describe('useAutoRules', () => {
 
     it('não persiste scores com delta < 5 pontos', () => {
       const params = defaultParams()
-      // Score correto ~28, se score atual é 27, delta = 1 < 5 → não persiste
+      // calcScore('prospecção', 100000, 1, 0) = 10+10+3-0 = 23
+      // score atual = 21, delta = |21-23| = 2 < 5 → não persiste
       params.clientes = [
-        sampleCliente({ id: 1, etapa: 'prospecção', score: 27, valorEstimado: 100000, diasInativo: 0 }),
+        sampleCliente({ id: 1, etapa: 'prospecção', score: 21, valorEstimado: 100000, diasInativo: 0 }),
       ]
+      // Override setClientes to use the test's actual clientes (not defaultParams)
+      params.setClientes = vi.fn().mockImplementation((updater: any) => {
+        if (typeof updater === 'function') updater(params.clientes)
+      })
 
       renderHook(() => useAutoRules(params))
 

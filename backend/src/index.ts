@@ -9,6 +9,7 @@ import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
+import { omieRouter } from './routes/omie.js'
 import { log } from './logger.js'
 
 const app = express()
@@ -194,6 +195,9 @@ app.post('/api/email/send-template', requireAuth, rateLimit(15, 60_000), async (
   res.json(result)
 })
 
+// ─── Omie ERP Routes (protegidos por auth + gerente) ───
+app.use('/api/omie', requireAuth, requireGerente, omieRouter)
+
 // ─── Start server ───
 
 async function start() {
@@ -217,9 +221,12 @@ async function start() {
     log.info('Use POST /api/whatsapp/connect ou a interface do CRM para conectar.')
   }
 
-  // Cron: processar jobs de automação a cada 5 minutos
-  setInterval(() => {
-    processarJobsPendentes()
+  // Cron: processar jobs de automação a cada 5 minutos (com guard anti-overlap)
+  let cronRunning = false
+  setInterval(async () => {
+    if (cronRunning) return
+    cronRunning = true
+    try { await processarJobsPendentes() } finally { cronRunning = false }
   }, 5 * 60 * 1000)
   log.info('⏰ Scheduler de jobs: a cada 5 minutos')
 }

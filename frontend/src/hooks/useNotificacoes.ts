@@ -3,6 +3,27 @@ import type { Notificacao, Cliente, Tarefa, Vendedor } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 
+const LS_KEY = 'crm_notif_dismissed_v1'
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
+  } catch { return new Set() }
+}
+
+function saveDismissed(keys: Set<string>) {
+  try {
+    // Keep max 500 keys to avoid bloat
+    const arr = Array.from(keys).slice(-500)
+    localStorage.setItem(LS_KEY, JSON.stringify(arr))
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function autoNotifKey(titulo: string, mensagem: string): string {
+  return `${titulo}|${mensagem}`
+}
+
 export function useNotificacoes(
   clientes: Cliente[],
   tarefas: Tarefa[],
@@ -11,6 +32,7 @@ export function useNotificacoes(
 ) {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>(initialNotificacoes || [])
   const notifGenRef = useRef<string>('')
+  const dismissedRef = useRef<Set<string>>(loadDismissed())
 
   // Sync initial data when it arrives from loadAllData
   const initialLoadedRef = useRef(false)
@@ -74,10 +96,18 @@ export function useNotificacoes(
     setNotificacoes(prev => {
       // Keep persisted (positive IDs) + merge new auto-generated (negative IDs)
       const persisted = prev.filter(n => n.id > 0)
-      // Preserve lida state for auto-generated
-      const lidaMap = new Map<string, boolean>()
-      prev.filter(n => n.id < 0 && n.lida).forEach(n => lidaMap.set(`${n.titulo}|${n.mensagem}`, true))
-      const autoWithLida = novas.map(n => ({ ...n, lida: lidaMap.get(`${n.titulo}|${n.mensagem}`) || false }))
+      // Preserve lida state: check dismissedRef (persisted across sessions) + in-memory prev
+      prev.filter(n => n.id < 0 && n.lida).forEach(n => {
+        const k = autoNotifKey(n.titulo, n.mensagem)
+        if (!dismissedRef.current.has(k)) {
+          dismissedRef.current.add(k)
+          saveDismissed(dismissedRef.current)
+        }
+      })
+      const autoWithLida = novas.map(n => ({
+        ...n,
+        lida: dismissedRef.current.has(autoNotifKey(n.titulo, n.mensagem))
+      }))
       return [...autoWithLida, ...persisted].slice(0, 50)
     })
   }, [clientes, tarefas, vendedores])
@@ -121,7 +151,17 @@ export function useNotificacoes(
   }, [])
 
   const markRead = useCallback(async (id: number) => {
-    setNotificacoes(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n))
+    setNotificacoes(prev => {
+      const notif = prev.find(n => n.id === id)
+      if (notif && notif.id < 0) {
+        const k = autoNotifKey(notif.titulo, notif.mensagem)
+        if (!dismissedRef.current.has(k)) {
+          dismissedRef.current.add(k)
+          saveDismissed(dismissedRef.current)
+        }
+      }
+      return prev.map(n => n.id === id ? { ...n, lida: true } : n)
+    })
     if (id > 0) {
       try { await db.markNotificacaoLida(id) } catch (err) { logger.error('Erro ao marcar lida:', err) }
     }

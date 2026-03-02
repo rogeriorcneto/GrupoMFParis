@@ -4,14 +4,41 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import type { Cliente, Vendedor, Interacao, Produto } from '../../types'
 import { stageLabels } from '../../utils/constants'
 
+type Periodo = '7d' | '30d' | '90d' | 'total'
+const periodoLabels: Record<Periodo, string> = { '7d': '7 dias', '30d': '30 dias', '90d': '90 dias', 'total': 'Todo período' }
+
 const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], interacoes: Interacao[], produtos?: Produto[] }> = ({ clientes, vendedores, interacoes, produtos = [] }) => {
+  const [periodo, setPeriodo] = React.useState<Periodo>('total')
+
+  const threshold = React.useMemo(() => {
+    if (periodo === 'total') return null
+    const d = new Date()
+    if (periodo === '7d') d.setDate(d.getDate() - 7)
+    else if (periodo === '30d') d.setMonth(d.getMonth() - 1)
+    else if (periodo === '90d') d.setMonth(d.getMonth() - 3)
+    return d
+  }, [periodo])
+
+  const fc = React.useMemo(() => {
+    if (!threshold) return clientes
+    return clientes.filter(c => {
+      const d = c.dataEntradaEtapa || c.ultimaInteracao
+      return d ? new Date(d) >= threshold : false
+    })
+  }, [clientes, threshold])
+
+  const fi = React.useMemo(() => {
+    if (!threshold) return interacoes
+    return interacoes.filter(i => new Date(i.data) >= threshold)
+  }, [interacoes, threshold])
+
   const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
 
-  const pipelineData = stages.map(s => ({ name: stageLabels[s] || s, valor: clientes.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0), qtd: clientes.filter(c => c.etapa === s).length }))
-  const pieData = stages.map(s => ({ name: stageLabels[s] || s, value: clientes.filter(c => c.etapa === s).length })).filter(d => d.value > 0)
-  const vendedorData = vendedores.filter(v => v.ativo).map(v => { const cv = clientes.filter(c => c.vendedorId === v.id); return { name: v.nome.split(' ')[0], pipeline: cv.reduce((s, c) => s + (c.valorEstimado || 0), 0), leads: cv.length, conversoes: cv.filter(c => c.etapa === 'pos_venda').length } })
-  const interacaoData = ['email', 'whatsapp', 'linkedin', 'instagram', 'ligacao', 'reuniao'].map(tipo => ({ name: tipo.charAt(0).toUpperCase() + tipo.slice(1), qtd: interacoes.filter(i => i.tipo === tipo).length })).filter(d => d.qtd > 0)
+  const pipelineData = stages.map(s => ({ name: stageLabels[s] || s, valor: fc.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0), qtd: fc.filter(c => c.etapa === s).length }))
+  const pieData = stages.map(s => ({ name: stageLabels[s] || s, value: fc.filter(c => c.etapa === s).length })).filter(d => d.value > 0)
+  const vendedorData = vendedores.filter(v => v.ativo).map(v => { const cv = fc.filter(c => c.vendedorId === v.id); return { name: v.nome.split(' ')[0], pipeline: cv.reduce((s, c) => s + (c.valorEstimado || 0), 0), leads: cv.length, conversoes: cv.filter(c => c.etapa === 'pos_venda').length } })
+  const interacaoData = ['email', 'whatsapp', 'linkedin', 'instagram', 'ligacao', 'reuniao'].map(tipo => ({ name: tipo.charAt(0).toUpperCase() + tipo.slice(1), qtd: fi.filter(i => i.tipo === tipo).length })).filter(d => d.qtd > 0)
 
   const gerarRelatorioPDF = () => {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -77,10 +104,19 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div><h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Relatórios e Gráficos</h1><p className="mt-1 text-sm text-gray-600">Análise visual completa do pipeline, vendedores e interações</p></div>
-        <button onClick={gerarRelatorioPDF} className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-apple hover:from-blue-700 hover:to-indigo-700 shadow-apple-sm flex items-center gap-2 font-medium text-sm transition-all self-start">
-          <SparklesIcon className="h-4 w-4" /> Gerar Relatório com IA
-        </button>
+        <div><h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Relatórios e Gráficos</h1><p className="mt-1 text-sm text-gray-600">Análise visual completa do pipeline, vendedores e interações{periodo !== 'total' ? ` — últimos ${periodoLabels[periodo]}` : ''}</p></div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-apple p-0.5 shadow-apple-sm">
+            {(['7d', '30d', '90d', 'total'] as Periodo[]).map(p => (
+              <button key={p} onClick={() => setPeriodo(p)} className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-all duration-200 ${ periodo === p ? 'bg-primary-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900' }`}>
+                {periodoLabels[p]}
+              </button>
+            ))}
+          </div>
+          <button onClick={gerarRelatorioPDF} className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-apple hover:from-blue-700 hover:to-indigo-700 shadow-apple-sm flex items-center gap-2 font-medium text-sm transition-all">
+            <SparklesIcon className="h-4 w-4" /> Relatório IA
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -124,10 +160,10 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Resumo Executivo</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-blue-50 rounded-apple border border-blue-200"><p className="text-xs text-blue-600 font-medium">Total Pipeline</p><p className="text-xl font-bold text-blue-900">R$ {clientes.reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
-          <div className="p-4 bg-green-50 rounded-apple border border-green-200"><p className="text-xs text-green-600 font-medium">Vendas Fechadas</p><p className="text-xl font-bold text-green-900">R$ {clientes.filter(c => c.etapa === 'pos_venda').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
-          <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Perdidos</p><p className="text-xl font-bold text-red-900">{clientes.filter(c => c.etapa === 'perdido').length} leads</p></div>
-          <div className="p-4 bg-purple-50 rounded-apple border border-purple-200"><p className="text-xs text-purple-600 font-medium">Taxa Conversão</p><p className="text-xl font-bold text-purple-900">{clientes.length > 0 ? ((clientes.filter(c => c.etapa === 'pos_venda').length / clientes.length) * 100).toFixed(1) : 0}%</p></div>
+          <div className="p-4 bg-blue-50 rounded-apple border border-blue-200"><p className="text-xs text-blue-600 font-medium">Total Pipeline</p><p className="text-xl font-bold text-blue-900">R$ {fc.reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
+          <div className="p-4 bg-green-50 rounded-apple border border-green-200"><p className="text-xs text-green-600 font-medium">Vendas Fechadas</p><p className="text-xl font-bold text-green-900">R$ {fc.filter(c => c.etapa === 'pos_venda').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
+          <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Perdidos</p><p className="text-xl font-bold text-red-900">{fc.filter(c => c.etapa === 'perdido').length} leads</p></div>
+          <div className="p-4 bg-purple-50 rounded-apple border border-purple-200"><p className="text-xs text-purple-600 font-medium">Taxa Conversão</p><p className="text-xl font-bold text-purple-900">{fc.length > 0 ? ((fc.filter(c => c.etapa === 'pos_venda').length / fc.length) * 100).toFixed(1) : 0}%</p></div>
         </div>
       </div>
 
@@ -137,7 +173,7 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
         const funilLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado', 'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda' }
         const passaramPor: Record<string, number> = {}
         funilStages.forEach(s => { passaramPor[s] = 0 })
-        clientes.forEach(c => { const etapas = new Set<string>(); etapas.add(c.etapa); (c.historicoEtapas || []).forEach(h => { etapas.add(h.etapa); if (h.de) etapas.add(h.de) }); funilStages.forEach(s => { if (etapas.has(s)) passaramPor[s]++ }) })
+        fc.forEach(c => { const etapas = new Set<string>(); etapas.add(c.etapa); (c.historicoEtapas || []).forEach(h => { etapas.add(h.etapa); if (h.de) etapas.add(h.de) }); funilStages.forEach(s => { if (etapas.has(s)) passaramPor[s]++ }) })
         const convData = funilStages.map((s, i) => { const qtd = passaramPor[s]; const anterior = i > 0 ? passaramPor[funilStages[i - 1]] : qtd; const taxa = anterior > 0 ? (qtd / anterior) * 100 : 0; return { name: funilLabels[s], qtd, taxa: Math.round(taxa) } })
         const maxQtd = Math.max(...convData.map(d => d.qtd), 1)
         return (
@@ -168,7 +204,7 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
         const stColors = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899']
         const temposPorEtapa: Record<string, number[]> = {}
         funilStages.forEach(s => { temposPorEtapa[s] = [] })
-        clientes.forEach(c => { const hist = c.historicoEtapas || []; for (let i = 0; i < hist.length; i++) { const etapa = hist[i].de; if (etapa && funilStages.includes(etapa)) { const entrada = i > 0 ? new Date(hist[i - 1].data).getTime() : (c.dataEntradaEtapa ? new Date(c.dataEntradaEtapa).getTime() : null); if (entrada) { const saida = new Date(hist[i].data).getTime(); const dias = Math.max(1, Math.floor((saida - entrada) / 86400000)); temposPorEtapa[etapa].push(dias) } } }; if (funilStages.includes(c.etapa) && c.dataEntradaEtapa) { const dias = Math.max(1, Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)); temposPorEtapa[c.etapa].push(dias) } })
+        fc.forEach(c => { const hist = c.historicoEtapas || []; for (let i = 0; i < hist.length; i++) { const etapa = hist[i].de; if (etapa && funilStages.includes(etapa)) { const entrada = i > 0 ? new Date(hist[i - 1].data).getTime() : (c.dataEntradaEtapa ? new Date(c.dataEntradaEtapa).getTime() : null); if (entrada) { const saida = new Date(hist[i].data).getTime(); const dias = Math.max(1, Math.floor((saida - entrada) / 86400000)); temposPorEtapa[etapa].push(dias) } } }; if (funilStages.includes(c.etapa) && c.dataEntradaEtapa) { const dias = Math.max(1, Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)); temposPorEtapa[c.etapa].push(dias) } })
         const tempoData = funilStages.map((s, i) => { const arr = temposPorEtapa[s]; const media = arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0; return { name: funilLabels[s], dias: media, fill: stColors[i], count: arr.length } }).filter(d => d.count > 0)
         if (tempoData.length === 0) return null
         return (
@@ -185,7 +221,7 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
 
       {/* Relatório de Perdas */}
       {(() => {
-        const perdidos = clientes.filter(c => c.etapa === 'perdido')
+        const perdidos = fc.filter(c => c.etapa === 'perdido')
         const totalPerdido = perdidos.length
         const valorPerdido = perdidos.reduce((s, c) => s + (c.valorEstimado || 0), 0)
         const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
@@ -202,7 +238,7 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
               <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Total Perdidos</p><p className="text-2xl font-bold text-red-900">{totalPerdido}</p></div>
               <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Valor Perdido</p><p className="text-2xl font-bold text-red-900">R$ {valorPerdido.toLocaleString('pt-BR')}</p></div>
               <div className="p-4 bg-orange-50 rounded-apple border border-orange-200"><p className="text-xs text-orange-600 font-medium">Motivo + Frequente</p><p className="text-2xl font-bold text-orange-900">{motivoMaisFrequente}</p></div>
-              <div className="p-4 bg-gray-50 rounded-apple border border-gray-200"><p className="text-xs text-gray-600 font-medium">Taxa de Perda</p><p className="text-2xl font-bold text-gray-900">{clientes.length > 0 ? ((totalPerdido / clientes.length) * 100).toFixed(1) : 0}%</p></div>
+              <div className="p-4 bg-gray-50 rounded-apple border border-gray-200"><p className="text-xs text-gray-600 font-medium">Taxa de Perda</p><p className="text-2xl font-bold text-gray-900">{fc.length > 0 ? ((totalPerdido / fc.length) * 100).toFixed(1) : 0}%</p></div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">

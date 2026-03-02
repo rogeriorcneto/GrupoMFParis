@@ -146,8 +146,10 @@ const TarefasView: React.FC<{
   const [newHora, setNewHora] = React.useState('')
   const [newTipo, setNewTipo] = React.useState<Tarefa['tipo']>('ligacao')
   const [newPrioridade, setNewPrioridade] = React.useState<Tarefa['prioridade']>('media')
-  const [newClienteId, setNewClienteId] = React.useState<number | ''>(clientes[0]?.id ?? '')
+  const [newClienteId, setNewClienteId] = React.useState<number | ''>('')
   const [newVendedorId, setNewVendedorId] = React.useState<number | ''>(loggedUser?.id ?? '')
+  const [clienteSearch, setClienteSearch] = React.useState('')
+  const [showClienteList, setShowClienteList] = React.useState(false)
   const isGerente = loggedUser?.cargo === 'gerente'
 
   const hoje = new Date().toISOString().split('T')[0]
@@ -364,12 +366,36 @@ const TarefasView: React.FC<{
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Cliente (opcional)</label>
-                  <select value={newClienteId} onChange={(e) => setNewClienteId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    <option value="">Sem cliente</option>
-                    {clientes.map(c => <option key={c.id} value={c.id}>{c.razaoSocial}</option>)}
-                  </select>
+                  <input
+                    type="text"
+                    value={clienteSearch}
+                    onChange={(e) => { setClienteSearch(e.target.value); setShowClienteList(true); if (!e.target.value) setNewClienteId('') }}
+                    onFocus={() => setShowClienteList(true)}
+                    placeholder={newClienteId ? clientes.find(c => c.id === newClienteId)?.razaoSocial || 'Buscar cliente...' : 'Buscar cliente...'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  {newClienteId && !clienteSearch && (
+                    <button type="button" onClick={() => { setNewClienteId(''); setClienteSearch('') }} className="absolute right-2 top-8 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                  )}
+                  {showClienteList && clienteSearch.length >= 2 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-apple shadow-lg max-h-48 overflow-y-auto">
+                      {clientes
+                        .filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase()) || (c.cnpj || '').includes(clienteSearch))
+                        .slice(0, 20)
+                        .map(c => (
+                          <button key={c.id} type="button" onClick={() => { setNewClienteId(c.id); setClienteSearch(c.razaoSocial); setShowClienteList(false) }} className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 border-b border-gray-100 last:border-0">
+                            <span className="font-medium">{c.razaoSocial}</span>
+                            {c.cnpj && <span className="text-gray-400 ml-2 text-xs">{c.cnpj}</span>}
+                          </button>
+                        ))
+                      }
+                      {clientes.filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase())).length === 0 && (
+                        <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Responsável *</label>

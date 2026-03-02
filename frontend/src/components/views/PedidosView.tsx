@@ -2,7 +2,7 @@ import React from 'react'
 import { PaperAirplaneIcon, ShoppingCartIcon, PhotoIcon } from '@heroicons/react/24/outline'
 import type { Pedido, Cliente, Produto, Vendedor, ItemPedido } from '../../types'
 
-function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido }: {
+function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, showToast }: {
   pedidos: Pedido[]
   clientes: Cliente[]
   produtos: Produto[]
@@ -10,6 +10,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   loggedUser: Vendedor
   onAddPedido: (p: Omit<Pedido, 'id'>) => Promise<void>
   onUpdatePedido: (p: Pedido) => void
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
 }) {
   const isGerente = loggedUser.cargo === 'gerente'
   const [tab, setTab] = React.useState<'novo' | 'historico'>('novo')
@@ -49,7 +50,20 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   }
 
   const handleEnviarPedido = async (status: 'rascunho' | 'enviado') => {
-    if (!selectedClienteId || itensPedido.length === 0 || isSaving) return
+    if (!selectedClienteId || isSaving) return
+    const clienteAlvo = clientes.find(c => c.id === Number(selectedClienteId))
+    if (clienteAlvo?.etapa === 'perdido') {
+      showToast?.('error', 'Cliente marcado como Perdido. Reative-o no funil antes de lançar pedido.')
+      return
+    }
+    if (itensPedido.length === 0) {
+      showToast?.('error', 'Adicione pelo menos um produto antes de salvar o pedido.')
+      return
+    }
+    if (totalPedido <= 0) {
+      showToast?.('error', 'O valor total do pedido deve ser maior que zero.')
+      return
+    }
     setIsSaving(true)
     const numero = `PED-${Date.now().toString().slice(-6)}`
     const novoPedido: Omit<Pedido, 'id'> = {
@@ -166,7 +180,14 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button onClick={() => setItemQtd(produtos.find(p => p.id === item.produtoId)!, item.quantidade - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-sm">−</button>
-                        <span className="w-8 text-center text-sm font-semibold text-gray-900">{item.quantidade}</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantidade}
+                          onChange={e => setItemQtd(produtos.find(p => p.id === item.produtoId)!, Math.max(1, parseInt(e.target.value) || 1))}
+                          onFocus={e => e.target.select()}
+                          className="w-10 text-center text-sm font-semibold text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-400 py-0.5"
+                        />
                         <button onClick={() => setItemQtd(produtos.find(p => p.id === item.produtoId)!, item.quantidade + 1)} className="w-6 h-6 rounded-full bg-primary-100 hover:bg-primary-200 flex items-center justify-center text-primary-700 font-bold text-sm">+</button>
                       </div>
                     </div>
@@ -228,7 +249,14 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         {noCarrinho ? (
                           <>
                             <button onClick={() => setItemQtd(produto, qtd - 1)} className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold">−</button>
-                            <span className="w-10 text-center font-bold text-gray-900">{qtd}</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={qtd}
+                              onChange={e => setItemQtd(produto, Math.max(1, parseInt(e.target.value) || 1))}
+                              onFocus={e => e.target.select()}
+                              className="w-12 text-center font-bold text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-400 py-1"
+                            />
                             <button onClick={() => setItemQtd(produto, qtd + 1)} className="w-8 h-8 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white font-bold">+</button>
                           </>
                         ) : (

@@ -9,7 +9,7 @@ import { log } from './logger.js'
  */
 export async function processarJobsPendentes(): Promise<void> {
   try {
-    const jobs = await db.fetchJobsPendentes()
+    const jobs = await db.claimJobsPendentes()
     if (jobs.length === 0) return
 
     log.info(`⏰ Processando ${jobs.length} job(s) pendente(s)...`)
@@ -22,7 +22,16 @@ export async function processarJobsPendentes(): Promise<void> {
           continue
         }
 
-        const mensagem = job.mensagem || `Olá ${cliente.razaoSocial}, mensagem automática do CRM MF Paris.`
+        let mensagem = `Olá ${cliente.razaoSocial}, mensagem automática do CRM MF Paris.`
+        if (job.templateId) {
+          const tmpl = await db.fetchTemplateMsgById(job.templateId)
+          if (tmpl?.conteudo) {
+            mensagem = tmpl.conteudo
+              .replace(/\{\{nome\}\}/gi, cliente.razaoSocial)
+              .replace(/\{\{empresa\}\}/gi, cliente.razaoSocial)
+              .replace(/\{\{contato\}\}/gi, cliente.contatoNome || '')
+          }
+        }
 
         if (job.canal === 'whatsapp') {
           const waStatus = getWhatsAppStatus()

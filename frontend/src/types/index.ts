@@ -1,4 +1,4 @@
-export type ViewType = 'dashboard' | 'funil' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos'
+export type ViewType = 'dashboard' | 'funil' | 'amostras' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos'
 
 export interface HistoricoEtapa {
   etapa: string
@@ -40,7 +40,7 @@ export interface Cliente {
   notas?: string
   origemLead?: string
   dataEnvioAmostra?: string
-  statusAmostra?: 'enviada' | 'aguardando_resposta' | 'aprovada' | 'rejeitada'
+  statusAmostra?: 'pendente_aprovacao' | 'enviada' | 'aguardando_resposta' | 'aprovada' | 'rejeitada'
   dataHomologacao?: string
   proximoPedidoPrevisto?: string
   dataProposta?: string

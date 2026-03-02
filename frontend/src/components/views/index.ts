@@ -1,4 +1,5 @@
 export { default as DashboardView } from './DashboardView'
+export { default as AmostrasView } from './AmostrasView'
 export { default as FunilView } from './FunilView'
 export { default as ClientesView } from './ClientesView'
 export { default as TarefasView } from './TarefasView'

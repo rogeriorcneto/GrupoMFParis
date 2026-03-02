@@ -433,6 +433,14 @@ export async function fetchClientes(): Promise<Cliente[]> {
   return clientes
 }
 
+export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Promise<Cliente | null> {
+  if (!cnpj || cnpj.trim() === '') return null
+  let query = supabase.from('clientes').select('*').eq('cnpj', cnpj.trim()).limit(1)
+  if (excludeId) query = query.neq('id', excludeId)
+  const { data } = await query
+  return data && data.length > 0 ? clienteFromDb(data[0]) : null
+}
+
 export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
   const row = clienteToDb(c)
   const { data, error } = await supabase.from('clientes').insert(row).select().single()
@@ -459,6 +467,19 @@ export async function updateCliente(id: number, c: Partial<Cliente>): Promise<vo
   if (error) throw error
 }
 
+export async function updateClientesBatch(updates: { id: number; changes: Partial<Cliente> }[]): Promise<void> {
+  if (updates.length === 0) return
+  const BATCH = 50
+  for (let i = 0; i < updates.length; i += BATCH) {
+    const chunk = updates.slice(i, i + BATCH)
+    await Promise.all(chunk.map(({ id, changes }) => {
+      const row = clienteToDb(changes)
+      row.updated_at = new Date().toISOString()
+      return supabase.from('clientes').update(row).eq('id', id)
+    }))
+  }
+}
+
 export async function deleteCliente(id: number): Promise<void> {
   // Deletar dados sem FK entre si em paralelo
   await Promise.all([
@@ -483,6 +504,36 @@ export async function insertHistoricoEtapa(clienteId: number, h: HistoricoEtapa)
     etapa: h.etapa,
     etapa_anterior: h.de,
     data: h.data,
+  })
+  if (error) throw error
+}
+
+export async function moverClienteAtomico(
+  clienteId: number,
+  etapa: string,
+  etapaAnterior: string,
+  dataEntradaEtapa: string,
+  extras: Partial<Cliente> = {}
+): Promise<void> {
+  const extrasDb: any = {}
+  if (extras.motivoPerda !== undefined) extrasDb.motivo_perda = extras.motivoPerda
+  if (extras.categoriaPerda !== undefined) extrasDb.categoria_perda = extras.categoriaPerda
+  if (extras.dataPerda !== undefined) extrasDb.data_perda = extras.dataPerda
+  if (extras.dataEnvioAmostra !== undefined) extrasDb.data_envio_amostra = extras.dataEnvioAmostra
+  if (extras.statusAmostra !== undefined) extrasDb.status_amostra = extras.statusAmostra
+  if (extras.dataHomologacao !== undefined) extrasDb.data_homologacao = extras.dataHomologacao
+  if (extras.valorProposta !== undefined) extrasDb.valor_proposta = extras.valorProposta
+  if (extras.dataProposta !== undefined) extrasDb.data_proposta = extras.dataProposta
+  if (extras.statusEntrega !== undefined) extrasDb.status_entrega = extras.statusEntrega
+  if (extras.dataUltimoPedido !== undefined) extrasDb.data_ultimo_pedido = extras.dataUltimoPedido
+  if (extras.statusFaturamento !== undefined) extrasDb.status_faturamento = extras.statusFaturamento
+
+  const { error } = await supabase.rpc('mover_cliente_atomico', {
+    p_cliente_id: clienteId,
+    p_etapa: etapa,
+    p_etapa_anterior: etapaAnterior,
+    p_data_entrada_etapa: dataEntradaEtapa,
+    p_extras: extrasDb,
   })
   if (error) throw error
 }
@@ -697,35 +748,29 @@ export async function fetchPedidos(): Promise<Pedido[]> {
 }
 
 export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
-  const { data: pedido, error } = await supabase.from('pedidos').insert({
-    numero: p.numero,
-    cliente_id: p.clienteId,
-    vendedor_id: p.vendedorId,
-    observacoes: p.observacoes,
-    status: p.status,
-    total_valor: p.totalValor,
-    data_criacao: p.dataCriacao,
-    data_envio: p.dataEnvio || null,
-  }).select().single()
+  const itensJson = (p.itens || []).map(i => ({
+    produto_id: i.produtoId,
+    nome_produto: i.nomeProduto,
+    sku: i.sku || '',
+    unidade: i.unidade,
+    preco: i.preco,
+    quantidade: i.quantidade,
+  }))
+
+  const { data, error } = await supabase.rpc('insert_pedido_atomico', {
+    p_numero: p.numero,
+    p_cliente_id: p.clienteId,
+    p_vendedor_id: p.vendedorId,
+    p_observacoes: p.observacoes,
+    p_status: p.status,
+    p_total_valor: p.totalValor,
+    p_data_criacao: p.dataCriacao,
+    p_data_envio: p.dataEnvio || '',
+    p_itens: itensJson,
+  })
   if (error) throw error
 
-  if (p.itens && p.itens.length > 0) {
-    const itensRows = p.itens.map(i => ({
-      pedido_id: pedido.id,
-      produto_id: i.produtoId,
-      nome_produto: i.nomeProduto,
-      sku: i.sku,
-      unidade: i.unidade,
-      preco: i.preco,
-      quantidade: i.quantidade,
-    }))
-    await supabase.from('itens_pedido').insert(itensRows)
-  }
-
-  return pedidoFromDb(pedido, p.itens.map(i => ({
-    produto_id: i.produtoId, nome_produto: i.nomeProduto,
-    sku: i.sku, unidade: i.unidade, preco: i.preco, quantidade: i.quantidade,
-  })))
+  return pedidoFromDb(data, itensJson)
 }
 
 export async function updatePedidoStatus(id: number, status: string): Promise<void> {
@@ -829,6 +874,23 @@ export async function insertJob(j: Omit<JobAutomacao, 'id'>): Promise<JobAutomac
   }).select().single()
   if (error) throw error
   return jobFromDb(data)
+}
+
+export async function insertJobsBatch(jobs: Omit<JobAutomacao, 'id'>[]): Promise<JobAutomacao[]> {
+  if (jobs.length === 0) return []
+  const BATCH_SIZE = 100
+  const allSaved: JobAutomacao[] = []
+  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
+    const batch = jobs.slice(i, i + BATCH_SIZE).map(j => ({
+      cliente_id: j.clienteId, canal: j.canal, tipo: j.tipo,
+      status: j.status, agendado_para: j.agendadoPara,
+      template_id: j.templateId || null, campanha_id: j.campanhaId || null,
+    }))
+    const { data, error } = await supabase.from('jobs_automacao').insert(batch).select()
+    if (error) throw error
+    if (data) allSaved.push(...data.map(jobFromDb))
+  }
+  return allSaved
 }
 
 export async function updateJobStatus(id: number, status: string): Promise<void> {

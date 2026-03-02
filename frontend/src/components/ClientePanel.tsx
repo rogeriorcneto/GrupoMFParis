@@ -34,7 +34,7 @@ export default function ClientePanel({
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda,
   setInteracoes, setClientes, setTarefas, addNotificacao
 }: ClientePanelProps) {
-  const [panelTab, setPanelTab] = useState<'info' | 'atividades' | 'tarefas'>('info')
+  const [panelTab, setPanelTab] = useState<'info' | 'atividades' | 'tarefas' | 'timeline'>('info')
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
   const [panelNota, setPanelNota] = useState('')
@@ -117,8 +117,12 @@ export default function ClientePanel({
 
           {/* Tabs */}
           <div className="flex border-t border-gray-100">
-            {([['info', '📋 Info'], ['atividades', '📞 Atividades'], ['tarefas', '✅ Tarefas']] as const).map(([key, label]) => (
-              <button key={key} onClick={() => setPanelTab(key)} className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${panelTab === key ? 'text-primary-700 border-b-2 border-primary-600 bg-primary-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>{label} {key === 'atividades' && clienteInteracoes.length > 0 ? `(${clienteInteracoes.length})` : ''}{key === 'tarefas' && clienteTarefas.length > 0 ? `(${clienteTarefas.length})` : ''}</button>
+            {([['info', '📋 Info'], ['timeline', '🕐 Timeline'], ['atividades', '📞 Ativ.'], ['tarefas', '✅ Tarefas']] as const).map(([key, label]) => (
+              <button key={key} onClick={() => setPanelTab(key)} className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${panelTab === key ? 'text-primary-700 border-b-2 border-primary-600 bg-primary-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
+                {label}
+                {key === 'atividades' && clienteInteracoes.length > 0 ? ` (${clienteInteracoes.length})` : ''}
+                {key === 'tarefas' && clienteTarefas.length > 0 ? ` (${clienteTarefas.length})` : ''}
+              </button>
             ))}
           </div>
         </div>
@@ -249,6 +253,65 @@ export default function ClientePanel({
               </div>
             </>
           )}
+
+          {/* === ABA TIMELINE === */}
+          {panelTab === 'timeline' && (() => {
+            type TimelineItem = { date: string; icon: string; title: string; subtitle: string; color: string }
+            const items: TimelineItem[] = []
+
+            clienteInteracoes.forEach(i => items.push({
+              date: i.data,
+              icon: tipoInteracaoIcon[i.tipo] || '📋',
+              title: i.assunto,
+              subtitle: i.descricao || '',
+              color: i.automatico ? 'bg-gray-400' : 'bg-primary-500',
+            }))
+
+            ;(c.historicoEtapas || []).forEach(h => items.push({
+              date: h.data,
+              icon: '🔀',
+              title: `Movido para ${etapaLabels[h.etapa] || h.etapa}`,
+              subtitle: h.de ? `← De: ${etapaLabels[h.de] || h.de}` : '',
+              color: 'bg-indigo-500',
+            }))
+
+            clienteTarefas.filter(t => t.status === 'concluida').forEach(t => items.push({
+              date: t.data,
+              icon: '✅',
+              title: t.titulo,
+              subtitle: `Tarefa concluída · ${t.tipo}`,
+              color: 'bg-green-500',
+            }))
+
+            items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+            return items.length === 0 ? (
+              <div className="bg-gray-50 rounded-apple border border-gray-200 p-10 text-center">
+                <p className="text-sm text-gray-500">Nenhuma atividade registrada ainda.</p>
+                <p className="text-xs text-gray-400 mt-1">Use a aba Atividades para registrar interações.</p>
+              </div>
+            ) : (
+              <div className="relative pl-4 border-l-2 border-gray-200 space-y-3">
+                {items.map((item, idx) => (
+                  <div key={idx} className="relative">
+                    <div className={`absolute -left-[1.3rem] w-3 h-3 rounded-full ${item.color}`} />
+                    <div className="ml-2 bg-white rounded-apple border border-gray-200 p-3">
+                      <div className="flex items-start gap-2">
+                        <span className="text-base flex-shrink-0">{item.icon}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                          {item.subtitle && <p className="text-xs text-gray-500 mt-0.5 truncate">{item.subtitle}</p>}
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {new Date(item.date).toLocaleDateString('pt-BR')} às {new Date(item.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
 
           {/* === ABA ATIVIDADES === */}
           {panelTab === 'atividades' && (

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts'
 import type { Cliente, Vendedor, Interacao, DashboardMetrics, Atividade, Produto, Tarefa } from '../../types'
 import { stageLabels } from '../../utils/constants'
 
@@ -388,6 +388,54 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* Evolução Mensal de Leads */}
+      {(() => {
+        const monthlyMap = new Map<string, { novos: number; perdidos: number; convertidos: number }>()
+        const now = new Date()
+        // Build last 12 months buckets
+        for (let i = 11; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+          monthlyMap.set(key, { novos: 0, perdidos: 0, convertidos: 0 })
+        }
+        clientes.forEach(c => {
+          if (c.dataEntradaEtapa) {
+            const key = c.dataEntradaEtapa.substring(0, 7)
+            if (monthlyMap.has(key)) {
+              const entry = monthlyMap.get(key)!
+              entry.novos++
+              if (c.etapa === 'perdido') entry.perdidos++
+              if (c.etapa === 'pos_venda') entry.convertidos++
+            }
+          }
+        })
+        const chartData = Array.from(monthlyMap.entries()).map(([key, v]) => {
+          const [year, month] = key.split('-')
+          const label = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+          return { mes: label, ...v }
+        })
+        const hasData = chartData.some(d => d.novos > 0 || d.perdidos > 0 || d.convertidos > 0)
+        if (!hasData) return null
+        return (
+          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">📅 Evolução Mensal de Leads</h3>
+            <p className="text-sm text-gray-500 mb-4">Últimos 12 meses — baseado na data de entrada na etapa atual</p>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Line type="monotone" dataKey="novos" name="Novos Leads" stroke="#3B82F6" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="convertidos" name="Convertidos (Pós-Venda)" stroke="#22C55E" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="perdidos" name="Perdidos" stroke="#EF4444" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      })()}
 
       {/* Ranking de Vendedores */}
       {(rankingProspeccao.length > 0 || rankingVendas.length > 0) && (

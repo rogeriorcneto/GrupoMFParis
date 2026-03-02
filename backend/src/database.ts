@@ -401,35 +401,29 @@ export async function fetchProdutosAtivos(): Promise<Produto[]> {
 // ============================================
 
 export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
-  const { data: pedido, error } = await supabase.from('pedidos').insert({
-    numero: p.numero,
-    cliente_id: p.clienteId,
-    vendedor_id: p.vendedorId,
-    observacoes: p.observacoes,
-    status: p.status,
-    total_valor: p.totalValor,
-    data_criacao: p.dataCriacao,
-    data_envio: p.dataEnvio || null,
-  }).select().single()
+  const itensJson = (p.itens || []).map(i => ({
+    produto_id: i.produtoId,
+    nome_produto: i.nomeProduto,
+    sku: i.sku || '',
+    unidade: i.unidade,
+    preco: i.preco,
+    quantidade: i.quantidade,
+  }))
+
+  const { data, error } = await supabase.rpc('insert_pedido_atomico', {
+    p_numero: p.numero,
+    p_cliente_id: p.clienteId,
+    p_vendedor_id: p.vendedorId,
+    p_observacoes: p.observacoes,
+    p_status: p.status,
+    p_total_valor: p.totalValor,
+    p_data_criacao: p.dataCriacao,
+    p_data_envio: p.dataEnvio || '',
+    p_itens: itensJson,
+  })
   if (error) throw error
 
-  if (p.itens && p.itens.length > 0) {
-    const itensRows = p.itens.map(i => ({
-      pedido_id: pedido.id,
-      produto_id: i.produtoId,
-      nome_produto: i.nomeProduto,
-      sku: i.sku,
-      unidade: i.unidade,
-      preco: i.preco,
-      quantidade: i.quantidade,
-    }))
-    await supabase.from('itens_pedido').insert(itensRows)
-  }
-
-  return pedidoFromDb(pedido, p.itens.map(i => ({
-    produto_id: i.produtoId, nome_produto: i.nomeProduto,
-    sku: i.sku, unidade: i.unidade, preco: i.preco, quantidade: i.quantidade,
-  })))
+  return pedidoFromDb(data, itensJson)
 }
 
 export async function updatePedidoStatus(id: number, status: string): Promise<void> {
@@ -477,6 +471,12 @@ export async function fetchTemplates(canal?: string): Promise<Template[]> {
   return (data || []).map(templateFromDb)
 }
 
+export async function fetchTemplateMsgById(id: number): Promise<{ conteudo: string } | null> {
+  const { data, error } = await supabase.from('templates_msgs').select('conteudo').eq('id', id).single()
+  if (error || !data) return null
+  return { conteudo: data.conteudo }
+}
+
 // ============================================
 // JOBS AUTOMAÇÃO (para cron)
 // ============================================
@@ -485,25 +485,18 @@ interface JobPendente {
   id: number
   clienteId: number
   canal: string
-  mensagem: string | null
+  templateId: number | null
   assunto: string | null
 }
 
-export async function fetchJobsPendentes(): Promise<JobPendente[]> {
-  const now = new Date().toISOString()
-  const { data, error } = await supabase
-    .from('jobs_automacao')
-    .select('id, cliente_id, canal, mensagem, assunto')
-    .eq('status', 'pendente')
-    .lte('agendado_para', now)
-    .order('agendado_para')
-    .limit(50)
-  if (error) { log.error({ error }, 'Erro fetchJobsPendentes'); return [] }
+export async function claimJobsPendentes(): Promise<JobPendente[]> {
+  const { data, error } = await supabase.rpc('claim_jobs_pendentes', { p_limit: 50 })
+  if (error) { log.error({ error }, 'Erro claimJobsPendentes'); return [] }
   return (data || []).map((r: any) => ({
     id: r.id,
     clienteId: r.cliente_id,
     canal: r.canal,
-    mensagem: r.mensagem,
+    templateId: r.template_id,
     assunto: r.assunto,
   }))
 }

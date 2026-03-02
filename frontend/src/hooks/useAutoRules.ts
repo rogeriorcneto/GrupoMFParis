@@ -36,11 +36,11 @@ export function useAutoRules({
         return { ...c, diasInativo: dias }
       })
       if (changedIds.length > 0) {
-        // Persist outside setState via microtask to avoid side-effects in updater
+        // Persist outside setState via microtask — batch update instead of N×1
         queueMicrotask(async () => {
-          for (const { id, diasInativo } of changedIds) {
-            try { await db.updateCliente(id, { diasInativo }) } catch (err) { logger.error('Erro ao persistir diasInativo:', err) }
-          }
+          try {
+            await db.updateClientesBatch(changedIds.map(({ id, diasInativo }) => ({ id, changes: { diasInativo } })))
+          } catch (err) { logger.error('Erro ao persistir diasInativo batch:', err) }
         })
         return updated
       }
@@ -67,10 +67,10 @@ export function useAutoRules({
     // Atribuir em batch ao gerente e persistir
     setClientes(prev => prev.map(c => !c.vendedorId ? { ...c, vendedorId: gerente.id } : c))
     const persistOrphan = async () => {
-      for (const c of orfaos) {
-        try { await db.updateCliente(c.id, { vendedorId: gerente.id }) } catch (err) { logger.error('Erro ao atribuir cliente órfão:', err) }
-      }
-      logger.log(`✅ ${orfaos.length} cliente(s) sem vendedor atribuído(s) a ${gerente.nome} (gerente)`)
+      try {
+        await db.updateClientesBatch(orfaos.map(c => ({ id: c.id, changes: { vendedorId: gerente.id } })))
+        logger.log(`✅ ${orfaos.length} cliente(s) sem vendedor atribuído(s) a ${gerente.nome} (gerente)`)
+      } catch (err) { logger.error('Erro ao atribuir clientes órfãos batch:', err) }
     }
     persistOrphan()
   }, [clientes, vendedores, loggedUser, setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -148,14 +148,14 @@ export function useAutoRules({
       })
       if (changedIds.length === 0) return prev
 
-      // Persist only scores that changed by 5+ points, debounced
+      // Persist only scores that changed by 5+ points, debounced — batch update
       const significantChanges = changedIds.filter(({ score, oldScore }) => Math.abs(oldScore - score) >= 5)
       if (significantChanges.length > 0) {
         if (scoreTimerRef.current) clearTimeout(scoreTimerRef.current)
         scoreTimerRef.current = setTimeout(async () => {
-          for (const { id, score } of significantChanges) {
-            try { await db.updateCliente(id, { score }) } catch (err) { logger.error('Erro ao persistir score:', err) }
-          }
+          try {
+            await db.updateClientesBatch(significantChanges.map(({ id, score }) => ({ id, changes: { score } })))
+          } catch (err) { logger.error('Erro ao persistir scores batch:', err) }
         }, 3000)
       }
       return updated

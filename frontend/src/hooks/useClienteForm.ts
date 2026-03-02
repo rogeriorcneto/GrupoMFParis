@@ -11,6 +11,7 @@ const emptyForm: FormData = {
   enderecoRua: '', enderecoNumero: '', enderecoComplemento: '',
   enderecoBairro: '', enderecoCidade: '', enderecoEstado: '', enderecoCep: '',
   cnaePrimario: '', cnaeSecundario: '',
+  valorEstimado: '',
   produtosInteresse: '', produtosQuantidades: {}, vendedorId: ''
 }
 
@@ -107,6 +108,24 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       return
     }
 
+    if (formData.valorEstimado && Number(formData.valorEstimado) < 0) {
+      showToast('error', 'Valor estimado deve ser um número positivo.')
+      return
+    }
+
+    // Verificar CNPJ duplicado antes de salvar
+    if (cnpjDigits.length === 14) {
+      try {
+        const duplicado = await db.checkCnpjDuplicado(formData.cnpj, editingCliente?.id)
+        if (duplicado) {
+          showToast('error', `CNPJ já cadastrado para "${duplicado.razaoSocial}". Não é possível duplicar.`)
+          return
+        }
+      } catch (err) {
+        logger.error('Erro ao verificar CNPJ duplicado:', err)
+      }
+    }
+
     const produtosArray = formData.produtosInteresse
       ? formData.produtosInteresse.split(',').map(p => p.trim()).filter(p => p)
       : []
@@ -181,6 +200,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       cnaeSecundario: cliente.cnaeSecundario || '',
       produtosInteresse: cliente.produtosInteresse?.join(', ') || '',
       produtosQuantidades: {},
+      valorEstimado: cliente.valorEstimado?.toString() || '',
       vendedorId: cliente.vendedorId?.toString() || ''
     })
     setShowModal(true)
