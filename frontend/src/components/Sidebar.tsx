@@ -13,6 +13,7 @@ import {
   CubeIcon,
   ShoppingCartIcon,
   BeakerIcon,
+  ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline'
 import type { ViewType, Vendedor } from '../types'
 
@@ -24,16 +25,18 @@ interface SidebarProps {
   setSidebarOpen: (v: boolean) => void
   onOpenAI: () => void
   onSignOut: () => void
+  pendingAprovacoes?: number
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'amostras', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos'],
+  gerente: ['dashboard', 'aprovacao', 'amostras', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos'],
   vendedor: ['amostras', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
   sdr: ['amostras', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'dashboard', icon: HomeIcon, label: 'Visão Geral' },
+  { id: 'aprovacao', icon: ClipboardDocumentCheckIcon, label: 'Aprovação de Pedidos' },
   { id: 'amostras', icon: BeakerIcon, label: 'Amostras' },
   { id: 'funil', icon: FunnelIcon, label: 'Funil de Vendas' },
   { id: 'clientes', icon: UserGroupIcon, label: 'Clientes' },
@@ -53,7 +56,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
 export { viewsPermitidas }
 
 export default function Sidebar({
-  activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut
+  activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, pendingAprovacoes = 0
 }: SidebarProps) {
   return (
     <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white border-gray-200 border-r flex flex-col`}>
@@ -80,12 +83,19 @@ export default function Sidebar({
                 w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-apple transition-all duration-200
                 ${activeView === item.id
                   ? 'bg-primary-50 text-primary-700'
+                  : item.id === 'aprovacao' && pendingAprovacoes > 0
+                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }
               `}
             >
-              <item.icon className="mr-3 h-5 w-5" />
-              {item.label}
+              <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === 'aprovacao' && pendingAprovacoes > 0 && (
+                <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                  {pendingAprovacoes}
+                </span>
+              )}
             </button>
           ))}
 

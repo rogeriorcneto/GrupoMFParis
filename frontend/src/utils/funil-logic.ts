@@ -1,6 +1,6 @@
 import type { Cliente } from '../types'
 
-export const prazosEtapa: Record<string, number> = { amostra: 30, homologado: 75, negociacao: 45 }
+export const prazosEtapa: Record<string, number> = { amostra: 30, homologado: 75, negociacao: 45, cotacao: 30 }
 
 export function diasDesde(dateStr?: string): number {
   if (!dateStr) return 0
@@ -34,6 +34,10 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       if (diasEtapa >= 60) return { text: '🚨 Agendar reunião URGENTE', color: 'text-red-600' }
       if (diasEtapa >= 30) return { text: '📞 Cobrar 1º pedido', color: 'text-orange-600' }
       return { text: '🤝 Preparar proposta', color: 'text-green-600' }
+    case 'cotacao':
+      if (diasEtapa >= 25) return { text: '🚨 Enviar cotação URGENTE', color: 'text-red-600' }
+      if (diasEtapa >= 10) return { text: '📞 Follow-up de cotação', color: 'text-orange-600' }
+      return { text: '📝 Preparar cotação', color: 'text-blue-600' }
     case 'negociacao':
       if (diasEtapa >= 35) return { text: '🚨 Cobrar resposta proposta', color: 'text-red-600' }
       if (diasEtapa >= 14) return { text: '📞 Follow-up proposta', color: 'text-orange-600' }
@@ -82,7 +86,7 @@ export function mapCategoriaPerdaAgendor(motivo: string): Cliente['categoriaPerd
 
 export function sortCards(
   cards: Cliente[],
-  sortBy: 'urgencia' | 'score' | 'valor',
+  sortBy: 'urgencia' | 'score' | 'valor' | 'antigo' | 'recente',
 ): Cliente[] {
   return [...cards].sort((a, b) => {
     if (sortBy === 'urgencia') {
@@ -92,6 +96,16 @@ export function sortCards(
       return (b.score || 0) - (a.score || 0)
     }
     if (sortBy === 'score') return (b.score || 0) - (a.score || 0)
+    if (sortBy === 'antigo') {
+      const da = a.dataEntradaEtapa ? new Date(a.dataEntradaEtapa).getTime() : 0
+      const db2 = b.dataEntradaEtapa ? new Date(b.dataEntradaEtapa).getTime() : 0
+      return da - db2
+    }
+    if (sortBy === 'recente') {
+      const da = a.dataEntradaEtapa ? new Date(a.dataEntradaEtapa).getTime() : 0
+      const db2 = b.dataEntradaEtapa ? new Date(b.dataEntradaEtapa).getTime() : 0
+      return db2 - da
+    }
     return (b.valorEstimado || 0) - (a.valorEstimado || 0)
   })
 }

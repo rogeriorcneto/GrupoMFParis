@@ -4,8 +4,10 @@ import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategori
 
 function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
-  const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor'>('urgencia')
+  const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
+  const [search, setSearch] = React.useState('')
+  const [hidePerdidos, setHidePerdidos] = React.useState(false)
 
   const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -188,9 +190,10 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     e.target.value = ''
   }
 
-  const VENDAS_ETAPAS = new Set(['negociacao', 'pos_venda'])
+  const VENDAS_ETAPAS = new Set(['cotacao', 'negociacao', 'pos_venda'])
 
   const stages = [
+    { title: 'Cotação', key: 'cotacao', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.60 },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.75 },
     { title: 'Pós-Venda', key: 'pos_venda', badge: 'bg-pink-100 text-pink-800', icon: '🚚', prob: 0.95 },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
@@ -207,12 +210,20 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     filterVendedorId ? clientes.filter(c => c.vendedorId === filterVendedorId) : clientes
   , [clientes, filterVendedorId])
 
-  const clientesFiltrados = useMemo(() =>
-    clientesFiltradosVendedor.filter(c =>
+  const clientesFiltrados = useMemo(() => {
+    const base = clientesFiltradosVendedor.filter(c =>
       VENDAS_ETAPAS.has(c.etapa) ||
       (c.etapa === 'perdido' && VENDAS_ETAPAS.has(c.etapaAnterior || ''))
     )
-  , [clientesFiltradosVendedor])
+    if (!search.trim()) return base
+    const q = search.toLowerCase()
+    return base.filter(c =>
+      c.razaoSocial.toLowerCase().includes(q) ||
+      (c.nomeFantasia || '').toLowerCase().includes(q) ||
+      (c.contatoNome || '').toLowerCase().includes(q) ||
+      (c.cnpj || '').includes(q)
+    )
+  }, [clientesFiltradosVendedor, search])
 
   // P1-1: Single O(n) pass to group clients by stage (instead of 7× filter)
   const stageMap = useMemo(() => {
@@ -264,6 +275,21 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const renderCardInfo = (cliente: Cliente) => {
     const dias = diasDesde(cliente.dataEntradaEtapa)
     switch (cliente.etapa) {
+      case 'cotacao': {
+        const diasCot = diasDesde(cliente.dataEntradaEtapa)
+        const pctPrazo = Math.min((diasCot / 30) * 100, 100)
+        const diasRestam = Math.max(30 - diasCot, 0)
+        return (
+          <div className="mt-1.5 space-y-1">
+            {cliente.valorEstimado && <p className="text-[10px] font-bold text-indigo-700">💰 R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p>}
+            <p className="text-[10px] text-gray-500">📋 Cotação há {diasCot}d</p>
+            <div className="flex items-center gap-1">
+              <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 80 ? 'bg-yellow-500' : 'bg-indigo-500'}`} style={{ width: `${pctPrazo}%` }} /></div>
+              <span className={`text-[9px] font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `${diasRestam}d` : 'Vencido!'}</span>
+            </div>
+          </div>
+        )
+      }
       case 'negociacao': {
         const diasNeg = diasDesde(cliente.dataProposta || cliente.dataEntradaEtapa)
         const pctPrazo = Math.min((diasNeg / 45) * 100, 100)
@@ -359,44 +385,69 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {isGerente && (
-            <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">👥 Todos os vendedores</option>
-              {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-            </select>
-          )}
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="urgencia">🔥 Ordenar: Urgência</option>
-            <option value="score">⭐ Ordenar: Score</option>
-            <option value="valor">💰 Ordenar: Valor</option>
-          </select>
-          {isGerente && onImportNegocios && (
-            <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
-              <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
-              📥 Importar Negócios Agendor
-            </label>
+      <div className="flex flex-col gap-2">
+        {/* Search bar */}
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar clientes no funil... (nome, fantasia, CNPJ)"
+            className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {importStatus && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
-              <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin"></div>
-              <p className="text-xs text-indigo-800">{importStatus}</p>
-            </div>
-          )}
-          {alertCount > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
-              <span>🚨</span>
-              <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
-            </div>
-          )}
+        {/* Filtros */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isGerente && (
+              <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">👥 Todos os vendedores</option>
+                {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              </select>
+            )}
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+              <option value="urgencia">🔥 Ordenar: Urgência</option>
+              <option value="score">⭐ Ordenar: Score</option>
+              <option value="valor">💰 Ordenar: Valor</option>
+              <option value="antigo">⏳ Ordenar: Mais Antigos</option>
+              <option value="recente">🆕 Ordenar: Mais Recentes</option>
+            </select>
+            <button
+              onClick={() => setHidePerdidos(v => !v)}
+              className={`px-3 py-1.5 rounded-apple text-sm font-medium border transition-colors ${hidePerdidos ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+            >
+              {hidePerdidos ? '👁 Mostrar Perdidos' : '🙈 Ocultar Perdidos'}
+            </button>
+            {isGerente && onImportNegocios && (
+              <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
+                <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
+                📥 Importar Negócios Agendor
+              </label>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {importStatus && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
+                <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-xs text-indigo-800">{importStatus}</p>
+              </div>
+            )}
+            {alertCount > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
+                <span>🚨</span>
+                <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex lg:grid lg:grid-cols-3 gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0">
-        {stages.map((stage) => {
+      <div className="flex lg:grid lg:grid-cols-4 gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0">
+        {stages.filter(s => !(hidePerdidos && s.key === 'perdido')).map((stage) => {
           const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
           const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
           const stageWeighted = Math.round(stageValor * stage.prob)

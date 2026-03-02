@@ -5,7 +5,7 @@ import type {
   TemplateMsg, Cadencia, Campanha, JobAutomacao, Pedido
 } from '../types'
 import {
-  DashboardView, AmostrasView, FunilView, ClientesView, TarefasView,
+  DashboardView, AmostrasView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
   ProdutosView, PedidosView
@@ -68,6 +68,28 @@ export default function AppRouter({
   switch (activeView) {
     case 'dashboard':
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} loggedUser={loggedUser} />
+    case 'aprovacao':
+      return <AprovacaoView
+        pedidos={pedidos}
+        clientes={clientes}
+        vendedores={vendedores}
+        loggedUser={loggedUser || { id: 0, nome: 'Sistema', email: '', cargo: 'gerente', ativo: true, metaVendas: 0, metaLeads: 0, metaConversao: 0 } as Vendedor}
+        showToast={showToast}
+        onAprovar={async (pedido) => {
+          try {
+            await db.aprovarPedido(pedido.id, loggedUser?.id || 0)
+            setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id } : p))
+            addNotificacao('success', 'Pedido aprovado', `Pedido ${pedido.numero} aprovado! O vendedor será notificado.`, pedido.clienteId)
+          } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
+        }}
+        onRecusar={async (pedido, motivo) => {
+          try {
+            await db.recusarPedido(pedido.id, motivo)
+            setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
+            addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
+          } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
+        }}
+      />
     case 'amostras':
       return <AmostrasView
         clientes={clientes}

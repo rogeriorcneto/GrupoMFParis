@@ -5,6 +5,7 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus'
 
 const viewTitles: Record<ViewType, string> = {
   dashboard: 'Visão Geral',
+  aprovacao: 'Aprovação de Pedidos',
   amostras: 'Painel de Amostras',
   funil: 'Funil de Vendas',
   clientes: 'Clientes',

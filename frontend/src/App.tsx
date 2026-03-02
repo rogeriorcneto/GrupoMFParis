@@ -307,6 +307,7 @@ function App() {
         loggedUser={loggedUser} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         onOpenAI={() => setShowAIModal(true)}
         onSignOut={async () => { await db.signOut(); setLoggedUser(null) }}
+        pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado').length : 0}
       />
 
       {/* Main Content */}

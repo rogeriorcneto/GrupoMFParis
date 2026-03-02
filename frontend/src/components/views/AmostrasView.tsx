@@ -26,7 +26,9 @@ function AmostrasView({
   onSolicitarAmostra, onAprovarAmostra, onRejeitarAmostra, moverCliente,
 }: AmostrasViewProps) {
   const [filterVendedorId, setFilterVendedorId] = useState<number | ''>('')
-  const [sortBy, setSortBy] = useState<'urgencia' | 'score' | 'valor'>('urgencia')
+  const [sortBy, setSortBy] = useState<'urgencia' | 'score' | 'antigo' | 'recente'>('urgencia')
+  const [search, setSearch] = useState('')
+  const [hidePerdidos, setHidePerdidos] = useState(false)
   const [showSolicitarModal, setShowSolicitarModal] = useState(false)
   const [solicitarCliente, setSolicitarCliente] = useState<Cliente | null>(null)
   const [solicitarMotivo, setSolicitarMotivo] = useState('')
@@ -37,9 +39,20 @@ function AmostrasView({
     return m
   }, [vendedores])
 
-  const clientesFiltrados = useMemo(() =>
+  const clientesFiltradosVendedor = useMemo(() =>
     filterVendedorId ? clientes.filter(c => c.vendedorId === filterVendedorId) : clientes
   , [clientes, filterVendedorId])
+
+  const clientesFiltrados = useMemo(() => {
+    if (!search.trim()) return clientesFiltradosVendedor
+    const q = search.toLowerCase()
+    return clientesFiltradosVendedor.filter(c =>
+      c.razaoSocial.toLowerCase().includes(q) ||
+      (c.nomeFantasia || '').toLowerCase().includes(q) ||
+      (c.contatoNome || '').toLowerCase().includes(q) ||
+      (c.cnpj || '').includes(q)
+    )
+  }, [clientesFiltradosVendedor, search])
 
   // Clientes nas etapas de amostras + perdidos que vieram de etapas de amostras
   const clientesAmostras = useMemo(() =>
@@ -233,33 +246,56 @@ function AmostrasView({
       )}
 
       {/* Filtros */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {isGerente && (
-            <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">👥 Todos os vendedores</option>
-              {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-            </select>
+      <div className="flex flex-col gap-2">
+        {/* Search bar */}
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar clientes em amostras... (nome, fantasia, CNPJ)"
+            className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
           )}
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="urgencia">🔥 Ordenar: Urgência</option>
-            <option value="score">⭐ Ordenar: Score</option>
-            <option value="valor">💰 Ordenar: Valor</option>
-          </select>
         </div>
-        <div className="flex items-center gap-2">
-          {alertCount > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
-              <span>🚨</span>
-              <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
-            </div>
-          )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isGerente && (
+              <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">👥 Todos os vendedores</option>
+                {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              </select>
+            )}
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+              <option value="urgencia">🔥 Ordenar: Urgência</option>
+              <option value="score">⭐ Ordenar: Score</option>
+              <option value="antigo">⏳ Ordenar: Mais Antigos</option>
+              <option value="recente">🆕 Ordenar: Mais Recentes</option>
+            </select>
+            <button
+              onClick={() => setHidePerdidos(v => !v)}
+              className={`px-3 py-1.5 rounded-apple text-sm font-medium border transition-colors ${hidePerdidos ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+            >
+              {hidePerdidos ? '👁 Mostrar Perdidos' : '🙈 Ocultar Perdidos'}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            {alertCount > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
+                <span>🚨</span>
+                <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Kanban */}
       <div className="flex lg:grid lg:grid-cols-4 gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0">
-        {AMOSTRAS_STAGES.map((stage) => {
+        {AMOSTRAS_STAGES.filter(s => !(hidePerdidos && s.key === 'perdido')).map((stage) => {
           const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
           const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
           return (

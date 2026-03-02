@@ -89,8 +89,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     })
     .sort((a, b) => new Date(b.dataCriacao).getTime() - new Date(a.dataCriacao).getTime())
 
-  const statusBadge = (s: Pedido['status']) => ({ rascunho: 'bg-gray-100 text-gray-700', enviado: 'bg-blue-100 text-blue-800', confirmado: 'bg-green-100 text-green-800', cancelado: 'bg-red-100 text-red-800' }[s])
-  const statusLabel = (s: Pedido['status']) => ({ rascunho: '📝 Rascunho', enviado: '📤 Enviado', confirmado: '✅ Confirmado', cancelado: '❌ Cancelado' }[s])
+  const statusBadge = (s: Pedido['status']) => ({ rascunho: 'bg-gray-100 text-gray-700', enviado: 'bg-amber-100 text-amber-800', confirmado: 'bg-green-100 text-green-800', cancelado: 'bg-red-100 text-red-800' }[s])
+  const statusLabel = (s: Pedido['status']) => ({ rascunho: '📝 Rascunho', enviado: '⏳ Ag. aprovação', confirmado: '✅ Aprovado', cancelado: '❌ Recusado' }[s])
   const catLabel: Record<string, string> = { sacaria: 'Sacaria 25kg', okey_lac: 'Okey Lac 25kg', varejo_lacteo: 'Varejo Lácteo', cafe: 'Café', outros: 'Outros' }
   const clienteSelecionado = clientes.find(c => c.id === Number(selectedClienteId))
 
@@ -110,9 +110,14 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       {pedidoEnviado && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-8 text-center">
-            <div className="text-6xl mb-4">🎉</div>
+            <div className="text-6xl mb-4">📤</div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Pedido Enviado!</h2>
-            <p className="text-3xl font-bold text-primary-600 mb-4">{pedidoEnviado.numero}</p>
+            <p className="text-3xl font-bold text-primary-600 mb-2">{pedidoEnviado.numero}</p>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-800 text-sm font-semibold rounded-full border border-amber-200">
+                ⏳ Aguardando aprovação do gerente
+              </span>
+            </div>
             <div className="bg-gray-50 rounded-apple p-4 text-left mb-6 space-y-1">
               <p className="text-sm text-gray-700"><span className="font-medium">Cliente:</span> {clientes.find(c => c.id === pedidoEnviado.clienteId)?.razaoSocial}</p>
               <p className="text-sm text-gray-700"><span className="font-medium">Itens:</span> {pedidoEnviado.itens.length} produto(s)</p>
@@ -207,7 +212,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
             </div>
             <div className="space-y-2">
               <button onClick={() => handleEnviarPedido('enviado')} disabled={!selectedClienteId || itensPedido.length === 0 || isSaving} className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-apple shadow-apple-sm transition-colors flex items-center justify-center gap-2">
-                {isSaving ? <><svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando...</> : <><PaperAirplaneIcon className="h-5 w-5" /> Enviar Pedido — R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</>}
+                {isSaving ? <><svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando...</> : <><PaperAirplaneIcon className="h-5 w-5" /> Enviar para Aprovação — R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</>}
               </button>
               <button onClick={() => handleEnviarPedido('rascunho')} disabled={!selectedClienteId || itensPedido.length === 0 || isSaving} className="w-full py-2 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-medium rounded-apple transition-colors text-sm">{isSaving ? '⏳ Salvando...' : '💾 Salvar como Rascunho'}</button>
               {itensPedido.length > 0 && <button onClick={() => setItensPedido([])} className="w-full py-2 text-red-500 hover:text-red-700 text-sm font-medium transition-colors">🗑️ Limpar carrinho</button>}
@@ -319,6 +324,12 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         </div>
                       ))}
                       {pedido.observacoes && <p className="text-xs text-gray-500 mt-2 italic">Obs: {pedido.observacoes}</p>}
+                    {pedido.motivoRecusa && (
+                      <div className="mt-2 p-2 bg-red-50 rounded-apple border border-red-200">
+                        <p className="text-xs font-semibold text-red-700">Motivo da recusa:</p>
+                        <p className="text-xs text-red-600">{pedido.motivoRecusa}</p>
+                      </div>
+                    )}
                     </div>
                     {isGerente && pedido.status === 'enviado' && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">

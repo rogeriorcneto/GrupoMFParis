@@ -776,7 +776,26 @@ export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
 export async function updatePedidoStatus(id: number, status: string): Promise<void> {
   const row: any = { status }
   if (status === 'enviado') row.data_envio = new Date().toISOString()
+  if (status === 'confirmado') row.data_aprovacao = new Date().toISOString()
   const { error } = await supabase.from('pedidos').update(row).eq('id', id)
+  if (error) throw error
+}
+
+export async function aprovarPedido(id: number, aprovadoPorId: number): Promise<void> {
+  const { error } = await supabase.from('pedidos').update({
+    status: 'confirmado',
+    data_aprovacao: new Date().toISOString(),
+    aprovado_por: aprovadoPorId,
+    motivo_recusa: null,
+  }).eq('id', id)
+  if (error) throw error
+}
+
+export async function recusarPedido(id: number, motivoRecusa: string): Promise<void> {
+  const { error } = await supabase.from('pedidos').update({
+    status: 'cancelado',
+    motivo_recusa: motivoRecusa,
+  }).eq('id', id)
   if (error) throw error
 }
 
