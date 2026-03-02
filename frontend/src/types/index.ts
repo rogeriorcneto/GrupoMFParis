@@ -1,4 +1,4 @@
-export type ViewType = 'dashboard' | 'funil' | 'amostras' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos'
+export type ViewType = 'dashboard' | 'funil' | 'amostras' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia'
 
 export interface HistoricoEtapa {
   etapa: string

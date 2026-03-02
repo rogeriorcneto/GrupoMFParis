@@ -29,13 +29,14 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'amostras', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos'],
+  gerente: ['dashboard', 'aprovacao', 'amostras', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos', 'ia'],
   vendedor: ['amostras', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
   sdr: ['amostras', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'dashboard', icon: HomeIcon, label: 'Visão Geral' },
+  { id: 'ia', icon: SparklesIcon, label: '🤖 Assistente IA' },
   { id: 'aprovacao', icon: ClipboardDocumentCheckIcon, label: 'Aprovação de Pedidos' },
   { id: 'amostras', icon: BeakerIcon, label: 'Amostras' },
   { id: 'funil', icon: FunnelIcon, label: 'Funil de Vendas' },
@@ -99,27 +100,6 @@ export default function Sidebar({
             </button>
           ))}
 
-        {/* Separador e Assistente IA — só para gerente */}
-        {loggedUser.cargo === 'gerente' && (
-        <div className="border-t border-gray-200 pt-4 mt-2">
-          <button
-            onClick={() => { onOpenAI(); setSidebarOpen(false) }}
-            className="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-apple bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-apple-sm"
-          >
-            <svg className="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-2" />
-            </svg>
-            Assistente IA
-          </button>
-        </div>
-        )}
-
-        {/* Placeholder invisível para manter estrutura quando não é gerente */}
-        {loggedUser.cargo !== 'gerente' && (
-        <div className="border-t border-gray-200 pt-4 mt-2">
-          <p className="text-xs text-gray-400 text-center px-2">Logado como <span className="font-medium text-gray-600">{loggedUser.cargo === 'sdr' ? 'SDR' : 'Vendedor'}</span></p>
-        </div>
-        )}
 
       </nav>
 

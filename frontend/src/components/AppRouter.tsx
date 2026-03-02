@@ -8,7 +8,7 @@ import {
   DashboardView, AmostrasView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView
+  ProdutosView, PedidosView, AssistenteIAView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -342,6 +342,13 @@ export default function AppRouter({
             setPedidos(prev => prev.map(x => x.id === p.id ? p : x))
           } catch (err) { logger.error('Erro ao atualizar pedido:', err) }
         }}
+      />
+    case 'ia':
+      return <AssistenteIAView
+        clientes={clientes}
+        pedidos={pedidos}
+        vendedores={vendedores}
+        interacoes={interacoes}
       />
     default:
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} loggedUser={loggedUser} />

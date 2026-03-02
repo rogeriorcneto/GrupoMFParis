@@ -20,6 +20,7 @@ const viewTitles: Record<ViewType, string> = {
   templates: 'Templates de Mensagens',
   produtos: 'Catálogo de Produtos',
   pedidos: 'Lançamento de Pedidos',
+  ia: 'Assistente IA',
 }
 
 interface TopBarProps {

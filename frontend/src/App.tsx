@@ -321,7 +321,7 @@ function App() {
         />
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto p-3 sm:p-6">
+        <div className="flex-1 overflow-auto p-3 sm:p-6 pb-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
@@ -347,6 +347,16 @@ function App() {
             />
           )}
         </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-2 flex items-center justify-center">
+          <p className="text-[11px] text-gray-400 text-center">
+            Desenvolvido por{' '}
+            <span className="font-semibold text-gray-600">Rogério Cassiano</span>
+            {' '}·{' '}
+            <span className="text-gray-500">Software Engineer — Especialista em Inteligência Artificial</span>
+          </p>
+        </div>
       </div>
 
       {/* Modal Novo Cliente */}
@@ -360,7 +370,7 @@ function App() {
       />
 
       {/* Modal Assistente IA */}
-      <AIModal show={showAIModal} onClose={() => setShowAIModal(false)} clientes={clientes} />
+      <AIModal show={showAIModal} onClose={() => setShowAIModal(false)} clientes={clientes} pedidos={pedidos} vendedores={vendedores} interacoes={interacoes} />
 
       {/* Painel lateral do cliente */}
       {selectedClientePanel && (

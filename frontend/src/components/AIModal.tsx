@@ -1,56 +1,53 @@
 import React, { useState } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/outline'
-import type { Cliente, AICommand } from '../types'
+import { XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import type { Cliente, Pedido, Vendedor, Interacao, AICommand } from '../types'
+import { callAI, buildCRMContext } from '../lib/gemini'
+import type { AIMessage } from '../lib/gemini'
 
 interface AIModalProps {
   show: boolean
   onClose: () => void
   clientes: Cliente[]
+  pedidos?: Pedido[]
+  vendedores?: Vendedor[]
+  interacoes?: Interacao[]
 }
 
-export default function AIModal({ show, onClose, clientes }: AIModalProps) {
+export default function AIModal({ show, onClose, clientes, pedidos = [], vendedores = [], interacoes = [] }: AIModalProps) {
   const [aiCommand, setAICommand] = useState('')
   const [aiResponse, setAIResponse] = useState('')
   const [aiCommands, setAICommands] = useState<AICommand[]>([])
   const [isAILoading, setIsAILoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const processAICommand = async (command: string) => {
+    if (!command.trim()) return
     setIsAILoading(true)
-    
-    // Simulate AI processing
-    setTimeout(() => {
-      let response = ''
-      
-      if (command.toLowerCase().includes('leads inativos')) {
-        const inativos = clientes.filter(c => (c.diasInativo || 0) > 30)
-        response = `Encontrei ${inativos.length} leads inativos há mais de 30 dias:\n\n${inativos.map(c => 
-          `• ${c.razaoSocial} - ${c.diasInativo} dias sem contato (${c.contatoEmail})`
-        ).join('\n')}\n\nDeseja que eu envie um follow-up automático para todos?`
-      } else if (command.toLowerCase().includes('follow-up')) {
-        response = 'Follow-ups agendados com sucesso! 3 emails serão enviados hoje e 2 amanhã. Usarei templates personalizados para cada cliente.'
-      } else if (command.toLowerCase().includes('priorizar')) {
-        const top = clientes.filter(c => c.etapa !== 'perdido').sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3)
-        response = top.length ? `Clientes priorizados por score:\n\n${top.map((c, i) => `${i+1}. ${c.razaoSocial} (Score: ${c.score || 0}) - ${c.etapa}`).join('\n')}\n\nFoco de hoje: ${top[0].razaoSocial}` : 'Nenhum cliente cadastrado ainda. Adicione clientes para priorizar.'
-      } else if (command.toLowerCase().includes('relatório')) {
-        const total = clientes.length
-        const ativos = clientes.filter(c => (c.diasInativo || 0) <= 15).length
-        const conversao = clientes.filter(c => c.etapa === 'pos_venda').length
-        response = total > 0 ? `📊 Relatório Semanal:\n\n• Total leads: ${total}\n• Leads ativos: ${ativos}\n• Taxa ativação: ${((ativos/total) * 100).toFixed(1)}%\n• Conversões: ${conversao}\n• Ticket médio: R$ ${(clientes.reduce((sum, c) => sum + (c.valorEstimado || 0), 0) / total).toFixed(2)}` : 'Nenhum cliente cadastrado ainda. Adicione clientes para gerar relatórios.'
-      } else {
-        response = 'Entendido! Posso ajudar com:\n\n• 📋 Listar leads inativos\n• 📤 Enviar follow-ups\n• 🎯 Priorizar clientes\n• 📊 Gerar relatórios\n• 🔍 Buscar clientes\n\nO que você precisa?'
-      }
-      
+    setAiError(null)
+    try {
+      const systemPrompt = buildCRMContext({ clientes, pedidos, vendedores, interacoes })
+      const history: AIMessage[] = aiCommands
+        .slice(0, 5)
+        .reverse()
+        .flatMap(c => [
+          { role: 'user' as const, content: c.command },
+          { role: 'assistant' as const, content: c.response },
+        ])
+      history.push({ role: 'user', content: command })
+      const response = await callAI(history, systemPrompt)
       const newCommand: AICommand = {
         id: Date.now().toString(),
         command,
         response,
-        timestamp: new Date().toLocaleString('pt-BR')
+        timestamp: new Date().toLocaleString('pt-BR'),
       }
-      
       setAICommands(prev => [newCommand, ...prev.slice(0, 9)])
       setAIResponse(response)
+    } catch (err: any) {
+      setAiError(err?.message || 'Erro ao conectar com a IA.')
+    } finally {
       setIsAILoading(false)
-    }, 1500)
+    }
   }
 
   if (!show) return null
@@ -64,11 +61,14 @@ export default function AIModal({ show, onClose, clientes }: AIModalProps) {
         />
 
         <div className="relative w-full max-w-2xl bg-white rounded-apple shadow-apple border border-gray-200">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Assistente Virtual IA</h2>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-apple">
+            <div className="flex items-center gap-2">
+              <SparklesIcon className="h-5 w-5 text-white" />
+              <h2 className="text-lg font-semibold text-white">Assistente IA — Gemini</h2>
+            </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+              className="text-white/70 hover:text-white transition-colors duration-200"
             >
               <XMarkIcon className="h-6 w-6" />
             </button>
@@ -130,6 +130,11 @@ export default function AIModal({ show, onClose, clientes }: AIModalProps) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Resposta da IA
                 </label>
+                {aiError && (
+                  <div className="bg-red-50 rounded-apple p-3 border border-red-200">
+                    <p className="text-xs text-red-700">⚠️ {aiError}</p>
+                  </div>
+                )}
                 {aiResponse && (
                   <div className="bg-gray-50 rounded-apple p-4 border border-gray-200">
                     <div className="whitespace-pre-wrap text-sm text-gray-800">{aiResponse}</div>
