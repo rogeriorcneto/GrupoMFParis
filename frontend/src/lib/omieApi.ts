@@ -18,6 +18,7 @@ export async function omieGetConfig(): Promise<OmieConfig> {
 export async function omieSaveConfig(appKey: string, appSecret: string): Promise<{ success: boolean; error?: string; empresa?: string; message?: string }> {
   const res = await authFetch(`${OMIE_BASE}/config`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ appKey, appSecret }),
   })
   return res.json()
@@ -55,6 +56,7 @@ export async function omieGetModules(): Promise<Record<string, OmieModuleInfo[]>
 export async function omieApiCall(group: string, module: string, action: string, params?: any): Promise<{ success: boolean; data?: any; error?: string }> {
   const res = await authFetch(`${OMIE_BASE}/call`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group, module, action, params }),
   })
   return res.json()
@@ -63,6 +65,7 @@ export async function omieApiCall(group: string, module: string, action: string,
 export async function omieApiCallAll(group: string, module: string, action: string, resultKey: string, params?: any): Promise<{ success: boolean; data?: any[]; total?: number; error?: string }> {
   const res = await authFetch(`${OMIE_BASE}/call-all`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ group, module, action, resultKey, params }),
   })
   return res.json()
@@ -105,6 +108,7 @@ export async function omieSyncDiff(): Promise<{ success: boolean; data?: SyncDif
 export async function omieSyncPull(vendedorIdPadrao?: number): Promise<{ success: boolean; data?: SyncPullResult; error?: string }> {
   const res = await authFetch(`${OMIE_BASE}/sync/pull`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ vendedorIdPadrao }),
   })
   return res.json()
