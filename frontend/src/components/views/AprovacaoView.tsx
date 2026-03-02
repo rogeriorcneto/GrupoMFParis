@@ -1,6 +1,41 @@
 import React, { useMemo, useState } from 'react'
-import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon } from '@heroicons/react/24/outline'
+import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 import type { Pedido, Cliente, Vendedor } from '../../types'
+
+export interface ParametrosAprovacao {
+  ativo: boolean
+  descontoMaxPct: number | null
+  valorTotalMax: number | null
+}
+
+const STORAGE_KEY = 'crm_parametros_aprovacao'
+
+export function getParametrosAprovacao(): ParametrosAprovacao {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ParametrosAprovacao
+  } catch { /* ignore */ }
+  return { ativo: false, descontoMaxPct: null, valorTotalMax: null }
+}
+
+function saveParametros(p: ParametrosAprovacao) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
+}
+
+export function pedidoPassaAutoAprovacao(pedido: Pedido, params: ParametrosAprovacao): boolean {
+  if (!params.ativo) return false
+  if (params.valorTotalMax !== null && pedido.totalValor > params.valorTotalMax) return false
+  if (params.descontoMaxPct !== null) {
+    const temDesconto = pedido.itens.some(item => {
+      const orig = item.precoOriginal ?? item.preco
+      if (!orig || orig <= 0) return false
+      const descPct = ((orig - item.preco) / orig) * 100
+      return descPct > (params.descontoMaxPct as number)
+    })
+    if (temDesconto) return false
+  }
+  return true
+}
 
 interface AprovacaoViewProps {
   pedidos: Pedido[]
@@ -28,7 +63,30 @@ export default function AprovacaoView({
   const [motivoRecusa, setMotivoRecusa] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [filtroVendedor, setFiltroVendedor] = useState<number | ''>('')
-  const [historico, setHistorico] = useState(false)
+  const [activeTab, setActiveTab] = useState<'pendentes' | 'historico' | 'parametros'>('pendentes')
+
+  // Parâmetros de auto-aprovação
+  const [params, setParams] = useState<ParametrosAprovacao>(() => getParametrosAprovacao())
+  const [paramsDirty, setParamsDirty] = useState(false)
+
+  const updateParam = <K extends keyof ParametrosAprovacao>(key: K, value: ParametrosAprovacao[K]) => {
+    setParams(prev => ({ ...prev, [key]: value }))
+    setParamsDirty(true)
+  }
+
+  const handleSaveParams = () => {
+    saveParametros(params)
+    setParamsDirty(false)
+    showToast('success', 'Parâmetros salvos! Novos pedidos serão verificados automaticamente.')
+  }
+
+  const handleResetParams = () => {
+    const reset: ParametrosAprovacao = { ativo: false, descontoMaxPct: null, valorTotalMax: null }
+    setParams(reset)
+    saveParametros(reset)
+    setParamsDirty(false)
+    showToast('success', 'Parâmetros resetados. Todos os pedidos exigirão aprovação manual.')
+  }
 
   const vendedorMap = useMemo(() => {
     const m = new Map<number, Vendedor>()
@@ -62,6 +120,8 @@ export default function AprovacaoView({
   , [pedidos, filtroVendedor])
 
   // Metrics
+  const historico = activeTab === 'historico'
+
   const { totalPendente, valorPendente, aprovadosMes, recusadosMes } = useMemo(() => {
     const agora = new Date()
     const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1)
@@ -286,36 +346,180 @@ export default function AprovacaoView({
         </div>
       </div>
 
-      {/* Filtros + tabs */}
+      {/* Tabs + filtros */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => setHistorico(false)}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${!historico ? 'bg-amber-500 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            onClick={() => setActiveTab('pendentes')}
+            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'pendentes' ? 'bg-amber-500 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
-            ⏳ Aguardando Aprovação {totalPendente > 0 && <span className="ml-1.5 bg-white text-amber-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{totalPendente}</span>}
+            ⏳ Aguardando {totalPendente > 0 && <span className="ml-1.5 bg-white text-amber-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{totalPendente}</span>}
           </button>
           <button
-            onClick={() => setHistorico(true)}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${historico ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            onClick={() => setActiveTab('historico')}
+            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'historico' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
             📋 Histórico
           </button>
+          <button
+            onClick={() => setActiveTab('parametros')}
+            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'parametros' ? 'bg-gray-700 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          >
+            <Cog6ToothIcon className="h-4 w-4" />
+            Parâmetros
+            {params.ativo && <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Auto-aprovação ativa" />}
+          </button>
         </div>
-        <select
-          value={filtroVendedor}
-          onChange={e => setFiltroVendedor(e.target.value ? Number(e.target.value) : '')}
-          className="px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-        >
-          <option value="">👥 Todos os vendedores</option>
-          {vendedores.filter(v => v.ativo && v.cargo !== 'gerente').map(v => (
-            <option key={v.id} value={v.id}>{v.nome}</option>
-          ))}
-        </select>
+        {activeTab !== 'parametros' && (
+          <select
+            value={filtroVendedor}
+            onChange={e => setFiltroVendedor(e.target.value ? Number(e.target.value) : '')}
+            className="px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          >
+            <option value="">👥 Todos os vendedores</option>
+            {vendedores.filter(v => v.ativo && v.cargo !== 'gerente').map(v => (
+              <option key={v.id} value={v.id}>{v.nome}</option>
+            ))}
+          </select>
+        )}
       </div>
 
+      {/* Tab: Parâmetros de Auto-Aprovação */}
+      {activeTab === 'parametros' && (
+        <div className="space-y-4">
+          {/* Card principal */}
+          <div className="bg-white rounded-apple shadow-apple-sm border-2 border-gray-200 overflow-hidden">
+            {/* Header toggle */}
+            <div className={`p-5 flex items-center justify-between ${params.ativo ? 'bg-green-50 border-b-2 border-green-200' : 'bg-gray-50 border-b border-gray-200'}`}>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Cog6ToothIcon className="h-5 w-5 text-gray-600" />
+                  <h3 className="font-semibold text-gray-900">Auto-Aprovação de Pedidos</h3>
+                  {params.ativo ? (
+                    <span className="px-2 py-0.5 text-xs font-bold bg-green-100 text-green-800 rounded-full border border-green-200">✅ Ativa</span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-xs font-bold bg-gray-100 text-gray-500 rounded-full border border-gray-200">⏸ Inativa</span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {params.ativo
+                    ? 'Pedidos dentro dos limites abaixo serão aprovados automaticamente.'
+                    : 'Quando ativada, pedidos dentro dos limites definidos não precisarão de aprovação manual.'}
+                </p>
+              </div>
+              {/* Toggle switch */}
+              <button
+                onClick={() => updateParam('ativo', !params.ativo)}
+                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none ${params.ativo ? 'bg-green-500' : 'bg-gray-300'}`}
+              >
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform ${params.ativo ? 'translate-x-8' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            {/* Parâmetros */}
+            <div className="p-5 space-y-5">
+              {/* Desconto máximo */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-800 mb-0.5">Desconto máximo por item (%)</label>
+                  <p className="text-xs text-gray-500">Se qualquer item tiver desconto acima deste valor, o pedido vai para aprovação manual.</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={params.descontoMaxPct ?? ''}
+                      onChange={e => updateParam('descontoMaxPct', e.target.value === '' ? null : parseFloat(e.target.value))}
+                      placeholder="Ex: 5"
+                      className="w-28 pr-8 pl-3 py-2 border-2 border-gray-300 rounded-apple text-sm text-right font-semibold focus:outline-none focus:border-primary-500 focus:ring-0 disabled:opacity-40"
+                      disabled={!params.ativo}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold">%</span>
+                  </div>
+                  {params.descontoMaxPct !== null && (
+                    <button onClick={() => updateParam('descontoMaxPct', null)} className="text-gray-400 hover:text-red-500 text-xs font-bold" title="Remover limite">✕</button>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-gray-100" />
+
+              {/* Valor total máximo */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-semibold text-gray-800 mb-0.5">Valor total máximo do pedido (R$)</label>
+                  <p className="text-xs text-gray-500">Pedidos acima deste valor total serão sempre enviados para aprovação manual.</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-bold">R$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      value={params.valorTotalMax ?? ''}
+                      onChange={e => updateParam('valorTotalMax', e.target.value === '' ? null : parseFloat(e.target.value))}
+                      placeholder="Ex: 10000"
+                      className="w-36 pl-9 pr-3 py-2 border-2 border-gray-300 rounded-apple text-sm text-right font-semibold focus:outline-none focus:border-primary-500 focus:ring-0 disabled:opacity-40"
+                      disabled={!params.ativo}
+                    />
+                  </div>
+                  {params.valorTotalMax !== null && (
+                    <button onClick={() => updateParam('valorTotalMax', null)} className="text-gray-400 hover:text-red-500 text-xs font-bold" title="Remover limite">✕</button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Preview da regra */}
+            {params.ativo && (
+              <div className="mx-5 mb-5 p-3 bg-blue-50 rounded-apple border border-blue-200">
+                <p className="text-xs font-semibold text-blue-800 mb-1">📋 Regra ativa:</p>
+                <p className="text-xs text-blue-700">
+                  Pedidos serão auto-aprovados se
+                  {params.descontoMaxPct !== null ? <strong> o desconto for ≤ {params.descontoMaxPct}%</strong> : <span> (sem limite de desconto)</span>}
+                  {params.valorTotalMax !== null ? <><span> e</span><strong> o valor total for ≤ R$ {params.valorTotalMax.toLocaleString('pt-BR')}</strong></> : <span> e (sem limite de valor)</span>}.
+                </p>
+              </div>
+            )}
+
+            {/* Botões */}
+            <div className="px-5 pb-5 flex items-center justify-between gap-3">
+              <button
+                onClick={handleResetParams}
+                className="px-4 py-2 text-sm text-gray-500 hover:text-red-600 border border-gray-200 rounded-apple hover:border-red-200 transition-colors"
+              >
+                🗑 Resetar tudo
+              </button>
+              <button
+                onClick={handleSaveParams}
+                disabled={!paramsDirty}
+                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-apple transition-colors"
+              >
+                {paramsDirty ? '💾 Salvar Parâmetros' : '✅ Salvo'}
+              </button>
+            </div>
+          </div>
+
+          {/* Info box */}
+          <div className="bg-amber-50 rounded-apple border border-amber-200 p-4">
+            <p className="text-sm font-semibold text-amber-900 mb-1">ℹ️ Como funciona</p>
+            <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
+              <li>Quando um vendedor cria um pedido, o sistema verifica automaticamente os parâmetros.</li>
+              <li>Se <strong>todos os limites</strong> forem respeitados, o pedido é aprovado na hora sem notificação para você.</li>
+              <li>Se <strong>algum limite for ultrapassado</strong>, o pedido entra na fila de aprovação manual normalmente.</li>
+              <li>Deixe um campo em branco para não aplicar aquele limite.</li>
+              <li>As configurações ficam salvas neste dispositivo.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
       {/* Lista pedidos pendentes */}
-      {!historico && (
+      {activeTab === 'pendentes' && (
         <>
           {pendentes.length === 0 ? (
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-16 text-center">

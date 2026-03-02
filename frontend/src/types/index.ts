@@ -238,6 +238,7 @@ export interface ItemPedido {
   sku?: string
   unidade: string
   preco: number
+  precoOriginal?: number
   quantidade: number
 }
 

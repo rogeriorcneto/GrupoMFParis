@@ -12,6 +12,7 @@ import {
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
+import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -324,8 +325,15 @@ export default function AppRouter({
         onAddPedido={async (p) => {
           try {
             const saved = await db.insertPedido(p)
-            setPedidos(prev => [...prev, saved])
-            showToast('success', `Pedido ${p.numero} salvo com sucesso!`)
+            const params = getParametrosAprovacao()
+            if (pedidoPassaAutoAprovacao(saved, params)) {
+              await db.aprovarPedido(saved.id, loggedUser?.id || 0)
+              setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
+              showToast('success', `Pedido ${saved.numero} aprovado automaticamente! ✅`)
+            } else {
+              setPedidos(prev => [...prev, saved])
+              showToast('success', `Pedido ${p.numero} enviado para aprovação!`)
+            }
           } catch (err) { logger.error('Erro ao criar pedido:', err); showToast('error', 'Erro ao salvar pedido. Tente novamente.') }
         }}
         onUpdatePedido={async (p) => {
