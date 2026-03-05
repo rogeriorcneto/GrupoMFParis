@@ -11,6 +11,7 @@ export interface Cliente {
   razaoSocial: string
   nomeFantasia?: string
   cnpj: string
+  cnpj2?: string
   contatoNome: string
   contatoTelefone: string
   contatoCelular?: string
@@ -24,6 +25,13 @@ export interface Cliente {
   enderecoCidade?: string
   enderecoEstado?: string
   enderecoCep?: string
+  enderecoRua2?: string
+  enderecoNumero2?: string
+  enderecoComplemento2?: string
+  enderecoBairro2?: string
+  enderecoCidade2?: string
+  enderecoEstado2?: string
+  enderecoCep2?: string
   cnaePrimario?: string
   cnaeSecundario?: string
   whatsapp?: string
@@ -60,6 +68,7 @@ export interface FormData {
   razaoSocial: string
   nomeFantasia: string
   cnpj: string
+  cnpj2: string
   contatoNome: string
   contatoTelefone: string
   contatoCelular: string
@@ -72,6 +81,13 @@ export interface FormData {
   enderecoCidade: string
   enderecoEstado: string
   enderecoCep: string
+  enderecoRua2: string
+  enderecoNumero2: string
+  enderecoComplemento2: string
+  enderecoBairro2: string
+  enderecoCidade2: string
+  enderecoEstado2: string
+  enderecoCep2: string
   cnaePrimario: string
   cnaeSecundario: string
   valorEstimado?: string

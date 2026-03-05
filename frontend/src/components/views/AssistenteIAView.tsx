@@ -16,6 +16,7 @@ interface AssistenteIAViewProps {
   pedidos: Pedido[]
   vendedores: Vendedor[]
   interacoes: Interacao[]
+  loggedUser: Vendedor
 }
 
 const PROMPT_CATEGORIES = [
@@ -86,12 +87,12 @@ function renderInline(text: string): React.ReactNode {
   })
 }
 
-export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes }: AssistenteIAViewProps) {
+export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, loggedUser }: AssistenteIAViewProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '0',
       role: 'assistant',
-      text: `Olá! Sou o Assistente IA do Grupo MF Paris, powered by OpenAI. 🤖\n\nTenho acesso completo aos dados do CRM:\n- **${clientes.length} clientes** cadastrados\n- **${pedidos.length} pedidos** no sistema\n- **${vendedores.length} vendedores** na equipe\n\nPosso gerar relatórios, analisar o funil, buscar clientes específicos e muito mais. Como posso ajudar?`,
+      text: `Olá ${loggedUser.nome}! Sou a Assistente IA do CRM Grupo MF Paris, desenvolvida EXCLUSIVAMENTE para o Grupo MF Paris por Rogério Reis. 🤖\n\nTenho acesso completo aos dados do CRM:\n- **${clientes.length} clientes** cadastrados\n- **${pedidos.length} pedidos** no sistema\n- **${vendedores.length} vendedores** na equipe\n\nComo posso ajudar você hoje?`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     },
   ])
@@ -107,7 +108,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const systemPrompt = buildCRMContext({ clientes, pedidos, vendedores, interacoes })
+  const systemPrompt = buildCRMContext({ clientes, pedidos, vendedores, interacoes, loggedUser })
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return
@@ -162,7 +163,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     setMessages([{
       id: '0',
       role: 'assistant',
-      text: `Conversa reiniciada! Tenho acesso a **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**. Como posso ajudar?`,
+      text: `Conversa reiniciada, ${loggedUser.nome}! Tenho acesso a **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**. Como posso ajudar você?`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }])
     setError(null)

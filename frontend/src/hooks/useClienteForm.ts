@@ -5,11 +5,13 @@ import { formatCNPJ, formatTelefone, validarCNPJ } from '../utils/validators'
 import { logger } from '../utils/logger'
 
 const emptyForm: FormData = {
-  razaoSocial: '', nomeFantasia: '', cnpj: '', contatoNome: '',
+  razaoSocial: '', nomeFantasia: '', cnpj: '', cnpj2: '', contatoNome: '',
   contatoTelefone: '', contatoCelular: '', contatoTelefoneFixo: '',
   contatoEmail: '',
   enderecoRua: '', enderecoNumero: '', enderecoComplemento: '',
   enderecoBairro: '', enderecoCidade: '', enderecoEstado: '', enderecoCep: '',
+  enderecoRua2: '', enderecoNumero2: '', enderecoComplemento2: '',
+  enderecoBairro2: '', enderecoCidade2: '', enderecoEstado2: '', enderecoCep2: '',
   cnaePrimario: '', cnaeSecundario: '',
   valorEstimado: '',
   produtosInteresse: '', produtosQuantidades: {}, vendedorId: ''
@@ -33,9 +35,9 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     let formatted = value
-    if (name === 'cnpj') formatted = formatCNPJ(value)
+    if (name === 'cnpj' || name === 'cnpj2') formatted = formatCNPJ(value)
     if (name === 'contatoTelefone' || name === 'contatoCelular' || name === 'contatoTelefoneFixo') formatted = formatTelefone(value)
-    if (name === 'enderecoCep') formatted = value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').substring(0, 9)
+    if (name === 'enderecoCep' || name === 'enderecoCep2') formatted = value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').substring(0, 9)
     setFormData(prev => ({ ...prev, [name]: formatted }))
   }
 
@@ -184,6 +186,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       razaoSocial: cliente.razaoSocial,
       nomeFantasia: cliente.nomeFantasia || '',
       cnpj: cliente.cnpj,
+      cnpj2: cliente.cnpj2 || '',
       contatoNome: cliente.contatoNome,
       contatoTelefone: cliente.contatoTelefone,
       contatoCelular: cliente.contatoCelular || '',
@@ -196,6 +199,13 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       enderecoCidade: cliente.enderecoCidade || '',
       enderecoEstado: cliente.enderecoEstado || '',
       enderecoCep: cliente.enderecoCep || '',
+      enderecoRua2: cliente.enderecoRua2 || '',
+      enderecoNumero2: cliente.enderecoNumero2 || '',
+      enderecoComplemento2: cliente.enderecoComplemento2 || '',
+      enderecoBairro2: cliente.enderecoBairro2 || '',
+      enderecoCidade2: cliente.enderecoCidade2 || '',
+      enderecoEstado2: cliente.enderecoEstado2 || '',
+      enderecoCep2: cliente.enderecoCep2 || '',
       cnaePrimario: cliente.cnaePrimario || '',
       cnaeSecundario: cliente.cnaeSecundario || '',
       produtosInteresse: cliente.produtosInteresse?.join(', ') || '',

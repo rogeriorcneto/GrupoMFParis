@@ -142,6 +142,20 @@ export default function ClientePanel({
                   <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail}</p></div>
                 </div>
                 {c.endereco && <div><p className="text-xs text-gray-500">Endereço</p><p className="text-sm text-gray-900">{c.endereco}</p></div>}
+                
+                {/* Campos adicionais para CNPJ 2 e Endereço 2 */}
+                {c.cnpj2 && (
+                  <div><p className="text-xs text-gray-500">CNPJ 2</p><p className="font-medium text-gray-900">{c.cnpj2}</p></div>
+                )}
+                {c.enderecoRua2 && (
+                  <div>
+                    <p className="text-xs text-gray-500">Endereço 2</p>
+                    <p className="text-sm text-gray-900">
+                      {[c.enderecoRua2, c.enderecoNumero2, c.enderecoComplemento2, c.enderecoBairro2, c.enderecoCidade2, c.enderecoEstado2, c.enderecoCep2 ? `CEP ${c.enderecoCep2}` : '']
+                        .filter(Boolean).join(', ')}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Dados comerciais */}

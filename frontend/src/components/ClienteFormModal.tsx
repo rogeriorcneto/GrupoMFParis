@@ -75,6 +75,12 @@ export default function ClienteFormModal({
                     </div>
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ 2 (opcional)</label>
+                    <input type="text" name="cnpj2" value={formData.cnpj2} onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                      placeholder="00.000.000/0000-00" />
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social *</label>
                     <input type="text" name="razaoSocial" value={formData.razaoSocial} onChange={handleInputChange} required
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
@@ -192,6 +198,61 @@ export default function ClienteFormModal({
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
                       <input type="text" name="enderecoEstado" value={formData.enderecoEstado} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="MG" maxLength={2} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Endereço 2 ── */}
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Endereço 2 (opcional)</p>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <div className="w-36">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">CEP</label>
+                      <input type="text" name="enderecoCep2" value={formData.enderecoCep2} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="00000-000" maxLength={9} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Rua / Logradouro</label>
+                      <input type="text" name="enderecoRua2" value={formData.enderecoRua2} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Rua das Flores" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Número</label>
+                      <input type="text" name="enderecoNumero2" value={formData.enderecoNumero2} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="100" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Complemento</label>
+                      <input type="text" name="enderecoComplemento2" value={formData.enderecoComplemento2} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Sala 2, Apto 301..." />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-1">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
+                      <input type="text" name="enderecoBairro2" value={formData.enderecoBairro2} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Centro" />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Cidade</label>
+                      <input type="text" name="enderecoCidade2" value={formData.enderecoCidade2} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Belo Horizonte" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Estado</label>
+                      <input type="text" name="enderecoEstado2" value={formData.enderecoEstado2} onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         placeholder="MG" maxLength={2} />
                     </div>

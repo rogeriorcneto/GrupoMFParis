@@ -29,6 +29,14 @@ export function clienteFromDb(row: any): Cliente {
     enderecoCidade: row.endereco_cidade ?? undefined,
     enderecoEstado: row.endereco_estado ?? undefined,
     enderecoCep: row.endereco_cep ?? undefined,
+    cnpj2: row.cnpj2 ?? undefined,
+    enderecoRua2: row.endereco_rua2 ?? undefined,
+    enderecoNumero2: row.endereco_numero2 ?? undefined,
+    enderecoComplemento2: row.endereco_complemento2 ?? undefined,
+    enderecoBairro2: row.endereco_bairro2 ?? undefined,
+    enderecoCidade2: row.endereco_cidade2 ?? undefined,
+    enderecoEstado2: row.endereco_estado2 ?? undefined,
+    enderecoCep2: row.endereco_cep2 ?? undefined,
     cnaePrimario: row.cnae_primario ?? undefined,
     cnaeSecundario: row.cnae_secundario ?? undefined,
     whatsapp: row.whatsapp ?? undefined,
@@ -80,6 +88,14 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.enderecoCidade !== undefined) row.endereco_cidade = c.enderecoCidade
   if (c.enderecoEstado !== undefined) row.endereco_estado = c.enderecoEstado
   if (c.enderecoCep !== undefined) row.endereco_cep = c.enderecoCep
+  if (c.cnpj2 !== undefined) row.cnpj2 = c.cnpj2
+  if (c.enderecoRua2 !== undefined) row.endereco_rua2 = c.enderecoRua2
+  if (c.enderecoNumero2 !== undefined) row.endereco_numero2 = c.enderecoNumero2
+  if (c.enderecoComplemento2 !== undefined) row.endereco_complemento2 = c.enderecoComplemento2
+  if (c.enderecoBairro2 !== undefined) row.endereco_bairro2 = c.enderecoBairro2
+  if (c.enderecoCidade2 !== undefined) row.endereco_cidade2 = c.enderecoCidade2
+  if (c.enderecoEstado2 !== undefined) row.endereco_estado2 = c.enderecoEstado2
+  if (c.enderecoCep2 !== undefined) row.endereco_cep2 = c.enderecoCep2
   if (c.cnaePrimario !== undefined) row.cnae_primario = c.cnaePrimario
   if (c.cnaeSecundario !== undefined) row.cnae_secundario = c.cnaeSecundario
   if (c.whatsapp !== undefined) row.whatsapp = c.whatsapp

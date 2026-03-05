@@ -349,6 +349,7 @@ export default function AppRouter({
         pedidos={pedidos}
         vendedores={vendedores}
         interacoes={interacoes}
+        loggedUser={loggedUser}
       />
     default:
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} loggedUser={loggedUser} />
