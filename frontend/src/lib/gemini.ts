@@ -1,5 +1,6 @@
-const GEMINI_API_KEY = 'AIzaSyDLx8UhKVrHc5LkLDbUS729sQXChrwz1O8'
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
+const GEMINI_URL = import.meta.env.MODE === 'production' 
+  ? '/.netlify/functions/gemini'  // Netlify Functions
+  : `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api/gemini`  // Backend local
 
 export interface AIMessage {
   role: 'user' | 'assistant'
@@ -10,26 +11,24 @@ export async function callAI(
   messages: AIMessage[],
   systemInstruction: string
 ): Promise<string> {
-  const contents = [
-    { role: 'user', parts: [{ text: systemInstruction }] },
-    { role: 'model', parts: [{ text: 'Entendido. Sou o Assistente IA do CRM Grupo MF Paris. Tenho acesso a todos os dados. Como posso ajudar?' }] },
-    ...messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    })),
-  ]
-
   const body = {
-    contents,
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 2048,
-    },
+    messages,
+    systemInstruction
+  }
+
+  // Get auth token from Supabase
+  const { supabase } = await import('./supabase')
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
   }
 
   const res = await fetch(GEMINI_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   })
 
@@ -39,7 +38,7 @@ export async function callAI(
   }
 
   const data = await res.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Sem resposta da IA.'
+  return data.response ?? 'Sem resposta da IA.'
 }
 
 function fmt(c: any, vMap: Map<number, string>): string {
@@ -226,29 +225,29 @@ ${(Object.entries(porEstado) as [string, number][]).sort((a,b)=>b[1]-a[1]).slice
 ## EQUIPE
 ${porVendedor}
 
-## TOP 20 SCORE
+## TOP 10 SCORE
 ${CSV_HEADER}
-${top20Score.map(c => fmt(c, vMap)).join('\n')}
+${top20Score.slice(0, 10).map(c => fmt(c, vMap)).join('\n')}
 
-## TOP 20 VALOR
+## TOP 10 VALOR
 ${CSV_HEADER}
-${top20Valor.map(c => fmt(c, vMap)).join('\n')}
+${top20Valor.slice(0, 10).map(c => fmt(c, vMap)).join('\n')}
 
-## TOP 20 MAIS INATIVOS
+## TOP 10 MAIS INATIVOS
 ${CSV_HEADER}
-${top20Inativos.map(c => fmt(c, vMap)).join('\n')}
+${top20Inativos.slice(0, 10).map(c => fmt(c, vMap)).join('\n')}
 
-## TODOS OS CLIENTES ATIVOS (${ativos.length} total)
+## AMOSTRA CLIENTES ATIVOS (50 de ${ativos.length})
 ${CSV_HEADER}
-${ativos.map(c => fmt(c, vMap)).join('\n')}
+${ativos.slice(0, 50).map(c => fmt(c, vMap)).join('\n')}
 
-## CLIENTES PERDIDOS (${Math.min(perdidos.length, 150)} de ${perdidos.length})
+## CLIENTES PERDIDOS (20 de ${perdidos.length})
 ${CSV_HEADER}
-${listaPerdidos}
+${perdidos.slice(0, 20).map(c => fmt(c, vMap)).join('\n')}
 
-## PEDIDOS RECENTES (últimos 30)
+## PEDIDOS RECENTES (últimos 10)
 numero|status|valor|data
-${pedidos.slice(-30).map(p => `${p.numero}|${p.status}|R$${p.totalValor}|${(p.dataCriacao||'').slice(0,10)}`).join('\n')}
+${pedidos.slice(-10).map(p => `${p.numero}|${p.status}|R$${p.totalValor}|${(p.dataCriacao||'').slice(0,10)}`).join('\n')}
 
 ## INSTRUÇÕES
 - Busque clientes por nome, fantasia ou CNPJ nos dados acima.

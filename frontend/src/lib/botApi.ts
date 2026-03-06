@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3001'
+const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
 
 /** Fetch with Supabase auth token attached */
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {

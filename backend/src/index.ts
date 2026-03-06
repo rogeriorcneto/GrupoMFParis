@@ -10,6 +10,7 @@ import { loadConfig, saveConfig } from './config-store.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
 import { omieRouter } from './routes/omie.js'
+import { geminiHandler } from './gemini.js'
 import { log } from './logger.js'
 
 const app = express()
@@ -27,7 +28,7 @@ app.use(cors({
   },
   credentials: true,
 }))
-app.use(express.json())
+app.use(express.json({ limit: '10mb' }))
 app.use(helmet())
 
 // ─── Health check ───
@@ -40,6 +41,9 @@ app.get('/api/health', (_req, res) => {
     uptime: process.uptime(),
   })
 })
+
+// ─── Gemini AI Route (protegido por auth) ───
+app.post('/api/gemini', requireAuth, geminiHandler)
 
 // ─── WhatsApp Routes (protegidos por auth) ───
 

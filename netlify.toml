@@ -1,7 +1,18 @@
 [build]
-  base = "frontend"
-  command = "npm run build"
+  command = "cd frontend && npm run build"
   publish = "frontend/dist"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[functions]
+  directory = "netlify/functions"
+
+# API redirect to Netlify Functions
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
 
 # SPA fallback for React Router-like setups
 [[redirects]]
