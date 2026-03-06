@@ -87,7 +87,7 @@ app.post('/api/whatsapp/disconnect', requireAuth, requireGerente, rateLimit(5, 6
 })
 
 app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, res) => {
-  const { number, text, clienteId, vendedorNome } = req.body
+  const { number, text, clienteId, vendedorNome, vendedorId } = req.body
 
   if (!number || !text) {
     res.status(400).json({ success: false, error: 'Campos obrigatórios: number, text' })
@@ -96,22 +96,60 @@ app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, r
 
   const result = await sendWhatsAppMessage(number, text)
 
-  if (result.success && clienteId) {
-    // Register interaction in Supabase
+  if (result.success) {
     try {
-      const { insertInteracao, updateCliente } = await import('./database.js')
-      await insertInteracao({
-        clienteId, tipo: 'whatsapp', data: new Date().toISOString(),
-        assunto: 'Mensagem WhatsApp', descricao: text.substring(0, 200),
-        automatico: false
+      const db = await import('./database.js')
+      // Salvar mensagem no histórico
+      await db.insertWhatsAppMessage({
+        numero: number.replace(/\D/g, ''),
+        clienteId: clienteId || undefined,
+        vendedorId: vendedorId || undefined,
+        direcao: 'enviada',
+        mensagem: text,
       })
-      await updateCliente(clienteId, { ultimaInteracao: new Date().toISOString().split('T')[0] })
+      // Registrar interação se tiver clienteId
+      if (clienteId) {
+        await db.insertInteracao({
+          clienteId, tipo: 'whatsapp', data: new Date().toISOString(),
+          assunto: 'Mensagem WhatsApp', descricao: text.substring(0, 200),
+          automatico: false
+        })
+        await db.updateCliente(clienteId, { ultimaInteracao: new Date().toISOString().split('T')[0] })
+      }
+      // Registrar atividade
+      if (vendedorNome) {
+        await db.insertAtividade({
+          tipo: 'whatsapp',
+          descricao: `WhatsApp para ${number}: ${text.substring(0, 80)}`,
+          vendedorNome,
+        })
+      }
     } catch (err) {
-      log.error({ err }, 'Erro ao registrar interação WhatsApp')
+      log.error({ err }, 'Erro ao registrar mensagem/interação WhatsApp')
     }
   }
 
   res.json(result)
+})
+
+app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
+  const { numero, clienteId, limit } = req.query
+  try {
+    const db = await import('./database.js')
+    let messages
+    if (clienteId) {
+      messages = await db.fetchWhatsAppMessagesByCliente(Number(clienteId), Number(limit) || 100)
+    } else if (numero) {
+      messages = await db.fetchWhatsAppMessages(String(numero), Number(limit) || 100)
+    } else {
+      res.status(400).json({ error: 'Informe numero ou clienteId' })
+      return
+    }
+    res.json(messages)
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar mensagens WhatsApp')
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
 })
 
 // ─── Config Routes (somente gerente) ───

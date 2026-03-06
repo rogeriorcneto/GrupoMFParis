@@ -26,16 +26,30 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
 }
 
 /** Send a WhatsApp message via backend */
-export async function sendWhatsApp(number: string, text: string, clienteId?: number, vendedorNome?: string): Promise<{ success: boolean; error?: string }> {
+export async function sendWhatsApp(number: string, text: string, clienteId?: number, vendedorNome?: string, vendedorId?: number): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await authFetch(`${BOT_URL}/api/whatsapp/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ number, text, clienteId, vendedorNome }),
+      body: JSON.stringify({ number, text, clienteId, vendedorNome, vendedorId }),
     })
     return await res.json()
   } catch (err: any) {
     return { success: false, error: err?.message || 'Erro de conexão com o bot' }
+  }
+}
+
+/** Fetch WhatsApp message history */
+export async function fetchWhatsAppMessages(params: { numero?: string; clienteId?: number; limit?: number }): Promise<any[]> {
+  try {
+    const query = new URLSearchParams()
+    if (params.clienteId) query.set('clienteId', String(params.clienteId))
+    else if (params.numero) query.set('numero', params.numero)
+    if (params.limit) query.set('limit', String(params.limit))
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/messages?${query.toString()}`)
+    return await res.json()
+  } catch {
+    return []
   }
 }
 

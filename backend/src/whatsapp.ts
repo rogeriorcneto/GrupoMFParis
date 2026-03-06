@@ -168,10 +168,37 @@ export async function connectWhatsApp(): Promise<void> {
 
         const senderNumber = from.replace('@s.whatsapp.net', '')
 
+        // Salvar mensagem recebida no histórico
+        try {
+          const { insertWhatsAppMessage, findClienteByPhone } = await import('./database.js')
+          const cliente = await findClienteByPhone(senderNumber)
+          await insertWhatsAppMessage({
+            numero: senderNumber,
+            clienteId: cliente?.id,
+            direcao: 'recebida',
+            mensagem: text.trim(),
+          })
+        } catch (dbErr) {
+          log.error({ err: dbErr }, 'Erro ao salvar mensagem recebida no DB')
+        }
+
         try {
           const reply = await handleMessage(senderNumber, text.trim())
           if (reply && sock) {
             await sock.sendMessage(from, { text: reply })
+            // Salvar resposta do bot no histórico
+            try {
+              const { insertWhatsAppMessage, findClienteByPhone } = await import('./database.js')
+              const cliente = await findClienteByPhone(senderNumber)
+              await insertWhatsAppMessage({
+                numero: senderNumber,
+                clienteId: cliente?.id,
+                direcao: 'enviada',
+                mensagem: reply,
+              })
+            } catch (dbErr) {
+              log.error({ err: dbErr }, 'Erro ao salvar resposta bot no DB')
+            }
           }
         } catch (err) {
           log.error({ err, senderNumber }, 'Erro ao processar mensagem')

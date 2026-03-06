@@ -340,6 +340,19 @@ export async function fetchClienteById(id: number): Promise<Cliente | null> {
   return clienteFromDb(data)
 }
 
+export async function findClienteByPhone(phone: string): Promise<Cliente | null> {
+  const clean = phone.replace(/\D/g, '')
+  if (!clean) return null
+  // Try whatsapp, contatoCelular, contatoTelefone fields
+  const { data, error } = await supabase
+    .from('clientes')
+    .select('*')
+    .or(`whatsapp.ilike.%${clean}%,contato_celular.ilike.%${clean}%,contato_telefone.ilike.%${clean}%`)
+    .limit(1)
+  if (error || !data || data.length === 0) return null
+  return clienteFromDb(data[0])
+}
+
 export async function fetchClientesByIds(ids: number[]): Promise<Cliente[]> {
   if (ids.length === 0) return []
   const { data, error } = await supabase.from('clientes').select('*').in('id', ids)
@@ -477,6 +490,74 @@ export async function insertAtividade(a: { tipo: string; descricao: string; vend
     tipo: a.tipo, descricao: a.descricao, vendedor_nome: a.vendedorNome,
   })
   if (error) throw error
+}
+
+// ============================================
+// WHATSAPP MESSAGES
+// ============================================
+
+export interface WhatsAppMessage {
+  id?: number
+  numero: string
+  clienteId?: number
+  vendedorId?: number
+  direcao: 'enviada' | 'recebida'
+  mensagem: string
+  tipo?: string
+  createdAt?: string
+}
+
+export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'createdAt'>): Promise<void> {
+  const { error } = await supabase.from('whatsapp_messages').insert({
+    numero: msg.numero,
+    cliente_id: msg.clienteId || null,
+    vendedor_id: msg.vendedorId || null,
+    direcao: msg.direcao,
+    mensagem: msg.mensagem,
+    tipo: msg.tipo || 'text',
+  })
+  if (error) throw error
+}
+
+export async function fetchWhatsAppMessages(numero: string, limit = 100): Promise<WhatsAppMessage[]> {
+  const cleanNum = numero.replace(/\D/g, '')
+  const { data, error } = await supabase
+    .from('whatsapp_messages')
+    .select('*')
+    .eq('numero', cleanNum)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    numero: row.numero,
+    clienteId: row.cliente_id,
+    vendedorId: row.vendedor_id,
+    direcao: row.direcao,
+    mensagem: row.mensagem,
+    tipo: row.tipo || 'text',
+    createdAt: row.created_at,
+  }))
+}
+
+export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 100): Promise<WhatsAppMessage[]> {
+  const { data, error } = await supabase
+    .from('whatsapp_messages')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    numero: row.numero,
+    clienteId: row.cliente_id,
+    vendedorId: row.vendedor_id,
+    direcao: row.direcao,
+    mensagem: row.mensagem,
+    tipo: row.tipo || 'text',
+    createdAt: row.created_at,
+  }))
 }
 
 // ============================================

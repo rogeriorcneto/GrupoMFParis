@@ -1,13 +1,22 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, PhoneIcon } from '@heroicons/react/24/outline'
-import type { Cliente, Vendedor } from '../types'
-import { sendWhatsApp, sendEmailViaBot } from '../lib/botApi'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { XMarkIcon, PaperAirplaneIcon, PhoneIcon, ClockIcon } from '@heroicons/react/24/outline'
+import type { Cliente, Vendedor, Interacao } from '../types'
+import { sendWhatsApp, sendEmailViaBot, fetchWhatsAppMessages } from '../lib/botApi'
+import { fetchInteracoesByCliente } from '../lib/database'
 
 interface Message {
   id: number
   text: string
-  from: 'me' | 'system'
+  from: 'me' | 'them' | 'system'
   time: string
+}
+
+interface HistoricoItem {
+  id: number | string
+  tipo: string
+  descricao: string
+  data: string
+  origem: 'interacao' | 'atividade' | 'whatsapp' | 'email'
 }
 
 interface TaskCommPanelProps {
@@ -17,7 +26,7 @@ interface TaskCommPanelProps {
   showToast?: (tipo: 'success' | 'error', texto: string) => void
 }
 
-type TabType = 'whatsapp' | 'email' | 'telefone'
+type TabType = 'whatsapp' | 'email' | 'telefone' | 'historico'
 
 const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onClose, showToast }) => {
   const [activeTab, setActiveTab] = useState<TabType>('whatsapp')
@@ -26,6 +35,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
   const [waMessages, setWaMessages] = useState<Message[]>([])
   const [waText, setWaText] = useState('')
   const [waSending, setWaSending] = useState(false)
+  const [waLoading, setWaLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   // Email state
@@ -34,9 +44,75 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
   const [emailBody, setEmailBody] = useState('')
   const [emailSending, setEmailSending] = useState(false)
 
+  // Histórico state
+  const [historico, setHistorico] = useState<HistoricoItem[]>([])
+  const [histLoading, setHistLoading] = useState(false)
+
   const whatsappNumber = cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
   const phoneNumber = cliente.contatoTelefone || cliente.contatoCelular || ''
   const cleanPhone = phoneNumber.replace(/\D/g, '')
+
+  // Load WhatsApp history from DB
+  const loadWaHistory = useCallback(async () => {
+    if (!cliente.id) return
+    setWaLoading(true)
+    try {
+      const msgs = await fetchWhatsAppMessages({ clienteId: cliente.id, limit: 200 })
+      setWaMessages(msgs.map((m: any) => ({
+        id: m.id || Date.now(),
+        text: m.mensagem,
+        from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+        time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+      })))
+    } catch {
+      // silently fail
+    }
+    setWaLoading(false)
+  }, [cliente.id])
+
+  // Load Histórico (interações + atividades)
+  const loadHistorico = useCallback(async () => {
+    if (!cliente.id) return
+    setHistLoading(true)
+    try {
+      const [interacoes, waMsgs] = await Promise.all([
+        fetchInteracoesByCliente(cliente.id),
+        fetchWhatsAppMessages({ clienteId: cliente.id, limit: 200 }),
+      ])
+      const items: HistoricoItem[] = []
+      // Interações (email, ligação, reunião, etc)
+      for (const i of interacoes) {
+        items.push({
+          id: i.id,
+          tipo: i.tipo,
+          descricao: i.descricao || i.assunto || '',
+          data: i.data,
+          origem: i.tipo === 'email' ? 'email' : 'interacao',
+        })
+      }
+      // WhatsApp messages
+      for (const m of waMsgs) {
+        items.push({
+          id: `wa-${m.id}`,
+          tipo: m.direcao === 'recebida' ? 'whatsapp_recebida' : 'whatsapp_enviada',
+          descricao: m.mensagem,
+          data: m.createdAt || '',
+          origem: 'whatsapp',
+        })
+      }
+      // Sort by date descending
+      items.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+      setHistorico(items)
+    } catch {
+      // silently fail
+    }
+    setHistLoading(false)
+  }, [cliente.id])
+
+  useEffect(() => {
+    if (activeTab === 'whatsapp') loadWaHistory()
+    if (activeTab === 'historico') loadHistorico()
+  }, [activeTab, loadWaHistory, loadHistorico])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -59,7 +135,8 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
       whatsappNumber.replace(/\D/g, ''),
       msg,
       cliente.id,
-      loggedUser?.nome
+      loggedUser?.nome,
+      loggedUser?.id
     )
 
     if (!result.success) {
@@ -144,6 +221,12 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
           >
             📞 Telefone
           </button>
+          <button
+            onClick={() => setActiveTab('historico')}
+            className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'historico' ? 'text-orange-700 border-b-2 border-orange-500 bg-orange-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+          >
+            📋 Histórico
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -184,7 +267,12 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
 
                   {/* Chat area */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5]">
-                    {waMessages.length === 0 && (
+                    {waLoading && (
+                      <div className="text-center py-4">
+                        <div className="inline-block animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full" />
+                      </div>
+                    )}
+                    {!waLoading && waMessages.length === 0 && (
                       <div className="text-center py-12">
                         <p className="text-sm text-gray-600 bg-white bg-opacity-80 inline-block px-4 py-2 rounded-lg shadow-sm">
                           Envie uma mensagem para {cliente.contatoNome || cliente.razaoSocial}
@@ -192,10 +280,15 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                       </div>
                     )}
                     {waMessages.map(msg => (
-                      <div key={msg.id} className={`flex ${msg.from === 'me' ? 'justify-end' : 'justify-center'}`}>
+                      <div key={msg.id} className={`flex ${msg.from === 'me' ? 'justify-end' : msg.from === 'them' ? 'justify-start' : 'justify-center'}`}>
                         {msg.from === 'system' ? (
                           <div className="bg-yellow-100 text-yellow-800 text-xs px-3 py-1.5 rounded-lg max-w-[85%] shadow-sm">
                             {msg.text}
+                          </div>
+                        ) : msg.from === 'them' ? (
+                          <div className="bg-white text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
+                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            <p className="text-[10px] text-gray-500 text-right mt-1">{msg.time}</p>
                           </div>
                         ) : (
                           <div className="bg-[#dcf8c6] text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
@@ -303,6 +396,62 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                     </button>
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* ─── Histórico Tab ─── */}
+          {activeTab === 'historico' && (
+            <div className="flex-1 overflow-y-auto">
+              {histLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin h-6 w-6 border-2 border-orange-600 border-t-transparent rounded-full" />
+                </div>
+              ) : historico.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <ClockIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-500 font-medium">Nenhum histórico encontrado</p>
+                    <p className="text-sm text-gray-400 mt-1">As interações com este cliente aparecerão aqui.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {historico.map(item => {
+                    const tipoIcon = item.tipo === 'whatsapp_enviada' ? '💬↗' :
+                      item.tipo === 'whatsapp_recebida' ? '💬↙' :
+                      item.tipo === 'whatsapp' ? '💬' :
+                      item.tipo === 'email' ? '📧' :
+                      item.tipo === 'ligacao' ? '📞' :
+                      item.tipo === 'reuniao' ? '🤝' :
+                      item.tipo === 'nota' ? '📝' : '📋'
+                    const tipoLabel = item.tipo === 'whatsapp_enviada' ? 'WhatsApp enviada' :
+                      item.tipo === 'whatsapp_recebida' ? 'WhatsApp recebida' :
+                      item.tipo === 'whatsapp' ? 'WhatsApp' :
+                      item.tipo === 'email' ? 'Email' :
+                      item.tipo === 'ligacao' ? 'Ligação' :
+                      item.tipo === 'reuniao' ? 'Reunião' :
+                      item.tipo === 'nota' ? 'Nota' : item.tipo
+                    const bgColor = item.origem === 'whatsapp' ? 'bg-green-50' :
+                      item.origem === 'email' ? 'bg-blue-50' : 'bg-gray-50'
+                    return (
+                      <div key={item.id} className={`px-4 py-3 hover:bg-gray-50 ${item.tipo === 'whatsapp_recebida' ? 'border-l-4 border-l-green-300' : item.tipo === 'whatsapp_enviada' ? 'border-l-4 border-l-green-500' : item.tipo === 'email' ? 'border-l-4 border-l-blue-400' : 'border-l-4 border-l-gray-300'}`}>
+                        <div className="flex items-start gap-3">
+                          <span className="text-lg flex-shrink-0 mt-0.5">{tipoIcon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bgColor}`}>{tipoLabel}</span>
+                              <span className="text-xs text-gray-400 flex-shrink-0">
+                                {item.data ? new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-700 mt-1 line-clamp-3">{item.descricao}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )}

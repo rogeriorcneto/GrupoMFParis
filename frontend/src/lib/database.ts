@@ -576,6 +576,17 @@ export async function fetchInteracoes(): Promise<Interacao[]> {
   return allRows.map(interacaoFromDb)
 }
 
+export async function fetchInteracoesByCliente(clienteId: number): Promise<Interacao[]> {
+  const { data, error } = await supabase
+    .from('interacoes')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return (data || []).map(interacaoFromDb)
+}
+
 export async function deleteAllClientes(): Promise<void> {
   const BATCH = 300
 
