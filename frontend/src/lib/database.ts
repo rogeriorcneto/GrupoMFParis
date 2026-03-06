@@ -209,6 +209,9 @@ export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
     totalValor: Number(row.total_valor),
     dataCriacao: row.data_criacao,
     dataEnvio: row.data_envio || '',
+    dataAprovacao: row.data_aprovacao || undefined,
+    motivoRecusa: row.motivo_recusa || undefined,
+    aprovadoPor: row.aprovado_por || undefined,
   }
 }
 
