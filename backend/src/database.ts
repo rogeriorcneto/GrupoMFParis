@@ -433,6 +433,12 @@ export async function updatePedidoStatus(id: number, status: string): Promise<vo
   if (error) throw error
 }
 
+export async function fetchPedidos(): Promise<Pedido[]> {
+  const { data, error } = await supabase.from('pedidos').select('*').order('data_criacao', { ascending: false }).limit(100)
+  if (error) throw error
+  return (data || []).map(row => pedidoFromDb(row, row.itens || []))
+}
+
 // ============================================
 // INTERAÇÕES
 // ============================================
@@ -446,6 +452,20 @@ export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<void> {
     automatico: i.automatico || false,
   })
   if (error) throw error
+}
+
+export async function fetchInteracoes(): Promise<Interacao[]> {
+  const { data, error } = await supabase.from('interacoes').select('*').order('created_at', { ascending: false }).limit(200)
+  if (error) throw error
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    clienteId: row.cliente_id,
+    tipo: row.tipo,
+    data: row.created_at || '',
+    assunto: row.assunto || '',
+    descricao: row.descricao || '',
+    automatico: row.automatico || false,
+  }))
 }
 
 // ============================================
