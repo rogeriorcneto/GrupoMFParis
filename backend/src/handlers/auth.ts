@@ -59,6 +59,7 @@ export function getMenuText(): string {
 4️⃣ Minhas tarefas
 5️⃣ Meu pipeline
 6️⃣ Buscar cliente
+7️⃣ 🤖 Assistente IA
 0️⃣ Sair
 
 _Digite o número ou a palavra-chave._`

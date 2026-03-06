@@ -13,6 +13,7 @@ import { startCreateSale, handleCreateSaleStep } from './handlers/vendas.js'
 import { handleTarefas } from './handlers/tarefas.js'
 import { handleTarefaConcluir } from './handlers/tarefas.js'
 import { handlePipeline } from './handlers/pipeline.js'
+import { startAIChat, handleAIChat } from './handlers/ia.js'
 
 // Rate limiting: max 30 messages per minute per number
 const rateLimits = new Map<string, number[]>()
@@ -70,6 +71,9 @@ export async function handleMessage(senderNumber: string, text: string): Promise
 
   // ─── State-specific handling ───
   switch (session.state) {
+    case 'chatting_ai':
+      return handleAIChat(senderNumber, session, text)
+
     case 'creating_client':
       return handleCreateClientStep(senderNumber, session, text)
 
@@ -129,6 +133,12 @@ export async function handleMessage(senderNumber: string, text: string): Promise
     case 'busca':
     case 'procurar':
       return startSearch(senderNumber)
+
+    case '7':
+    case 'ia':
+    case 'ai':
+    case 'assistente':
+      return startAIChat(senderNumber, session)
 
     default:
       // If viewing list and typed a number

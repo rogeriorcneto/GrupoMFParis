@@ -11,6 +11,7 @@ export type BotState =
   | 'creating_sale'
   | 'searching_client'
   | 'viewing_client_list'
+  | 'chatting_ai'
 
 export type CreateClientStep = 'razaoSocial' | 'cnpj' | 'contatoNome' | 'contatoTelefone' | 'contatoEmail' | 'confirm'
 export type CreateSaleStep = 'selectClient' | 'selectProduct' | 'addMore' | 'observacoes' | 'confirm'
@@ -41,6 +42,7 @@ export interface UserSession {
   clientListPage?: number
   clientListIds?: number[]
   listType?: 'clientes' | 'tarefas'
+  aiHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   lastActivity: number
 }
 
