@@ -30,8 +30,8 @@ interface SidebarProps {
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
   gerente: ['dashboard', 'aprovacao', 'amostras', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos', 'ia'],
-  vendedor: ['amostras', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
-  sdr: ['amostras', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
+  vendedor: ['ia', 'amostras', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
+  sdr: ['ia', 'amostras', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
