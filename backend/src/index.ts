@@ -22,6 +22,8 @@ app.use(cors({
     if (!origin) return callback(null, true)
     // Allow any localhost or 127.0.0.1 origin (dev)
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
+    // Allow Netlify production domain
+    if (origin.endsWith('.netlify.app')) return callback(null, true)
     // Allow configured origins (production)
     if (CONFIG.corsOrigins.includes(origin)) return callback(null, true)
     callback(new Error(`CORS: origin ${origin} not allowed`))
@@ -155,18 +157,22 @@ app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
 // ─── Config Routes (somente gerente) ───
 
 app.get('/api/config', requireAuth, requireGerente, async (_req, res) => {
-  const cfg = await loadConfig()
-  // Nunca retornar a senha completa para o frontend
-  const waStatus = getWhatsAppStatus()
-  res.json({
-    emailHost: cfg.emailHost,
-    emailPort: cfg.emailPort,
-    emailUser: cfg.emailUser,
-    emailPass: cfg.emailPass ? '••••••••' : '',
-    emailFrom: cfg.emailFrom,
-    whatsappNumero: waStatus.connected ? waStatus.number : (cfg.whatsappNumero || ''),
-    whatsappConnected: waStatus.connected,
-  })
+  try {
+    const cfg = await loadConfig()
+    const waStatus = getWhatsAppStatus()
+    res.json({
+      emailHost: cfg.emailHost,
+      emailPort: cfg.emailPort,
+      emailUser: cfg.emailUser,
+      emailPass: cfg.emailPass ? '••••••••' : '',
+      emailFrom: cfg.emailFrom,
+      whatsappNumero: waStatus.connected ? waStatus.number : (cfg.whatsappNumero || ''),
+      whatsappConnected: waStatus.connected,
+    })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao carregar config')
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao carregar configuração' })
+  }
 })
 
 app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), async (req, res) => {
