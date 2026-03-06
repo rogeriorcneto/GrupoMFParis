@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
+  VITE_BOT_URL = "https://grupomfparis-production.up.railway.app"
 
 [functions]
   directory = "netlify/functions"
