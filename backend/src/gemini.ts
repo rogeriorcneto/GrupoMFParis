@@ -39,7 +39,7 @@ export async function geminiHandler(req: Request, res: Response): Promise<void> 
     // Construir payload para Gemini API
     const contents = [
       { role: 'user', parts: [{ text: systemInstruction }] },
-      { role: 'model', parts: [{ text: 'Entendido. Sou o Assistente IA do CRM Grupo MF Paris. Tenho acesso a todos os dados. Como posso ajudar?' }] },
+      { role: 'model', parts: [{ text: 'Entendido, tenho acesso a todos os dados do CRM. Vou responder de forma direta e natural.' }] },
       ...messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],

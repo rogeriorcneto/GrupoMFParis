@@ -92,7 +92,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     {
       id: '0',
       role: 'assistant',
-      text: `Olá ${loggedUser.nome}! Sou a Assistente IA do CRM Grupo MF Paris, desenvolvida EXCLUSIVAMENTE para o Grupo MF Paris por Rogério Reis. 🤖\n\nTenho acesso completo aos dados do CRM:\n- **${clientes.length} clientes** cadastrados\n- **${pedidos.length} pedidos** no sistema\n- **${vendedores.length} vendedores** na equipe\n\nComo posso ajudar você hoje?`,
+      text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**.\n\nPode perguntar qualquer coisa sobre os dados, pedir relatórios, análises ou dicas de estratégia.`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     },
   ])
@@ -163,7 +163,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     setMessages([{
       id: '0',
       role: 'assistant',
-      text: `Conversa reiniciada, ${loggedUser.nome}! Tenho acesso a **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**. Como posso ajudar você?`,
+      text: `Conversa limpa, ${loggedUser.nome.split(' ')[0]}! 🔄 Os dados continuam carregados — **${clientes.length} clientes**, **${pedidos.length} pedidos**, **${vendedores.length} vendedores**. Manda aí!`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }])
     setError(null)
