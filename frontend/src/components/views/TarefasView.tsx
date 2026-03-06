@@ -1,7 +1,8 @@
 import React from 'react'
-import { XMarkIcon, PlusIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor } from '../../types'
 import { logger } from '../../utils/logger'
+import TaskCommPanel from '../TaskCommPanel'
 
 const TarefasView: React.FC<{
   tarefas: Tarefa[]
@@ -11,8 +12,10 @@ const TarefasView: React.FC<{
   onUpdateTarefa: (t: Tarefa) => void
   onAddTarefa: (t: Tarefa) => void
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, onUpdateTarefa, onAddTarefa, onImportTarefas }) => {
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
+}> = ({ tarefas, clientes, vendedores, loggedUser, onUpdateTarefa, onAddTarefa, onImportTarefas, showToast }) => {
   const [showModal, setShowModal] = React.useState(false)
+  const [commCliente, setCommCliente] = React.useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = React.useState<'todas' | 'pendente' | 'concluida'>('pendente')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
 
@@ -297,10 +300,46 @@ const TarefasView: React.FC<{
                                 <h4 className={`font-semibold text-gray-900 ${tarefa.status === 'concluida' ? 'line-through' : ''}`}>{tarefa.titulo}</h4>
                               </div>
                               {tarefa.descricao && <p className="text-sm text-gray-600 mt-1">{tarefa.descricao}</p>}
-                              <div className="flex items-center gap-3 mt-2">
+                              <div className="flex items-center gap-3 mt-2 flex-wrap">
                                 {cliente && <p className="text-xs text-gray-500">👤 {cliente.razaoSocial}</p>}
                                 {vendedor && <p className="text-xs text-primary-600 font-medium">🏷️ {vendedor.nome}</p>}
                               </div>
+                              {/* Action buttons: WhatsApp, Email, Phone */}
+                              {cliente && tarefa.status !== 'concluida' && (
+                                <div className="flex items-center gap-1.5 mt-2">
+                                  {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setCommCliente(cliente) }}
+                                      title="WhatsApp"
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-full transition-colors"
+                                    >
+                                      <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
+                                      WhatsApp
+                                    </button>
+                                  )}
+                                  {cliente.contatoEmail && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setCommCliente(cliente) }}
+                                      title="Email"
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-full transition-colors"
+                                    >
+                                      <EnvelopeIcon className="h-3.5 w-3.5" />
+                                      Email
+                                    </button>
+                                  )}
+                                  {(cliente.contatoTelefone || cliente.contatoCelular) && (
+                                    <a
+                                      href={`tel:${(cliente.contatoTelefone || cliente.contatoCelular || '').replace(/\D/g, '')}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      title="Ligar"
+                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-full transition-colors"
+                                    >
+                                      <PhoneIcon className="h-3.5 w-3.5" />
+                                      Ligar
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <div className="text-right">
                               {tarefa.hora && <p className="text-sm font-semibold text-gray-900">🕐 {tarefa.hora}</p>}
@@ -317,6 +356,16 @@ const TarefasView: React.FC<{
           )
         })}
       </div>
+
+      {/* Communication Panel */}
+      {commCliente && (
+        <TaskCommPanel
+          cliente={commCliente}
+          loggedUser={loggedUser}
+          onClose={() => setCommCliente(null)}
+          showToast={showToast}
+        />
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
