@@ -14,6 +14,7 @@ function envOptional(key: string): string | undefined {
 export const CONFIG = {
   supabaseUrl: env('SUPABASE_URL'),
   supabaseAnonKey: env('SUPABASE_ANON_KEY'),
+  supabaseServiceRoleKey: envOptional('SUPABASE_SERVICE_ROLE_KEY') || env('SUPABASE_ANON_KEY'),
   port: parseInt(process.env.PORT || env('BOT_PORT', '3001'), 10),
   corsOrigins: env('CORS_ORIGINS', 'http://localhost:5173,http://localhost:4173').split(',').map(s => s.trim()),
   email: {

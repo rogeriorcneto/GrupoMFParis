@@ -110,8 +110,8 @@ const IntegracoesView: React.FC = () => {
       const res = await authFetch(`${BOT_URL}/api/whatsapp/connect`, { method: 'POST' })
       const data = await res.json()
       if (!data.success) setWaError(data.error || 'Erro ao conectar')
-    } catch {
-      setWaError('Bot offline. Inicie o backend primeiro.')
+    } catch (err: any) {
+      setWaError(err?.message === 'AUTH_EXPIRED' ? 'Sessão expirada.' : err?.message || 'Bot offline. Inicie o backend primeiro.')
     } finally {
       setWaLoading(false)
     }
@@ -153,8 +153,8 @@ const IntegracoesView: React.FC = () => {
       } else {
         setEmailMsg({ type: 'error', text: data.error || 'Erro ao salvar.' })
       }
-    } catch {
-      setEmailMsg({ type: 'error', text: 'Bot offline.' })
+    } catch (err: any) {
+      setEmailMsg({ type: 'error', text: err?.message || 'Bot offline.' })
     } finally {
       setEmailSaving(false)
     }
@@ -166,8 +166,8 @@ const IntegracoesView: React.FC = () => {
       const res = await authFetch(`${BOT_URL}/api/email/test`, { method: 'POST' })
       const data = await res.json()
       setEmailMsg(data.success ? { type: 'success', text: 'Conexao SMTP OK!' } : { type: 'error', text: `Erro: ${data.error}` })
-    } catch {
-      setEmailMsg({ type: 'error', text: 'Bot offline.' })
+    } catch (err: any) {
+      setEmailMsg({ type: 'error', text: err?.message || 'Bot offline.' })
     }
   }
 
