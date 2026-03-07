@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
 import * as db from './database.js'
-import { getEmailConfig } from './config-store.js'
+import { getEmailConfig, invalidateConfigCache } from './config-store.js'
 import { STAGE_LABELS } from './constants.js'
 import { log } from './logger.js'
 
@@ -16,13 +16,18 @@ export async function initEmail(): Promise<boolean> {
  * Recarrega a configuração de email (chamado ao salvar config pelo CRM)
  */
 export async function reloadEmail(): Promise<boolean> {
+  // Invalidate cache to force re-read from DB
+  invalidateConfigCache()
+
   const cfg = await getEmailConfig()
   if (!cfg) {
     transporter = null
     currentFrom = ''
-    log.info('📧 Email não configurado.')
+    log.info('📧 Email não configurado (host/user/pass vazio)')
     return false
   }
+
+  log.info({ host: cfg.host, port: cfg.port, user: cfg.user, from: cfg.from, passLen: cfg.pass?.length }, '📧 Criando transporter SMTP')
 
   transporter = nodemailer.createTransport({
     host: cfg.host,
@@ -32,10 +37,25 @@ export async function reloadEmail(): Promise<boolean> {
       user: cfg.user,
       pass: cfg.pass,
     },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
+    tls: {
+      rejectUnauthorized: false,
+    },
   })
 
   currentFrom = cfg.from || cfg.user
-  log.info(`📧 Email configurado: ${currentFrom}`)
+
+  // Verify connection immediately
+  try {
+    await transporter.verify()
+    log.info(`📧 Email configurado e verificado: ${currentFrom}`)
+  } catch (err: any) {
+    log.error({ err: err?.message, host: cfg.host, port: cfg.port }, '📧 Transporter criado mas verify falhou')
+    // Keep transporter alive — some servers reject verify but allow send
+  }
+
   return true
 }
 
@@ -72,16 +92,20 @@ export interface SendEmailParams {
 
 export async function sendEmail(params: SendEmailParams): Promise<{ success: boolean; error?: string }> {
   if (!transporter) {
-    return { success: false, error: 'Email não configurado.' }
+    log.warn({ to: params.to, subject: params.subject }, '📧 sendEmail chamado mas transporter é null')
+    return { success: false, error: 'Email não configurado. Vá em Integrações → Email e salve a configuração.' }
   }
 
+  log.info({ to: params.to, subject: params.subject, from: currentFrom }, '📧 Enviando email...')
+
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: currentFrom,
       to: params.to,
       subject: params.subject,
       html: params.body,
     })
+    log.info({ messageId: info.messageId, to: params.to }, '📧 Email enviado com sucesso')
 
     // Registrar interação se tiver clienteId
     if (params.clienteId) {

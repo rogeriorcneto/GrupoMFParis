@@ -365,6 +365,8 @@ app.get('/api/email/status', requireAuth, (_req, res) => {
 })
 
 app.post('/api/email/test', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
+  // Force reload config from DB before testing
+  await reloadEmail()
   const result = await testEmailConnection()
   res.json(result)
 })

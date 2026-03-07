@@ -29,6 +29,11 @@ const DEFAULT_CONFIG: BotConfigData = {
 let cachedConfig: BotConfigData = { ...DEFAULT_CONFIG }
 let cacheLoaded = false
 
+/** Force next loadConfig to re-read from DB */
+export function invalidateConfigCache(): void {
+  cacheLoaded = false
+}
+
 export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData> {
   if (cacheLoaded) return { ...cachedConfig }
 

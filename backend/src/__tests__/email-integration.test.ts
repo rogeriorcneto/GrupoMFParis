@@ -33,6 +33,7 @@ vi.mock('../config-store.js', () => ({
     user: 'user@gmail.com', pass: 'secret123',
     from: 'noreply@mfparis.com',
   }),
+  invalidateConfigCache: vi.fn(),
 }))
 
 // Mock constants
@@ -57,12 +58,14 @@ describe('Email Integration', () => {
     it('configura transporter com credenciais do config-store', async () => {
       const result = await reloadEmail()
       expect(result).toBe(true)
-      expect(mockCreateTransport).toHaveBeenCalledWith({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        auth: { user: 'user@gmail.com', pass: 'secret123' },
-      })
+      expect(mockCreateTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          host: 'smtp.gmail.com',
+          port: 587,
+          secure: false,
+          auth: { user: 'user@gmail.com', pass: 'secret123' },
+        })
+      )
     })
 
     it('retorna false quando config está vazia', async () => {
