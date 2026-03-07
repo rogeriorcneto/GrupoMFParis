@@ -308,7 +308,7 @@ app.get('/api/vendedores/historico', requireAuth, requireGerente, async (req, re
 
 app.get('/api/config', requireAuth, requireGerente, async (req, res) => {
   try {
-    const cfg = await loadConfig((req as any).supabase)
+    const cfg = await loadConfig()
     const waStatus = getWhatsAppStatus()
     res.json({
       emailHost: cfg.emailHost,
@@ -337,7 +337,7 @@ app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), asyn
     if (emailPass !== undefined && emailPass !== '••••••••') updates.emailPass = emailPass
     if (emailFrom !== undefined) updates.emailFrom = emailFrom
 
-    const saved = await saveConfig(updates, (req as any).supabase)
+    const saved = await saveConfig(updates)
 
     // Recarregar transporter de email com novas configs
     const emailOk = await reloadEmail()

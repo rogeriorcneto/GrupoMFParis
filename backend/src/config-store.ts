@@ -99,6 +99,7 @@ export async function saveConfig(data: Partial<BotConfigData>, client?: Supabase
     }
 
     cachedConfig = updated
+    cacheLoaded = true
     log.info('💾 Configurações salvas no Supabase (bot_config)')
   } catch (err) {
     log.error({ err }, 'Erro ao salvar config')
