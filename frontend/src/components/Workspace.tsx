@@ -12,6 +12,7 @@ import type { AIMessage } from '../lib/gemini'
 import { sendUserWhatsApp, getUserWhatsAppStatus } from '../lib/botApi'
 import { sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
+import { loadConversation, saveConversation, clearConversation } from '../lib/aiConversations'
 
 // ── Types ──
 
@@ -87,6 +88,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [wsConversationLoaded, setWsConversationLoaded] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -114,12 +116,32 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
   useEffect(() => {
     const nome = loggedUser?.nome?.split(' ')[0] || 'Vendedor'
-    setMessages([{
+    const welcome: ChatMessage = {
       id: '0', role: 'assistant',
       text: `Fala, ${nome}! 🚀\n\nEsse é o seu **Workspace**. Aqui você tem tudo na mão:\n- 🔍 Buscar clientes na barra lateral\n- 📱 Enviar WhatsApp\n- 📧 Enviar email\n- 📝 Adicionar observações\n- ✅ Criar tarefas rápidas\n\nTodas as ações ficam registradas no seu **histórico**. Me pergunte qualquer coisa sobre os dados do CRM!`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    }])
+    }
+    loadConversation('workspace').then(saved => {
+      if (saved.length > 0) {
+        setMessages([welcome, ...saved])
+      } else {
+        setMessages([welcome])
+      }
+      setWsConversationLoaded(true)
+    }).catch(() => {
+      setMessages([welcome])
+      setWsConversationLoaded(true)
+    })
   }, [loggedUser])
+
+  // Auto-save workspace conversation
+  useEffect(() => {
+    if (!wsConversationLoaded) return
+    const toSave = messages.filter(m => m.id !== '0')
+    if (toSave.length > 0) {
+      saveConversation('workspace', toSave).catch(() => {})
+    }
+  }, [messages, wsConversationLoaded])
 
   useEffect(() => {
     if (bottomRef.current?.scrollIntoView) {
@@ -648,6 +670,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                   text: `Conversa limpa! 🔄 Os dados continuam carregados. Manda aí, ${loggedUser?.nome?.split(' ')[0] || ''}!`,
                   timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                 }])
+                clearConversation('workspace').catch(() => {})
               }}
               className="flex items-center gap-1 px-2.5 py-1 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-apple transition-colors"
             >

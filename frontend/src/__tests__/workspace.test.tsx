@@ -36,6 +36,13 @@ vi.mock('../lib/database', () => ({
   insertInteracao: vi.fn().mockResolvedValue({ id: 1 }),
 }))
 
+// Mock aiConversations
+vi.mock('../lib/aiConversations', () => ({
+  loadConversation: vi.fn().mockResolvedValue([]),
+  saveConversation: vi.fn().mockResolvedValue(undefined),
+  clearConversation: vi.fn().mockResolvedValue(undefined),
+}))
+
 import Workspace from '../components/Workspace'
 import { callAI } from '../lib/gemini'
 import { sendUserWhatsApp, getUserWhatsAppStatus, sendEmailViaBot } from '../lib/botApi'
@@ -85,9 +92,11 @@ describe('Workspace Component', () => {
     expect(screen.getByText(/Workspace — João Silva/)).toBeTruthy()
   })
 
-  it('mostra mensagem de boas-vindas da IA', () => {
+  it('mostra mensagem de boas-vindas da IA', async () => {
     render(<Workspace {...mockProps} />)
-    expect(screen.getByText(/Fala, João!/)).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByText(/Fala, João!/)).toBeTruthy()
+    })
   })
 
   it('mostra botões da sidebar de ferramentas', () => {

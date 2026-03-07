@@ -3,6 +3,7 @@ import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon } from '@heroic
 import type { Cliente, Pedido, Vendedor, Interacao } from '../../types'
 import { callAI, buildCRMContext } from '../../lib/gemini'
 import type { AIMessage } from '../../lib/gemini'
+import { loadConversation, saveConversation, clearConversation } from '../../lib/aiConversations'
 
 interface ChatMessage {
   id: string
@@ -88,21 +89,40 @@ function renderInline(text: string): React.ReactNode {
 }
 
 export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, loggedUser }: AssistenteIAViewProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '0',
-      role: 'assistant',
-      text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**.\n\nPode perguntar qualquer coisa sobre os dados, pedir relatórios, análises ou dicas de estratégia.`,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    },
-  ])
+  const welcomeMsg: ChatMessage = {
+    id: '0',
+    role: 'assistant',
+    text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**.\n\nPode perguntar qualquer coisa sobre os dados, pedir relatórios, análises ou dicas de estratégia.`,
+    timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+  }
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMsg])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState(0)
   const [copied, setCopied] = useState<string | null>(null)
+  const [conversationLoaded, setConversationLoaded] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Load saved conversation on mount
+  useEffect(() => {
+    loadConversation('assistente').then(saved => {
+      if (saved.length > 0) {
+        setMessages([welcomeMsg, ...saved])
+      }
+      setConversationLoaded(true)
+    }).catch(() => setConversationLoaded(true))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-save conversation when messages change (skip welcome msg)
+  useEffect(() => {
+    if (!conversationLoaded) return
+    const toSave = messages.filter(m => m.id !== '0')
+    if (toSave.length > 0) {
+      saveConversation('assistente', toSave).catch(() => {})
+    }
+  }, [messages, conversationLoaded])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -167,6 +187,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }])
     setError(null)
+    clearConversation('assistente').catch(() => {})
   }
 
   return (
