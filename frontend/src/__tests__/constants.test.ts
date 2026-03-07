@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { stageLabels, transicoesPermitidas } from '../utils/constants'
 
 describe('stageLabels', () => {
-  const ALL_STAGES = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
+  const ALL_STAGES = ['prospecção', 'amostra', 'homologado', 'cotacao', 'negociacao', 'pos_venda', 'perdido']
 
   it('deve ter label para cada etapa do funil', () => {
     for (const stage of ALL_STAGES) {
@@ -19,7 +19,7 @@ describe('stageLabels', () => {
 })
 
 describe('transicoesPermitidas', () => {
-  const ALL_STAGES = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
+  const ALL_STAGES = ['prospecção', 'amostra', 'homologado', 'cotacao', 'negociacao', 'pos_venda', 'perdido']
 
   it('deve definir transições para cada etapa', () => {
     for (const stage of ALL_STAGES) {
@@ -36,12 +36,16 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['amostra']).toEqual(['homologado', 'perdido'])
   })
 
-  it('homologado só pode ir para negociacao ou perdido', () => {
-    expect(transicoesPermitidas['homologado']).toEqual(['negociacao', 'perdido'])
+  it('homologado pode ir para cotacao, negociacao ou perdido', () => {
+    expect(transicoesPermitidas['homologado']).toEqual(['cotacao', 'negociacao', 'perdido'])
   })
 
-  it('negociacao pode ir para pos_venda, homologado ou perdido', () => {
-    expect(transicoesPermitidas['negociacao']).toEqual(['pos_venda', 'homologado', 'perdido'])
+  it('cotacao pode ir para negociacao, homologado ou perdido', () => {
+    expect(transicoesPermitidas['cotacao']).toEqual(['negociacao', 'homologado', 'perdido'])
+  })
+
+  it('negociacao pode ir para pos_venda, cotacao, homologado ou perdido', () => {
+    expect(transicoesPermitidas['negociacao']).toEqual(['pos_venda', 'cotacao', 'homologado', 'perdido'])
   })
 
   it('pos_venda só pode voltar para negociacao', () => {

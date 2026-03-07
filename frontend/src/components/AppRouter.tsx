@@ -227,7 +227,7 @@ export default function AppRouter({
         />
       )
     case 'tarefas':
-      return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} showToast={showToast}
+      return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast}
         onUpdateTarefa={async (t) => {
           try {
             await db.updateTarefa(t.id, t)

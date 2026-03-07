@@ -11,8 +11,10 @@ vi.mock('../lib/database', () => ({
   insertAtividade: vi.fn().mockImplementation((a: any) => Promise.resolve({ ...a, id: 200 })),
   insertTarefa: vi.fn().mockImplementation((t: any) => Promise.resolve({ ...t, id: 300 })),
   insertJob: vi.fn().mockImplementation((j: any) => Promise.resolve({ ...j, id: 400, status: 'pendente' })),
+  insertJobsBatch: vi.fn().mockImplementation((jobs: any[]) => Promise.resolve(jobs.map((j: any, i: number) => ({ ...j, id: 400 + i })))),
   updateJobStatus: vi.fn().mockResolvedValue(undefined),
   updateCampanhaStatus: vi.fn().mockResolvedValue(undefined),
+  moverClienteAtomico: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../utils/logger', () => ({
@@ -188,15 +190,10 @@ describe('useFunilActions', () => {
       })
 
       expect(params.setClientes).toHaveBeenCalled()
-      expect(db.updateCliente).toHaveBeenCalledWith(1, expect.objectContaining({
-        etapa: 'amostra',
-        etapaAnterior: 'prospecção',
-        dataEnvioAmostra: '2025-02-01',
-      }))
-      expect(db.insertHistoricoEtapa).toHaveBeenCalledWith(1, expect.objectContaining({
-        etapa: 'amostra',
-        de: 'prospecção',
-      }))
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(
+        1, 'amostra', 'prospecção', expect.any(String),
+        expect.objectContaining({ dataEnvioAmostra: '2025-02-01' })
+      )
       expect(db.insertAtividade).toHaveBeenCalled()
       expect(params.setAtividades).toHaveBeenCalled()
     })
@@ -250,7 +247,7 @@ describe('useFunilActions', () => {
     })
 
     it('faz rollback se persistência falhar', async () => {
-      vi.mocked(db.updateCliente).mockRejectedValueOnce(new Error('DB error'))
+      vi.mocked(db.moverClienteAtomico).mockRejectedValueOnce(new Error('DB error'))
       const params = defaultParams()
       const { result } = renderHook(() => useFunilActions(params))
 
@@ -267,7 +264,7 @@ describe('useFunilActions', () => {
     it('protege contra double-move (movingRef)', async () => {
       // Make first move hang
       let resolveFirst: any
-      vi.mocked(db.updateCliente).mockImplementationOnce(() => new Promise(r => { resolveFirst = r }))
+      vi.mocked(db.moverClienteAtomico).mockImplementationOnce(() => new Promise(r => { resolveFirst = r }))
 
       const params = defaultParams()
       const { result } = renderHook(() => useFunilActions(params))
@@ -282,8 +279,8 @@ describe('useFunilActions', () => {
         await result.current.moverCliente(2, 'homologado')
       })
 
-      // Only 1 updateCliente call
-      expect(db.updateCliente).toHaveBeenCalledTimes(1)
+      // Only 1 moverClienteAtomico call
+      expect(db.moverClienteAtomico).toHaveBeenCalledTimes(1)
 
       resolveFirst(undefined)
       await move1
@@ -297,7 +294,7 @@ describe('useFunilActions', () => {
         await result.current.moverCliente(999, 'amostra')
       })
 
-      expect(db.updateCliente).not.toHaveBeenCalled()
+      expect(db.moverClienteAtomico).not.toHaveBeenCalled()
     })
   })
 
@@ -322,11 +319,13 @@ describe('useFunilActions', () => {
         result.current.confirmPerda()
       })
 
-      expect(db.updateCliente).toHaveBeenCalledWith(1, expect.objectContaining({
-        etapa: 'perdido',
-        motivoPerda: 'Preço muito alto',
-        categoriaPerda: 'preco',
-      }))
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(
+        1, 'perdido', 'prospecção', expect.any(String),
+        expect.objectContaining({
+          motivoPerda: 'Preço muito alto',
+          categoriaPerda: 'preco',
+        })
+      )
       expect(result.current.showMotivoPerda).toBe(false)
       expect(result.current.motivoPerdaTexto).toBe('')
       expect(result.current.draggedItem).toBeNull()
@@ -347,11 +346,13 @@ describe('useFunilActions', () => {
         result.current.confirmAmostra()
       })
 
-      expect(db.updateCliente).toHaveBeenCalledWith(1, expect.objectContaining({
-        etapa: 'amostra',
-        dataEnvioAmostra: '2025-03-01',
-        statusAmostra: 'enviada',
-      }))
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(
+        1, 'amostra', 'prospecção', expect.any(String),
+        expect.objectContaining({
+          dataEnvioAmostra: '2025-03-01',
+          statusAmostra: 'enviada',
+        })
+      )
       expect(result.current.showModalAmostra).toBe(false)
     })
   })
@@ -370,10 +371,12 @@ describe('useFunilActions', () => {
         result.current.confirmProposta()
       })
 
-      expect(db.updateCliente).toHaveBeenCalledWith(3, expect.objectContaining({
-        etapa: 'negociacao',
-        valorProposta: 250000,
-      }))
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(
+        3, 'negociacao', 'homologado', expect.any(String),
+        expect.objectContaining({
+          valorProposta: 250000,
+        })
+      )
       expect(result.current.showModalProposta).toBe(false)
     })
   })
@@ -445,13 +448,13 @@ describe('useFunilActions', () => {
       const params = defaultParams()
       params.campanhas = [{
         id: 1, nome: 'Campanha Teste', cadenciaId: 1,
-        etapa: 'prospecção', minScore: 0, diasInativoMin: 0, status: 'rascunho',
+        etapa: 'prospecção', minScore: 0, diasInativoMin: 0, status: 'rascunho' as const,
       }]
       params.cadencias = [{
         id: 1, nome: 'Cadência 1', pausarAoResponder: false,
         steps: [
-          { id: 1, canal: 'email', delayDias: 0, templateId: 1 },
-          { id: 2, canal: 'whatsapp', delayDias: 3, templateId: 2 },
+          { id: 1, canal: 'email' as const, delayDias: 0, templateId: 1 },
+          { id: 2, canal: 'whatsapp' as const, delayDias: 3, templateId: 2 },
         ],
       }]
       const { result } = renderHook(() => useFunilActions(params))
@@ -460,8 +463,10 @@ describe('useFunilActions', () => {
         await result.current.startCampanha(1)
       })
 
-      // 1 cliente em prospecção × 2 steps = 2 jobs
-      expect(db.insertJob).toHaveBeenCalledTimes(2)
+      // 1 cliente em prospecção × 2 steps = 2 jobs via batch insert
+      expect(db.insertJobsBatch).toHaveBeenCalledTimes(1)
+      const batchArg = vi.mocked(db.insertJobsBatch).mock.calls[0][0] as any[]
+      expect(batchArg).toHaveLength(2)
       expect(db.updateCampanhaStatus).toHaveBeenCalledWith(1, 'ativa')
       expect(params.setCampanhas).toHaveBeenCalled()
       expect(params.addNotificacao).toHaveBeenCalledWith('success', expect.any(String), expect.any(String))

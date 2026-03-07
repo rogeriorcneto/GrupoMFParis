@@ -492,6 +492,47 @@ export async function insertAtividade(a: { tipo: string; descricao: string; vend
   if (error) throw error
 }
 
+export interface Atividade {
+  id: number
+  tipo: string
+  descricao: string
+  vendedorNome: string
+  timestamp: string
+}
+
+export async function fetchAtividadesByVendedor(vendedorNome: string, limit = 200): Promise<Atividade[]> {
+  const { data, error } = await supabase
+    .from('atividades')
+    .select('*')
+    .eq('vendedor_nome', vendedorNome)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    tipo: row.tipo,
+    descricao: row.descricao,
+    vendedorNome: row.vendedor_nome || 'Sistema',
+    timestamp: row.created_at,
+  }))
+}
+
+export async function fetchAllAtividades(limit = 500): Promise<Atividade[]> {
+  const { data, error } = await supabase
+    .from('atividades')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    tipo: row.tipo,
+    descricao: row.descricao,
+    vendedorNome: row.vendedor_nome || 'Sistema',
+    timestamp: row.created_at,
+  }))
+}
+
 // ============================================
 // WHATSAPP MESSAGES
 // ============================================

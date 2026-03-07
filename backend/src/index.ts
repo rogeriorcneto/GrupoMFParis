@@ -4,6 +4,11 @@ import helmet from 'helmet'
 import { rateLimit } from './middleware/rate-limit.js'
 import { CONFIG } from './config.js'
 import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, sendWhatsAppMessage } from './whatsapp.js'
+import {
+  connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
+  getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
+  startSessionCleanup,
+} from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
@@ -154,6 +159,151 @@ app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
   }
 })
 
+// ─── Per-User WhatsApp Routes (cada vendedor conecta seu próprio WA) ───
+
+app.get('/api/whatsapp/user/status', requireAuth, async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    res.json(getUserWhatsAppStatus(vendedor.id))
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
+app.get('/api/whatsapp/user/qr', requireAuth, async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    const status = getUserWhatsAppStatus(vendedor.id)
+    if (status.connected) {
+      res.json({ qr: null, status: 'connected', number: status.number })
+      return
+    }
+    const qr = getUserQRDataUrl(vendedor.id)
+    if (qr) {
+      res.json({ qr, status: 'qr' })
+      return
+    }
+    res.json({ qr: null, status: status.status })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
+app.post('/api/whatsapp/user/connect', requireAuth, rateLimit(5, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    await connectUserWhatsApp(vendedor.id)
+    res.json({ success: true, message: 'Conexão iniciada. Aguarde o QR code.' })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao conectar' })
+  }
+})
+
+app.post('/api/whatsapp/user/disconnect', requireAuth, rateLimit(5, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    await disconnectUserWhatsApp(vendedor.id)
+    res.json({ success: true, message: 'WhatsApp desconectado.' })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao desconectar' })
+  }
+})
+
+app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const { number, text, clienteId } = req.body
+  if (!number || !text) {
+    res.status(400).json({ success: false, error: 'Campos obrigatórios: number, text' })
+    return
+  }
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    const result = await sendUserWhatsAppMessage(vendedor.id, number, text)
+    if (result.success) {
+      try {
+        await db.insertWhatsAppMessage({
+          numero: number.replace(/\D/g, ''),
+          clienteId: clienteId || undefined,
+          vendedorId: vendedor.id,
+          direcao: 'enviada',
+          mensagem: text,
+        })
+        if (clienteId) {
+          await db.insertInteracao({
+            clienteId, tipo: 'whatsapp', data: new Date().toISOString(),
+            assunto: 'Mensagem WhatsApp', descricao: text.substring(0, 200),
+            automatico: false
+          })
+          await db.updateCliente(clienteId, { ultimaInteracao: new Date().toISOString().split('T')[0] })
+        }
+        await db.insertAtividade({
+          tipo: 'whatsapp',
+          descricao: `WhatsApp para ${number}: ${text.substring(0, 80)}`,
+          vendedorNome: vendedor.nome,
+        })
+      } catch (err) {
+        log.error({ err }, 'Erro ao registrar mensagem/interação WhatsApp (user)')
+      }
+    }
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+// Gerente: ver todas as sessões de usuários
+app.get('/api/whatsapp/user/sessions', requireAuth, requireGerente, (_req, res) => {
+  res.json(getAllUserSessions())
+})
+
+// ─── Vendedor Histórico (gerente only) ───
+
+app.get('/api/vendedor/:id/historico', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const vendedorId = parseInt(req.params.id, 10)
+    if (isNaN(vendedorId)) { res.status(400).json({ error: 'ID inválido' }); return }
+
+    // Find vendedor name by ID
+    const vendedores = await import('./database.js').then(m => m.fetchVendedores())
+    const vendedor = vendedores.find((v: any) => v.id === vendedorId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+
+    const { fetchAtividadesByVendedor } = await import('./database.js')
+    const limit = parseInt(req.query.limit as string, 10) || 200
+    const atividades = await fetchAtividadesByVendedor(vendedor.nome, limit)
+    res.json({ vendedor: { id: vendedor.id, nome: vendedor.nome }, atividades })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar histórico vendedor')
+    res.status(500).json({ error: err?.message || 'Erro ao buscar histórico' })
+  }
+})
+
+app.get('/api/vendedores/historico', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const { fetchAllAtividades } = await import('./database.js')
+    const limit = parseInt(req.query.limit as string, 10) || 500
+    const atividades = await fetchAllAtividades(limit)
+    res.json({ atividades })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar histórico geral')
+    res.status(500).json({ error: err?.message || 'Erro ao buscar histórico' })
+  }
+})
+
 // ─── Config Routes (somente gerente) ───
 
 app.get('/api/config', requireAuth, requireGerente, async (req, res) => {
@@ -268,6 +418,9 @@ async function start() {
     log.error({ err }, 'Erro ao auto-conectar WhatsApp')
     log.info('Use POST /api/whatsapp/connect ou a interface do CRM para conectar.')
   }
+
+  // Start per-user WhatsApp session cleanup (removes inactive sessions after 24h)
+  startSessionCleanup()
 
   // Cron: processar jobs de automação a cada 5 minutos (com guard anti-overlap)
   let cronRunning = false

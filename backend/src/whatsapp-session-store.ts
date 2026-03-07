@@ -10,18 +10,21 @@ import { log } from './logger.js'
  *
  * Drop-in replacement for useMultiFileAuthState().
  */
-export async function useSupabaseAuthState(): Promise<{
+export async function useSupabaseAuthState(prefix = 'bot'): Promise<{
   state: AuthenticationState
   saveCreds: () => Promise<void>
   clearSession: () => Promise<void>
 }> {
+  // Prefix all keys so each session (bot, user_1, user_2, ...) is isolated
+  const pfx = (key: string) => `${prefix}:${key}`
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   async function readData(key: string): Promise<any> {
     const { data, error } = await supabase
       .from('whatsapp_session')
       .select('value')
-      .eq('key', key)
+      .eq('key', pfx(key))
       .single()
     if (error || !data) return null
     try {
@@ -35,12 +38,12 @@ export async function useSupabaseAuthState(): Promise<{
     const serialized = JSON.stringify(value, BufferJSON.replacer)
     const { error } = await supabase
       .from('whatsapp_session')
-      .upsert({ key, value: serialized, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-    if (error) log.error({ error, key }, 'Erro ao salvar sessão WA no Supabase')
+      .upsert({ key: pfx(key), value: serialized, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    if (error) log.error({ error, key: pfx(key) }, 'Erro ao salvar sessão WA no Supabase')
   }
 
   async function removeData(key: string): Promise<void> {
-    await supabase.from('whatsapp_session').delete().eq('key', key)
+    await supabase.from('whatsapp_session').delete().eq('key', pfx(key))
   }
 
   // ── Creds ─────────────────────────────────────────────────────────────────
@@ -87,9 +90,9 @@ export async function useSupabaseAuthState(): Promise<{
     const { error } = await supabase
       .from('whatsapp_session')
       .delete()
-      .neq('key', '__placeholder__') // delete all rows
-    if (error) log.error({ error }, 'Erro ao limpar sessão WA do Supabase')
-    else log.info('🗑️ Sessão WhatsApp removida do Supabase')
+      .like('key', `${prefix}:%`)
+    if (error) log.error({ error }, `Erro ao limpar sessão WA (${prefix}) do Supabase`)
+    else log.info(`🗑️ Sessão WhatsApp (${prefix}) removida do Supabase`)
   }
 
   return {

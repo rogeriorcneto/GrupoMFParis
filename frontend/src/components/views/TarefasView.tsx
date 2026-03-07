@@ -1,23 +1,31 @@
 import React from 'react'
-import { XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline'
-import type { Tarefa, Cliente, Vendedor } from '../../types'
+import { XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon, ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../../types'
 import { logger } from '../../utils/logger'
 import TaskCommPanel from '../TaskCommPanel'
+import WhatsAppUserPanel from '../WhatsAppUserPanel'
+import Workspace from '../Workspace'
 
 const TarefasView: React.FC<{
   tarefas: Tarefa[]
   clientes: Cliente[]
   vendedores: Vendedor[]
   loggedUser: Vendedor | null
+  interacoes?: Interacao[]
+  pedidos?: Pedido[]
   onUpdateTarefa: (t: Tarefa) => void
   onAddTarefa: (t: Tarefa) => void
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
   showToast?: (tipo: 'success' | 'error', texto: string) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, onUpdateTarefa, onAddTarefa, onImportTarefas, showToast }) => {
+}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast }) => {
   const [showModal, setShowModal] = React.useState(false)
   const [commCliente, setCommCliente] = React.useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = React.useState<'todas' | 'pendente' | 'concluida'>('pendente')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
+  const [showWhatsApp, setShowWhatsApp] = React.useState(false)
+  const [waCliente, setWaCliente] = React.useState<Cliente | null>(null)
+  const [showWorkspace, setShowWorkspace] = React.useState(false)
+  const [wsCliente, setWsCliente] = React.useState<Cliente | null>(null)
 
   const handleImportTarefas = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -222,6 +230,20 @@ const TarefasView: React.FC<{
             </label>
           )}
           <button
+            onClick={() => setShowWhatsApp(prev => !prev)}
+            className={`px-4 py-2 rounded-apple shadow-apple-sm flex items-center text-sm font-medium transition-colors ${showWhatsApp ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'}`}
+          >
+            <DevicePhoneMobileIcon className="h-4 w-4 mr-2" />
+            {showWhatsApp ? 'Fechar WhatsApp' : '📱 Meu WhatsApp'}
+          </button>
+          <button
+            onClick={() => { setShowWorkspace(true); setWsCliente(null) }}
+            className="px-4 py-2 rounded-apple shadow-apple-sm flex items-center text-sm font-medium bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all"
+          >
+            <RocketLaunchIcon className="h-4 w-4 mr-2" />
+            Workspace
+          </button>
+          <button
             onClick={() => {
               const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
               const sugeridas: Tarefa[] = [
@@ -259,6 +281,17 @@ const TarefasView: React.FC<{
           <option value="concluida">Concluídas</option>
         </select>
       </div>
+
+      {/* WhatsApp Business Panel */}
+      {showWhatsApp && (
+        <WhatsAppUserPanel
+          loggedUser={loggedUser}
+          cliente={waCliente}
+          onClose={() => { setShowWhatsApp(false); setWaCliente(null) }}
+          showToast={showToast}
+          compact
+        />
+      )}
 
       <div className="space-y-6">
         {datasOrdenadas.length === 0 && (
@@ -308,14 +341,24 @@ const TarefasView: React.FC<{
                               {cliente && tarefa.status !== 'concluida' && (
                                 <div className="flex items-center gap-1.5 mt-2">
                                   {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setCommCliente(cliente) }}
-                                      title="WhatsApp"
-                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-full transition-colors"
-                                    >
-                                      <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
-                                      WhatsApp
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setWaCliente(cliente); setShowWhatsApp(true) }}
+                                        title="Enviar via meu WhatsApp"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-full transition-colors"
+                                      >
+                                        <DevicePhoneMobileIcon className="h-3.5 w-3.5" />
+                                        Meu WA
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setCommCliente(cliente) }}
+                                        title="Enviar via Bot CRM"
+                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-full transition-colors"
+                                      >
+                                        <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
+                                        Bot
+                                      </button>
+                                    </>
                                   )}
                                   {cliente.contatoEmail && (
                                     <button
@@ -461,6 +504,23 @@ const TarefasView: React.FC<{
             </div>
           </div>
         </div>
+      )}
+
+      {/* Workspace interativo (fullscreen overlay) */}
+      {showWorkspace && (
+        <Workspace
+          loggedUser={loggedUser}
+          clientes={clientes}
+          vendedores={vendedores}
+          interacoes={interacoes}
+          pedidos={pedidos}
+          tarefas={tarefas}
+          cliente={wsCliente}
+          onClose={() => { setShowWorkspace(false); setWsCliente(null) }}
+          showToast={showToast}
+          onAddTarefa={onAddTarefa}
+          onUpdateTarefa={onUpdateTarefa}
+        />
       )}
     </div>
   )

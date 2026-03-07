@@ -5,6 +5,7 @@ import { sampleVendedor, sampleCliente } from './mocks/supabase-mock'
 // Mock database module
 vi.mock('../lib/database', () => ({
   updateCliente: vi.fn().mockResolvedValue(undefined),
+  updateClientesBatch: vi.fn().mockResolvedValue(undefined),
   insertHistoricoEtapa: vi.fn().mockResolvedValue(undefined),
   insertAtividade: vi.fn().mockImplementation((a: any) => Promise.resolve({ ...a, id: 200 })),
 }))
@@ -114,11 +115,11 @@ describe('useAutoRules', () => {
 
       renderHook(() => useAutoRules(params))
 
-      // updateCliente deve ser chamado para cada órfão
+      // updateClientesBatch deve ser chamado para órfãos
       // (assíncrono, pode levar um tick)
       vi.advanceTimersByTime(100)
 
-      expect(db.updateCliente).toHaveBeenCalled()
+      expect(db.updateClientesBatch).toHaveBeenCalled()
     })
 
     it('não reatribui clientes que já têm vendedor', () => {
@@ -130,10 +131,10 @@ describe('useAutoRules', () => {
       renderHook(() => useAutoRules(params))
       vi.advanceTimersByTime(100)
 
-      // updateCliente NÃO deve ser chamado para atribuição de órfão
-      // (pode ser chamado por score/diasInativo, mas não por orphan fix)
-      const orphanCalls = vi.mocked(db.updateCliente).mock.calls.filter(
-        call => call[1] && 'vendedorId' in (call[1] as any)
+      // updateClientesBatch NÃO deve ser chamado for orphan fix
+      // (may be called for diasInativo/score, but not with vendedorId)
+      const orphanCalls = vi.mocked(db.updateClientesBatch).mock.calls.filter(
+        call => Array.isArray(call[0]) && call[0].some((item: any) => item.changes && 'vendedorId' in item.changes)
       )
       expect(orphanCalls.length).toBe(0)
     })
@@ -211,9 +212,11 @@ describe('useAutoRules', () => {
       // Advance past debounce (3 seconds)
       vi.advanceTimersByTime(3500)
 
-      expect(db.updateCliente).toHaveBeenCalledWith(1, expect.objectContaining({
-        score: expect.any(Number),
-      }))
+      expect(db.updateClientesBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 1, changes: expect.objectContaining({ score: expect.any(Number) }) })
+        ])
+      )
     })
 
     it('não persiste scores com delta < 5 pontos', () => {
@@ -232,9 +235,9 @@ describe('useAutoRules', () => {
 
       vi.advanceTimersByTime(3500)
 
-      // updateCliente should NOT be called for score (may be called for diasInativo)
-      const scoreCalls = vi.mocked(db.updateCliente).mock.calls.filter(
-        call => call[1] && 'score' in (call[1] as any)
+      // updateClientesBatch should NOT be called for score (may be called for diasInativo)
+      const scoreCalls = vi.mocked(db.updateClientesBatch).mock.calls.filter(
+        call => Array.isArray(call[0]) && call[0].some((item: any) => item.changes && 'score' in item.changes)
       )
       expect(scoreCalls.length).toBe(0)
     })

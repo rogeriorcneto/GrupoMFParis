@@ -83,6 +83,9 @@ vi.mock('../components/views', () => ({
   TemplatesView: () => <div data-testid="view-templates">Templates</div>,
   ProdutosView: () => <div data-testid="view-produtos">Produtos</div>,
   PedidosView: () => <div data-testid="view-pedidos">Pedidos</div>,
+  AssistenteIAView: () => <div data-testid="view-ia">Assistente IA</div>,
+  AmostrasView: () => <div data-testid="view-amostras">Amostras</div>,
+  AprovacaoView: () => <div data-testid="view-aprovacao">Aprovação</div>,
 }))
 
 // Mock ClientePanel
@@ -272,7 +275,7 @@ describe('App — Navegação por cargo', () => {
 
     // Use getByRole to target nav buttons specifically
     expect(screen.getByRole('button', { name: /Visão Geral/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Funil$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Funil de Vendas/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Clientes$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Pedidos$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Tarefas$/i })).toBeInTheDocument()
@@ -284,14 +287,14 @@ describe('App — Navegação por cargo', () => {
 
   it('gerente vê botão Assistente IA', async () => {
     await loginAs('gerente')
-    expect(screen.getByText('Assistente IA')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Assistente IA/i })).toBeInTheDocument()
   })
 
   it('vendedor NÃO vê dashboard, automações, prospecção, equipe, relatórios', async () => {
     await loginAs('vendedor')
 
-    // Vendedor's first view is 'funil'
-    expect(screen.getByTestId('view-funil')).toBeInTheDocument()
+    // Vendedor's first view is 'ia' (first in viewsPermitidas)
+    expect(screen.getByTestId('view-ia')).toBeInTheDocument()
 
     // Should NOT see these nav items
     expect(screen.queryByRole('button', { name: /Visão Geral/i })).not.toBeInTheDocument()
@@ -299,11 +302,6 @@ describe('App — Navegação por cargo', () => {
     expect(screen.queryByRole('button', { name: /Prospecção/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Equipe$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Relatórios/i })).not.toBeInTheDocument()
-  })
-
-  it('vendedor NÃO vê Assistente IA', async () => {
-    await loginAs('vendedor')
-    expect(screen.queryByText('Assistente IA')).not.toBeInTheDocument()
   })
 
   it('sdr NÃO vê dashboard, automações, equipe, relatórios', async () => {
@@ -315,7 +313,7 @@ describe('App — Navegação por cargo', () => {
     expect(screen.queryByRole('button', { name: /Relatórios/i })).not.toBeInTheDocument()
 
     // SDR sees funil, clientes, mapa, prospecção, tarefas, templates, pedidos
-    expect(screen.getByRole('button', { name: /^Funil$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Funil de Vendas/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Clientes$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Prospecção/i })).toBeInTheDocument()
   })
@@ -330,49 +328,49 @@ describe('App — Navegação entre views', () => {
   it('clicar em "Funil" navega para FunilView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Funil'))
+    await userEvent.click(screen.getByRole('button', { name: /Funil de Vendas/i }))
     expect(screen.getByTestId('view-funil')).toBeInTheDocument()
   })
 
   it('clicar em "Clientes" navega para ClientesView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Clientes'))
+    await userEvent.click(screen.getByRole('button', { name: /^Clientes$/i }))
     expect(screen.getByTestId('view-clientes')).toBeInTheDocument()
   })
 
   it('clicar em "Pedidos" navega para PedidosView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Pedidos'))
+    await userEvent.click(screen.getByRole('button', { name: /^Pedidos$/i }))
     expect(screen.getByTestId('view-pedidos')).toBeInTheDocument()
   })
 
   it('clicar em "Tarefas" navega para TarefasView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Tarefas'))
+    await userEvent.click(screen.getByRole('button', { name: /^Tarefas$/i }))
     expect(screen.getByTestId('view-tarefas')).toBeInTheDocument()
   })
 
   it('clicar em "Relatórios" navega para RelatoriosView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Relatórios'))
+    await userEvent.click(screen.getByRole('button', { name: /Relatórios/i }))
     expect(screen.getByTestId('view-relatorios')).toBeInTheDocument()
   })
 
   it('clicar em "Equipe" navega para VendedoresView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Equipe'))
+    await userEvent.click(screen.getByRole('button', { name: /^Equipe$/i }))
     expect(screen.getByTestId('view-equipe')).toBeInTheDocument()
   })
 
   it('clicar em "Produtos" navega para ProdutosView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByText('Produtos'))
+    await userEvent.click(screen.getByRole('button', { name: /^Produtos$/i }))
     expect(screen.getByTestId('view-produtos')).toBeInTheDocument()
   })
 })

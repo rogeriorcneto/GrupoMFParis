@@ -1,6 +1,7 @@
 import React from 'react'
-import { PlusIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Vendedor, Cliente } from '../../types'
+import { fetchVendedorHistorico, type VendedorHistoricoItem } from '../../lib/botApi'
 
 const VendedoresView: React.FC<{
   vendedores: Vendedor[]
@@ -25,8 +26,19 @@ const VendedoresView: React.FC<{
   const [editMetaVendas, setEditMetaVendas] = React.useState('')
   const [editMetaLeads, setEditMetaLeads] = React.useState('')
   const [editMetaConversao, setEditMetaConversao] = React.useState('')
+  const [historico, setHistorico] = React.useState<VendedorHistoricoItem[]>([])
+  const [historicoLoading, setHistoricoLoading] = React.useState(false)
 
   const selectedVendedor = vendedores.find(v => v.id === selectedVendedorId) ?? null
+
+  React.useEffect(() => {
+    if (!selectedVendedorId) { setHistorico([]); return }
+    setHistoricoLoading(true)
+    fetchVendedorHistorico(selectedVendedorId)
+      .then(res => setHistorico(res.atividades))
+      .catch(() => setHistorico([]))
+      .finally(() => setHistoricoLoading(false))
+  }, [selectedVendedorId])
 
   const getVendedorMetrics = (vendedor: Vendedor) => {
     const clientesVendedor = clientes.filter(c => c.vendedorId === vendedor.id)
@@ -182,6 +194,38 @@ const VendedoresView: React.FC<{
                   <div key={c.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-apple border border-gray-200">
                     <div><p className="font-medium text-sm text-gray-900">{c.razaoSocial}</p><p className="text-xs text-gray-500">{c.contatoNome} • {c.etapa}</p></div>
                     <div className="text-right"><p className="text-sm font-semibold text-gray-900">R$ {(c.valorEstimado || 0).toLocaleString('pt-BR')}</p><p className="text-xs text-gray-500">Score: {c.score || 0}</p></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Histórico de Atividades do Vendedor */}
+        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+            <ClockIcon className="h-5 w-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">Histórico de Atividades</h3>
+            <span className="text-sm text-gray-500 ml-auto">{historico.length} ação(ões)</span>
+          </div>
+          <div className="p-6">
+            {historicoLoading ? (
+              <p className="text-gray-500 text-sm text-center py-4">Carregando histórico...</p>
+            ) : historico.length === 0 ? (
+              <p className="text-gray-500 text-sm text-center py-4">Nenhuma atividade registrada para este vendedor.</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {historico.map(a => (
+                  <div key={a.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-apple border border-gray-200">
+                    <span className="text-lg flex-shrink-0 mt-0.5">
+                      {a.tipo === 'whatsapp' ? '📱' : a.tipo === 'email' ? '📧' : a.tipo === 'nota' ? '📝' : a.tipo === 'tarefa' ? '✅' : a.tipo === 'ia' ? '🤖' : a.tipo === 'ligacao' ? '📞' : '📋'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800">{a.descricao}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {new Date(a.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>

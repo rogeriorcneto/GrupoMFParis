@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { authFetch, BOT_URL } from '../../lib/botApi'
+import { authFetch, BOT_URL, getAllUserWhatsAppSessions, type UserWAStatus } from '../../lib/botApi'
 import OmieIntegration from '../omie/OmieIntegration'
 
 interface WhatsAppStatus {
@@ -45,6 +45,9 @@ const IntegracoesView: React.FC = () => {
   const [emailMsg, setEmailMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const configLoadedRef = useRef(false)
 
+  // Per-user WhatsApp sessions (gerente view)
+  const [userSessions, setUserSessions] = useState<UserWAStatus[]>([])
+
   // Carregar config salva do backend
   const loadConfig = useCallback(async () => {
     try {
@@ -75,6 +78,12 @@ const IntegracoesView: React.FC = () => {
         setWaError(null)
 
         if (!configLoadedRef.current) loadConfig()
+
+        // Load per-user WhatsApp sessions
+        try {
+          const sessions = await getAllUserWhatsAppSessions()
+          setUserSessions(sessions)
+        } catch { /* not gerente or bot offline */ }
 
         if (waRes.status === 'qr' || waRes.status === 'connecting') {
           const qrRes: QRResponse = await authFetch(`${BOT_URL}/api/whatsapp/qr`).then(r => r.json())
@@ -305,6 +314,63 @@ const IntegracoesView: React.FC = () => {
               {waLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ═══════════════ WHATSAPP BUSINESS CRM (per-user) ═══════════════ */}
+      <div className="bg-white rounded-apple shadow-apple-sm border-2 border-emerald-200 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="text-4xl">📱</div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business CRM</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-block w-2.5 h-2.5 rounded-full ${
+                userSessions.some(s => s.connected) ? 'bg-green-500 animate-pulse' : 'bg-gray-300'
+              }`} />
+              <span className="text-sm text-gray-600">
+                {userSessions.filter(s => s.connected).length > 0
+                  ? `${userSessions.filter(s => s.connected).length} vendedor(es) conectado(s)`
+                  : 'Nenhum vendedor conectado'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-4">
+          Cada vendedor conecta seu próprio WhatsApp Business diretamente na tela de <strong>Tarefas</strong>.
+          As mensagens são enviadas do número pessoal do vendedor, não do bot da empresa.
+        </p>
+
+        {userSessions.length > 0 ? (
+          <div className="space-y-2 mb-4">
+            <h4 className="text-sm font-semibold text-gray-700">Sessões ativas:</h4>
+            {userSessions.map(s => (
+              <div key={s.vendedorId} className={`flex items-center justify-between px-3 py-2 rounded-apple border ${s.connected ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${s.connected ? 'bg-green-500' : s.status === 'qr' ? 'bg-yellow-400' : 'bg-gray-300'}`} />
+                  <span className="text-sm font-medium text-gray-800">Vendedor #{s.vendedorId}</span>
+                </div>
+                <div className="text-xs text-gray-500">
+                  {s.connected ? `${s.number} • ${Math.floor(s.uptime / 60)}min` : s.status}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-emerald-50 rounded-apple border border-emerald-200 p-4 mb-4">
+            <p className="text-sm text-emerald-800">
+              Instrua seus vendedores a acessarem <strong>Tarefas → 📱 Meu WhatsApp</strong> para conectar.
+            </p>
+            <p className="text-xs text-emerald-600 mt-1">
+              Cada vendedor escaneia o QR Code com seu celular para vincular o WhatsApp Business ao CRM.
+            </p>
+          </div>
+        )}
+
+        <div className="bg-blue-50 rounded-apple border border-blue-200 p-3">
+          <p className="text-xs text-blue-700">
+            <strong>Limite:</strong> até 20 sessões simultâneas. Sessões inativas por 24h são desconectadas automaticamente.
+          </p>
         </div>
       </div>
 

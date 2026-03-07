@@ -67,5 +67,95 @@ export async function sendEmailViaBot(to: string, subject: string, body: string,
   }
 }
 
+// ─── Per-User WhatsApp (cada vendedor conecta seu próprio WA) ───
+
+export interface UserWAStatus {
+  connected: boolean
+  status: 'disconnected' | 'connecting' | 'qr' | 'connected'
+  number: string | null
+  uptime: number
+  vendedorId: number
+}
+
+/** Get the logged user's WhatsApp connection status */
+export async function getUserWhatsAppStatus(): Promise<UserWAStatus> {
+  const res = await authFetch(`${BOT_URL}/api/whatsapp/user/status`)
+  return await res.json()
+}
+
+/** Get the logged user's WhatsApp QR code (if available) */
+export async function getUserWhatsAppQR(): Promise<{ qr: string | null; status: string; number?: string }> {
+  const res = await authFetch(`${BOT_URL}/api/whatsapp/user/qr`)
+  return await res.json()
+}
+
+/** Connect the logged user's WhatsApp */
+export async function connectUserWhatsApp(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/connect`, { method: 'POST' })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao conectar' }
+  }
+}
+
+/** Disconnect the logged user's WhatsApp */
+export async function disconnectUserWhatsApp(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/disconnect`, { method: 'POST' })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao desconectar' }
+  }
+}
+
+/** Send a WhatsApp message via the logged user's own WhatsApp session */
+export async function sendUserWhatsApp(
+  number: string, text: string, clienteId?: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, text, clienteId }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+/** Get all user WhatsApp sessions (gerente only) */
+export async function getAllUserWhatsAppSessions(): Promise<UserWAStatus[]> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/sessions`)
+    return await res.json()
+  } catch {
+    return []
+  }
+}
+
+// ── Vendedor Histórico (gerente) ──
+
+export interface VendedorHistoricoItem {
+  id: number
+  tipo: string
+  descricao: string
+  vendedorNome: string
+  timestamp: string
+}
+
+export async function fetchVendedorHistorico(vendedorId: number, limit = 200): Promise<{ vendedor: { id: number; nome: string }; atividades: VendedorHistoricoItem[] }> {
+  const res = await authFetch(`${BOT_URL}/api/vendedor/${vendedorId}/historico?limit=${limit}`)
+  if (!res.ok) throw new Error('Erro ao buscar histórico')
+  return await res.json()
+}
+
+export async function fetchAllVendedoresHistorico(limit = 500): Promise<{ atividades: VendedorHistoricoItem[] }> {
+  const res = await authFetch(`${BOT_URL}/api/vendedores/historico?limit=${limit}`)
+  if (!res.ok) throw new Error('Erro ao buscar histórico geral')
+  return await res.json()
+}
+
 /** Get bot URL for direct use */
 export { BOT_URL }
