@@ -3,7 +3,7 @@ import { PlusIcon, AdjustmentsHorizontalIcon, MagnifyingGlassIcon, EllipsisVerti
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
 
-const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
+const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
   const [searchTerm, setSearchTerm] = React.useState('')
   const [showFilters, setShowFilters] = React.useState(false)
   const [filterEtapa, setFilterEtapa] = React.useState('')
@@ -16,6 +16,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   const [showMenu, setShowMenu] = React.useState(false)
   const [openCardMenu, setOpenCardMenu] = React.useState<number | null>(null)
   const [deleteClienteModal, setDeleteClienteModal] = React.useState<Cliente | null>(null)
+  const [editingVendedor, setEditingVendedor] = React.useState<number | null>(null)
   const importRef = React.useRef<HTMLInputElement>(null)
   const debouncedSearch = useDebounce(searchTerm, 250)
   const PAGE_SIZE = 50
@@ -332,8 +333,35 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                         {cfg.label}
                       </span>
                     </td>
-                    <td className="py-3 px-4 hidden lg:table-cell">
-                      {v ? <span className="text-sm text-gray-600">{v.nome.split(' ')[0]}</span> : <span className="text-xs text-gray-300">—</span>}
+                    <td className="py-3 px-4 hidden lg:table-cell" onClick={e => e.stopPropagation()}>
+                      {editingVendedor === cliente.id ? (
+                        <select
+                          autoFocus
+                          className="text-sm bg-white border border-primary-300 rounded-apple px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                          value={cliente.vendedorId || ''}
+                          onChange={async (e) => {
+                            const newId = Number(e.target.value)
+                            if (newId && newId !== cliente.vendedorId && onUpdateCliente) {
+                              await onUpdateCliente(cliente.id, { vendedorId: newId })
+                            }
+                            setEditingVendedor(null)
+                          }}
+                          onBlur={() => setEditingVendedor(null)}
+                        >
+                          <option value="">— Sem vendedor —</option>
+                          {vendedores.map(vd => (
+                            <option key={vd.id} value={vd.id}>{vd.nome}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setEditingVendedor(cliente.id)}
+                          className="text-sm text-gray-600 hover:text-primary-700 hover:bg-primary-50 px-2 py-0.5 rounded-apple transition-colors"
+                          title="Clique para trocar vendedor"
+                        >
+                          {v ? v.nome.split(' ')[0] : <span className="text-gray-300">—</span>}
+                        </button>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       {cliente.valorEstimado ? (
@@ -420,7 +448,32 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                     <span className={`w-1 h-1 rounded-full ${cfg.dot}`} />
                     {cfg.label}
                   </span>
-                  {v && <span className="text-[10px] text-gray-400">{v.nome.split(' ')[0]}</span>}
+                  <span className="text-[10px] text-gray-400" onClick={e => e.stopPropagation()}>
+                    {editingVendedor === cliente.id ? (
+                      <select
+                        autoFocus
+                        className="text-[10px] bg-white border border-primary-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        value={cliente.vendedorId || ''}
+                        onChange={async (e) => {
+                          const newId = Number(e.target.value)
+                          if (newId && newId !== cliente.vendedorId && onUpdateCliente) {
+                            await onUpdateCliente(cliente.id, { vendedorId: newId })
+                          }
+                          setEditingVendedor(null)
+                        }}
+                        onBlur={() => setEditingVendedor(null)}
+                      >
+                        <option value="">—</option>
+                        {vendedores.map(vd => (
+                          <option key={vd.id} value={vd.id}>{vd.nome}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <button onClick={() => setEditingVendedor(cliente.id)} className="hover:text-primary-600 transition-colors">
+                        {v ? v.nome.split(' ')[0] : '—'}
+                      </button>
+                    )}
+                  </span>
                   {cliente.valorEstimado ? (
                     <span className="text-[10px] font-semibold text-gray-600 ml-auto">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</span>
                   ) : null}

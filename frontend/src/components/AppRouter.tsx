@@ -169,6 +169,12 @@ export default function AppRouter({
         vendedores={vendedores}
         onNewCliente={openModal}
         onEditCliente={handleEditCliente}
+        onUpdateCliente={async (id, changes) => {
+          try {
+            await db.updateCliente(id, changes)
+            setClientes(prev => prev.map(c => c.id === id ? { ...c, ...changes } : c))
+          } catch (err) { logger.error('Erro ao atualizar cliente:', err); showToast('error', 'Erro ao atualizar cliente.') }
+        }}
         onImportClientes={async (novos) => {
           try {
             const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
