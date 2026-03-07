@@ -12,9 +12,11 @@ import {
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
+import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
 import { omieRouter } from './routes/omie.js'
+import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
 import { geminiHandler } from './gemini.js'
 import { log } from './logger.js'
 
@@ -397,6 +399,79 @@ app.post('/api/email/send-template', requireAuth, rateLimit(15, 60_000), async (
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
+
+// ─── Pedido → Omie (automático ao aprovar) ───
+
+app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    // 1. Aprovar pedido no CRM
+    const { data: pedido, error: fetchErr } = await supabase
+      .from('pedidos')
+      .select('status')
+      .eq('id', pedidoId)
+      .single()
+
+    if (fetchErr || !pedido) {
+      res.status(404).json({ success: false, error: 'Pedido não encontrado' })
+      return
+    }
+
+    const userId = (req as any).userId
+    const { error: updateErr } = await supabase
+      .from('pedidos')
+      .update({
+        status: 'aprovado',
+        aprovado_por: userId,
+        data_aprovacao: new Date().toISOString(),
+      })
+      .eq('id', pedidoId)
+
+    if (updateErr) {
+      res.status(500).json({ success: false, error: updateErr.message })
+      return
+    }
+
+    // 2. Enviar automaticamente ao Omie
+    const omieResult = await onPedidoAprovado(pedidoId)
+
+    res.json({
+      success: true,
+      pedido_aprovado: true,
+      omie: omieResult,
+    })
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao aprovar pedido')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+app.post('/api/pedidos/:id/enviar-omie', requireAuth, requireGerente, async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    const response = await criarPedidoOmie(pedidoId)
+    res.json({ success: true, omie: response })
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao enviar pedido para Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+app.get('/api/pedidos/:id/status-omie', requireAuth, async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    const status = await consultarPedidoOmie(pedidoId)
+    res.json({ success: true, status })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
 
 // ─── Start server ───
 

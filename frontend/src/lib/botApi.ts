@@ -157,5 +157,35 @@ export async function fetchAllVendedoresHistorico(limit = 500): Promise<{ ativid
   return await res.json()
 }
 
+// ─── Omie Pedido Integration ───
+
+export interface OmieApprovalResult {
+  success: boolean
+  pedido_aprovado: boolean
+  omie: {
+    success: boolean
+    error?: string
+    omie_codigo?: string
+  }
+}
+
+/** Aprovar pedido e enviar automaticamente ao Omie */
+export async function aprovarPedidoComOmie(pedidoId: number): Promise<OmieApprovalResult> {
+  const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/aprovar`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+  return await res.json()
+}
+
+/** Enviar pedido manualmente ao Omie (já aprovado) */
+export async function enviarPedidoOmie(pedidoId: number): Promise<{ success: boolean; omie?: any; error?: string }> {
+  const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/enviar-omie`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+  return await res.json()
+}
+
+/** Consultar status do pedido no Omie */
+export async function consultarStatusOmie(pedidoId: number): Promise<{ success: boolean; status?: any; error?: string }> {
+  const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/status-omie`)
+  return await res.json()
+}
+
 /** Get bot URL for direct use */
 export { BOT_URL }

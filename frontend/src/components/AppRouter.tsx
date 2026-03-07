@@ -13,6 +13,7 @@ import {
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
+import { aprovarPedidoComOmie } from '../lib/botApi'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -78,9 +79,13 @@ export default function AppRouter({
         showToast={showToast}
         onAprovar={async (pedido) => {
           try {
-            await db.aprovarPedido(pedido.id, loggedUser?.id || 0)
+            const result = await aprovarPedidoComOmie(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id } : p))
-            addNotificacao('success', 'Pedido aprovado', `Pedido ${pedido.numero} aprovado! O vendedor será notificado.`, pedido.clienteId)
+            if (result.omie?.success) {
+              addNotificacao('success', 'Pedido aprovado + Omie', `Pedido ${pedido.numero} aprovado e enviado ao Omie! (Cód: ${result.omie.omie_codigo})`, pedido.clienteId)
+            } else {
+              addNotificacao('success', 'Pedido aprovado', `Pedido ${pedido.numero} aprovado! ${result.omie?.error ? '⚠️ Omie: ' + result.omie.error : ''}`, pedido.clienteId)
+            }
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
         }}
         onRecusar={async (pedido, motivo) => {
@@ -333,9 +338,19 @@ export default function AppRouter({
             const saved = await db.insertPedido(p)
             const params = getParametrosAprovacao()
             if (pedidoPassaAutoAprovacao(saved, params)) {
-              await db.aprovarPedido(saved.id, loggedUser?.id || 0)
-              setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
-              showToast('success', `Pedido ${saved.numero} aprovado automaticamente! ✅`)
+              try {
+                const omieResult = await aprovarPedidoComOmie(saved.id)
+                setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
+                if (omieResult.omie?.success) {
+                  showToast('success', `Pedido ${saved.numero} aprovado e enviado ao Omie! ✅`)
+                } else {
+                  showToast('success', `Pedido ${saved.numero} aprovado! ${omieResult.omie?.error ? '⚠️ Omie: ' + omieResult.omie.error : ''}`)
+                }
+              } catch {
+                await db.aprovarPedido(saved.id, loggedUser?.id || 0)
+                setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
+                showToast('success', `Pedido ${saved.numero} aprovado automaticamente! ✅ (Omie offline)`)
+              }
             } else {
               setPedidos(prev => [...prev, saved])
               showToast('success', `Pedido ${p.numero} enviado para aprovação!`)
@@ -344,8 +359,25 @@ export default function AppRouter({
         }}
         onUpdatePedido={async (p) => {
           try {
-            await db.updatePedidoStatus(p.id, p.status)
-            setPedidos(prev => prev.map(x => x.id === p.id ? p : x))
+            if (p.status === 'confirmado') {
+              // Aprovar via backend → Omie
+              try {
+                const result = await aprovarPedidoComOmie(p.id)
+                setPedidos(prev => prev.map(x => x.id === p.id ? { ...p, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id } : x))
+                if (result.omie?.success) {
+                  showToast('success', `Pedido ${p.numero} aprovado e enviado ao Omie! ✅`)
+                } else {
+                  showToast('success', `Pedido ${p.numero} aprovado! ${result.omie?.error ? '⚠️ Omie: ' + result.omie.error : ''}`)
+                }
+              } catch {
+                await db.aprovarPedido(p.id, loggedUser?.id || 0)
+                setPedidos(prev => prev.map(x => x.id === p.id ? { ...p, status: 'confirmado' } : x))
+                showToast('success', `Pedido ${p.numero} aprovado! (Omie offline)`)
+              }
+            } else {
+              await db.updatePedidoStatus(p.id, p.status)
+              setPedidos(prev => prev.map(x => x.id === p.id ? p : x))
+            }
           } catch (err) { logger.error('Erro ao atualizar pedido:', err) }
         }}
       />
