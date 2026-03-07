@@ -1,6 +1,7 @@
-import { supabase } from './supabase.js'
+import { supabase as defaultSupabase } from './supabase.js'
 import { encrypt, decrypt } from './crypto.js'
 import { log } from './logger.js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface BotConfigData {
   emailHost: string
@@ -28,9 +29,10 @@ const DEFAULT_CONFIG: BotConfigData = {
 let cachedConfig: BotConfigData = { ...DEFAULT_CONFIG }
 let cacheLoaded = false
 
-export async function loadConfig(): Promise<BotConfigData> {
+export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData> {
   if (cacheLoaded) return { ...cachedConfig }
 
+  const supabase = client || defaultSupabase
   try {
     const { data, error } = await supabase
       .from('bot_config')
@@ -70,8 +72,9 @@ export function loadConfigSync(): BotConfigData {
   return { ...cachedConfig }
 }
 
-export async function saveConfig(data: Partial<BotConfigData>): Promise<BotConfigData> {
-  const current = await loadConfig()
+export async function saveConfig(data: Partial<BotConfigData>, client?: SupabaseClient): Promise<BotConfigData> {
+  const supabase = client || defaultSupabase
+  const current = await loadConfig(client)
   const updated = { ...current, ...data }
 
   try {

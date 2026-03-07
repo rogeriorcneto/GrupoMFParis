@@ -40,6 +40,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (cached && cached.expiresAt > Date.now()) {
     ;(req as any).userId = cached.userId
     ;(req as any).userEmail = cached.email
+    ;(req as any).supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
     next()
     return
   }
@@ -60,6 +64,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // Attach user to request for downstream use
     ;(req as any).userId = user.id
     ;(req as any).userEmail = user.email
+
+    // Create a per-request Supabase client authenticated with the user's token
+    // This allows DB operations to pass RLS policies that check auth.uid()
+    ;(req as any).supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
 
     next()
   } catch (err) {
@@ -91,7 +102,9 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
   }
 
   try {
-    const { data, error } = await authClient
+    // Use per-request authenticated client if available, fallback to authClient
+    const client = (req as any).supabase || authClient
+    const { data, error } = await client
       .from('vendedores')
       .select('cargo')
       .eq('auth_id', userId)

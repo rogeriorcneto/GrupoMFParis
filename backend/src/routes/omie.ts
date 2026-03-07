@@ -11,9 +11,9 @@ export const omieRouter = Router()
 
 // ─── Config ───
 
-omieRouter.get('/config', async (_req, res) => {
+omieRouter.get('/config', async (req, res) => {
   try {
-    const cfg = await loadConfig()
+    const cfg = await loadConfig((req as any).supabase)
     const hasKey = !!cfg.omieAppKey
     const hasSecret = !!cfg.omieAppSecret
     res.json({
@@ -43,7 +43,7 @@ omieRouter.post('/config', rateLimit(10, 60_000), async (req, res) => {
     }
 
     // Salvar as credenciais (serão encriptadas pelo config-store)
-    await saveConfig({ omieAppKey: appKey, omieAppSecret: appSecret })
+    await saveConfig({ omieAppKey: appKey, omieAppSecret: appSecret }, (req as any).supabase)
 
     res.json({
       success: true,

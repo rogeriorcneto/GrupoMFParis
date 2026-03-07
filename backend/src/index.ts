@@ -156,9 +156,9 @@ app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
 
 // ─── Config Routes (somente gerente) ───
 
-app.get('/api/config', requireAuth, requireGerente, async (_req, res) => {
+app.get('/api/config', requireAuth, requireGerente, async (req, res) => {
   try {
-    const cfg = await loadConfig()
+    const cfg = await loadConfig((req as any).supabase)
     const waStatus = getWhatsAppStatus()
     res.json({
       emailHost: cfg.emailHost,
@@ -187,7 +187,7 @@ app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), asyn
     if (emailPass !== undefined && emailPass !== '••••••••') updates.emailPass = emailPass
     if (emailFrom !== undefined) updates.emailFrom = emailFrom
 
-    const saved = await saveConfig(updates)
+    const saved = await saveConfig(updates, (req as any).supabase)
 
     // Recarregar transporter de email com novas configs
     const emailOk = await reloadEmail()
