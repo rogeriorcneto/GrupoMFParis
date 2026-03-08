@@ -53,7 +53,7 @@ describe('handlePipeline', () => {
       makeCliente({ id: 1, etapa: 'prospecção', valorEstimado: 10000 }),
       makeCliente({ id: 2, etapa: 'prospecção', valorEstimado: 20000 }),
       makeCliente({ id: 3, etapa: 'negociacao', valorEstimado: 50000 }),
-      makeCliente({ id: 4, etapa: 'pos_venda', valorEstimado: 80000 }),
+      makeCliente({ id: 4, etapa: 'cliente_ativo', valorEstimado: 80000 }),
     ]
     vi.mocked(db.fetchClientesByVendedor).mockResolvedValue(clientes)
     const session = { vendedor, state: 'logged_in' as const, lastActivity: Date.now() }
@@ -67,7 +67,7 @@ describe('handlePipeline', () => {
   it('calcula taxa de conversão', async () => {
     const clientes = [
       makeCliente({ id: 1, etapa: 'prospecção' }),
-      makeCliente({ id: 2, etapa: 'pos_venda' }),
+      makeCliente({ id: 2, etapa: 'cliente_ativo' }),
     ]
     vi.mocked(db.fetchClientesByVendedor).mockResolvedValue(clientes)
     const session = { vendedor, state: 'logged_in' as const, lastActivity: Date.now() }
@@ -78,7 +78,7 @@ describe('handlePipeline', () => {
 
   it('mostra progresso da meta quando vendedor tem meta > 0', async () => {
     const clientes = [
-      makeCliente({ id: 1, etapa: 'pos_venda', valorEstimado: 50000 }),
+      makeCliente({ id: 1, etapa: 'cliente_ativo', valorEstimado: 50000 }),
     ]
     vi.mocked(db.fetchClientesByVendedor).mockResolvedValue(clientes)
     const session = { vendedor: { ...vendedor, metaVendas: 100000 }, state: 'logged_in' as const, lastActivity: Date.now() }

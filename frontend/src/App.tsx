@@ -262,7 +262,7 @@ function App() {
     const interacoesHoje = interacoes.filter(c => c.data.startsWith(hoje)).length
     const valorTotal = clientes.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
     const ticketMedio = totalLeads > 0 ? valorTotal / totalLeads : 0
-    const taxaConversao = totalLeads > 0 ? (clientes.filter(c => c.etapa === 'pos_venda').length / totalLeads) * 100 : 0
+    const taxaConversao = totalLeads > 0 ? (clientes.filter(c => c.etapa === 'cliente_ativo').length / totalLeads) * 100 : 0
 
     return {
       totalLeads,
@@ -402,7 +402,7 @@ function App() {
           onEditCliente={handleEditCliente}
           onMoverCliente={moverCliente}
           onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'prospecção' }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}
-          onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'homologado' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
+          onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
           onTriggerPerda={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'perdido' }); setShowMotivoPerda(true) }}
           setInteracoes={setInteracoes}
           setClientes={setClientes}

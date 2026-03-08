@@ -29,17 +29,16 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'amostras', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos', 'ia'],
-  vendedor: ['ia', 'amostras', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
-  sdr: ['ia', 'amostras', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'templates', 'produtos', 'pedidos', 'ia'],
+  vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
+  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'dashboard', icon: HomeIcon, label: 'Visão Geral' },
   { id: 'ia', icon: SparklesIcon, label: '🤖 Assistente IA' },
   { id: 'aprovacao', icon: ClipboardDocumentCheckIcon, label: 'Aprovação de Pedidos' },
-  { id: 'amostras', icon: BeakerIcon, label: 'Amostras' },
-  { id: 'funil', icon: FunnelIcon, label: 'Funil de Vendas' },
+  { id: 'funil', icon: FunnelIcon, label: 'Funil Comercial' },
   { id: 'clientes', icon: UserGroupIcon, label: 'Clientes' },
   { id: 'pedidos', icon: ShoppingCartIcon, label: 'Pedidos' },
   { id: 'tarefas', icon: ChartBarIcon, label: 'Tarefas' },

@@ -38,6 +38,9 @@ export function useFunilActions({
   const [modalAmostraData, setModalAmostraData] = useState(new Date().toISOString().split('T')[0])
   const [showModalProposta, setShowModalProposta] = useState(false)
   const [modalPropostaValor, setModalPropostaValor] = useState('')
+  const [showModalSatisfacao, setShowModalSatisfacao] = useState(false)
+  const [modalSatisfacaoNota, setModalSatisfacaoNota] = useState(5)
+  const [modalSatisfacaoFeedback, setModalSatisfacaoFeedback] = useState('')
   const [selectedClientePanel, setSelectedClientePanel] = useState<Cliente | null>(null)
   const [transicaoInvalida, setTransicaoInvalida] = useState('')
   const movingRef = useRef(false)
@@ -213,19 +216,22 @@ export function useFunilActions({
     const dataDaqui = (dias: number) => new Date(Date.now() + dias * 86400000).toISOString().split('T')[0]
     const tarefaDefs: Omit<Tarefa, 'id'>[] = []
     if (toStage === 'amostra') {
-      tarefaDefs.push({ titulo: `Follow-up amostra — ${nome}`, descricao: 'Verificar se o cliente recebeu e analisou a amostra', data: dataDaqui(15), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Cobrar resposta amostra — ${nome}`, descricao: 'Prazo de 30 dias se aproximando. Cobrar retorno urgente.', data: dataDaqui(25), hora: '09:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Follow-up amostra — ${nome}`, descricao: 'Verificar se o cliente recebeu e analisou a amostra', data: dataDaqui(20), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Cobrar resultado amostra — ${nome}`, descricao: 'Prazo de 45 dias se aproximando. Cobrar retorno urgente.', data: dataDaqui(40), hora: '09:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
-    if (toStage === 'homologado') {
-      tarefaDefs.push({ titulo: `Agendar reunião 1º pedido — ${nome}`, descricao: 'Cliente homologado. Agendar reunião para fechar primeiro pedido.', data: dataDaqui(30), hora: '14:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Verificar prazo 75d — ${nome}`, descricao: 'Verificar se o cliente vai fazer pedido antes do prazo de 75 dias.', data: dataDaqui(60), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+    if (toStage === 'proposta') {
+      tarefaDefs.push({ titulo: `Preparar proposta — ${nome}`, descricao: 'Amostra aprovada. Preparar e enviar proposta comercial.', data: dataDaqui(5), hora: '10:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Follow-up proposta — ${nome}`, descricao: 'Verificar se o cliente analisou a proposta.', data: dataDaqui(15), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (toStage === 'negociacao') {
       tarefaDefs.push({ titulo: `Cobrar resposta proposta — ${nome}`, descricao: 'Verificar retorno da proposta comercial enviada.', data: dataDaqui(7), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
-    if (toStage === 'pos_venda') {
-      tarefaDefs.push({ titulo: `Confirmar entrega — ${nome}`, descricao: 'Confirmar que o pedido foi entregue corretamente.', data: dataDaqui(10), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Pós-venda: satisfação — ${nome}`, descricao: 'Pesquisa de satisfação e abrir porta para próximo pedido.', data: dataDaqui(20), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+    if (toStage === 'follow_up') {
+      tarefaDefs.push({ titulo: `Acompanhar logística — ${nome}`, descricao: 'Pedido aprovado. Acompanhar produção e entrega.', data: dataDaqui(7), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Coletar satisfação — ${nome}`, descricao: 'Após entrega, avaliar satisfação do cliente.', data: dataDaqui(30), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+    }
+    if (toStage === 'cliente_ativo') {
+      tarefaDefs.push({ titulo: `Contato relacionamento — ${nome}`, descricao: 'Manter relacionamento ativo. Verificar necessidade de recompra.', data: dataDaqui(30), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (tarefaDefs.length > 0) {
       try {
@@ -265,10 +271,16 @@ export function useFunilActions({
       setShowModalProposta(true)
       return
     }
+    if (toStage === 'cliente_ativo' && draggedItem.fromStage === 'follow_up') {
+      setPendingDrop({ e, toStage })
+      setModalSatisfacaoNota(5)
+      setModalSatisfacaoFeedback('')
+      setShowModalSatisfacao(true)
+      return
+    }
 
     const extras: Partial<Cliente> = {}
-    if (toStage === 'homologado') { extras.dataHomologacao = new Date().toISOString().split('T')[0]; extras.statusAmostra = 'aprovada' }
-    if (toStage === 'pos_venda') { extras.statusEntrega = 'preparando'; extras.dataUltimoPedido = new Date().toISOString().split('T')[0]; extras.statusFaturamento = 'a_faturar' }
+    if (toStage === 'proposta') { extras.resultadoAmostra = 'aprovada'; extras.dataResultadoAmostra = new Date().toISOString().split('T')[0] }
     if (toStage === 'prospecção') { extras.motivoPerda = undefined; extras.categoriaPerda = undefined; extras.dataPerda = undefined }
 
     moverCliente(draggedItem.cliente.id, toStage, extras)
@@ -290,10 +302,25 @@ export function useFunilActions({
     if (draggedItem) {
       moverCliente(draggedItem.cliente.id, 'amostra', {
         dataEnvioAmostra: modalAmostraData,
-        statusAmostra: 'enviada'
+        statusAmostra: 'solicitada'
       })
     }
     setDraggedItem(null); setPendingDrop(null); setShowModalAmostra(false)
+  }
+
+  const confirmSatisfacao = () => {
+    if (draggedItem) {
+      moverCliente(draggedItem.cliente.id, 'cliente_ativo', {
+        statusSatisfacao: modalSatisfacaoNota >= 4 ? 'satisfeito' : 'insatisfeito',
+        notaSatisfacao: modalSatisfacaoNota,
+        feedbackSatisfacao: modalSatisfacaoFeedback.trim() || undefined,
+        statusFollowUp: 'concluido',
+        totalCompras: (draggedItem.cliente.totalCompras || 0) + 1,
+        dataUltimoPedido: new Date().toISOString().split('T')[0],
+        dataProximaRecompra: new Date(Date.now() + (draggedItem.cliente.cicloRecompra || 60) * 86400000).toISOString().split('T')[0],
+      })
+    }
+    setDraggedItem(null); setPendingDrop(null); setShowModalSatisfacao(false); setModalSatisfacaoNota(5); setModalSatisfacaoFeedback('')
   }
 
   const confirmProposta = () => {
@@ -327,6 +354,11 @@ export function useFunilActions({
     showModalProposta, setShowModalProposta,
     modalPropostaValor, setModalPropostaValor,
     confirmProposta,
+    // Modal: Satisfação
+    showModalSatisfacao, setShowModalSatisfacao,
+    modalSatisfacaoNota, setModalSatisfacaoNota,
+    modalSatisfacaoFeedback, setModalSatisfacaoFeedback,
+    confirmSatisfacao,
     // Panel
     selectedClientePanel, setSelectedClientePanel,
     // Transição inválida toast

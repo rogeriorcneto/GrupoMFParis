@@ -1,10 +1,11 @@
 export const STAGE_LABELS: Record<string, string> = {
   'prospecção': 'Prospecção',
   'amostra': 'Amostra',
-  'homologado': 'Homologado',
+  'proposta': 'Proposta',
   'negociacao': 'Negociação',
-  'pos_venda': 'Pós-Venda',
+  'follow_up': 'Follow-up',
+  'cliente_ativo': 'Cliente Ativo',
   'perdido': 'Perdido',
 }
 
-export const STAGES = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido'] as const
+export const STAGES = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo', 'perdido'] as const

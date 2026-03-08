@@ -275,7 +275,7 @@ describe('App — Navegação por cargo', () => {
 
     // Use getByRole to target nav buttons specifically
     expect(screen.getByRole('button', { name: /Visão Geral/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Funil de Vendas/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Funil Comercial/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Clientes$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Pedidos$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Tarefas$/i })).toBeInTheDocument()
@@ -313,7 +313,7 @@ describe('App — Navegação por cargo', () => {
     expect(screen.queryByRole('button', { name: /Relatórios/i })).not.toBeInTheDocument()
 
     // SDR sees funil, clientes, mapa, prospecção, tarefas, templates, pedidos
-    expect(screen.getByRole('button', { name: /Funil de Vendas/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Funil Comercial/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Clientes$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Prospecção/i })).toBeInTheDocument()
   })
@@ -328,7 +328,7 @@ describe('App — Navegação entre views', () => {
   it('clicar em "Funil" navega para FunilView', async () => {
     await loginAs('gerente')
 
-    await userEvent.click(screen.getByRole('button', { name: /Funil de Vendas/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Funil Comercial/i }))
     expect(screen.getByTestId('view-funil')).toBeInTheDocument()
   })
 

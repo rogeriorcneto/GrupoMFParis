@@ -39,8 +39,8 @@ vi.mock('../config-store.js', () => ({
 // Mock constants
 vi.mock('../constants.js', () => ({
   STAGE_LABELS: {
-    prospecção: 'Prospecção', amostra: 'Amostra', homologado: 'Homologado',
-    negociacao: 'Negociação', pos_venda: 'Pós-Venda', perdido: 'Perdido',
+    prospecção: 'Prospecção', amostra: 'Amostra', proposta: 'Proposta',
+    negociacao: 'Negociação', follow_up: 'Follow-up', cliente_ativo: 'Cliente Ativo', perdido: 'Perdido',
   },
 }))
 

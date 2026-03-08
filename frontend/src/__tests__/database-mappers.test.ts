@@ -14,7 +14,7 @@ describe('clienteFromDb', () => {
     whatsapp: '5531999991234',
     omie_codigo: 'OMI-001',
     etapa: 'negociacao',
-    etapa_anterior: 'homologado',
+    etapa_anterior: 'proposta',
     data_entrada_etapa: '2025-01-15T10:00:00Z',
     vendedor_id: 5,
     score: 85,
@@ -53,7 +53,7 @@ describe('clienteFromDb', () => {
     expect(c.whatsapp).toBe('5531999991234')
     expect(c.omieCodigo).toBe('OMI-001')
     expect(c.etapa).toBe('negociacao')
-    expect(c.etapaAnterior).toBe('homologado')
+    expect(c.etapaAnterior).toBe('proposta')
     expect(c.dataEntradaEtapa).toBe('2025-01-15T10:00:00Z')
     expect(c.vendedorId).toBe(5)
     expect(c.score).toBe(85)

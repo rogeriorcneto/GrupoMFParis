@@ -71,12 +71,12 @@ export function useNotificacoes(
           novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
         }
       }
-      if (c.etapa === 'homologado' && c.dataEntradaEtapa) {
+      if (c.etapa === 'proposta' && c.dataEntradaEtapa) {
         const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
-        if (dias >= 75) {
-          novas.push({ id: nId--, tipo: 'error', titulo: '🔴 Prazo vencido (Homologado)', mensagem: `${c.razaoSocial} está há ${dias} dias em Homologado (prazo: 75d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
-        } else if (dias >= 60) {
-          novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Homologado)', mensagem: `${c.razaoSocial} está há ${dias} dias em Homologado (prazo: 75d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+        if (dias >= 30) {
+          novas.push({ id: nId--, tipo: 'error', titulo: '🔴 Prazo vencido (Proposta)', mensagem: `${c.razaoSocial} está há ${dias} dias em Proposta (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+        } else if (dias >= 25) {
+          novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Proposta)', mensagem: `${c.razaoSocial} está há ${dias} dias em Proposta (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
         }
       }
     })

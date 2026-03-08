@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
 import { getSyncDiff, syncPullClientes, syncPushClientes } from '../omie/sync.js'
+import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
@@ -170,6 +171,16 @@ omieRouter.post('/sync/push', rateLimit(3, 60_000), async (_req, res) => {
     res.json({ success: true, data: result })
   } catch (err: any) {
     log.error({ err }, 'Erro no sync push CRM → Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.post('/sync/logistics', rateLimit(3, 60_000), async (_req, res) => {
+  try {
+    const result = await syncOmieLogistics()
+    res.json({ success: true, data: result })
+  } catch (err: any) {
+    log.error({ err }, 'Erro no sync logístico Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

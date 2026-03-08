@@ -1,6 +1,6 @@
 import type { Cliente } from '../types'
 
-export const prazosEtapa: Record<string, number> = { amostra: 30, homologado: 75, negociacao: 45, cotacao: 30 }
+export const prazosEtapa: Record<string, number> = { amostra: 45, proposta: 30, negociacao: 45, follow_up: 60, cliente_ativo: 90 }
 
 export function diasDesde(dateStr?: string): number {
   if (!dateStr) return 0
@@ -26,30 +26,48 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       if (diasInativo > 7) return { text: '📞 Ligar agora — inativo há ' + diasInativo + 'd', color: 'text-orange-600' }
       if (diasInativo > 3) return { text: '💬 Enviar WhatsApp de contato', color: 'text-blue-600' }
       return { text: '📧 Enviar apresentação', color: 'text-green-600' }
-    case 'amostra':
-      if (diasEtapa >= 25) return { text: '🚨 Cobrar retorno URGENTE', color: 'text-red-600' }
-      if (diasEtapa >= 15) return { text: '📞 Follow-up da amostra', color: 'text-orange-600' }
+    case 'amostra': {
+      const sub = cliente.statusAmostra
+      if (sub === 'solicitada') return { text: '⏳ Aguardando aprovação gerente', color: 'text-yellow-600' }
+      if (sub === 'aguardando_gerente') return { text: '👤 Gerente precisa aprovar', color: 'text-orange-600' }
+      if (sub === 'liberada') return { text: '📦 Providenciar coleta da amostra', color: 'text-blue-600' }
+      if (sub === 'coletada') return { text: '🚚 Amostra em trânsito', color: 'text-blue-600' }
+      if (sub === 'entregue') return { text: '🔬 Aguardar teste do cliente', color: 'text-gray-500' }
+      if (sub === 'em_teste') {
+        if (diasEtapa >= 40) return { text: '🚨 Cobrar resultado URGENTE (45d)', color: 'text-red-600' }
+        if (diasEtapa >= 25) return { text: '📞 Follow-up resultado amostra', color: 'text-orange-600' }
+        return { text: '⏳ Em teste — aguardar resultado', color: 'text-gray-500' }
+      }
+      if (diasEtapa >= 40) return { text: '🚨 Cobrar retorno URGENTE', color: 'text-red-600' }
+      if (diasEtapa >= 20) return { text: '📞 Follow-up da amostra', color: 'text-orange-600' }
       return { text: '⏳ Aguardar avaliação', color: 'text-gray-500' }
-    case 'homologado':
-      if (diasEtapa >= 60) return { text: '🚨 Agendar reunião URGENTE', color: 'text-red-600' }
-      if (diasEtapa >= 30) return { text: '📞 Cobrar 1º pedido', color: 'text-orange-600' }
-      return { text: '🤝 Preparar proposta', color: 'text-green-600' }
-    case 'cotacao':
-      if (diasEtapa >= 25) return { text: '🚨 Enviar cotação URGENTE', color: 'text-red-600' }
-      if (diasEtapa >= 10) return { text: '📞 Follow-up de cotação', color: 'text-orange-600' }
-      return { text: '📝 Preparar cotação', color: 'text-blue-600' }
+    }
+    case 'proposta':
+      if (diasEtapa >= 25) return { text: '🚨 Enviar proposta URGENTE', color: 'text-red-600' }
+      if (diasEtapa >= 10) return { text: '📞 Follow-up da proposta', color: 'text-orange-600' }
+      return { text: '📝 Preparar proposta comercial', color: 'text-blue-600' }
     case 'negociacao':
       if (diasEtapa >= 35) return { text: '🚨 Cobrar resposta proposta', color: 'text-red-600' }
-      if (diasEtapa >= 14) return { text: '📞 Follow-up proposta', color: 'text-orange-600' }
+      if (diasEtapa >= 14) return { text: '📞 Follow-up negociação', color: 'text-orange-600' }
       return { text: '💬 Aguardar decisão', color: 'text-gray-500' }
-    case 'pos_venda': {
+    case 'follow_up': {
+      const sub = cliente.statusFollowUp
+      if (sub === 'pedido_aprovado') return { text: '🏭 Aguardando produção', color: 'text-blue-600' }
+      if (sub === 'em_producao') return { text: '🏭 Em produção', color: 'text-blue-600' }
+      if (sub === 'faturado') return { text: '📄 Faturado — aguardar expedição', color: 'text-blue-600' }
+      if (sub === 'expedido') return { text: '� Expedido — em trânsito', color: 'text-blue-600' }
+      if (sub === 'entregue') return { text: '📋 Entregue — avaliar satisfação', color: 'text-green-600' }
+      if (sub === 'satisfacao_pendente') return { text: '⭐ Coletar feedback do cliente', color: 'text-purple-600' }
+      if (sub === 'concluido') return { text: '✅ Mover para Cliente Ativo', color: 'text-green-600' }
+      if (diasEtapa >= 50) return { text: '� Follow-up parado há ' + diasEtapa + 'd', color: 'text-red-600' }
+      return { text: '📦 Acompanhar logística', color: 'text-blue-600' }
+    }
+    case 'cliente_ativo': {
       const diasPedido = diasDesde(cliente.dataUltimoPedido)
-      if (!cliente.dataEntregaRealizada && !cliente.dataEntregaPrevista && cliente.statusEntrega !== 'entregue') return { text: '📅 Definir previsão de entrega', color: 'text-orange-600' }
-      if (!cliente.dataEntregaRealizada && cliente.statusEntrega !== 'entregue') return { text: '🚚 Confirmar entrega realizada', color: 'text-blue-600' }
-      if (cliente.statusFaturamento !== 'faturado') return { text: '💰 Faturar pedido', color: 'text-orange-600' }
-      if (diasPedido >= 30) return { text: '🛒 Sugerir recompra — ' + diasPedido + 'd', color: 'text-purple-600' }
-      if (diasPedido >= 20) return { text: '📞 Pós-venda — satisfação', color: 'text-blue-600' }
-      return { text: '✅ Entregue e faturado', color: 'text-green-600' }
+      if (diasPedido >= 80) return { text: '� Sem compra há ' + diasPedido + 'd — risco de inatividade', color: 'text-red-600' }
+      if (diasPedido >= 60) return { text: '🛒 Sugerir recompra — ' + diasPedido + 'd', color: 'text-purple-600' }
+      if (diasPedido >= 30) return { text: '📞 Contato de relacionamento', color: 'text-blue-600' }
+      return { text: '✅ Cliente ativo — carteira OK', color: 'text-green-600' }
     }
     case 'perdido': {
       const diasPerdido = diasDesde(cliente.dataPerda)
@@ -66,11 +84,13 @@ export function mapEtapaAgendor(etapa: string, status: string): string {
   if (s === 'perdido' || s === 'lost') return 'perdido'
   const e = etapa.toLowerCase().trim()
   if (e.includes('contato') || e.includes('prospec')) return 'prospecção'
-  if (e.includes('proposta') || e.includes('negocia')) return 'negociacao'
-  if (e.includes('envio') || e.includes('pedido')) return 'homologado'
-  if (e.includes('follow') || e.includes('pós') || e.includes('pos')) return 'pos_venda'
+  if (e.includes('proposta')) return 'proposta'
+  if (e.includes('negocia')) return 'negociacao'
+  if (e.includes('envio') || e.includes('pedido')) return 'negociacao'
+  if (e.includes('follow') || e.includes('pós') || e.includes('pos')) return 'follow_up'
   if (e.includes('amostra')) return 'amostra'
-  if (e.includes('homolog')) return 'homologado'
+  if (e.includes('homolog')) return 'proposta'
+  if (e.includes('ativo') || e.includes('carteira')) return 'cliente_ativo'
   return 'prospecção'
 }
 

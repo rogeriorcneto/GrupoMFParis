@@ -44,7 +44,7 @@ const VendedoresView: React.FC<{
     const clientesVendedor = clientes.filter(c => c.vendedorId === vendedor.id)
     const totalLeads = clientesVendedor.length
     const valorPipeline = clientesVendedor.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
-    const conversoes = clientesVendedor.filter(c => c.etapa === 'pos_venda').length
+    const conversoes = clientesVendedor.filter(c => c.etapa === 'cliente_ativo').length
     const taxaConversao = totalLeads > 0 ? (conversoes / totalLeads) * 100 : 0
     return { totalLeads, valorPipeline, conversoes, taxaConversao, clientesVendedor }
   }

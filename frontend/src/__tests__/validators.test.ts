@@ -88,9 +88,10 @@ describe('calcularScore', () => {
   it('calcula score base por etapa', () => {
     expect(calcularScore('prospecção', 0, 0, 0)).toBe(10)
     expect(calcularScore('amostra', 0, 0, 0)).toBe(25)
-    expect(calcularScore('homologado', 0, 0, 0)).toBe(50)
-    expect(calcularScore('negociacao', 0, 0, 0)).toBe(70)
-    expect(calcularScore('pos_venda', 0, 0, 0)).toBe(90)
+    expect(calcularScore('proposta', 0, 0, 0)).toBe(40)
+    expect(calcularScore('negociacao', 0, 0, 0)).toBe(60)
+    expect(calcularScore('follow_up', 0, 0, 0)).toBe(80)
+    expect(calcularScore('cliente_ativo', 0, 0, 0)).toBe(95)
     expect(calcularScore('perdido', 0, 0, 0)).toBe(5)
   })
 
@@ -116,7 +117,7 @@ describe('calcularScore', () => {
   })
 
   it('nunca ultrapassa 100', () => {
-    expect(calcularScore('pos_venda', 200000, 10, 0)).toBe(100)
+    expect(calcularScore('cliente_ativo', 200000, 10, 0)).toBe(100)
   })
 
   it('nunca fica abaixo de 0', () => {
@@ -124,7 +125,7 @@ describe('calcularScore', () => {
   })
 
   it('calcula score combinado corretamente', () => {
-    // homologado(50) + valor 50000(5) + 3 inter(9) - 10 dias(5) = 59
-    expect(calcularScore('homologado', 50000, 3, 10)).toBe(59)
+    // proposta(40) + valor 50000(5) + 3 inter(9) - 10 dias(5) = 49
+    expect(calcularScore('proposta', 50000, 3, 10)).toBe(49)
   })
 })

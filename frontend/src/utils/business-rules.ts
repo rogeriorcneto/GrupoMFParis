@@ -8,8 +8,8 @@ export function calcScore(
   diasInativo: number | undefined
 ): number {
   const baseEtapa: Record<string, number> = {
-    'prospecção': 10, 'amostra': 25, 'homologado': 50,
-    'negociacao': 70, 'pos_venda': 90, 'perdido': 5
+    'prospecção': 10, 'amostra': 25, 'proposta': 40,
+    'negociacao': 60, 'follow_up': 80, 'cliente_ativo': 95, 'perdido': 5
   }
   const base = baseEtapa[etapa] || 10
   const bonusValor = Math.min((valorEstimado || 0) / 10000, 15)
@@ -20,9 +20,11 @@ export function calcScore(
 
 /** Deadline thresholds per stage (days) */
 export const autoMovePrazos: Record<string, number> = {
-  'amostra': 30,
-  'homologado': 75,
+  'amostra': 45,
+  'proposta': 30,
   'negociacao': 45,
+  'follow_up': 60,
+  'cliente_ativo': 90,
 }
 
 /** Returns clients that should be auto-moved to "perdido" due to expired deadlines */

@@ -17,6 +17,7 @@ import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
 import { omieRouter } from './routes/omie.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
+import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
 import { log } from './logger.js'
 
@@ -507,6 +508,15 @@ async function start() {
     try { await processarJobsPendentes() } finally { cronRunning = false }
   }, 5 * 60 * 1000)
   log.info('⏰ Scheduler de jobs: a cada 5 minutos')
+
+  // Cron: sync Omie logistics a cada 15 minutos (com guard anti-overlap)
+  let logisticsRunning = false
+  setInterval(async () => {
+    if (logisticsRunning) return
+    logisticsRunning = true
+    try { await syncOmieLogistics() } catch (err) { log.error({ err }, 'Erro no sync logístico Omie') } finally { logisticsRunning = false }
+  }, 15 * 60 * 1000)
+  log.info('🚚 Sync logístico Omie: a cada 15 minutos')
 }
 
 start().catch(err => log.fatal({ err }, 'Falha ao iniciar servidor'))

@@ -33,7 +33,7 @@ const defaultParams = () => {
   const clientes = [
     sampleCliente({ id: 1, etapa: 'prospecção', razaoSocial: 'Empresa A' }),
     sampleCliente({ id: 2, etapa: 'amostra', razaoSocial: 'Empresa B' }),
-    sampleCliente({ id: 3, etapa: 'homologado', razaoSocial: 'Empresa C' }),
+    sampleCliente({ id: 3, etapa: 'proposta', razaoSocial: 'Empresa C' }),
   ]
   return {
     clientes,
@@ -90,7 +90,7 @@ describe('useFunilActions', () => {
   })
 
   describe('handleDrop — transições', () => {
-    it('rejeita transição inválida (prospecção → homologado)', () => {
+    it('rejeita transição inválida (prospecção → negociacao)', () => {
       vi.useFakeTimers()
       const params = defaultParams()
       const { result } = renderHook(() => useFunilActions(params))
@@ -103,7 +103,7 @@ describe('useFunilActions', () => {
 
       // Drop on invalid stage
       act(() => {
-        result.current.handleDrop(fakeEvent, 'homologado')
+        result.current.handleDrop(fakeEvent, 'negociacao')
       })
 
       expect(result.current.transicaoInvalida).toContain('Não é possível mover')
@@ -170,7 +170,7 @@ describe('useFunilActions', () => {
       const fakeEvent = { preventDefault: vi.fn(), dataTransfer: { effectAllowed: 'move' } } as any
 
       act(() => {
-        result.current.handleDragStart(fakeEvent, params.clientes[2], 'homologado')
+        result.current.handleDragStart(fakeEvent, params.clientes[2], 'proposta')
       })
       act(() => {
         result.current.handleDrop(fakeEvent, 'negociacao')
@@ -206,17 +206,17 @@ describe('useFunilActions', () => {
         await result.current.moverCliente(1, 'amostra')
       })
 
-      // 2 tarefas: follow-up 15d + cobrar 25d
+      // 2 tarefas: follow-up 20d + cobrar 40d
       expect(db.insertTarefa).toHaveBeenCalledTimes(2)
       expect(params.setTarefas).toHaveBeenCalled()
     })
 
-    it('cria tarefas automáticas ao mover para homologado', async () => {
+    it('cria tarefas automáticas ao mover para proposta', async () => {
       const params = defaultParams()
       const { result } = renderHook(() => useFunilActions(params))
 
       await act(async () => {
-        await result.current.moverCliente(2, 'homologado')
+        await result.current.moverCliente(2, 'proposta')
       })
 
       expect(db.insertTarefa).toHaveBeenCalledTimes(2)
@@ -233,16 +233,16 @@ describe('useFunilActions', () => {
       expect(db.insertTarefa).toHaveBeenCalledTimes(1)
     })
 
-    it('cria tarefas automáticas ao mover para pos_venda', async () => {
+    it('cria tarefas automáticas ao mover para follow_up', async () => {
       const params = defaultParams()
       params.clientes.push(sampleCliente({ id: 4, etapa: 'negociacao' }))
       const { result } = renderHook(() => useFunilActions(params))
 
       await act(async () => {
-        await result.current.moverCliente(4, 'pos_venda')
+        await result.current.moverCliente(4, 'follow_up')
       })
 
-      // 2 tarefas: confirmar entrega + pós-venda satisfação
+      // 2 tarefas: acompanhar logística + coletar satisfação
       expect(db.insertTarefa).toHaveBeenCalledTimes(2)
     })
 
@@ -276,7 +276,7 @@ describe('useFunilActions', () => {
 
       // Second move while first is pending — should be no-op
       await act(async () => {
-        await result.current.moverCliente(2, 'homologado')
+        await result.current.moverCliente(2, 'proposta')
       })
 
       // Only 1 moverClienteAtomico call
@@ -350,7 +350,7 @@ describe('useFunilActions', () => {
         1, 'amostra', 'prospecção', expect.any(String),
         expect.objectContaining({
           dataEnvioAmostra: '2025-03-01',
-          statusAmostra: 'enviada',
+          statusAmostra: 'solicitada',
         })
       )
       expect(result.current.showModalAmostra).toBe(false)
@@ -363,7 +363,7 @@ describe('useFunilActions', () => {
       const { result } = renderHook(() => useFunilActions(params))
       const fakeEvent = { preventDefault: vi.fn(), dataTransfer: { effectAllowed: 'move' } } as any
 
-      act(() => { result.current.handleDragStart(fakeEvent, params.clientes[2], 'homologado') })
+      act(() => { result.current.handleDragStart(fakeEvent, params.clientes[2], 'proposta') })
       act(() => { result.current.handleDrop(fakeEvent, 'negociacao') })
       act(() => { result.current.setModalPropostaValor('250000') })
 
@@ -372,7 +372,7 @@ describe('useFunilActions', () => {
       })
 
       expect(db.moverClienteAtomico).toHaveBeenCalledWith(
-        3, 'negociacao', 'homologado', expect.any(String),
+        3, 'negociacao', 'proposta', expect.any(String),
         expect.objectContaining({
           valorProposta: 250000,
         })

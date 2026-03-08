@@ -4,8 +4,8 @@ import { getMenuText } from './auth.js'
 import { STAGE_LABELS } from '../constants.js'
 
 const STAGE_ICONS: Record<string, string> = {
-  'prospecção': '🔵', 'amostra': '🟡', 'homologado': '🟢',
-  'negociacao': '🟠', 'pos_venda': '✅', 'perdido': '🔴',
+  'prospecção': '🔵', 'amostra': '🟡', 'proposta': '🟢',
+  'negociacao': '🟠', 'follow_up': '📦', 'cliente_ativo': '✅', 'perdido': '🔴',
 }
 
 
@@ -24,7 +24,7 @@ export async function handlePipeline(session: UserSession): Promise<string> {
   }
 
   // Agrupar por etapa
-  const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
+  const stages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo', 'perdido']
   const groups = new Map<string, { count: number; valor: number }>()
   for (const stage of stages) {
     groups.set(stage, { count: 0, valor: 0 })
@@ -32,7 +32,7 @@ export async function handlePipeline(session: UserSession): Promise<string> {
 
   let totalValor = 0
   let totalClientes = 0
-  let posVendaCount = 0
+  let clienteAtivoCount = 0
 
   for (const c of clientes) {
     const g = groups.get(c.etapa) || { count: 0, valor: 0 }
@@ -41,10 +41,10 @@ export async function handlePipeline(session: UserSession): Promise<string> {
     groups.set(c.etapa, g)
     totalValor += c.valorEstimado || 0
     totalClientes++
-    if (c.etapa === 'pos_venda') posVendaCount++
+    if (c.etapa === 'cliente_ativo') clienteAtivoCount++
   }
 
-  const taxaConversao = totalClientes > 0 ? ((posVendaCount / totalClientes) * 100).toFixed(1) : '0'
+  const taxaConversao = totalClientes > 0 ? ((clienteAtivoCount / totalClientes) * 100).toFixed(1) : '0'
 
   let msg = `📊 *${isGerente ? 'Pipeline Geral' : 'Seu Pipeline'}*\n\n`
 
@@ -61,8 +61,8 @@ export async function handlePipeline(session: UserSession): Promise<string> {
 
   // Meta do vendedor
   if (session.vendedor.metaVendas > 0) {
-    const posVendaValor = groups.get('pos_venda')?.valor || 0
-    const pctMeta = ((posVendaValor / session.vendedor.metaVendas) * 100).toFixed(0)
+    const clienteAtivoValor = groups.get('cliente_ativo')?.valor || 0
+    const pctMeta = ((clienteAtivoValor / session.vendedor.metaVendas) * 100).toFixed(0)
     msg += `🎯 *Meta vendas:* ${formatCurrency(session.vendedor.metaVendas)} (progresso: ${pctMeta}%)\n`
   }
 

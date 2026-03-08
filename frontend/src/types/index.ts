@@ -1,4 +1,4 @@
-export type ViewType = 'dashboard' | 'funil' | 'amostras' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia'
+export type ViewType = 'dashboard' | 'funil' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia'
 
 export interface HistoricoEtapa {
   etapa: string
@@ -48,11 +48,25 @@ export interface Cliente {
   notas?: string
   origemLead?: string
   dataEnvioAmostra?: string
-  statusAmostra?: 'pendente_aprovacao' | 'enviada' | 'aguardando_resposta' | 'aprovada' | 'rejeitada'
+  statusAmostra?: 'solicitada' | 'aguardando_gerente' | 'liberada' | 'coletada' | 'entregue' | 'em_teste' | 'aprovada' | 'reprovada'
   dataHomologacao?: string
   proximoPedidoPrevisto?: string
   dataProposta?: string
   valorProposta?: number
+  resultadoAmostra?: 'aprovada' | 'reprovada'
+  dataResultadoAmostra?: string
+  motivoReprovacao?: string
+  statusFollowUp?: 'pedido_aprovado' | 'em_producao' | 'faturado' | 'expedido' | 'entregue' | 'satisfacao_pendente' | 'concluido'
+  statusSatisfacao?: 'pendente' | 'satisfeito' | 'insatisfeito'
+  notaSatisfacao?: number
+  feedbackSatisfacao?: string
+  cicloRecompra?: number
+  dataProximaRecompra?: string
+  totalCompras?: number
+  omieStatusLogistico?: string
+  omieCodigoRastreio?: string
+  omieNotaFiscal?: string
+  omieDataFaturamento?: string
   statusEntrega?: 'preparando' | 'enviado' | 'entregue'
   dataEntregaPrevista?: string
   dataEntregaRealizada?: string

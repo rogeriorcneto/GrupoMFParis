@@ -141,9 +141,9 @@ describe('useAutoRules', () => {
   })
 
   describe('auto-move por prazo vencido', () => {
-    it('move cliente em amostra com > 30 dias para perdido', () => {
+    it('move cliente em amostra com > 45 dias para perdido', () => {
       const params = defaultParams()
-      const dataAntiga = new Date(Date.now() - 35 * 86400000).toISOString()
+      const dataAntiga = new Date(Date.now() - 50 * 86400000).toISOString()
       params.clientes = [
         sampleCliente({ id: 10, etapa: 'amostra', dataEntradaEtapa: dataAntiga, diasInativo: 5 }),
       ]
@@ -164,7 +164,7 @@ describe('useAutoRules', () => {
       expect(autoMoveCall).toBeTruthy()
     })
 
-    it('não move cliente em amostra com < 30 dias', () => {
+    it('não move cliente em amostra com < 45 dias', () => {
       const params = defaultParams()
       const dataRecente = new Date(Date.now() - 10 * 86400000).toISOString()
       params.clientes = [

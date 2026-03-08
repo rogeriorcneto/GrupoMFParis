@@ -54,7 +54,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
     const interacoesHoje = fi.filter(i => i.data.startsWith(hoje)).length
     const valorTotal = fc.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
     const ticketMedio = totalLeads > 0 ? valorTotal / totalLeads : 0
-    const taxaConversao = totalLeads > 0 ? (fc.filter(c => c.etapa === 'pos_venda').length / totalLeads) * 100 : 0
+    const taxaConversao = totalLeads > 0 ? (fc.filter(c => c.etapa === 'cliente_ativo').length / totalLeads) * 100 : 0
 
     return {
       filteredClientes: fc,
@@ -64,7 +64,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
   }, [clientes, interacoes, metrics, periodo])
 
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
-  const stages = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda', 'perdido']
+  const stages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo', 'perdido']
 
   const { pipelineData, vendedorData, rankingProspeccao, rankingVendas } = useMemo(() => {
     // Uma única passada para acumular valor+qtd por etapa e por vendedor
@@ -74,12 +74,12 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
     const vendedorLeads = new Map<number, number>()
 
     // Rankings por tipo
-    const vendedorProspLeads = new Map<number, number>()   // qtd leads em prosp+amostra+homologado
-    const vendedorVendasQtd = new Map<number, number>()    // qtd em negociacao+pos_venda
-    const vendedorVendasValor = new Map<number, number>()  // valor em negociacao+pos_venda
+    const vendedorProspLeads = new Map<number, number>()   // qtd leads em prosp+amostra+proposta
+    const vendedorVendasQtd = new Map<number, number>()    // qtd em negociacao+follow_up+cliente_ativo
+    const vendedorVendasValor = new Map<number, number>()  // valor em negociacao+follow_up+cliente_ativo
 
-    const ETAPAS_PROSP = new Set(['prospecção', 'amostra', 'homologado'])
-    const ETAPAS_VENDA = new Set(['negociacao', 'pos_venda'])
+    const ETAPAS_PROSP = new Set(['prospecção', 'amostra', 'proposta'])
+    const ETAPAS_VENDA = new Set(['negociacao', 'follow_up', 'cliente_ativo'])
 
     for (const c of filteredClientes) {
       const v = c.valorEstimado || 0
@@ -161,67 +161,6 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
           ))}
         </div>
       </div>
-
-      {/* Item 6: Painel Ações do Dia */}
-      {(() => {
-        const hoje = new Date().toISOString().split('T')[0]
-        const isVendedor = loggedUser?.cargo === 'vendedor' || loggedUser?.cargo === 'sdr'
-        const meusClientes = isVendedor ? clientes.filter(c => c.vendedorId === loggedUser?.id) : clientes
-        const meusClienteIds = new Set(meusClientes.map(c => c.id))
-
-        const acoes: { id: string; prioridade: number; icon: string; titulo: string; subtitulo: string; tipo: 'vencida' | 'hoje' | 'prazo' | 'proposta' }[] = []
-
-        tarefas.filter(t => t.status === 'pendente' && t.data < hoje && (!isVendedor || (t.clienteId && meusClienteIds.has(t.clienteId)))).forEach(t => {
-          const cl = clientes.find(c => c.id === t.clienteId)
-          acoes.push({ id: `tv-${t.id}`, prioridade: 0, icon: '🔴', titulo: t.titulo, subtitulo: `Vencida em ${new Date(t.data).toLocaleDateString('pt-BR')}${cl ? ` • ${cl.razaoSocial}` : ''}`, tipo: 'vencida' })
-        })
-        tarefas.filter(t => t.status === 'pendente' && t.data === hoje && (!isVendedor || (t.clienteId && meusClienteIds.has(t.clienteId)))).forEach(t => {
-          const cl = clientes.find(c => c.id === t.clienteId)
-          acoes.push({ id: `th-${t.id}`, prioridade: 1, icon: '🟡', titulo: t.titulo, subtitulo: `Hoje${t.hora ? ` às ${t.hora}` : ''}${cl ? ` • ${cl.razaoSocial}` : ''}`, tipo: 'hoje' })
-        })
-        meusClientes.filter(c => c.etapa === 'amostra' && c.dataEntradaEtapa).forEach(c => {
-          const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa!).getTime()) / 86400000)
-          if (dias >= 25 && dias <= 30) acoes.push({ id: `pa-${c.id}`, prioridade: 2, icon: '⚠️', titulo: `Prazo amostra vencendo — ${c.razaoSocial}`, subtitulo: `${dias}/30 dias — ${30 - dias} dias restantes`, tipo: 'prazo' })
-        })
-        meusClientes.filter(c => c.etapa === 'homologado' && c.dataEntradaEtapa).forEach(c => {
-          const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa!).getTime()) / 86400000)
-          if (dias >= 60 && dias <= 75) acoes.push({ id: `ph-${c.id}`, prioridade: 2, icon: '⚠️', titulo: `Prazo homologação vencendo — ${c.razaoSocial}`, subtitulo: `${dias}/75 dias — ${75 - dias} dias restantes`, tipo: 'prazo' })
-        })
-        meusClientes.filter(c => c.etapa === 'negociacao' && c.dataProposta).forEach(c => {
-          const dias = Math.floor((Date.now() - new Date(c.dataProposta!).getTime()) / 86400000)
-          if (dias > 7) acoes.push({ id: `pr-${c.id}`, prioridade: 3, icon: '💰', titulo: `Proposta sem resposta — ${c.razaoSocial}`, subtitulo: `Enviada há ${dias} dias • R$ ${(c.valorProposta || c.valorEstimado || 0).toLocaleString('pt-BR')}`, tipo: 'proposta' })
-        })
-
-        acoes.sort((a, b) => a.prioridade - b.prioridade)
-        const acoesVisiveis = acoes.slice(0, 8)
-
-        if (acoesVisiveis.length === 0) return null
-        return (
-          <div className="bg-white rounded-apple shadow-apple-sm border-2 border-primary-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📋</span>
-                <div>
-                  <h3 className="text-base font-bold text-gray-900">Ações do Dia</h3>
-                  <p className="text-xs text-gray-500">{acoesVisiveis.length} ação{acoesVisiveis.length !== 1 ? 'ões' : ''} pendente{acoesVisiveis.length !== 1 ? 's' : ''}{isVendedor ? ' (seus clientes)' : ''}</p>
-                </div>
-              </div>
-              {acoes.length > 8 && <span className="text-xs text-gray-400">+{acoes.length - 8} mais</span>}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {acoesVisiveis.map(a => (
-                <div key={a.id} className={`flex items-start gap-2.5 p-3 rounded-apple border ${a.tipo === 'vencida' ? 'border-red-200 bg-red-50' : a.tipo === 'hoje' ? 'border-yellow-200 bg-yellow-50' : a.tipo === 'prazo' ? 'border-orange-200 bg-orange-50' : 'border-purple-200 bg-purple-50'}`}>
-                  <span className="text-sm flex-shrink-0 mt-0.5">{a.icon}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{a.titulo}</p>
-                    <p className="text-xs text-gray-600">{a.subtitulo}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -305,10 +244,10 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
 
       {/* Projeção de Receita Futura */}
       {(() => {
-        const probEtapa: Record<string, number> = { 'prospecção': 0.10, 'amostra': 0.25, 'homologado': 0.50, 'negociacao': 0.75, 'pos_venda': 0.95 }
-        const etapasAtivas = ['prospecção', 'amostra', 'homologado', 'negociacao', 'pos_venda']
-        const etapaLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado', 'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda' }
-        const projColors: Record<string, string> = { 'prospecção': '#93C5FD', 'amostra': '#FDE68A', 'homologado': '#86EFAC', 'negociacao': '#C4B5FD', 'pos_venda': '#FBCFE8' }
+        const probEtapa: Record<string, number> = { 'prospecção': 0.10, 'amostra': 0.25, 'proposta': 0.40, 'negociacao': 0.60, 'follow_up': 0.80, 'cliente_ativo': 0.95 }
+        const etapasAtivas = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo']
+        const etapaLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo' }
+        const projColors: Record<string, string> = { 'prospecção': '#93C5FD', 'amostra': '#FDE68A', 'proposta': '#A5B4FC', 'negociacao': '#C4B5FD', 'follow_up': '#93C5FD', 'cliente_ativo': '#86EFAC' }
 
         const projecaoPorEtapa = etapasAtivas.map(etapa => {
           const clientesEtapa = filteredClientes.filter(c => c.etapa === etapa)
@@ -406,7 +345,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
               const entry = monthlyMap.get(key)!
               entry.novos++
               if (c.etapa === 'perdido') entry.perdidos++
-              if (c.etapa === 'pos_venda') entry.convertidos++
+              if (c.etapa === 'cliente_ativo') entry.convertidos++
             }
           }
         })
@@ -446,7 +385,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, metrics, ve
               <span className="text-xl">📞</span>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Ranking — Prospecção</h3>
-                <p className="text-xs text-gray-500">Prospecção · Amostra · Homologado</p>
+                <p className="text-xs text-gray-500">Prospecção · Amostra · Proposta</p>
               </div>
             </div>
             {rankingProspeccao.length === 0 ? (

@@ -1,19 +1,48 @@
 export const stageLabels: Record<string, string> = {
   'prospecção': 'Prospecção',
   'amostra': 'Amostra',
-  'homologado': 'Homologado',
-  'cotacao': 'Cotação',
+  'proposta': 'Proposta',
   'negociacao': 'Negociação',
-  'pos_venda': 'Pós-Venda',
+  'follow_up': 'Follow-up',
+  'cliente_ativo': 'Cliente Ativo',
   'perdido': 'Perdido'
 }
 
 export const transicoesPermitidas: Record<string, string[]> = {
   'prospecção': ['amostra', 'perdido'],
-  'amostra': ['homologado', 'perdido'],
-  'homologado': ['cotacao', 'negociacao', 'perdido'],
-  'cotacao': ['negociacao', 'homologado', 'perdido'],
-  'negociacao': ['pos_venda', 'cotacao', 'homologado', 'perdido'],
-  'pos_venda': ['negociacao'],
-  'perdido': ['prospecção']
+  'amostra': ['proposta', 'perdido'],
+  'proposta': ['negociacao', 'perdido'],
+  'negociacao': ['follow_up', 'proposta', 'perdido'],
+  'follow_up': ['cliente_ativo', 'perdido'],
+  'cliente_ativo': ['negociacao', 'perdido'],
+  'perdido': ['prospecção', 'proposta']
+}
+
+export const subStatusAmostra = [
+  'solicitada', 'aguardando_gerente', 'liberada', 'coletada', 'entregue', 'em_teste', 'aprovada', 'reprovada'
+] as const
+
+export const subStatusFollowUp = [
+  'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'
+] as const
+
+export const subStatusAmostraLabels: Record<string, string> = {
+  'solicitada': 'Solicitada',
+  'aguardando_gerente': 'Aguardando Gerente',
+  'liberada': 'Liberada',
+  'coletada': 'Coletada',
+  'entregue': 'Entregue',
+  'em_teste': 'Em Teste',
+  'aprovada': 'Aprovada',
+  'reprovada': 'Reprovada',
+}
+
+export const subStatusFollowUpLabels: Record<string, string> = {
+  'pedido_aprovado': 'Pedido Aprovado',
+  'em_producao': 'Em Produção',
+  'faturado': 'Faturado',
+  'expedido': 'Expedido',
+  'entregue': 'Entregue',
+  'satisfacao_pendente': 'Satisfação Pendente',
+  'concluido': 'Concluído',
 }

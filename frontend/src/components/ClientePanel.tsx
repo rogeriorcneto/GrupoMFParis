@@ -22,8 +22,8 @@ interface ClientePanelProps {
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
 }
 
-const etapaLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'homologado': 'Homologado', 'negociacao': 'Negociação', 'pos_venda': 'Pós-Venda', 'perdido': 'Perdido' }
-const etapaCores: Record<string, string> = { 'prospecção': 'bg-blue-100 text-blue-800', 'amostra': 'bg-yellow-100 text-yellow-800', 'homologado': 'bg-green-100 text-green-800', 'negociacao': 'bg-purple-100 text-purple-800', 'pos_venda': 'bg-pink-100 text-pink-800', 'perdido': 'bg-red-100 text-red-800' }
+const etapaLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo', 'perdido': 'Perdido' }
+const etapaCores: Record<string, string> = { 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'cliente_ativo': 'bg-green-100 text-green-800', 'perdido': 'bg-red-100 text-red-800' }
 const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
 const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação' }
@@ -182,11 +182,10 @@ export default function ClientePanel({
                     <p className="text-gray-700">Prazo: <span className="font-medium">{Math.max(30 - (c.dataEnvioAmostra ? Math.floor((Date.now() - new Date(c.dataEnvioAmostra).getTime()) / 86400000) : 0), 0)} dias restantes</span></p>
                   </div>
                 )}
-                {c.etapa === 'homologado' && (
+                {c.etapa === 'proposta' && (
                   <div className="space-y-1 text-sm">
-                    {c.dataHomologacao && <p className="text-gray-700">✅ Homologado em: <span className="font-medium">{new Date(c.dataHomologacao).toLocaleDateString('pt-BR')}</span></p>}
-                    {c.proximoPedidoPrevisto && <p className="text-gray-700">🛒 Próximo pedido: <span className="font-medium">{new Date(c.proximoPedidoPrevisto).toLocaleDateString('pt-BR')}</span></p>}
-                    <p className="text-gray-700">Prazo: <span className="font-medium">{Math.max(75 - (c.dataHomologacao ? Math.floor((Date.now() - new Date(c.dataHomologacao).getTime()) / 86400000) : 0), 0)} dias restantes</span></p>
+                    {c.valorEstimado && <p className="text-gray-700">💰 Valor: <span className="font-medium">R$ {c.valorEstimado.toLocaleString('pt-BR')}</span></p>}
+                    <p className="text-gray-700">Prazo: <span className="font-medium">{Math.max(30 - (c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0), 0)} dias restantes</span></p>
                   </div>
                 )}
                 {c.etapa === 'negociacao' && (
@@ -195,9 +194,11 @@ export default function ClientePanel({
                     {c.dataProposta && <p className="text-gray-700">📅 Enviada em: <span className="font-medium">{new Date(c.dataProposta).toLocaleDateString('pt-BR')}</span></p>}
                   </div>
                 )}
-                {c.etapa === 'pos_venda' && (
+                {(c.etapa === 'follow_up' || c.etapa === 'cliente_ativo') && (
                   <div className="space-y-1 text-sm">
-                    {c.statusEntrega && <p className="text-gray-700">Status: <span className="font-medium">{({ preparando: '📋 Preparando', enviado: '🚚 Enviado', entregue: '✅ Entregue' })[c.statusEntrega]}</span></p>}
+                    {c.omieStatusLogistico && <p className="text-gray-700">Logística: <span className="font-medium">{c.omieStatusLogistico}</span></p>}
+                    {c.omieCodigoRastreio && <p className="text-gray-700">� Rastreio: <span className="font-medium">{c.omieCodigoRastreio}</span></p>}
+                    {c.omieNotaFiscal && <p className="text-gray-700">📄 NF: <span className="font-medium">{c.omieNotaFiscal}</span></p>}
                     {c.dataUltimoPedido && <p className="text-gray-700">📦 Último pedido: <span className="font-medium">{new Date(c.dataUltimoPedido).toLocaleDateString('pt-BR')}</span></p>}
                   </div>
                 )}
@@ -246,15 +247,15 @@ export default function ClientePanel({
                     <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
                   )}
                   {c.etapa === 'amostra' && (
-                    <button onClick={() => { onMoverCliente(c.id, 'homologado', { dataHomologacao: new Date().toISOString().split('T')[0], statusAmostra: 'aprovada' }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Homologar</button>
+                    <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada' }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar Amostra</button>
                   )}
-                  {c.etapa === 'homologado' && (
+                  {c.etapa === 'proposta' && (
                     <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
                   )}
                   {c.etapa === 'negociacao' && (
                     <>
-                      <button onClick={() => { onMoverCliente(c.id, 'pos_venda', { statusEntrega: 'preparando', dataUltimoPedido: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">🎉 Ganhou</button>
-                      <button onClick={() => { onMoverCliente(c.id, 'homologado', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Homologado</button>
+                      <button onClick={() => { onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'pedido_aprovado', dataUltimoPedido: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">🎉 Ganhou</button>
+                      <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                     </>
                   )}
                   {c.etapa !== 'perdido' && (

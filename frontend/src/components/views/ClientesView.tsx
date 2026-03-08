@@ -38,9 +38,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   const etapaConfig: Record<string, { label: string; badge: string; dot: string }> = {
     'prospecção': { label: 'Prospecção', badge: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
     'amostra': { label: 'Amostra', badge: 'bg-yellow-50 text-yellow-700', dot: 'bg-yellow-500' },
-    'homologado': { label: 'Homologado', badge: 'bg-green-50 text-green-700', dot: 'bg-green-500' },
+    'proposta': { label: 'Proposta', badge: 'bg-indigo-50 text-indigo-700', dot: 'bg-indigo-500' },
     'negociacao': { label: 'Negociação', badge: 'bg-purple-50 text-purple-700', dot: 'bg-purple-500' },
-    'pos_venda': { label: 'Pós-Venda', badge: 'bg-pink-50 text-pink-700', dot: 'bg-pink-500' },
+    'follow_up': { label: 'Follow-up', badge: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
+    'cliente_ativo': { label: 'Cliente Ativo', badge: 'bg-green-50 text-green-700', dot: 'bg-green-500' },
     'perdido': { label: 'Perdido', badge: 'bg-red-50 text-red-700', dot: 'bg-red-500' },
   }
 
@@ -261,9 +262,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                 <option value="">Todas</option>
                 <option value="prospecção">Prospecção</option>
                 <option value="amostra">Amostra</option>
-                <option value="homologado">Homologado</option>
+                <option value="proposta">Proposta</option>
                 <option value="negociacao">Negociação</option>
-                <option value="pos_venda">Pós-Venda</option>
+                <option value="follow_up">Follow-up</option>
+                <option value="cliente_ativo">Cliente Ativo</option>
                 <option value="perdido">Perdido</option>
               </select>
             </div>

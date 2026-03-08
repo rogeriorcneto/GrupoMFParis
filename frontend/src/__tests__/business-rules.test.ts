@@ -30,8 +30,8 @@ describe('calcScore', () => {
     expect(calcScore('prospecção', undefined, 0, 0)).toBe(10)
   })
 
-  it('retorna base 90 para pos_venda sem bônus', () => {
-    expect(calcScore('pos_venda', undefined, 0, 0)).toBe(90)
+  it('retorna base 95 para cliente_ativo sem bônus', () => {
+    expect(calcScore('cliente_ativo', undefined, 0, 0)).toBe(95)
   })
 
   it('retorna base 5 para perdido', () => {
@@ -60,8 +60,8 @@ describe('calcScore', () => {
   })
 
   it('nunca excede 100', () => {
-    // pos_venda(90) + valor(15) + interações(15) = 120 → clamped to 100
-    expect(calcScore('pos_venda', 200000, 10, 0)).toBe(100)
+    // cliente_ativo(95) + valor(15) + interações(15) = 125 → clamped to 100
+    expect(calcScore('cliente_ativo', 200000, 10, 0)).toBe(100)
   })
 
   it('nunca fica abaixo de 0', () => {
@@ -70,8 +70,8 @@ describe('calcScore', () => {
   })
 
   it('combina todos os fatores corretamente', () => {
-    // homologado(50) + valor(10) + interações(9) - penalidade(5) = 64
-    expect(calcScore('homologado', 100000, 3, 10)).toBe(64)
+    // proposta(40) + valor(10) + interações(9) - penalidade(5) = 54
+    expect(calcScore('proposta', 100000, 3, 10)).toBe(54)
   })
 
   it('etapa desconhecida usa base 10', () => {
@@ -82,29 +82,36 @@ describe('calcScore', () => {
 // ─── autoMovePrazos ───
 
 describe('autoMovePrazos', () => {
-  it('amostra tem prazo 30d', () => {
-    expect(autoMovePrazos['amostra']).toBe(30)
+  it('amostra tem prazo 45d', () => {
+    expect(autoMovePrazos['amostra']).toBe(45)
   })
 
-  it('homologado tem prazo 75d', () => {
-    expect(autoMovePrazos['homologado']).toBe(75)
+  it('proposta tem prazo 30d', () => {
+    expect(autoMovePrazos['proposta']).toBe(30)
   })
 
   it('negociacao tem prazo 45d', () => {
     expect(autoMovePrazos['negociacao']).toBe(45)
   })
 
-  it('prospecção e pos_venda não têm prazo', () => {
+  it('follow_up tem prazo 60d', () => {
+    expect(autoMovePrazos['follow_up']).toBe(60)
+  })
+
+  it('cliente_ativo tem prazo 90d', () => {
+    expect(autoMovePrazos['cliente_ativo']).toBe(90)
+  })
+
+  it('prospecção não tem prazo', () => {
     expect(autoMovePrazos['prospecção']).toBeUndefined()
-    expect(autoMovePrazos['pos_venda']).toBeUndefined()
   })
 })
 
 // ─── getClientsToAutoMove ───
 
 describe('getClientsToAutoMove', () => {
-  it('detecta amostra expirada (>30d)', () => {
-    const clientes = [makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(31) })]
+  it('detecta amostra expirada (>45d)', () => {
+    const clientes = [makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(46) })]
     const result = getClientsToAutoMove(clientes, new Set())
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe(1)
@@ -112,15 +119,15 @@ describe('getClientsToAutoMove', () => {
   })
 
   it('não detecta amostra dentro do prazo', () => {
-    const clientes = [makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(15) })]
+    const clientes = [makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(30) })]
     expect(getClientsToAutoMove(clientes, new Set())).toHaveLength(0)
   })
 
-  it('detecta homologado expirado (>75d)', () => {
-    const clientes = [makeCliente({ id: 1, etapa: 'homologado', dataEntradaEtapa: daysAgo(76) })]
+  it('detecta proposta expirada (>30d)', () => {
+    const clientes = [makeCliente({ id: 1, etapa: 'proposta', dataEntradaEtapa: daysAgo(31) })]
     const result = getClientsToAutoMove(clientes, new Set())
     expect(result).toHaveLength(1)
-    expect(result[0].etapa).toBe('homologado')
+    expect(result[0].etapa).toBe('proposta')
   })
 
   it('detecta negociacao expirada (>45d)', () => {
@@ -131,7 +138,7 @@ describe('getClientsToAutoMove', () => {
   })
 
   it('ignora clientes já marcados (alreadyMovedIds)', () => {
-    const clientes = [makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(31) })]
+    const clientes = [makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(46) })]
     expect(getClientsToAutoMove(clientes, new Set([1]))).toHaveLength(0)
   })
 
@@ -140,10 +147,9 @@ describe('getClientsToAutoMove', () => {
     expect(getClientsToAutoMove(clientes, new Set())).toHaveLength(0)
   })
 
-  it('ignora prospecção e pos_venda (sem prazo)', () => {
+  it('ignora prospecção (sem prazo)', () => {
     const clientes = [
       makeCliente({ id: 1, etapa: 'prospecção', dataEntradaEtapa: daysAgo(200) }),
-      makeCliente({ id: 2, etapa: 'pos_venda', dataEntradaEtapa: daysAgo(200) }),
     ]
     expect(getClientsToAutoMove(clientes, new Set())).toHaveLength(0)
   })
@@ -155,9 +161,9 @@ describe('getClientsToAutoMove', () => {
 
   it('detecta múltiplos clientes expirados', () => {
     const clientes = [
-      makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(31) }),
+      makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(46) }),
       makeCliente({ id: 2, etapa: 'negociacao', dataEntradaEtapa: daysAgo(46) }),
-      makeCliente({ id: 3, etapa: 'homologado', dataEntradaEtapa: daysAgo(10) }), // dentro do prazo
+      makeCliente({ id: 3, etapa: 'proposta', dataEntradaEtapa: daysAgo(10) }), // dentro do prazo
     ]
     const result = getClientsToAutoMove(clientes, new Set())
     expect(result).toHaveLength(2)

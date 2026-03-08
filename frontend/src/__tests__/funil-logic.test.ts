@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   diasDesde,
   getCardUrgencia,
@@ -52,21 +52,28 @@ describe('diasDesde', () => {
 // ─── prazosEtapa ───
 
 describe('prazosEtapa', () => {
-  it('amostra tem prazo de 30 dias', () => {
-    expect(prazosEtapa['amostra']).toBe(30)
+  it('amostra tem prazo de 45 dias', () => {
+    expect(prazosEtapa['amostra']).toBe(45)
   })
 
-  it('homologado tem prazo de 75 dias', () => {
-    expect(prazosEtapa['homologado']).toBe(75)
+  it('proposta tem prazo de 30 dias', () => {
+    expect(prazosEtapa['proposta']).toBe(30)
   })
 
   it('negociacao tem prazo de 45 dias', () => {
     expect(prazosEtapa['negociacao']).toBe(45)
   })
 
-  it('prospecção e pos_venda não têm prazo', () => {
+  it('follow_up tem prazo de 60 dias', () => {
+    expect(prazosEtapa['follow_up']).toBe(60)
+  })
+
+  it('cliente_ativo tem prazo de 90 dias', () => {
+    expect(prazosEtapa['cliente_ativo']).toBe(90)
+  })
+
+  it('prospecção não tem prazo', () => {
     expect(prazosEtapa['prospecção']).toBeUndefined()
-    expect(prazosEtapa['pos_venda']).toBeUndefined()
   })
 })
 
@@ -78,28 +85,33 @@ describe('getCardUrgencia', () => {
     expect(getCardUrgencia(c)).toBe('normal')
   })
 
-  it('retorna atencao em 83% do prazo de amostra (25d)', () => {
-    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(25) })
+  it('retorna atencao em 83% do prazo de amostra (~37d)', () => {
+    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(38) })
     expect(getCardUrgencia(c)).toBe('atencao')
   })
 
-  it('retorna critico quando prazo de amostra vence (30d)', () => {
-    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(31) })
+  it('retorna critico quando prazo de amostra vence (45d)', () => {
+    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(46) })
     expect(getCardUrgencia(c)).toBe('critico')
   })
 
-  it('retorna atencao em 83% do prazo de negociacao (37d)', () => {
+  it('retorna atencao em 83% do prazo de proposta (~25d)', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(25) })
+    expect(getCardUrgencia(c)).toBe('atencao')
+  })
+
+  it('retorna critico quando prazo de proposta vence (30d)', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(31) })
+    expect(getCardUrgencia(c)).toBe('critico')
+  })
+
+  it('retorna atencao em 83% do prazo de negociacao (~37d)', () => {
     const c = makeCliente({ etapa: 'negociacao', dataEntradaEtapa: daysAgo(38) })
     expect(getCardUrgencia(c)).toBe('atencao')
   })
 
   it('retorna critico quando prazo de negociacao vence (45d)', () => {
     const c = makeCliente({ etapa: 'negociacao', dataEntradaEtapa: daysAgo(46) })
-    expect(getCardUrgencia(c)).toBe('critico')
-  })
-
-  it('retorna critico quando prazo de homologado vence (75d)', () => {
-    const c = makeCliente({ etapa: 'homologado', dataEntradaEtapa: daysAgo(76) })
     expect(getCardUrgencia(c)).toBe('critico')
   })
 
@@ -136,15 +148,28 @@ describe('getNextAction', () => {
     expect(action?.text).toContain('apresentação')
   })
 
-  it('amostra >= 25d sugere cobrar retorno urgente', () => {
-    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(26) })
+  it('amostra sub-status solicitada sugere aguardar gerente', () => {
+    const c = makeCliente({ etapa: 'amostra', statusAmostra: 'solicitada' as any, dataEntradaEtapa: daysAgo(3) })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('aprovação gerente')
+  })
+
+  it('amostra sub-status em_teste >= 40d sugere cobrar URGENTE', () => {
+    const c = makeCliente({ etapa: 'amostra', statusAmostra: 'em_teste' as any, dataEntradaEtapa: daysAgo(41) })
     const action = getNextAction(c)
     expect(action?.text).toContain('URGENTE')
     expect(action?.color).toBe('text-red-600')
   })
 
-  it('amostra >= 15d sugere follow-up', () => {
-    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(16) })
+  it('amostra >= 40d (sem sub-status) sugere cobrar retorno urgente', () => {
+    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(41) })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('URGENTE')
+    expect(action?.color).toBe('text-red-600')
+  })
+
+  it('amostra >= 20d sugere follow-up', () => {
+    const c = makeCliente({ etapa: 'amostra', dataEntradaEtapa: daysAgo(21) })
     const action = getNextAction(c)
     expect(action?.text).toContain('Follow-up')
   })
@@ -155,10 +180,22 @@ describe('getNextAction', () => {
     expect(action?.text).toContain('Aguardar')
   })
 
-  it('homologado >= 60d sugere reunião urgente', () => {
-    const c = makeCliente({ etapa: 'homologado', dataEntradaEtapa: daysAgo(61) })
+  it('proposta >= 25d sugere enviar URGENTE', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(26) })
     const action = getNextAction(c)
     expect(action?.text).toContain('URGENTE')
+  })
+
+  it('proposta >= 10d sugere follow-up', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(11) })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('Follow-up')
+  })
+
+  it('proposta recente sugere preparar proposta', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(3) })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('proposta comercial')
   })
 
   it('negociacao >= 35d sugere cobrar resposta', () => {
@@ -167,31 +204,47 @@ describe('getNextAction', () => {
     expect(action?.text).toContain('Cobrar resposta')
   })
 
-  it('pos_venda sem entrega prevista sugere definir previsão', () => {
-    const c = makeCliente({ etapa: 'pos_venda' })
+  it('negociacao recente sugere aguardar decisão', () => {
+    const c = makeCliente({ etapa: 'negociacao', dataEntradaEtapa: daysAgo(5) })
     const action = getNextAction(c)
-    expect(action?.text).toContain('previsão de entrega')
+    expect(action?.text).toContain('Aguardar decisão')
   })
 
-  it('pos_venda com entrega prevista mas não realizada sugere confirmar', () => {
-    const c = makeCliente({ etapa: 'pos_venda', dataEntregaPrevista: daysAgo(-5) })
+  it('follow_up pedido_aprovado sugere aguardar produção', () => {
+    const c = makeCliente({ etapa: 'follow_up', statusFollowUp: 'pedido_aprovado' as any })
     const action = getNextAction(c)
-    expect(action?.text).toContain('Confirmar entrega')
+    expect(action?.text).toContain('produção')
   })
 
-  it('pos_venda entregue mas não faturado sugere faturar', () => {
-    const c = makeCliente({ etapa: 'pos_venda', statusEntrega: 'entregue', dataEntregaRealizada: daysAgo(2) })
+  it('follow_up entregue sugere avaliar satisfação', () => {
+    const c = makeCliente({ etapa: 'follow_up', statusFollowUp: 'entregue' as any })
     const action = getNextAction(c)
-    expect(action?.text).toContain('Faturar')
+    expect(action?.text).toContain('satisfação')
   })
 
-  it('pos_venda completa há 30+ dias sugere recompra', () => {
-    const c = makeCliente({
-      etapa: 'pos_venda', statusEntrega: 'entregue', dataEntregaRealizada: daysAgo(35),
-      statusFaturamento: 'faturado', dataUltimoPedido: daysAgo(35)
-    })
+  it('follow_up concluido sugere mover para Cliente Ativo', () => {
+    const c = makeCliente({ etapa: 'follow_up', statusFollowUp: 'concluido' as any })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('Cliente Ativo')
+  })
+
+  it('cliente_ativo sem compra há 80+ dias alerta risco', () => {
+    const c = makeCliente({ etapa: 'cliente_ativo', dataUltimoPedido: daysAgo(85) })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('risco')
+    expect(action?.color).toBe('text-red-600')
+  })
+
+  it('cliente_ativo sem compra há 60+ dias sugere recompra', () => {
+    const c = makeCliente({ etapa: 'cliente_ativo', dataUltimoPedido: daysAgo(65) })
     const action = getNextAction(c)
     expect(action?.text).toContain('recompra')
+  })
+
+  it('cliente_ativo recente retorna carteira OK', () => {
+    const c = makeCliente({ etapa: 'cliente_ativo', dataUltimoPedido: daysAgo(5) })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('carteira OK')
   })
 
   it('perdido há 60+ dias sugere reconquista', () => {
@@ -227,36 +280,37 @@ describe('mapEtapaAgendor', () => {
     expect(mapEtapaAgendor('Prospecção Ativa', 'ativo')).toBe('prospecção')
   })
 
-  it('PROPOSTA ENVIADA → negociacao', () => {
-    expect(mapEtapaAgendor('PROPOSTA ENVIADA', 'ativo')).toBe('negociacao')
+  it('PROPOSTA ENVIADA → proposta', () => {
+    expect(mapEtapaAgendor('PROPOSTA ENVIADA', 'ativo')).toBe('proposta')
   })
 
   it('Negociação → negociacao', () => {
     expect(mapEtapaAgendor('Em Negociação', 'ativo')).toBe('negociacao')
   })
 
-  it('ENVIO DO PEDIDO → homologado', () => {
-    expect(mapEtapaAgendor('ENVIO DO PEDIDO', 'ativo')).toBe('homologado')
+  it('ENVIO DO PEDIDO → negociacao', () => {
+    expect(mapEtapaAgendor('ENVIO DO PEDIDO', 'ativo')).toBe('negociacao')
   })
 
-  it('FOLLOW-UP → pos_venda', () => {
-    expect(mapEtapaAgendor('FOLLOW-UP', 'ativo')).toBe('pos_venda')
+  it('FOLLOW-UP → follow_up', () => {
+    expect(mapEtapaAgendor('FOLLOW-UP', 'ativo')).toBe('follow_up')
   })
 
-  it('Pós-Venda → pos_venda', () => {
-    expect(mapEtapaAgendor('Pós-Venda', 'ativo')).toBe('pos_venda')
+  it('Pós-Venda → follow_up', () => {
+    expect(mapEtapaAgendor('Pós-Venda', 'ativo')).toBe('follow_up')
   })
 
   it('Amostra → amostra', () => {
     expect(mapEtapaAgendor('Amostra Enviada', 'ativo')).toBe('amostra')
   })
 
-  it('Envio de Amostra → homologado (envio tem prioridade sobre amostra)', () => {
-    expect(mapEtapaAgendor('Envio de Amostra', 'ativo')).toBe('homologado')
+  it('Homologação → proposta', () => {
+    expect(mapEtapaAgendor('Homologação', 'ativo')).toBe('proposta')
   })
 
-  it('Homologação → homologado', () => {
-    expect(mapEtapaAgendor('Homologação', 'ativo')).toBe('homologado')
+  it('Cliente Ativo → cliente_ativo', () => {
+    expect(mapEtapaAgendor('Cliente Ativo', 'ativo')).toBe('cliente_ativo')
+    expect(mapEtapaAgendor('Carteira', 'ativo')).toBe('cliente_ativo')
   })
 
   it('etapa desconhecida → prospecção (fallback)', () => {
@@ -302,9 +356,9 @@ describe('mapCategoriaPerdaAgendor', () => {
 
 describe('sortCards', () => {
   it('por urgencia: critico > atencao > normal', () => {
-    const critico = makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(31), score: 10 })
+    const critico = makeCliente({ id: 1, etapa: 'amostra', dataEntradaEtapa: daysAgo(46), score: 10 })
     const normal = makeCliente({ id: 2, etapa: 'prospecção', diasInativo: 0, score: 90, dataEntradaEtapa: daysAgo(1) })
-    const atencao = makeCliente({ id: 3, etapa: 'amostra', dataEntradaEtapa: daysAgo(26), score: 50 })
+    const atencao = makeCliente({ id: 3, etapa: 'amostra', dataEntradaEtapa: daysAgo(38), score: 50 })
 
     const sorted = sortCards([normal, critico, atencao], 'urgencia')
     expect(sorted[0].id).toBe(1) // critico

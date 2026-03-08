@@ -48,9 +48,10 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
           <option value="">Todas as etapas</option>
           <option value="prospecção">Prospecção</option>
           <option value="amostra">Amostra</option>
-          <option value="homologado">Homologado</option>
+          <option value="proposta">Proposta</option>
           <option value="negociacao">Negociação</option>
-          <option value="pos_venda">Pós-Venda</option>
+          <option value="follow_up">Follow-up</option>
+          <option value="cliente_ativo">Cliente Ativo</option>
         </select>
       </div>
 
@@ -149,9 +150,10 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
                   <select value={newEtapa} onChange={(e) => setNewEtapa(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
                     <option value="prospecção">Prospecção</option>
                     <option value="amostra">Amostra</option>
-                    <option value="homologado">Homologado</option>
+                    <option value="proposta">Proposta</option>
                     <option value="negociacao">Negociação</option>
-                    <option value="pos_venda">Pós-Venda</option>
+                    <option value="follow_up">Follow-up</option>
+                    <option value="cliente_ativo">Cliente Ativo</option>
                   </select>
                 </div>
               </div>

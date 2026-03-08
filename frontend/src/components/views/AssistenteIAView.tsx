@@ -44,7 +44,7 @@ const PROMPT_CATEGORIES = [
     prompts: [
       'Quais são os 5 clientes mais próximos de fechar negócio?',
       'Sugira uma estratégia de follow-up para os clientes em negociação',
-      'Quais clientes em homologado devem ser priorizados para cotação?',
+      'Quais clientes em proposta devem ser priorizados para negociação?',
       'Analise o pipeline e projete o faturamento do mês',
     ],
   },

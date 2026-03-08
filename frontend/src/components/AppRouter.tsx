@@ -5,7 +5,7 @@ import type {
   TemplateMsg, Cadencia, Campanha, JobAutomacao, Pedido
 } from '../types'
 import {
-  DashboardView, AmostrasView, AprovacaoView, FunilView, ClientesView, TarefasView,
+  DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
   ProdutosView, PedidosView, AssistenteIAView
@@ -94,41 +94,6 @@ export default function AppRouter({
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
             addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
           } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
-        }}
-      />
-    case 'amostras':
-      return <AmostrasView
-        clientes={clientes}
-        vendedores={vendedores}
-        interacoes={interacoes}
-        loggedUser={loggedUser}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        onQuickAction={handleQuickAction}
-        onClickCliente={(c) => setSelectedClientePanel(c)}
-        isGerente={loggedUser?.cargo === 'gerente'}
-        moverCliente={moverCliente}
-        onSolicitarAmostra={async (cliente) => {
-          try {
-            await db.updateCliente(cliente.id, { statusAmostra: 'pendente_aprovacao' })
-            setClientes(prev => prev.map(c => c.id === cliente.id ? { ...c, statusAmostra: 'pendente_aprovacao' } : c))
-            addNotificacao('success', 'Solicitação enviada', `Amostra solicitada para ${cliente.razaoSocial}. Aguardando aprovação do gerente.`, cliente.id)
-          } catch (err) { logger.error('Erro ao solicitar amostra:', err); showToast('error', 'Erro ao solicitar amostra') }
-        }}
-        onAprovarAmostra={async (cliente) => {
-          try {
-            const dataEnvio = new Date().toISOString().split('T')[0]
-            moverCliente(cliente.id, 'amostra', { dataEnvioAmostra: dataEnvio, statusAmostra: 'enviada' })
-            addNotificacao('success', 'Amostra aprovada', `Amostra aprovada para ${cliente.razaoSocial}. Cliente movido para etapa Amostra.`, cliente.id)
-          } catch (err) { logger.error('Erro ao aprovar amostra:', err); showToast('error', 'Erro ao aprovar amostra') }
-        }}
-        onRejeitarAmostra={async (cliente) => {
-          try {
-            await db.updateCliente(cliente.id, { statusAmostra: undefined })
-            setClientes(prev => prev.map(c => c.id === cliente.id ? { ...c, statusAmostra: undefined } : c))
-            addNotificacao('info', 'Amostra rejeitada', `Solicitação de amostra rejeitada para ${cliente.razaoSocial}.`, cliente.id)
-          } catch (err) { logger.error('Erro ao rejeitar amostra:', err); showToast('error', 'Erro ao rejeitar amostra') }
         }}
       />
     case 'funil':

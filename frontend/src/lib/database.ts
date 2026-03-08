@@ -64,6 +64,20 @@ export function clienteFromDb(row: any): Cliente {
     motivoPerda: row.motivo_perda ?? undefined,
     categoriaPerda: row.categoria_perda ?? undefined,
     dataPerda: row.data_perda ?? undefined,
+    resultadoAmostra: row.resultado_amostra ?? undefined,
+    dataResultadoAmostra: row.data_resultado_amostra ?? undefined,
+    motivoReprovacao: row.motivo_reprovacao ?? undefined,
+    statusFollowUp: row.status_follow_up ?? undefined,
+    statusSatisfacao: row.status_satisfacao ?? undefined,
+    notaSatisfacao: row.nota_satisfacao ?? undefined,
+    feedbackSatisfacao: row.feedback_satisfacao ?? undefined,
+    cicloRecompra: row.ciclo_recompra ?? undefined,
+    dataProximaRecompra: row.data_proxima_recompra ?? undefined,
+    totalCompras: row.total_compras ?? 0,
+    omieStatusLogistico: row.omie_status_logistico ?? undefined,
+    omieCodigoRastreio: row.omie_codigo_rastreio ?? undefined,
+    omieNotaFiscal: row.omie_nota_fiscal ?? undefined,
+    omieDataFaturamento: row.omie_data_faturamento ?? undefined,
     origemLead: row.origem_lead ?? undefined,
     notas: row.notas ?? undefined,
     historicoEtapas: [],
@@ -123,6 +137,20 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.motivoPerda !== undefined) row.motivo_perda = c.motivoPerda ?? null
   if (c.categoriaPerda !== undefined) row.categoria_perda = c.categoriaPerda ?? null
   if (c.dataPerda !== undefined) row.data_perda = c.dataPerda || null
+  if (c.resultadoAmostra !== undefined) row.resultado_amostra = c.resultadoAmostra ?? null
+  if (c.dataResultadoAmostra !== undefined) row.data_resultado_amostra = c.dataResultadoAmostra || null
+  if (c.motivoReprovacao !== undefined) row.motivo_reprovacao = c.motivoReprovacao ?? null
+  if (c.statusFollowUp !== undefined) row.status_follow_up = c.statusFollowUp ?? null
+  if (c.statusSatisfacao !== undefined) row.status_satisfacao = c.statusSatisfacao ?? null
+  if (c.notaSatisfacao !== undefined) row.nota_satisfacao = c.notaSatisfacao ?? null
+  if (c.feedbackSatisfacao !== undefined) row.feedback_satisfacao = c.feedbackSatisfacao ?? null
+  if (c.cicloRecompra !== undefined) row.ciclo_recompra = c.cicloRecompra ?? null
+  if (c.dataProximaRecompra !== undefined) row.data_proxima_recompra = c.dataProximaRecompra || null
+  if (c.totalCompras !== undefined) row.total_compras = c.totalCompras
+  if (c.omieStatusLogistico !== undefined) row.omie_status_logistico = c.omieStatusLogistico ?? null
+  if (c.omieCodigoRastreio !== undefined) row.omie_codigo_rastreio = c.omieCodigoRastreio ?? null
+  if (c.omieNotaFiscal !== undefined) row.omie_nota_fiscal = c.omieNotaFiscal ?? null
+  if (c.omieDataFaturamento !== undefined) row.omie_data_faturamento = c.omieDataFaturamento || null
   if (c.origemLead !== undefined) row.origem_lead = c.origemLead
   if (c.notas !== undefined) row.notas = c.notas
   return row

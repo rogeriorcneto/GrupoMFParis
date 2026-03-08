@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 import type { Cliente, Vendedor, Interacao, FunilViewProps } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
+import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
 
 function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
@@ -190,12 +191,15 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     e.target.value = ''
   }
 
-  const VENDAS_ETAPAS = new Set(['cotacao', 'negociacao', 'pos_venda'])
+  const FUNIL_ETAPAS = new Set(['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo'])
 
   const stages = [
-    { title: 'Cotação', key: 'cotacao', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.60 },
-    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.75 },
-    { title: 'Pós-Venda', key: 'pos_venda', badge: 'bg-pink-100 text-pink-800', icon: '🚚', prob: 0.95 },
+    { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10 },
+    { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25 },
+    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40 },
+    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.60 },
+    { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80 },
+    { title: 'Cliente Ativo', key: 'cliente_ativo', badge: 'bg-green-100 text-green-800', icon: '✅', prob: 0.95 },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
   ]
 
@@ -212,8 +216,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
 
   const clientesFiltrados = useMemo(() => {
     const base = clientesFiltradosVendedor.filter(c =>
-      VENDAS_ETAPAS.has(c.etapa) ||
-      (c.etapa === 'perdido' && VENDAS_ETAPAS.has(c.etapaAnterior || ''))
+      FUNIL_ETAPAS.has(c.etapa) || c.etapa === 'perdido'
     )
     if (!search.trim()) return base
     const q = search.toLowerCase()
@@ -238,7 +241,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
 
   // Memoized metrics using stageMap (no re-filtering)
   const { totalPipeline, receitaPonderada, taxaConversao, tempoMedio, activeCount } = useMemo(() => {
-    let pipeline = 0, weighted = 0, posVendaCount = 0, nonPerdidoCount = 0
+    let pipeline = 0, weighted = 0, clienteAtivoCount = 0, nonPerdidoCount = 0
     let totalDias = 0, histCount = 0
     const probMap = new Map(stages.map(s => [s.key, s.prob]))
 
@@ -246,7 +249,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
       const prob = probMap.get(c.etapa) || 0
       const val = c.valorEstimado || 0
       if (c.etapa !== 'perdido') { pipeline += val; nonPerdidoCount++ }
-      if (c.etapa === 'pos_venda') posVendaCount++
+      if (c.etapa === 'cliente_ativo') clienteAtivoCount++
       weighted += val * prob
       if (c.historicoEtapas && c.historicoEtapas.length > 1) {
         const h = c.historicoEtapas
@@ -260,7 +263,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     return {
       totalPipeline: pipeline,
       receitaPonderada: weighted,
-      taxaConversao: nonPerdidoCount > 0 ? Math.round((posVendaCount / nonPerdidoCount) * 100) : 0,
+      taxaConversao: nonPerdidoCount > 0 ? Math.round((clienteAtivoCount / nonPerdidoCount) * 100) : 0,
       tempoMedio: histCount > 0 ? Math.round(totalDias / histCount) : 0,
       activeCount: nonPerdidoCount,
     }
@@ -275,14 +278,39 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const renderCardInfo = (cliente: Cliente) => {
     const dias = diasDesde(cliente.dataEntradaEtapa)
     switch (cliente.etapa) {
-      case 'cotacao': {
-        const diasCot = diasDesde(cliente.dataEntradaEtapa)
-        const pctPrazo = Math.min((diasCot / 30) * 100, 100)
-        const diasRestam = Math.max(30 - diasCot, 0)
+      case 'prospecção': {
         return (
           <div className="mt-1.5 space-y-1">
-            {cliente.valorEstimado && <p className="text-[10px] font-bold text-indigo-700">💰 R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p>}
-            <p className="text-[10px] text-gray-500">📋 Cotação há {diasCot}d</p>
+            {cliente.diasInativo !== undefined && cliente.diasInativo > 3 && <p className="text-[10px] text-orange-600">⏳ Inativo há {cliente.diasInativo}d</p>}
+            {cliente.origemLead && <span className="inline-block px-1.5 py-0.5 text-[9px] bg-sky-100 text-sky-700 rounded-full">{cliente.origemLead}</span>}
+          </div>
+        )
+      }
+      case 'amostra': {
+        const subLabel = cliente.statusAmostra ? subStatusAmostraLabels[cliente.statusAmostra] || cliente.statusAmostra : 'Pendente'
+        const subIdx = cliente.statusAmostra ? ['solicitada', 'aguardando_gerente', 'liberada', 'coletada', 'entregue', 'em_teste', 'aprovada', 'reprovada'].indexOf(cliente.statusAmostra) : 0
+        const pctSub = Math.min(((subIdx + 1) / 7) * 100, 100)
+        const pctPrazo = Math.min((dias / 45) * 100, 100)
+        const diasRestam = Math.max(45 - dias, 0)
+        return (
+          <div className="mt-1.5 space-y-1">
+            <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${cliente.statusAmostra === 'aprovada' ? 'bg-green-100 text-green-700' : cliente.statusAmostra === 'reprovada' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{subLabel}</span>
+            <div className="flex items-center gap-1">
+              <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className="h-1.5 rounded-full transition-all bg-amber-500" style={{ width: `${pctSub}%` }} /></div>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="flex-1 bg-gray-200 rounded-full h-1"><div className={`h-1 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 80 ? 'bg-yellow-500' : 'bg-gray-400'}`} style={{ width: `${pctPrazo}%` }} /></div>
+              <span className={`text-[9px] font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `${diasRestam}d` : 'Vencido!'}</span>
+            </div>
+          </div>
+        )
+      }
+      case 'proposta': {
+        const pctPrazo = Math.min((dias / 30) * 100, 100)
+        const diasRestam = Math.max(30 - dias, 0)
+        return (
+          <div className="mt-1.5 space-y-1">
+            {cliente.valorEstimado && <p className="text-[10px] font-bold text-indigo-700">� R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p>}
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 80 ? 'bg-yellow-500' : 'bg-indigo-500'}`} style={{ width: `${pctPrazo}%` }} /></div>
               <span className={`text-[9px] font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `${diasRestam}d` : 'Vencido!'}</span>
@@ -304,37 +332,34 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           </div>
         )
       }
-      case 'pos_venda': {
-        const diasPedido = diasDesde(cliente.dataUltimoPedido)
-        const cicloRecompra = 30
-        const pctRecompra = Math.min((diasPedido / cicloRecompra) * 100, 100)
-        const entregaRealizada = cliente.dataEntregaRealizada
-        const entregaPrevista = cliente.dataEntregaPrevista
-        const faturamento = cliente.statusFaturamento
+      case 'follow_up': {
+        const subLabel = cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando'
+        const subIdx = cliente.statusFollowUp ? ['pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0
+        const pctSub = Math.min(((subIdx + 1) / 7) * 100, 100)
         return (
           <div className="mt-1.5 space-y-1">
-            {entregaRealizada ? (
-              <p className="text-[10px] font-medium text-green-700">✅ Entregue em {new Date(entregaRealizada).toLocaleDateString('pt-BR')}</p>
-            ) : entregaPrevista ? (
-              <p className="text-[10px] font-medium text-blue-700">🚚 Entrega prevista: {new Date(entregaPrevista).toLocaleDateString('pt-BR')}</p>
-            ) : cliente.statusEntrega === 'enviado' ? (
-              <p className="text-[10px] font-medium text-orange-600">🚚 Enviado — aguardando entrega</p>
-            ) : cliente.statusEntrega === 'preparando' ? (
-              <p className="text-[10px] font-medium text-gray-600">📋 Preparando pedido</p>
-            ) : null}
-            {faturamento === 'faturado' ? (
-              <p className="text-[10px] font-bold text-green-700">💰 Faturado</p>
-            ) : (
-              <p className="text-[10px] font-bold text-orange-600">💰 A faturar</p>
-            )}
+            <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{subLabel}</span>
+            <div className="flex items-center gap-1">
+              <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className="h-1.5 rounded-full transition-all bg-blue-500" style={{ width: `${pctSub}%` }} /></div>
+            </div>
+            {cliente.omieCodigoRastreio && <p className="text-[10px] text-gray-500">� Rastreio: {cliente.omieCodigoRastreio}</p>}
+            {cliente.omieNotaFiscal && <p className="text-[10px] text-gray-500">� NF: {cliente.omieNotaFiscal}</p>}
+          </div>
+        )
+      }
+      case 'cliente_ativo': {
+        const diasPedido = diasDesde(cliente.dataUltimoPedido)
+        const ciclo = cliente.cicloRecompra || 60
+        const pctRecompra = Math.min((diasPedido / ciclo) * 100, 100)
+        return (
+          <div className="mt-1.5 space-y-1">
+            {cliente.totalCompras !== undefined && <p className="text-[10px] text-green-700">� {cliente.totalCompras} compra(s)</p>}
+            {cliente.notaSatisfacao !== undefined && <p className="text-[10px] text-purple-600">⭐ NPS: {cliente.notaSatisfacao}/5</p>}
             {cliente.dataUltimoPedido && (
-              <>
-                <p className="text-[10px] text-gray-500">📦 Pedido: {diasPedido}d atrás</p>
-                <div className="flex items-center gap-1">
-                  <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctRecompra >= 100 ? 'bg-purple-500' : pctRecompra >= 67 ? 'bg-blue-500' : 'bg-green-500'}`} style={{ width: `${pctRecompra}%` }} /></div>
-                  <span className={`text-[9px] font-bold ${diasPedido >= cicloRecompra ? 'text-purple-600' : 'text-gray-500'}`}>{diasPedido >= cicloRecompra ? '🛒 Recompra!' : `${cicloRecompra - diasPedido}d`}</span>
-                </div>
-              </>
+              <div className="flex items-center gap-1">
+                <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctRecompra >= 100 ? 'bg-purple-500' : pctRecompra >= 67 ? 'bg-blue-500' : 'bg-green-500'}`} style={{ width: `${pctRecompra}%` }} /></div>
+                <span className={`text-[9px] font-bold ${diasPedido >= ciclo ? 'text-purple-600' : 'text-gray-500'}`}>{diasPedido >= ciclo ? '🛒 Recompra!' : `${ciclo - diasPedido}d`}</span>
+              </div>
             )}
           </div>
         )
@@ -346,7 +371,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         return (
           <div className="mt-1.5 space-y-1">
             {cliente.categoriaPerda && <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded-full">{catLabels[cliente.categoriaPerda]}</span>}
-            {cliente.etapaAnterior && <p className="text-[10px] text-gray-500">↩ {cliente.etapaAnterior}</p>}
+            {cliente.etapaAnterior && <p className="text-[10px] text-gray-500">↩ {stageLabels[cliente.etapaAnterior] || cliente.etapaAnterior}</p>}
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctReconquista >= 100 ? 'bg-green-500' : 'bg-gray-400'}`} style={{ width: `${pctReconquista}%` }} /></div>
               <span className={`text-[9px] font-bold ${diasPerdido >= 60 ? 'text-green-600' : 'text-gray-500'}`}>{diasPerdido >= 60 ? '🔄 Reconquistar!' : `${60 - diasPerdido}d`}</span>
@@ -376,7 +401,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
           <p className="text-[10px] text-gray-500 uppercase font-semibold">Taxa Conversão</p>
           <p className="text-lg font-bold text-primary-600">{taxaConversao}%</p>
-          <p className="text-[10px] text-gray-500">Leads → Pós-Venda</p>
+          <p className="text-[10px] text-gray-500">Leads → Cliente Ativo</p>
         </div>
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
           <p className="text-[10px] text-gray-500 uppercase font-semibold">Tempo Médio</p>
@@ -446,7 +471,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         </div>
       </div>
 
-      <div className={`flex lg:grid gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0 ${hidePerdidos ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
+      <div className={`flex lg:grid gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0 ${hidePerdidos ? 'lg:grid-cols-6' : 'lg:grid-cols-7'}`}>
         {stages.filter(s => !(hidePerdidos && s.key === 'perdido')).map((stage) => {
           const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
           const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)

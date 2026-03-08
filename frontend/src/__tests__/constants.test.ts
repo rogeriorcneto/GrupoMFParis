@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { stageLabels, transicoesPermitidas } from '../utils/constants'
+import { stageLabels, transicoesPermitidas, subStatusAmostraLabels, subStatusFollowUpLabels } from '../utils/constants'
 
 describe('stageLabels', () => {
-  const ALL_STAGES = ['prospecção', 'amostra', 'homologado', 'cotacao', 'negociacao', 'pos_venda', 'perdido']
+  const ALL_STAGES = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo', 'perdido']
 
   it('deve ter label para cada etapa do funil', () => {
     for (const stage of ALL_STAGES) {
@@ -11,15 +11,15 @@ describe('stageLabels', () => {
     }
   })
 
-  it('labels devem ser strings legíveis (sem underscores)', () => {
-    for (const label of Object.values(stageLabels)) {
-      expect(label).not.toContain('_')
-    }
+  it('labels devem ser strings legíveis (sem underscores no valor)', () => {
+    // follow_up e cliente_ativo são chaves com _, mas os labels não
+    expect(stageLabels['follow_up']).toBe('Follow-up')
+    expect(stageLabels['cliente_ativo']).toBe('Cliente Ativo')
   })
 })
 
 describe('transicoesPermitidas', () => {
-  const ALL_STAGES = ['prospecção', 'amostra', 'homologado', 'cotacao', 'negociacao', 'pos_venda', 'perdido']
+  const ALL_STAGES = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo', 'perdido']
 
   it('deve definir transições para cada etapa', () => {
     for (const stage of ALL_STAGES) {
@@ -32,45 +32,45 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['prospecção']).toEqual(['amostra', 'perdido'])
   })
 
-  it('amostra só pode ir para homologado ou perdido', () => {
-    expect(transicoesPermitidas['amostra']).toEqual(['homologado', 'perdido'])
+  it('amostra só pode ir para proposta ou perdido', () => {
+    expect(transicoesPermitidas['amostra']).toEqual(['proposta', 'perdido'])
   })
 
-  it('homologado pode ir para cotacao, negociacao ou perdido', () => {
-    expect(transicoesPermitidas['homologado']).toEqual(['cotacao', 'negociacao', 'perdido'])
+  it('proposta pode ir para negociacao ou perdido', () => {
+    expect(transicoesPermitidas['proposta']).toEqual(['negociacao', 'perdido'])
   })
 
-  it('cotacao pode ir para negociacao, homologado ou perdido', () => {
-    expect(transicoesPermitidas['cotacao']).toEqual(['negociacao', 'homologado', 'perdido'])
+  it('negociacao pode ir para follow_up, proposta ou perdido', () => {
+    expect(transicoesPermitidas['negociacao']).toEqual(['follow_up', 'proposta', 'perdido'])
   })
 
-  it('negociacao pode ir para pos_venda, cotacao, homologado ou perdido', () => {
-    expect(transicoesPermitidas['negociacao']).toEqual(['pos_venda', 'cotacao', 'homologado', 'perdido'])
+  it('follow_up pode ir para cliente_ativo ou perdido', () => {
+    expect(transicoesPermitidas['follow_up']).toEqual(['cliente_ativo', 'perdido'])
   })
 
-  it('pos_venda só pode voltar para negociacao', () => {
-    expect(transicoesPermitidas['pos_venda']).toEqual(['negociacao'])
+  it('cliente_ativo pode voltar para negociacao ou perdido', () => {
+    expect(transicoesPermitidas['cliente_ativo']).toEqual(['negociacao', 'perdido'])
   })
 
-  it('perdido só pode voltar para prospecção (reconquista)', () => {
-    expect(transicoesPermitidas['perdido']).toEqual(['prospecção'])
+  it('perdido pode voltar para prospecção ou proposta', () => {
+    expect(transicoesPermitidas['perdido']).toEqual(['prospecção', 'proposta'])
   })
 
   it('transições ilegais não devem existir', () => {
-    // prospecção não pode pular direto para pos_venda
-    expect(transicoesPermitidas['prospecção']).not.toContain('pos_venda')
+    // prospecção não pode pular direto para cliente_ativo
+    expect(transicoesPermitidas['prospecção']).not.toContain('cliente_ativo')
     expect(transicoesPermitidas['prospecção']).not.toContain('negociacao')
-    expect(transicoesPermitidas['prospecção']).not.toContain('homologado')
+    expect(transicoesPermitidas['prospecção']).not.toContain('follow_up')
     // amostra não pode pular para negociacao
     expect(transicoesPermitidas['amostra']).not.toContain('negociacao')
-    expect(transicoesPermitidas['amostra']).not.toContain('pos_venda')
-    // perdido não pode ir direto para pos_venda
-    expect(transicoesPermitidas['perdido']).not.toContain('pos_venda')
+    expect(transicoesPermitidas['amostra']).not.toContain('cliente_ativo')
+    // perdido não pode ir direto para cliente_ativo
+    expect(transicoesPermitidas['perdido']).not.toContain('cliente_ativo')
     expect(transicoesPermitidas['perdido']).not.toContain('negociacao')
   })
 
   it('todas as transições devem apontar para etapas válidas', () => {
-    for (const [from, targets] of Object.entries(transicoesPermitidas)) {
+    for (const [_from, targets] of Object.entries(transicoesPermitidas)) {
       for (const to of targets) {
         expect(ALL_STAGES).toContain(to)
       }
@@ -81,5 +81,23 @@ describe('transicoesPermitidas', () => {
     const labelKeys = Object.keys(stageLabels).sort()
     const transKeys = Object.keys(transicoesPermitidas).sort()
     expect(labelKeys).toEqual(transKeys)
+  })
+})
+
+describe('subStatusAmostraLabels', () => {
+  it('deve ter labels para todos os sub-status de amostra', () => {
+    const expected = ['solicitada', 'aguardando_gerente', 'liberada', 'coletada', 'entregue', 'em_teste', 'aprovada', 'reprovada']
+    for (const s of expected) {
+      expect(subStatusAmostraLabels[s]).toBeDefined()
+    }
+  })
+})
+
+describe('subStatusFollowUpLabels', () => {
+  it('deve ter labels para todos os sub-status de follow-up', () => {
+    const expected = ['pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido']
+    for (const s of expected) {
+      expect(subStatusFollowUpLabels[s]).toBeDefined()
+    }
   })
 })

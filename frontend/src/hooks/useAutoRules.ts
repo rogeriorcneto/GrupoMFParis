@@ -98,7 +98,7 @@ export function useAutoRules({
           ...c, etapa: 'perdido', etapaAnterior: c.etapa, dataEntradaEtapa: nowStr,
           historicoEtapas: [...(c.historicoEtapas || []), hist],
           categoriaPerda: 'sem_resposta' as const, dataPerda: nowStr.split('T')[0],
-          motivoPerda: `[Sistema] Prazo de ${match.etapa === 'amostra' ? '30' : match.etapa === 'negociacao' ? '45' : '75'} dias na etapa "${match.etapa === 'amostra' ? 'Amostra' : match.etapa === 'negociacao' ? 'Negociação' : 'Homologado'}" vencido — movido automaticamente`
+          motivoPerda: `[Sistema] Prazo de ${match.etapa === 'amostra' ? '45' : match.etapa === 'proposta' ? '30' : match.etapa === 'negociacao' ? '45' : match.etapa === 'follow_up' ? '60' : '90'} dias na etapa "${match.etapa}" vencido — movido automaticamente`
         }
       }))
       // Capture client names before state update (avoid stale closure)
@@ -109,7 +109,7 @@ export function useAutoRules({
       // Persist each auto-move to Supabase
       const persistAutoMoves = async () => {
         for (const m of moveInfo) {
-          const motivo = `[Sistema] Prazo de ${m.etapa === 'amostra' ? '30' : m.etapa === 'negociacao' ? '45' : '75'} dias na etapa "${m.etapa === 'amostra' ? 'Amostra' : m.etapa === 'negociacao' ? 'Negociação' : 'Homologado'}" vencido — movido automaticamente`
+          const motivo = `[Sistema] Prazo de ${m.etapa === 'amostra' ? '45' : m.etapa === 'proposta' ? '30' : m.etapa === 'negociacao' ? '45' : m.etapa === 'follow_up' ? '60' : '90'} dias na etapa "${m.etapa}" vencido — movido automaticamente`
           try {
             await db.updateCliente(m.id, {
               etapa: 'perdido', etapaAnterior: m.fromStage, dataEntradaEtapa: nowStr,
@@ -118,7 +118,7 @@ export function useAutoRules({
             await db.insertHistoricoEtapa(m.id, { etapa: 'perdido', data: nowStr, de: m.fromStage })
             const savedAtiv = await db.insertAtividade({
               tipo: 'moveu',
-              descricao: `${m.razaoSocial} movido para Perdido automaticamente (prazo ${m.etapa === 'amostra' ? '30d' : m.etapa === 'negociacao' ? '45d' : '75d'} vencido)`,
+              descricao: `${m.razaoSocial} movido para Perdido automaticamente (prazo ${m.etapa === 'amostra' ? '45d' : m.etapa === 'proposta' ? '30d' : m.etapa === 'negociacao' ? '45d' : m.etapa === 'follow_up' ? '60d' : '90d'} vencido)`,
               vendedorNome: 'Sistema', timestamp: nowStr
             })
             setAtividades(prev => [savedAtiv, ...prev])

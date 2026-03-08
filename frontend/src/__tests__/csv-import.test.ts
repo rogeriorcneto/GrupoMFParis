@@ -110,16 +110,16 @@ describe('CSV Import — mapeamento Agendor completo', () => {
     expect(mapEtapaAgendor('CONTATO INICIAL', 'Ativo')).toBe('prospecção')
   })
 
-  it('PROPOSTA ENVIADA (ativo) → negociacao', () => {
-    expect(mapEtapaAgendor('PROPOSTA ENVIADA', 'Ativo')).toBe('negociacao')
+  it('PROPOSTA ENVIADA (ativo) → proposta', () => {
+    expect(mapEtapaAgendor('PROPOSTA ENVIADA', 'Ativo')).toBe('proposta')
   })
 
-  it('ENVIO DO PEDIDO (ativo) → homologado', () => {
-    expect(mapEtapaAgendor('ENVIO DO PEDIDO', 'Ativo')).toBe('homologado')
+  it('ENVIO DO PEDIDO (ativo) → negociacao', () => {
+    expect(mapEtapaAgendor('ENVIO DO PEDIDO', 'Ativo')).toBe('negociacao')
   })
 
-  it('FOLLOW-UP (ativo) → pos_venda', () => {
-    expect(mapEtapaAgendor('FOLLOW-UP', 'Ativo')).toBe('pos_venda')
+  it('FOLLOW-UP (ativo) → follow_up', () => {
+    expect(mapEtapaAgendor('FOLLOW-UP', 'Ativo')).toBe('follow_up')
   })
 
   it('qualquer etapa com status Perdido → perdido', () => {
