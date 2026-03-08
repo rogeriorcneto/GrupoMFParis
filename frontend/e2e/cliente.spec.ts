@@ -43,7 +43,7 @@ test.describe('Cadastro de Cliente', () => {
 
     // Toast de sucesso ou o cliente aparece na lista
     // Navega para o Funil para confirmar que o cliente apareceu na coluna Prospecção
-    await page.click('button:has-text("Funil")')
+    await page.click('button:has-text("Funil Comercial")')
 
     // Espera o funil carregar e procura o cliente
     await expect(page.getByText(razaoSocial)).toBeVisible({ timeout: 15_000 })

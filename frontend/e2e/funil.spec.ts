@@ -21,7 +21,7 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil")')
+    await page.click('button:has-text("Funil Comercial")')
 
     // Espera o funil renderizar
     await page.waitForTimeout(2_000)
@@ -39,7 +39,7 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil")')
+    await page.click('button:has-text("Funil Comercial")')
     await page.waitForTimeout(2_000)
 
     // Localiza o card do cliente
@@ -78,7 +78,7 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil")')
+    await page.click('button:has-text("Funil Comercial")')
     await page.waitForTimeout(2_000)
 
     // Clica no card
@@ -94,7 +94,7 @@ test.describe('Funil de Vendas', () => {
     const { id, client } = await criarClienteTeste({
       etapa: 'amostra',
       data_envio_amostra: dataEnvio,
-      status_amostra: 'enviada',
+      status_amostra: 'solicitada',
     })
     cleanupIds.push(id)
 
@@ -102,7 +102,7 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil")')
+    await page.click('button:has-text("Funil Comercial")')
     await page.waitForTimeout(2_000)
 
     // O cliente deve estar visível (na coluna Amostra)
