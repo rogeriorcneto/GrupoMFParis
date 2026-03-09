@@ -347,22 +347,49 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  // Buscar pedidos direto do Omie (mais recentes primeiro via ordenar_por_codigo DESC)
-  const result = await omieCall<any>(
+  // Filtrar pedidos de 01/01/2026 em diante
+  const filtroParams = {
+    pagina: 1,
+    registros_por_pagina: 50,
+    apenas_importado_api: 'N',
+    filtrar_por_data_de: '01/01/2026',
+    filtrar_por_data_ate: '31/12/2030',
+  }
+
+  // Primeira chamada para saber total de páginas
+  const firstResult = await omieCall<any>(
     '/produtos/pedido/',
     'ListarPedidos',
-    [{
-      pagina: 1,
-      registros_por_pagina: 50,
-      apenas_importado_api: 'N',
-    }],
+    [filtroParams],
     { credentials: creds }
   )
 
-  const pedidosOmie = result?.pedido_venda_produto || []
+  const totalPaginas = firstResult?.total_de_paginas || 1
+
+  // Se há mais de 1 página, buscar a última (mais recentes)
+  let pedidosOmie = firstResult?.pedido_venda_produto || []
+
+  if (totalPaginas > 1) {
+    const lastResult = await omieCall<any>(
+      '/produtos/pedido/',
+      'ListarPedidos',
+      [{ ...filtroParams, pagina: totalPaginas }],
+      { credentials: creds }
+    )
+    pedidosOmie = lastResult?.pedido_venda_produto || pedidosOmie
+  }
+
   if (pedidosOmie.length === 0) return []
 
-  // Mapear para formato padronizado, mais recentes primeiro
+  // Helper: converter data dd/mm/aaaa para yyyy-mm-dd (ISO)
+  const parseOmieDate = (d: string): string => {
+    if (!d || d.length < 10) return ''
+    const parts = d.split('/')
+    if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`
+    return d
+  }
+
+  // Mapear para formato padronizado
   const resultado: PedidoAcompanhamento[] = pedidosOmie.map((p: any) => {
     const cab = p.cabecalho || {}
     const infoCad = p.infoCadastro || {}
@@ -380,6 +407,10 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) statusOmie = 'entregue'
     else if (etapaLower.includes('cancelado')) statusOmie = 'cancelado'
 
+    // Usar data_previsao do cabecalho, converter para ISO
+    const dataRaw = cab.data_previsao || infoCad.dDtInc || ''
+    const dataISO = parseOmieDate(dataRaw)
+
     return {
       pedidoId: cab.codigo_pedido || 0,
       numero: cab.numero_pedido ? String(cab.numero_pedido) : String(cab.codigo_pedido || ''),
@@ -387,13 +418,13 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
       clienteId: cab.codigo_cliente || 0,
       vendedorNome: cab.codigo_vendedor ? `Vendedor ${cab.codigo_vendedor}` : '',
       valor: Number(totalPedido.valor_total_pedido || cab.valor_total || 0),
-      dataCriacao: cab.data_previsao || infoCad.dDtInc || '',
+      dataCriacao: dataISO || dataRaw,
       statusCrm: '',
       statusOmie,
       etapaOmie: descEtapa,
       nf: infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : '',
       codigoRastreio: '',
-      dataFaturamento: infoCad.dDataFaturamento || infoCad.dDtFat || '',
+      dataFaturamento: parseOmieDate(infoCad.dDataFaturamento || infoCad.dDtFat || ''),
       omieCodigo: String(cab.codigo_pedido || ''),
     }
   })
@@ -422,46 +453,56 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  // Filtrar últimos 6 meses até 6 meses no futuro
   const hoje = new Date()
-  const seisAtras = new Date(hoje)
-  seisAtras.setMonth(seisAtras.getMonth() - 6)
-  const seisFrente = new Date(hoje)
-  seisFrente.setMonth(seisFrente.getMonth() + 6)
 
-  const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
-  const dataInicio = fmt(seisAtras)
-  const dataFim = fmt(seisFrente)
+  // Helper para buscar última página (mais recentes) de uma lista financeira
+  async function fetchUltimaPagina(endpoint: string, method: string, resultKey: string): Promise<any[]> {
+    const params = { pagina: 1, registros_por_pagina: 50 }
 
-  const [receber, pagar] = await Promise.all([
-    omieCall<any>(
-      '/financas/contareceber/',
-      'ListarContasReceber',
-      [{
-        pagina: 1,
-        registros_por_pagina: 50,
-        filtrar_por_data_de: dataInicio,
-        filtrar_por_data_ate: dataFim,
-      }],
-      { credentials: creds }
-    ).catch(() => ({ conta_receber_cadastro: [] })),
-    omieCall<any>(
-      '/financas/contapagar/',
-      'ListarContasPagar',
-      [{
-        pagina: 1,
-        registros_por_pagina: 50,
-        filtrar_por_data_de: dataInicio,
-        filtrar_por_data_ate: dataFim,
-      }],
-      { credentials: creds }
-    ).catch(() => ({ conta_pagar_cadastro: [] })),
+    // Primeira chamada: descobrir total de páginas
+    const first = await omieCall<any>(endpoint, method, [params], { credentials: creds! })
+    const totalPag = first?.total_de_paginas || 1
+
+    // Se só tem 1 página, filtrar localmente por data >= 2026
+    if (totalPag <= 1) {
+      return (first?.[resultKey] || [])
+    }
+
+    // Buscar última página (mais recentes)
+    const last = await omieCall<any>(endpoint, method, [{ ...params, pagina: totalPag }], { credentials: creds! })
+    return (last?.[resultKey] || [])
+  }
+
+  const [contasReceberRaw, contasPagarRaw] = await Promise.all([
+    fetchUltimaPagina('/financas/contareceber/', 'ListarContasReceber', 'conta_receber_cadastro')
+      .catch(() => []),
+    fetchUltimaPagina('/financas/contapagar/', 'ListarContasPagar', 'conta_pagar_cadastro')
+      .catch(() => []),
   ])
 
-  const contasReceber = receber?.conta_receber_cadastro || []
-  const contasPagar = pagar?.conta_pagar_cadastro || []
+  // Filtrar apenas contas de 2026 em diante (data_vencimento no formato dd/mm/aaaa)
+  const isRecent = (d: string) => {
+    if (!d) return true
+    const parts = d.split('/')
+    if (parts.length === 3) {
+      const year = parseInt(parts[2], 10)
+      return year >= 2026
+    }
+    return true
+  }
 
-  const hojeStr = hoje.toISOString().split('T')[0]
+  const contasReceber = contasReceberRaw.filter((c: any) => isRecent(c.data_vencimento))
+  const contasPagar = contasPagarRaw.filter((c: any) => isRecent(c.data_vencimento))
+
+  // Helper: dd/mm/yyyy → YYYYMMDD numérico para comparação
+  const toNum = (d: string): number => {
+    if (!d) return 0
+    const parts = d.split('/')
+    if (parts.length === 3) return parseInt(`${parts[2]}${parts[1]}${parts[0]}`, 10)
+    return 0
+  }
+
+  const hojeNum = toNum(`${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`)
 
   let totalReceber = 0
   let totalPagar = 0
@@ -471,8 +512,8 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
   for (const cr of contasReceber) {
     const valor = Number(cr.valor_documento || 0)
     totalReceber += valor
-    const venc = cr.data_vencimento || ''
-    if (venc && venc < hojeStr) titulosVencidos++
+    const vencNum = toNum(cr.data_vencimento || '')
+    if (vencNum > 0 && vencNum < hojeNum) titulosVencidos++
     else titulosAVencer++
   }
 
@@ -480,12 +521,8 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
     totalPagar += Number(cp.valor_documento || 0)
   }
 
-  // Ordenar mais recentes primeiro (por data_vencimento desc)
-  const sortByDate = (a: any, b: any) => {
-    const da = a.data_vencimento || ''
-    const db = b.data_vencimento || ''
-    return db.localeCompare(da)
-  }
+  // Ordenar mais recentes primeiro (por data_vencimento desc dd/mm/yyyy)
+  const sortByDate = (a: any, b: any) => toNum(b.data_vencimento || '') - toNum(a.data_vencimento || '')
   contasReceber.sort(sortByDate)
   contasPagar.sort(sortByDate)
 
