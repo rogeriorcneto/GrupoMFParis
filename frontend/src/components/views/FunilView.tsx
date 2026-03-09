@@ -9,6 +9,8 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState('')
   const [hidePerdidos, setHidePerdidos] = React.useState(false)
+  const [hideInativos, setHideInativos] = React.useState(true)
+  const [hideAmostraPerdida, setHideAmostraPerdida] = React.useState(true)
   const [filterSegmento, setFilterSegmento] = React.useState('')
   const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
 
@@ -207,6 +209,15 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
   ]
 
+  const displayedStages = useMemo(() => {
+    return stages.filter(stage => {
+      if (hidePerdidos && stage.key === 'perdido') return false
+      if (hideInativos && stage.key === 'inativo') return false
+      if (hideAmostraPerdida && stage.key === 'amostra_perdida') return false
+      return true
+    })
+  }, [hideAmostraPerdida, hideInativos, hidePerdidos])
+
   // P1-2: O(1) vendedor lookup instead of O(m) find per card
   const vendedorMap = useMemo(() => {
     const m = new Map<number, Vendedor>()
@@ -243,19 +254,19 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   // P1-1: Single O(n) pass to group clients by stage (instead of 7× filter)
   const stageMap = useMemo(() => {
     const m = new Map<string, Cliente[]>()
-    stages.forEach(s => m.set(s.key, []))
+    displayedStages.forEach(s => m.set(s.key, []))
     clientesFiltrados.forEach(c => {
       const arr = m.get(c.etapa)
       if (arr) arr.push(c)
     })
     return m
-  }, [clientesFiltrados])
+  }, [clientesFiltrados, displayedStages])
 
   // Memoized metrics using stageMap (no re-filtering)
   const { totalPipeline, receitaPonderada, taxaConversao, tempoMedio, activeCount } = useMemo(() => {
     let pipeline = 0, weighted = 0, followUpCount = 0, nonPerdidoCount = 0
     let totalDias = 0, histCount = 0
-    const probMap = new Map(stages.map(s => [s.key, s.prob]))
+    const probMap = new Map(displayedStages.map(s => [s.key, s.prob]))
 
     clientesFiltrados.forEach(c => {
       const prob = probMap.get(c.etapa) || 0
@@ -279,7 +290,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
       tempoMedio: histCount > 0 ? Math.round(totalDias / histCount) : 0,
       activeCount: nonPerdidoCount,
     }
-  }, [clientesFiltrados])
+  }, [clientesFiltrados, displayedStages])
 
   const urgenciaBorder = (u: string) => {
     if (u === 'critico') return 'border-l-4 border-l-red-500 bg-red-50'
@@ -412,162 +423,162 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const alertCount = useMemo(() => clientesFiltrados.filter(c => getCardUrgencia(c) !== 'normal').length, [clientesFiltrados])
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
-          <p className="text-[10px] text-gray-500 uppercase font-semibold">Pipeline Total</p>
-          <p className="text-lg font-bold text-gray-900">R$ {totalPipeline.toLocaleString('pt-BR')}</p>
-          <p className="text-[10px] text-gray-500">{activeCount} leads ativos</p>
+    <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden">
+      {/* KPI bar — inline compacta */}
+      <div className="flex items-center gap-3 px-1 py-2 flex-shrink-0">
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
+          <span className="text-[10px] text-gray-400 uppercase font-semibold">Pipeline</span>
+          <span className="text-sm font-bold text-gray-900">R$ {totalPipeline.toLocaleString('pt-BR')}</span>
+          <span className="text-[10px] text-gray-400">({activeCount})</span>
         </div>
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
-          <p className="text-[10px] text-gray-500 uppercase font-semibold">Receita Prevista</p>
-          <p className="text-lg font-bold text-green-600">R$ {Math.round(receitaPonderada).toLocaleString('pt-BR')}</p>
-          <p className="text-[10px] text-gray-500">Ponderada por probabilidade</p>
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
+          <span className="text-[10px] text-gray-400 uppercase font-semibold">Prevista</span>
+          <span className="text-sm font-bold text-green-600">R$ {Math.round(receitaPonderada).toLocaleString('pt-BR')}</span>
         </div>
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
-          <p className="text-[10px] text-gray-500 uppercase font-semibold">Taxa Conversão</p>
-          <p className="text-lg font-bold text-primary-600">{taxaConversao}%</p>
-          <p className="text-[10px] text-gray-500">Leads → Follow-up</p>
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
+          <span className="text-[10px] text-gray-400 uppercase font-semibold">Conversão</span>
+          <span className="text-sm font-bold text-primary-600">{taxaConversao}%</span>
         </div>
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
-          <p className="text-[10px] text-gray-500 uppercase font-semibold">Tempo Médio</p>
-          <p className="text-lg font-bold text-purple-600">{tempoMedio}d</p>
-          <p className="text-[10px] text-gray-500">Ciclo de venda</p>
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
+          <span className="text-[10px] text-gray-400 uppercase font-semibold">Ciclo</span>
+          <span className="text-sm font-bold text-purple-600">{tempoMedio}d</span>
         </div>
+        {alertCount > 0 && (
+          <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 shadow-sm ml-auto">
+            <span className="text-xs">🚨</span>
+            <span className="text-xs font-bold text-red-700">{alertCount} vencendo</span>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        {/* Search bar */}
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+      {/* Toolbar — 1 linha */}
+      <div className="flex items-center gap-2 px-1 pb-2 flex-shrink-0 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar clientes no funil... (nome, fantasia, CNPJ)"
-            className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="Buscar..."
+            className="w-full pl-7 pr-6 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
           />
-          {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs px-1">✕</button>
-          )}
+          {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-[10px]">✕</button>}
         </div>
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            {isGerente && (
-              <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">👥 Todos os vendedores</option>
-                {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-              </select>
-            )}
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-3 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="urgencia">🔥 Ordenar: Urgência</option>
-              <option value="score">⭐ Ordenar: Score</option>
-              <option value="valor">💰 Ordenar: Valor</option>
-              <option value="antigo">⏳ Ordenar: Mais Antigos</option>
-              <option value="recente">🆕 Ordenar: Mais Recentes</option>
-            </select>
-            <button
-              onClick={() => setHidePerdidos(v => !v)}
-              className={`px-3 py-1.5 rounded-apple text-sm font-medium border transition-colors ${hidePerdidos ? 'bg-gray-800 text-white border-gray-800' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
-            >
-              {hidePerdidos ? '👁 Mostrar Perdidos' : '🙈 Ocultar Perdidos'}
-            </button>
-            <input
-              type="text"
-              value={filterSegmento}
-              onChange={e => setFilterSegmento(e.target.value)}
-              placeholder="🏢 Segmento"
-              className="px-2 py-1.5 border border-gray-300 rounded-apple text-sm w-28 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            <input
-              type="text"
-              value={filterLocalizacao}
-              onChange={e => setFilterLocalizacao(e.target.value)}
-              placeholder="📍 Localização"
-              className="px-2 py-1.5 border border-gray-300 rounded-apple text-sm w-28 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-            {isGerente && onImportNegocios && (
-              <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
-                <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
-                📥 Importar Negócios Agendor
-              </label>
-            )}
+        {isGerente && (
+          <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500">
+            <option value="">Todos vendedores</option>
+            {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+          </select>
+        )}
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500">
+          <option value="urgencia">Urgência</option>
+          <option value="score">Score</option>
+          <option value="valor">Valor</option>
+          <option value="antigo">Mais antigo</option>
+          <option value="recente">Mais recente</option>
+        </select>
+        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+
+        <div className="h-5 w-px bg-gray-300" />
+
+        <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
+          🧪
+        </button>
+        <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
+          💤
+        </button>
+        <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
+          ❌
+        </button>
+
+        {isGerente && onImportNegocios && (
+          <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-2.5 rounded-lg transition-colors shadow-sm flex items-center gap-1 cursor-pointer text-xs ml-auto">
+            <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
+            📥 Importar
+          </label>
+        )}
+        {importStatus && (
+          <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1">
+            <div className="w-2.5 h-2.5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
+            <span className="text-[10px] text-indigo-700">{importStatus}</span>
           </div>
-          <div className="flex items-center gap-2">
-            {importStatus && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
-                <div className="w-3 h-3 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin"></div>
-                <p className="text-xs text-indigo-800">{importStatus}</p>
-              </div>
-            )}
-            {alertCount > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-apple px-3 py-1.5 flex items-center gap-2">
-                <span>🚨</span>
-                <p className="text-xs text-red-800"><span className="font-bold">{alertCount}</span> com prazo vencendo</p>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
-        {stages.filter(s => !(hidePerdidos && s.key === 'perdido')).map((stage) => {
-          const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
-          const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-          const stageWeighted = Math.round(stageValor * stage.prob)
-          return (
-            <div key={stage.title} className="bg-white rounded-apple shadow-apple-sm border border-gray-200 min-w-[260px] sm:min-w-[280px] lg:min-w-0 snap-start flex-shrink-0 lg:flex-shrink" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
-              <div className="p-3">
-                <div className="flex items-center justify-between mb-0.5">
-                  <h3 className="font-medium text-gray-900 text-sm">{stage.icon} {stage.title}</h3>
-                  <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${stage.badge}`}>{stageClientes.length}</span>
+      {/* Kanban columns — scroll horizontal com colunas de largura fixa igual */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <div className="flex gap-2 h-full px-1 pb-2" style={{ minWidth: `${displayedStages.length * 220}px` }}>
+          {displayedStages.map((stage) => {
+            const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
+            const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+            const stageWeighted = Math.round(stageValor * stage.prob)
+            return (
+              <div key={stage.key} className="flex-1 min-w-[200px] max-w-[320px] flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
+                {/* Column header — compacto e colorido */}
+                <div className="px-2.5 py-2 bg-white border-b border-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <h3 className="font-semibold text-gray-800 text-[11px] truncate leading-none">{stage.icon} {stage.title}</h3>
+                    <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-[10px] text-gray-500 font-medium">R$ {stageValor.toLocaleString('pt-BR')}</span>
+                    {stage.prob > 0 && <span className="text-[9px] text-gray-400">{Math.round(stage.prob * 100)}%</span>}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-gray-500">R$ {stageValor.toLocaleString('pt-BR')}</p>
-                  {stage.prob > 0 && <p className="text-[10px] text-gray-400">{Math.round(stage.prob * 100)}% → R$ {stageWeighted.toLocaleString('pt-BR')}</p>}
-                </div>
-                <div className="space-y-2 min-h-[200px] lg:min-h-[300px] max-h-[calc(100vh-340px)] overflow-y-auto">
+
+                {/* Cards area — scroll vertical */}
+                <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
                   {stageClientes.map((cliente) => {
                     const urgencia = getCardUrgencia(cliente)
                     const nextAction = getNextAction(cliente)
                     const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
                     return (
-                      <div key={cliente.id} className={`p-2.5 rounded-apple ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-apple transition-all duration-200 ${urgenciaBorder(urgencia)} group`} draggable={isGerente} onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()} onClick={() => onClickCliente?.(cliente)}>
-                        <div className="flex items-start justify-between">
-                          <h4 className="font-semibold text-xs text-gray-900 leading-tight">{cliente.razaoSocial}</h4>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            {urgencia !== 'normal' && <span className="text-xs">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
+                      <div
+                        key={cliente.id}
+                        className={`p-2 rounded-md bg-white ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-md transition-all duration-150 group ${
+                          urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-red-100' :
+                          urgencia === 'atencao' ? 'border-l-[3px] border-l-yellow-400 border border-yellow-100' :
+                          'border border-gray-150 hover:border-gray-300'
+                        }`}
+                        draggable={isGerente}
+                        onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
+                        onClick={() => onClickCliente?.(cliente)}
+                      >
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="font-semibold text-[11px] text-gray-900 leading-tight line-clamp-2">{cliente.razaoSocial}</h4>
+                          <div className="flex items-center gap-0.5 flex-shrink-0">
+                            {urgencia !== 'normal' && <span className="text-[10px]">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
                             {cliente.score !== undefined && <span className="text-[9px] font-bold text-gray-400">{cliente.score}</span>}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] text-gray-500">{cliente.contatoNome}</p>
-                          {vendedor && <span className="text-[9px] text-primary-500 font-medium">{vendedor.nome.split(' ')[0]}</span>}
+                        <div className="flex items-center justify-between mt-0.5">
+                          <span className="text-[10px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                          {vendedor && <span className="text-[9px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
-                        {cliente.valorEstimado && <p className="text-[10px] font-bold text-primary-600">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p>}
+                        {cliente.valorEstimado ? <p className="text-[10px] font-bold text-primary-600 mt-0.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                         {renderCardInfo(cliente)}
-                        {nextAction && <p className={`text-[10px] font-medium mt-1 ${nextAction.color}`}>{nextAction.text}</p>}
+                        {nextAction && <p className={`text-[9px] font-medium mt-1 leading-snug ${nextAction.color}`}>{nextAction.text}</p>}
                         {cliente.produtosInteresse && cliente.produtosInteresse.length > 0 && (
                           <div className="flex flex-wrap gap-0.5 mt-1">
-                            {cliente.produtosInteresse.slice(0, 2).map(p => (<span key={p} className="px-1 py-0.5 text-[9px] bg-primary-50 text-primary-700 rounded-full border border-primary-100 truncate max-w-[90px]">{p}</span>))}
-                            {cliente.produtosInteresse.length > 2 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 2}</span>}
+                            {cliente.produtosInteresse.slice(0, 2).map(p => (<span key={p} className="px-1 py-0 text-[8px] bg-primary-50 text-primary-700 rounded-full border border-primary-100 truncate max-w-[80px]">{p}</span>))}
+                            {cliente.produtosInteresse.length > 2 && <span className="text-[8px] text-gray-400">+{cliente.produtosInteresse.length - 2}</span>}
                           </div>
                         )}
                         <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'whatsapp', 'contato') }} className="px-1.5 py-0.5 text-[9px] bg-green-100 text-green-700 rounded hover:bg-green-200 font-medium" title="WhatsApp">💬</button>
-                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'email', 'contato') }} className="px-1.5 py-0.5 text-[9px] bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium" title="Email">📧</button>
-                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1.5 py-0.5 text-[9px] bg-orange-100 text-orange-700 rounded hover:bg-orange-200 font-medium" title="Ligar">📞</button>
+                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'whatsapp', 'contato') }} className="px-1 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="WhatsApp">💬</button>
+                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'email', 'contato') }} className="px-1 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium" title="Email">📧</button>
+                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Ligar">📞</button>
                         </div>
                       </div>
                     )
                   })}
-                  {stageClientes.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">Arraste clientes aqui</div>}
+                  {stageClientes.length === 0 && <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>}
                 </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )
