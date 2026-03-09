@@ -272,6 +272,242 @@ export async function consultarPedidoOmie(pedidoId: number): Promise<any> {
 }
 
 // ============================================
+// Consultar entrega / etapas de um pedido
+// ============================================
+
+export interface EntregaOmieResult {
+  etapa: string
+  dataPrevisao: string
+  codigoRastreio: string
+  nf: string
+  dataFaturamento: string
+  statusDescricao: string
+}
+
+export async function consultarEntregaOmie(pedidoId: number): Promise<EntregaOmieResult> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  const { data: pedido } = await supabase
+    .from('pedidos')
+    .select('omie_codigo')
+    .eq('id', pedidoId)
+    .single()
+
+  if (!pedido?.omie_codigo) {
+    throw new Error(`Pedido ${pedidoId} não tem código Omie`)
+  }
+
+  const codigoPedido = parseInt(pedido.omie_codigo, 10)
+
+  // Consultar pedido completo para extrair dados logísticos
+  const result = await omieCall<any>(
+    '/produtos/pedido/',
+    'ConsultarPedido',
+    [{ codigo_pedido: codigoPedido }],
+    { credentials: creds }
+  )
+
+  const cab = result?.cabecalho || {}
+  const infoCad = result?.infoCadastro || {}
+  const transporte = result?.transporte || {}
+
+  return {
+    etapa: cab.etapa || infoCad.cEtapa || '',
+    dataPrevisao: cab.data_previsao || '',
+    codigoRastreio: transporte.codigo_rastreio || '',
+    nf: infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : '',
+    dataFaturamento: infoCad.dDataFaturamento || infoCad.dDtFat || '',
+    statusDescricao: cab.descricao_etapa || infoCad.cDescEtapa || '',
+  }
+}
+
+// ============================================
+// Listar pedidos enviados ao Omie com status
+// ============================================
+
+export interface PedidoAcompanhamento {
+  pedidoId: number
+  numero: string
+  clienteNome: string
+  clienteId: number
+  vendedorNome: string
+  valor: number
+  dataCriacao: string
+  statusCrm: string
+  statusOmie: string
+  etapaOmie: string
+  nf: string
+  codigoRastreio: string
+  dataFaturamento: string
+  omieCodigo: string
+}
+
+export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanhamento[]> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  // Buscar pedidos com omie_codigo
+  const { data: pedidos, error } = await supabase
+    .from('pedidos')
+    .select('id, numero, cliente_id, vendedor_id, total_valor, data_criacao, status, omie_codigo, omie_numero, omie_status')
+    .not('omie_codigo', 'is', null)
+    .order('data_criacao', { ascending: false })
+    .limit(100)
+
+  if (error) throw new Error(error.message)
+  if (!pedidos || pedidos.length === 0) return []
+
+  // Buscar nomes de clientes e vendedores
+  const clienteIds = [...new Set(pedidos.map(p => p.cliente_id))]
+  const vendedorIds = [...new Set(pedidos.map(p => p.vendedor_id))]
+
+  const [clientesRes, vendedoresRes] = await Promise.all([
+    supabase.from('clientes').select('id, razao_social').in('id', clienteIds),
+    supabase.from('vendedores').select('id, nome').in('id', vendedorIds),
+  ])
+
+  const clienteMap = new Map((clientesRes.data || []).map((c: any) => [c.id, c.razao_social]))
+  const vendedorMap = new Map((vendedoresRes.data || []).map((v: any) => [v.id, v.nome]))
+
+  // Para cada pedido, tentar consultar status no Omie (com rate-limit awareness)
+  const resultado: PedidoAcompanhamento[] = []
+  let consultasOmie = 0
+  const MAX_CONSULTAS = 10 // Limitar consultas ao Omie por chamada
+
+  for (const p of pedidos) {
+    let statusOmie = p.omie_status || 'enviado'
+    let etapaOmie = ''
+    let nf = ''
+    let codigoRastreio = ''
+    let dataFaturamento = ''
+
+    // Consultar no Omie apenas os primeiros N (evitar rate-limit)
+    if (consultasOmie < MAX_CONSULTAS && p.omie_codigo) {
+      try {
+        const omieData = await omieCall<any>(
+          '/produtos/pedido/',
+          'ConsultarPedido',
+          [{ codigo_pedido: parseInt(p.omie_codigo, 10) }],
+          { credentials: creds }
+        )
+
+        const cab = omieData?.cabecalho || {}
+        const infoCad = omieData?.infoCadastro || {}
+        const transporte = omieData?.transporte || {}
+
+        etapaOmie = cab.descricao_etapa || infoCad.cDescEtapa || cab.etapa || ''
+        nf = infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : ''
+        codigoRastreio = transporte.codigo_rastreio || ''
+        dataFaturamento = infoCad.dDataFaturamento || infoCad.dDtFat || ''
+
+        // Mapear etapa Omie para status legível
+        const etapaLower = etapaOmie.toLowerCase()
+        if (etapaLower.includes('faturado') || etapaLower.includes('faturar')) statusOmie = 'faturado'
+        else if (etapaLower.includes('separar') || etapaLower.includes('produção')) statusOmie = 'em_producao'
+        else if (etapaLower.includes('expedir') || etapaLower.includes('expedido')) statusOmie = 'expedido'
+        else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) statusOmie = 'entregue'
+        else if (etapaLower.includes('cancelado')) statusOmie = 'cancelado'
+        else statusOmie = 'enviado'
+
+        // Atualizar status no banco para cache
+        await supabase.from('pedidos').update({ omie_status: statusOmie }).eq('id', p.id)
+
+        consultasOmie++
+      } catch (err: any) {
+        log.warn({ err: err.message, pedidoId: p.id }, 'Erro ao consultar pedido no Omie (acompanhamento)')
+      }
+    }
+
+    resultado.push({
+      pedidoId: p.id,
+      numero: p.numero,
+      clienteNome: clienteMap.get(p.cliente_id) || 'Cliente não encontrado',
+      clienteId: p.cliente_id,
+      vendedorNome: vendedorMap.get(p.vendedor_id) || 'Vendedor não encontrado',
+      valor: Number(p.total_valor),
+      dataCriacao: p.data_criacao,
+      statusCrm: p.status,
+      statusOmie,
+      etapaOmie,
+      nf,
+      codigoRastreio,
+      dataFaturamento,
+      omieCodigo: p.omie_codigo,
+    })
+  }
+
+  return resultado
+}
+
+// ============================================
+// Resumo financeiro do Omie
+// ============================================
+
+export interface FinanceiroResumo {
+  totalReceber: number
+  totalPagar: number
+  saldo: number
+  titulosVencidos: number
+  titulosAVencer: number
+  contasReceber: any[]
+  contasPagar: any[]
+}
+
+export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  const [receber, pagar] = await Promise.all([
+    omieCall<any>(
+      '/financas/contareceber/',
+      'ListarContasReceber',
+      [{ pagina: 1, registros_por_pagina: 50 }],
+      { credentials: creds }
+    ).catch(() => ({ conta_receber_cadastro: [] })),
+    omieCall<any>(
+      '/financas/contapagar/',
+      'ListarContasPagar',
+      [{ pagina: 1, registros_por_pagina: 50 }],
+      { credentials: creds }
+    ).catch(() => ({ conta_pagar_cadastro: [] })),
+  ])
+
+  const contasReceber = receber?.conta_receber_cadastro || []
+  const contasPagar = pagar?.conta_pagar_cadastro || []
+
+  const hoje = new Date()
+  const hojeStr = hoje.toISOString().split('T')[0]
+
+  let totalReceber = 0
+  let totalPagar = 0
+  let titulosVencidos = 0
+  let titulosAVencer = 0
+
+  for (const cr of contasReceber) {
+    const valor = Number(cr.valor_documento || 0)
+    totalReceber += valor
+    const venc = cr.data_vencimento || ''
+    if (venc && venc < hojeStr) titulosVencidos++
+    else titulosAVencer++
+  }
+
+  for (const cp of contasPagar) {
+    totalPagar += Number(cp.valor_documento || 0)
+  }
+
+  return {
+    totalReceber,
+    totalPagar,
+    saldo: totalReceber - totalPagar,
+    titulosVencidos,
+    titulosAVencer,
+    contasReceber: contasReceber.slice(0, 20),
+    contasPagar: contasPagar.slice(0, 20),
+  }
+}
+
+// ============================================
 // Handler: pedido aprovado → enviar ao Omie
 // ============================================
 

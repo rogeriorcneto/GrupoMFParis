@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
 import { getSyncDiff, syncPullClientes, syncPushClientes } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
+import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
@@ -138,6 +139,43 @@ omieRouter.post('/call-all', rateLimit(10, 60_000), async (req, res) => {
     res.json({ success: true, data: result, total: result.length })
   } catch (err: any) {
     log.error({ err, group, module, action }, 'Erro na chamada paginada Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Pedidos Omie — Acompanhamento ───
+
+omieRouter.get('/pedidos/acompanhamento', rateLimit(10, 60_000), async (_req, res) => {
+  try {
+    const data = await listarPedidosOmieAcompanhamento()
+    res.json({ success: true, data })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao listar acompanhamento de pedidos Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.post('/pedidos/:id/consultar-entrega', rateLimit(30, 60_000), async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    const data = await consultarEntregaOmie(pedidoId)
+    res.json({ success: true, data })
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao consultar entrega do pedido no Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Financeiro Omie — Resumo ───
+
+omieRouter.get('/financeiro/resumo', rateLimit(5, 60_000), async (_req, res) => {
+  try {
+    const data = await obterResumoFinanceiro()
+    res.json({ success: true, data })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao obter resumo financeiro Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

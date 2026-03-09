@@ -116,5 +116,69 @@ export async function omieSyncPull(vendedorIdPadrao?: number): Promise<{ success
 
 export async function omieSyncPush(): Promise<{ success: boolean; data?: SyncPushResult; error?: string }> {
   const res = await authFetch(`${OMIE_BASE}/sync/push`, { method: 'POST' })
+  return await res.json()
+}
+
+// ─── Pedidos Acompanhamento ───
+
+export interface PedidoAcompanhamento {
+  pedidoId: number
+  numero: string
+  clienteNome: string
+  clienteId: number
+  vendedorNome: string
+  valor: number
+  dataCriacao: string
+  statusCrm: string
+  statusOmie: string
+  etapaOmie: string
+  nf: string
+  codigoRastreio: string
+  dataFaturamento: string
+  omieCodigo: string
+}
+
+export async function omieGetPedidosAcompanhamento(): Promise<{ success: boolean; data?: PedidoAcompanhamento[]; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/pedidos/acompanhamento`)
+  return res.json()
+}
+
+// ─── Consultar Entrega ───
+
+export interface EntregaOmieResult {
+  etapa: string
+  dataPrevisao: string
+  codigoRastreio: string
+  nf: string
+  dataFaturamento: string
+  statusDescricao: string
+}
+
+export async function omieConsultarEntrega(pedidoId: number): Promise<{ success: boolean; data?: EntregaOmieResult; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/pedidos/${pedidoId}/consultar-entrega`, { method: 'POST' })
+  return res.json()
+}
+
+// ─── Financeiro Resumo ───
+
+export interface FinanceiroResumo {
+  totalReceber: number
+  totalPagar: number
+  saldo: number
+  titulosVencidos: number
+  titulosAVencer: number
+  contasReceber: any[]
+  contasPagar: any[]
+}
+
+export async function omieGetFinanceiroResumo(): Promise<{ success: boolean; data?: FinanceiroResumo; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/financeiro/resumo`)
+  return res.json()
+}
+
+// ─── Sync Logístico ───
+
+export async function omieSyncLogistics(): Promise<{ success: boolean; data?: { atualizados: number; semPedido: number; erros: any[] }; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/sync/logistics`, { method: 'POST' })
   return res.json()
 }

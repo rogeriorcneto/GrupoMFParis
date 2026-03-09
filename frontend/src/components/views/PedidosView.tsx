@@ -343,6 +343,14 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         <button onClick={() => onUpdatePedido({ ...pedido, status: 'cancelado' })} className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 text-xs font-semibold rounded-apple hover:bg-red-100">🗑️ Descartar</button>
                       </div>
                     )}
+                    {pedido.omieCodigo && (
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                        <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-full border border-blue-200">
+                          Omie: {pedido.omieStatus || 'enviado'}
+                        </span>
+                        <span className="text-[10px] text-gray-400">Cód: {pedido.omieCodigo}</span>
+                      </div>
+                    )}
                   </div>
                 )
               })}

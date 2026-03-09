@@ -246,6 +246,9 @@ export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
     dataAprovacao: row.data_aprovacao || undefined,
     motivoRecusa: row.motivo_recusa || undefined,
     aprovadoPor: row.aprovado_por || undefined,
+    omieCodigo: row.omie_codigo || undefined,
+    omieNumero: row.omie_numero || undefined,
+    omieStatus: row.omie_status || undefined,
   }
 }
 
