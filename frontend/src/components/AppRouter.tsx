@@ -173,7 +173,7 @@ export default function AppRouter({
         }}
       />
     case 'automacoes':
-      return <AutomacoesView clientes={clientes} onAction={handleQuickAction} />
+      return <AutomacoesView clientes={clientes} vendedores={vendedores} templates={templatesMsgs} loggedUser={loggedUser} showToast={showToast} onAction={handleQuickAction} />
     case 'mapa':
       return <MapaView clientes={clientes} />
     case 'prospeccao':

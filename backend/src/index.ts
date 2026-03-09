@@ -15,6 +15,7 @@ import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
+import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter } from './routes/omie.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
@@ -396,6 +397,51 @@ app.post('/api/email/send-template', requireAuth, rateLimit(15, 60_000), async (
 
   const result = await sendTemplateEmail({ templateId, to, clienteId, vendedorNome })
   res.json(result)
+})
+
+// ─── Bulk Dispatch Routes (disparo em massa) ───
+
+app.post('/api/bulk/send', requireAuth, rateLimit(5, 60_000), async (req, res) => {
+  const { canal, subject, body, templateId, targets, vendedorNome, delayMs } = req.body
+
+  if (!canal || !targets || !Array.isArray(targets) || targets.length === 0) {
+    res.status(400).json({ success: false, error: 'Campos obrigatórios: canal, targets[]' })
+    return
+  }
+  if (!['email', 'whatsapp'].includes(canal)) {
+    res.status(400).json({ success: false, error: 'Canal deve ser "email" ou "whatsapp"' })
+    return
+  }
+  if (!body && !templateId) {
+    res.status(400).json({ success: false, error: 'Informe body ou templateId' })
+    return
+  }
+  if (targets.length > 500) {
+    res.status(400).json({ success: false, error: 'Máximo 500 destinatários por lote' })
+    return
+  }
+
+  const batchId = startBulkDispatch({
+    canal, subject, body: body || '', templateId, targets,
+    vendedorNome: vendedorNome || 'Sistema', delayMs,
+  })
+
+  res.json({ success: true, batchId })
+})
+
+app.get('/api/bulk/status/:batchId', requireAuth, (req, res) => {
+  const batch = getBatchStatus(req.params.batchId)
+  if (!batch) { res.status(404).json({ error: 'Batch não encontrado' }); return }
+  res.json(batch)
+})
+
+app.get('/api/bulk/batches', requireAuth, (_req, res) => {
+  res.json(getAllBatches())
+})
+
+app.post('/api/bulk/cancel/:batchId', requireAuth, (req, res) => {
+  const ok = cancelBatch(req.params.batchId)
+  res.json({ success: ok })
 })
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───

@@ -187,5 +187,76 @@ export async function consultarStatusOmie(pedidoId: number): Promise<{ success: 
   return await res.json()
 }
 
+// ─── Bulk Dispatch (disparo em massa) ───
+
+export interface BulkTarget {
+  clienteId: number
+  to: string
+}
+
+export interface BulkStatus {
+  batchId: string
+  canal: 'email' | 'whatsapp'
+  total: number
+  sent: number
+  failed: number
+  errors: Array<{ clienteId: number; to: string; error: string }>
+  status: 'running' | 'done' | 'cancelled'
+  startedAt: string
+  finishedAt?: string
+}
+
+/** Start a bulk email/whatsapp dispatch */
+export async function startBulkSend(params: {
+  canal: 'email' | 'whatsapp'
+  subject?: string
+  body?: string
+  templateId?: number
+  targets: BulkTarget[]
+  vendedorNome: string
+  delayMs?: number
+}): Promise<{ success: boolean; batchId?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/bulk/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+/** Poll batch status */
+export async function getBulkStatus(batchId: string): Promise<BulkStatus | null> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/bulk/status/${batchId}`)
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+/** Get all batch history */
+export async function getBulkBatches(): Promise<BulkStatus[]> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/bulk/batches`)
+    return await res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Cancel a running batch */
+export async function cancelBulkBatch(batchId: string): Promise<{ success: boolean }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/bulk/cancel/${batchId}`, { method: 'POST' })
+    return await res.json()
+  } catch {
+    return { success: false }
+  }
+}
+
 /** Get bot URL for direct use */
 export { BOT_URL }
