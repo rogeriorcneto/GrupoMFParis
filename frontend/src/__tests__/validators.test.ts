@@ -91,7 +91,7 @@ describe('calcularScore', () => {
     expect(calcularScore('proposta', 0, 0, 0)).toBe(40)
     expect(calcularScore('negociacao', 0, 0, 0)).toBe(60)
     expect(calcularScore('follow_up', 0, 0, 0)).toBe(80)
-    expect(calcularScore('cliente_ativo', 0, 0, 0)).toBe(95)
+    expect(calcularScore('inativo', 0, 0, 0)).toBe(10)
     expect(calcularScore('perdido', 0, 0, 0)).toBe(5)
   })
 
@@ -117,7 +117,7 @@ describe('calcularScore', () => {
   })
 
   it('nunca ultrapassa 100', () => {
-    expect(calcularScore('cliente_ativo', 200000, 10, 0)).toBe(100)
+    expect(calcularScore('follow_up', 200000, 10, 0)).toBe(100)
   })
 
   it('nunca fica abaixo de 0', () => {

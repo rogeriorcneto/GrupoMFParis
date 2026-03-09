@@ -230,8 +230,8 @@ export function useFunilActions({
       tarefaDefs.push({ titulo: `Acompanhar logística — ${nome}`, descricao: 'Pedido aprovado. Acompanhar produção e entrega.', data: dataDaqui(7), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
       tarefaDefs.push({ titulo: `Coletar satisfação — ${nome}`, descricao: 'Após entrega, avaliar satisfação do cliente.', data: dataDaqui(30), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
-    if (toStage === 'cliente_ativo') {
-      tarefaDefs.push({ titulo: `Contato relacionamento — ${nome}`, descricao: 'Manter relacionamento ativo. Verificar necessidade de recompra.', data: dataDaqui(30), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+    if (toStage === 'amostra_perdida') {
+      tarefaDefs.push({ titulo: `Avaliar 2ª tentativa amostra — ${nome}`, descricao: 'Amostra reprovada. Avaliar se vale tentar novamente.', data: dataDaqui(3), hora: '10:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (tarefaDefs.length > 0) {
       try {
@@ -271,17 +271,35 @@ export function useFunilActions({
       setShowModalProposta(true)
       return
     }
-    if (toStage === 'cliente_ativo' && draggedItem.fromStage === 'follow_up') {
+
+    // 2ª tentativa de amostra: de amostra_perdida → amostra
+    if (toStage === 'amostra' && draggedItem.fromStage === 'amostra_perdida') {
+      const tentativa = draggedItem.cliente.tentativaAmostra || 0
+      if (tentativa >= 2) {
+        setTransicaoInvalida(`${draggedItem.cliente.razaoSocial} já usou as 2 tentativas de amostra. Mova para Perdido.`)
+        setTimeout(() => setTransicaoInvalida(''), 5000)
+        setDraggedItem(null)
+        return
+      }
       setPendingDrop({ e, toStage })
-      setModalSatisfacaoNota(5)
-      setModalSatisfacaoFeedback('')
-      setShowModalSatisfacao(true)
+      setModalAmostraData(new Date().toISOString().split('T')[0])
+      setShowModalAmostra(true)
       return
     }
 
     const extras: Partial<Cliente> = {}
     if (toStage === 'proposta') { extras.resultadoAmostra = 'aprovada'; extras.dataResultadoAmostra = new Date().toISOString().split('T')[0] }
     if (toStage === 'prospecção') { extras.motivoPerda = undefined; extras.categoriaPerda = undefined; extras.dataPerda = undefined }
+    // Lead → Prospecção: notify vendedor
+    if (toStage === 'prospecção' && draggedItem.fromStage === 'lead') {
+      const vendedorNome = loggedUser?.nome || 'Gerente'
+      addNotificacao('info', '🆕 Novo Lead!', `${vendedorNome} enviou um novo lead: ${draggedItem.cliente.razaoSocial}`, draggedItem.cliente.id)
+    }
+    // Amostra → Amostra Perdida: set reprovada result
+    if (toStage === 'amostra_perdida') {
+      extras.resultadoAmostra = 'reprovada'
+      extras.dataResultadoAmostra = new Date().toISOString().split('T')[0]
+    }
 
     moverCliente(draggedItem.cliente.id, toStage, extras)
     setDraggedItem(null)
@@ -300,9 +318,15 @@ export function useFunilActions({
 
   const confirmAmostra = () => {
     if (draggedItem) {
+      const isRetry = draggedItem.fromStage === 'amostra_perdida'
+      const tentativa = isRetry ? (draggedItem.cliente.tentativaAmostra || 0) + 1 : (draggedItem.cliente.tentativaAmostra || 0)
       moverCliente(draggedItem.cliente.id, 'amostra', {
         dataEnvioAmostra: modalAmostraData,
-        statusAmostra: 'solicitada'
+        statusAmostra: 'solicitada',
+        tentativaAmostra: tentativa,
+        resultadoAmostra: undefined,
+        dataResultadoAmostra: undefined,
+        motivoReprovacao: undefined,
       })
     }
     setDraggedItem(null); setPendingDrop(null); setShowModalAmostra(false)
@@ -310,7 +334,7 @@ export function useFunilActions({
 
   const confirmSatisfacao = () => {
     if (draggedItem) {
-      moverCliente(draggedItem.cliente.id, 'cliente_ativo', {
+      moverCliente(draggedItem.cliente.id, 'follow_up', {
         statusSatisfacao: modalSatisfacaoNota >= 4 ? 'satisfeito' : 'insatisfeito',
         notaSatisfacao: modalSatisfacaoNota,
         feedbackSatisfacao: modalSatisfacaoFeedback.trim() || undefined,

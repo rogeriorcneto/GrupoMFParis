@@ -12,17 +12,17 @@ test.describe('Login', () => {
 
   test('mostra branding MF Paris na tela de login', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText('Grupo MF Paris')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByText('CRM de Vendas')).toBeVisible()
+    await expect(page.getByText('Grupo MF Paris').first()).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('CRM de Vendas').first()).toBeVisible()
   })
 
   test('login com credenciais corretas navega para o app', async ({ page }) => {
     await loginAs(page, 'gerente')
 
-    // Sidebar visível com nome do usuário
-    await expect(page.getByText('Grupo MF Paris')).toBeVisible()
+    // Sidebar visível com nome do app
+    await expect(page.getByText('Grupo MF Paris').first()).toBeVisible()
     // Deve mostrar a view padrão (dashboard para gerente)
-    await expect(page.getByText('Visão Geral')).toBeVisible()
+    await expect(page.locator('h2', { hasText: 'Visão Geral' })).toBeVisible()
   })
 
   test('login com credenciais erradas mostra erro', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('Login', () => {
     await loginAs(page, 'gerente')
 
     // Espera o app estar completamente carregado
-    await expect(page.getByText('Visão Geral')).toBeVisible()
+    await expect(page.locator('h2', { hasText: 'Visão Geral' })).toBeVisible()
 
     // Recarrega a página
     await page.reload()
@@ -55,7 +55,7 @@ test.describe('Login', () => {
     })
 
     // Deve estar logado
-    await expect(page.getByText('Visão Geral')).toBeVisible({ timeout: 20_000 })
+    await expect(page.locator('h2', { hasText: 'Visão Geral' })).toBeVisible({ timeout: 20_000 })
   })
 
   test('logout retorna para tela de login', async ({ page }) => {
@@ -80,6 +80,6 @@ test.describe('Login', () => {
 
     // Deve logar
     await page.waitForSelector('text=Entrar no sistema', { state: 'detached', timeout: 15_000 })
-    await expect(page.getByText('Grupo MF Paris')).toBeVisible()
+    await expect(page.getByText('Grupo MF Paris').first()).toBeVisible()
   })
 })

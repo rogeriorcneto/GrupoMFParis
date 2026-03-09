@@ -29,8 +29,20 @@ export async function getAuthenticatedClient() {
  * CNPJ único para cada execução de teste — evita conflitos
  */
 export function gerarCnpjTeste(): string {
-  const ts = Date.now().toString().slice(-8)
-  return `99.999.${ts.slice(0, 3)}/${ts.slice(3, 7)}-00`
+  // Gera 12 dígitos base e calcula os 2 dígitos verificadores
+  const base = Array.from({ length: 12 }, (_, i) => i < 4 ? Math.floor(Math.random() * 10) : i === 4 ? 0 : i === 5 ? 0 : i === 6 ? 0 : i === 7 ? 1 : Math.floor(Math.random() * 10))
+  // Primeiro dígito verificador
+  const pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+  let soma1 = base.reduce((s, d, i) => s + d * pesos1[i], 0)
+  const d1 = soma1 % 11 < 2 ? 0 : 11 - (soma1 % 11)
+  base.push(d1)
+  // Segundo dígito verificador
+  const pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+  let soma2 = base.reduce((s, d, i) => s + d * pesos2[i], 0)
+  const d2 = soma2 % 11 < 2 ? 0 : 11 - (soma2 % 11)
+  base.push(d2)
+  const digits = base.join('')
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12, 14)}`
 }
 
 /**

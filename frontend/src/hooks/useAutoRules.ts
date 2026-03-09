@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { Cliente, Interacao, Atividade, Vendedor, HistoricoEtapa } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { calcScore, getClientsToAutoMove, calcDiasInativo } from '../utils/business-rules'
+import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo } from '../utils/business-rules'
 
 interface UseAutoRulesParams {
   clientes: Cliente[]
@@ -127,6 +127,52 @@ export function useAutoRules({
         }
       }
       persistAutoMoves()
+    }
+  }, [clientes, addNotificacao, setClientes, setAtividades])
+
+  // Auto-move para "inativo" — clientes com 90+ dias sem atividade
+  const autoInativoIds = useRef<Set<number>>(new Set())
+  const autoInativoRunRef = useRef(false)
+  useEffect(() => {
+    if (autoInativoRunRef.current || clientes.length === 0) return
+    autoInativoRunRef.current = true
+    setTimeout(() => { autoInativoRunRef.current = false }, 60000)
+
+    const clientesParaInativar = getClientsToAutoInativo(clientes, autoInativoIds.current)
+    if (clientesParaInativar.length > 0) {
+      clientesParaInativar.forEach(m => autoInativoIds.current.add(m.id))
+      const nowStr = new Date().toISOString()
+      setClientes(prev => prev.map(c => {
+        const match = clientesParaInativar.find(m => m.id === c.id)
+        if (!match) return c
+        const hist: HistoricoEtapa = { etapa: 'inativo', data: nowStr, de: c.etapa }
+        return {
+          ...c, etapa: 'inativo', etapaAnterior: c.etapa, dataEntradaEtapa: nowStr,
+          historicoEtapas: [...(c.historicoEtapas || []), hist],
+        }
+      }))
+      const moveInfo = clientesParaInativar.map(m => {
+        const cl = clientes.find(c => c.id === m.id)
+        return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente' }
+      })
+      const persistAutoInativo = async () => {
+        for (const m of moveInfo) {
+          try {
+            await db.updateCliente(m.id, {
+              etapa: 'inativo', etapaAnterior: m.etapa, dataEntradaEtapa: nowStr,
+            })
+            await db.insertHistoricoEtapa(m.id, { etapa: 'inativo', data: nowStr, de: m.etapa })
+            const savedAtiv = await db.insertAtividade({
+              tipo: 'moveu',
+              descricao: `${m.razaoSocial} movido para Inativos automaticamente (${m.dias}d sem atividade)`,
+              vendedorNome: 'Sistema', timestamp: nowStr
+            })
+            setAtividades(prev => [savedAtiv, ...prev])
+          } catch (err) { logger.error('Erro auto-inativo Supabase:', err) }
+          addNotificacao('warning', 'Cliente inativado', `${m.razaoSocial} → Inativos (${m.dias}d sem atividade)`, m.id)
+        }
+      }
+      persistAutoInativo()
     }
   }, [clientes, addNotificacao, setClientes, setAtividades])
 

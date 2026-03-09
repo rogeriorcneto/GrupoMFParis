@@ -51,7 +51,9 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
           <option value="proposta">Proposta</option>
           <option value="negociacao">Negociação</option>
           <option value="follow_up">Follow-up</option>
-          <option value="cliente_ativo">Cliente Ativo</option>
+          <option value="lead">Leads</option>
+          <option value="amostra_perdida">Amostra Perdida</option>
+          <option value="inativo">Inativos</option>
         </select>
       </div>
 
@@ -153,7 +155,9 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
                     <option value="proposta">Proposta</option>
                     <option value="negociacao">Negociação</option>
                     <option value="follow_up">Follow-up</option>
-                    <option value="cliente_ativo">Cliente Ativo</option>
+                    <option value="lead">Leads</option>
+                    <option value="amostra_perdida">Amostra Perdida</option>
+                    <option value="inativo">Inativos</option>
                   </select>
                 </div>
               </div>

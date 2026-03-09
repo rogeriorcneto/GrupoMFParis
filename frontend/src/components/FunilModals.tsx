@@ -93,8 +93,19 @@ export default function FunilModals({
       {showModalAmostra && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelAmostra}>
           <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">📦 Enviar Amostra</h2>
-            <p className="text-sm text-gray-600 mb-4">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">
+              {draggedItem?.fromStage === 'amostra_perdida' ? '� 2ª Tentativa de Amostra' : '�📦 Enviar Amostra'}
+            </h2>
+            <p className="text-sm text-gray-600 mb-2">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
+            {draggedItem?.fromStage === 'amostra_perdida' && (
+              <div className="bg-amber-50 border border-amber-200 rounded-apple p-3 mb-3">
+                <p className="text-xs text-amber-800 font-medium">⚠️ Esta é a 2ª tentativa de amostra.</p>
+                <p className="text-xs text-amber-700">Se não for aprovada desta vez, o cliente será movido para Perdido.</p>
+                {draggedItem.cliente.motivoReprovacao && (
+                  <p className="text-xs text-amber-700 mt-1">Motivo anterior: <span className="font-medium">{draggedItem.cliente.motivoReprovacao}</span></p>
+                )}
+              </div>
+            )}
             <label className="block text-sm font-medium text-gray-700 mb-1">Data de envio da amostra</label>
             <input type="date" value={modalAmostraData} onChange={(e) => setModalAmostraData(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 mb-2 text-sm" />
             <p className="text-xs text-gray-500 mb-4">O prazo de 30 dias para resposta começará a contar a partir desta data.</p>

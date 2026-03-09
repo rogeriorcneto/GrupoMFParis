@@ -1,20 +1,24 @@
 export const stageLabels: Record<string, string> = {
+  'lead': 'Leads',
   'prospecção': 'Prospecção',
   'amostra': 'Amostra',
+  'amostra_perdida': 'Amostra Perdida',
   'proposta': 'Proposta',
   'negociacao': 'Negociação',
   'follow_up': 'Follow-up',
-  'cliente_ativo': 'Cliente Ativo',
+  'inativo': 'Clientes Inativos',
   'perdido': 'Perdido'
 }
 
 export const transicoesPermitidas: Record<string, string[]> = {
+  'lead': ['prospecção'],
   'prospecção': ['amostra', 'perdido'],
-  'amostra': ['proposta', 'perdido'],
+  'amostra': ['proposta', 'amostra_perdida'],
+  'amostra_perdida': ['amostra', 'perdido'],
   'proposta': ['negociacao', 'perdido'],
   'negociacao': ['follow_up', 'proposta', 'perdido'],
-  'follow_up': ['cliente_ativo', 'perdido'],
-  'cliente_ativo': ['negociacao', 'perdido'],
+  'follow_up': ['negociacao', 'perdido'],
+  'inativo': ['prospecção', 'perdido'],
   'perdido': ['prospecção', 'proposta']
 }
 

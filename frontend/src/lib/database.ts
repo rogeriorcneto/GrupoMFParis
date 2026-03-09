@@ -80,6 +80,9 @@ export function clienteFromDb(row: any): Cliente {
     omieDataFaturamento: row.omie_data_faturamento ?? undefined,
     origemLead: row.origem_lead ?? undefined,
     notas: row.notas ?? undefined,
+    segmento: row.segmento ?? undefined,
+    localizacao: row.localizacao ?? undefined,
+    tentativaAmostra: row.tentativa_amostra ?? 0,
     historicoEtapas: [],
   }
 }
@@ -153,6 +156,9 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.omieDataFaturamento !== undefined) row.omie_data_faturamento = c.omieDataFaturamento || null
   if (c.origemLead !== undefined) row.origem_lead = c.origemLead
   if (c.notas !== undefined) row.notas = c.notas
+  if (c.segmento !== undefined) row.segmento = c.segmento
+  if (c.localizacao !== undefined) row.localizacao = c.localizacao
+  if (c.tentativaAmostra !== undefined) row.tentativa_amostra = c.tentativaAmostra
   return row
 }
 

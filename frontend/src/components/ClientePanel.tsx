@@ -22,8 +22,8 @@ interface ClientePanelProps {
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
 }
 
-const etapaLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo', 'perdido': 'Perdido' }
-const etapaCores: Record<string, string> = { 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'cliente_ativo': 'bg-green-100 text-green-800', 'perdido': 'bg-red-100 text-red-800' }
+const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
+const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
 const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
 const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação' }
@@ -194,7 +194,28 @@ export default function ClientePanel({
                     {c.dataProposta && <p className="text-gray-700">📅 Enviada em: <span className="font-medium">{new Date(c.dataProposta).toLocaleDateString('pt-BR')}</span></p>}
                   </div>
                 )}
-                {(c.etapa === 'follow_up' || c.etapa === 'cliente_ativo') && (
+                {c.etapa === 'amostra_perdida' && (
+                  <div className="space-y-1 text-sm">
+                    {c.motivoReprovacao && <p className="text-gray-700">❌ Motivo: <span className="font-medium">{c.motivoReprovacao}</span></p>}
+                    <p className="text-gray-700">🧪 Tentativas: <span className="font-medium">{c.tentativaAmostra || 0} de 2</span></p>
+                    {c.etapaAnterior && <p className="text-gray-700">↩ Veio de: <span className="font-medium">{etapaLabels[c.etapaAnterior]}</span></p>}
+                  </div>
+                )}
+                {c.etapa === 'inativo' && (
+                  <div className="space-y-1 text-sm">
+                    <p className="text-gray-700">💤 Inativo há {c.diasInativo || 0} dias</p>
+                    {c.etapaAnterior && <p className="text-gray-700">↩ Veio de: <span className="font-medium">{etapaLabels[c.etapaAnterior]}</span></p>}
+                    {c.totalCompras !== undefined && c.totalCompras > 0 && <p className="text-gray-700">🛒 {c.totalCompras} compra(s)</p>}
+                  </div>
+                )}
+                {c.etapa === 'lead' && (
+                  <div className="space-y-1 text-sm">
+                    {c.segmento && <p className="text-gray-700">🏢 Segmento: <span className="font-medium">{c.segmento}</span></p>}
+                    {c.localizacao && <p className="text-gray-700">📍 Localização: <span className="font-medium">{c.localizacao}</span></p>}
+                    {c.origemLead && <p className="text-gray-700">🌐 Origem: <span className="font-medium">{c.origemLead}</span></p>}
+                  </div>
+                )}
+                {c.etapa === 'follow_up' && (
                   <div className="space-y-1 text-sm">
                     {c.omieStatusLogistico && <p className="text-gray-700">Logística: <span className="font-medium">{c.omieStatusLogistico}</span></p>}
                     {c.omieCodigoRastreio && <p className="text-gray-700">� Rastreio: <span className="font-medium">{c.omieCodigoRastreio}</span></p>}
@@ -260,6 +281,15 @@ export default function ClientePanel({
                   )}
                   {c.etapa !== 'perdido' && (
                     <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
+                  )}
+                  {c.etapa === 'lead' && (
+                    <button onClick={() => { onMoverCliente(c.id, 'prospecção'); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-sky-600 text-white rounded-apple hover:bg-sky-700">🔎 Enviar para Prospecção</button>
+                  )}
+                  {c.etapa === 'amostra_perdida' && (c.tentativaAmostra || 0) < 2 && (
+                    <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">🔄 2ª Tentativa Amostra</button>
+                  )}
+                  {c.etapa === 'inativo' && (
+                    <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">🔄 Reativar</button>
                   )}
                   {c.etapa === 'perdido' && (
                     <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">🔄 Reativar</button>

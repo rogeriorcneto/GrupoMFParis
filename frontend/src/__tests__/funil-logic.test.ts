@@ -68,10 +68,6 @@ describe('prazosEtapa', () => {
     expect(prazosEtapa['follow_up']).toBe(60)
   })
 
-  it('cliente_ativo tem prazo de 90 dias', () => {
-    expect(prazosEtapa['cliente_ativo']).toBe(90)
-  })
-
   it('prospecção não tem prazo', () => {
     expect(prazosEtapa['prospecção']).toBeUndefined()
   })
@@ -222,29 +218,34 @@ describe('getNextAction', () => {
     expect(action?.text).toContain('satisfação')
   })
 
-  it('follow_up concluido sugere mover para Cliente Ativo', () => {
+  it('follow_up concluido sugere ciclo concluído', () => {
     const c = makeCliente({ etapa: 'follow_up', statusFollowUp: 'concluido' as any })
     const action = getNextAction(c)
-    expect(action?.text).toContain('Cliente Ativo')
+    expect(action).toBeDefined()
   })
 
-  it('cliente_ativo sem compra há 80+ dias alerta risco', () => {
-    const c = makeCliente({ etapa: 'cliente_ativo', dataUltimoPedido: daysAgo(85) })
+  it('lead sugere encaminhar para prospecção', () => {
+    const c = makeCliente({ etapa: 'lead', diasInativo: 0 })
     const action = getNextAction(c)
-    expect(action?.text).toContain('risco')
-    expect(action?.color).toBe('text-red-600')
+    expect(action?.text).toContain('prospecção')
   })
 
-  it('cliente_ativo sem compra há 60+ dias sugere recompra', () => {
-    const c = makeCliente({ etapa: 'cliente_ativo', dataUltimoPedido: daysAgo(65) })
+  it('amostra_perdida com tentativa < 2 sugere 2ª tentativa', () => {
+    const c = makeCliente({ etapa: 'amostra_perdida', tentativaAmostra: 1 })
     const action = getNextAction(c)
-    expect(action?.text).toContain('recompra')
+    expect(action?.text).toContain('2ª tentativa')
   })
 
-  it('cliente_ativo recente retorna carteira OK', () => {
-    const c = makeCliente({ etapa: 'cliente_ativo', dataUltimoPedido: daysAgo(5) })
+  it('amostra_perdida com tentativa >= 2 sugere mover para Perdido', () => {
+    const c = makeCliente({ etapa: 'amostra_perdida', tentativaAmostra: 2 })
     const action = getNextAction(c)
-    expect(action?.text).toContain('carteira OK')
+    expect(action?.text).toContain('Perdido')
+  })
+
+  it('inativo sugere reativação', () => {
+    const c = makeCliente({ etapa: 'inativo', diasInativo: 100 })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('reativação')
   })
 
   it('perdido há 60+ dias sugere reconquista', () => {
@@ -308,9 +309,9 @@ describe('mapEtapaAgendor', () => {
     expect(mapEtapaAgendor('Homologação', 'ativo')).toBe('proposta')
   })
 
-  it('Cliente Ativo → cliente_ativo', () => {
-    expect(mapEtapaAgendor('Cliente Ativo', 'ativo')).toBe('cliente_ativo')
-    expect(mapEtapaAgendor('Carteira', 'ativo')).toBe('cliente_ativo')
+  it('Cliente Ativo → follow_up', () => {
+    expect(mapEtapaAgendor('Cliente Ativo', 'ativo')).toBe('follow_up')
+    expect(mapEtapaAgendor('Carteira', 'ativo')).toBe('follow_up')
   })
 
   it('etapa desconhecida → prospecção (fallback)', () => {

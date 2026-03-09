@@ -5,7 +5,7 @@ test.describe('Assistente IA — chat funcional', () => {
   test('view do Assistente IA renderiza sem erros', async ({ page }) => {
     await loginAs(page, 'gerente')
     await page.getByRole('button', { name: /Assistente IA/i }).click()
-    await expect(page.getByText('Assistente IA')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('h2', { hasText: 'Assistente IA' })).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=Cannot read properties')).not.toBeVisible()
   })
 
@@ -103,6 +103,6 @@ test.describe('Assistente IA — chat funcional', () => {
     await page.waitForTimeout(5_000)
 
     // A mensagem "Oi" deve estar visível no chat
-    await expect(page.getByText('Oi')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Oi').first()).toBeVisible({ timeout: 10_000 })
   })
 })

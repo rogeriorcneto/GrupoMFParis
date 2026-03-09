@@ -30,8 +30,8 @@ describe('calcScore', () => {
     expect(calcScore('prospecção', undefined, 0, 0)).toBe(10)
   })
 
-  it('retorna base 95 para cliente_ativo sem bônus', () => {
-    expect(calcScore('cliente_ativo', undefined, 0, 0)).toBe(95)
+  it('retorna base 80 para follow_up sem bônus', () => {
+    expect(calcScore('follow_up', undefined, 0, 0)).toBe(80)
   })
 
   it('retorna base 5 para perdido', () => {
@@ -60,8 +60,8 @@ describe('calcScore', () => {
   })
 
   it('nunca excede 100', () => {
-    // cliente_ativo(95) + valor(15) + interações(15) = 125 → clamped to 100
-    expect(calcScore('cliente_ativo', 200000, 10, 0)).toBe(100)
+    // follow_up(80) + valor(15) + interações(15) = 110 → clamped to 100
+    expect(calcScore('follow_up', 200000, 10, 0)).toBe(100)
   })
 
   it('nunca fica abaixo de 0', () => {
@@ -96,10 +96,6 @@ describe('autoMovePrazos', () => {
 
   it('follow_up tem prazo 60d', () => {
     expect(autoMovePrazos['follow_up']).toBe(60)
-  })
-
-  it('cliente_ativo tem prazo 90d', () => {
-    expect(autoMovePrazos['cliente_ativo']).toBe(90)
   })
 
   it('prospecção não tem prazo', () => {

@@ -172,7 +172,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
     const novosClientes = fc.filter(c => inRange(c.dataEntradaEtapa)).length
     const perdidos = fc.filter(c => c.etapa === 'perdido')
     const valorPipeline = fc.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-    const taxaConversao = fc.length > 0 ? (fc.filter(c => c.etapa === 'cliente_ativo').length / fc.length) * 100 : 0
+    const taxaConversao = fc.length > 0 ? (fc.filter(c => c.etapa === 'follow_up').length / fc.length) * 100 : 0
 
     // Interações por vendedor e tipo
     const vendInteracoes = new Map<number, Map<string, number>>()
@@ -459,13 +459,13 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
   }
 
   const renderFunil = () => {
-    const stages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo']
+    const stages = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
     const funilData = stages.map(s => ({ name: stageLabels[s] || s, qtd: fc.filter(c => c.etapa === s).length }))
     const maxQtd = Math.max(...funilData.map(d => d.qtd), 1)
     const funilColors = ['#0EA5E9', '#F59E0B', '#6366F1', '#A855F7', '#3B82F6', '#22C55E']
     // Tempo médio de fechamento
     const tempos: number[] = []
-    fc.filter(c => c.etapa === 'cliente_ativo').forEach(c => {
+    fc.filter(c => c.etapa === 'follow_up').forEach(c => {
       const hist = c.historicoEtapas || []
       if (hist.length > 0 && c.dataEntradaEtapa) {
         const first = hist.reduce((min, h) => h.data < min ? h.data : min, hist[0].data)
@@ -573,7 +573,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={activeVendedores.map(v => {
               const leads = fc.filter(c => c.vendedorId === v.id).length
-              const conv = fc.filter(c => c.vendedorId === v.id && c.etapa === 'cliente_ativo').length
+              const conv = fc.filter(c => c.vendedorId === v.id && c.etapa === 'follow_up').length
               return { name: v.nome.split(' ')[0], leads, conversoes: conv, taxa: leads > 0 ? Math.round((conv / leads) * 100) : 0 }
             })}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 10 }} allowDecimals={false} /><Tooltip /><Bar dataKey="leads" fill="#93C5FD" name="Leads" radius={[4, 4, 0, 0]} /><Bar dataKey="conversoes" fill="#22C55E" name="Conversões" radius={[4, 4, 0, 0]} /><Legend />

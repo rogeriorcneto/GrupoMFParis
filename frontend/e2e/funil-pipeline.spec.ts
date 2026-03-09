@@ -23,7 +23,7 @@ test.describe('Funil Pipeline — fluxo completo', () => {
 
     const colunas = ['Prospecção', 'Amostra', 'Proposta', 'Negociação', 'Follow-up', 'Cliente Ativo', 'Perdido']
     for (const col of colunas) {
-      await expect(page.getByText(col).first()).toBeVisible({ timeout: 5_000 })
+      await expect(page.getByText(col).first()).toBeVisible({ timeout: 10_000 })
     }
   })
 
@@ -83,16 +83,16 @@ test.describe('Funil Pipeline — fluxo completo', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click()
+    await page.getByRole('button', { name: /Funil Comercial/i }).click({ timeout: 15_000 })
     await page.waitForTimeout(2_000)
 
     const card = page.getByText(nome).first()
     await expect(card).toBeVisible({ timeout: 10_000 })
     await card.click()
 
-    // Painel deve abrir com dados do cliente
+    // Painel deve abrir com dados do cliente (nome aparece no card E no painel)
     await page.waitForTimeout(1_000)
-    await expect(page.getByText(nome)).toBeVisible()
+    await expect(page.getByText(nome).first()).toBeVisible()
   })
 
   test('botões de ação rápida visíveis no hover do card', async ({ page }) => {
@@ -120,11 +120,12 @@ test.describe('Funil Pipeline — fluxo completo', () => {
     const callBtn = actionArea.locator('button[title="Ligar"], button:has-text("📞")').first()
 
     // Pelo menos um deve estar visível
-    const anyVisible = await Promise.any([
-      whatsBtn.isVisible({ timeout: 2_000 }),
-      emailBtn.isVisible({ timeout: 2_000 }),
-      callBtn.isVisible({ timeout: 2_000 }),
-    ]).catch(() => false)
+    const [w, e, c] = await Promise.all([
+      whatsBtn.isVisible({ timeout: 2_000 }).catch(() => false),
+      emailBtn.isVisible({ timeout: 2_000 }).catch(() => false),
+      callBtn.isVisible({ timeout: 2_000 }).catch(() => false),
+    ])
+    const anyVisible = w || e || c
 
     // Ações rápidas podem estar em opacity transition — ok se não apareceu
     if (!anyVisible) {

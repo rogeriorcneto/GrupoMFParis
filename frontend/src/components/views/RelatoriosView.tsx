@@ -32,12 +32,12 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
     return interacoes.filter(i => new Date(i.data) >= threshold)
   }, [interacoes, threshold])
 
-  const stages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo', 'perdido']
+  const stages = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo', 'perdido']
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
 
   const pipelineData = stages.map(s => ({ name: stageLabels[s] || s, valor: fc.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0), qtd: fc.filter(c => c.etapa === s).length }))
   const pieData = stages.map(s => ({ name: stageLabels[s] || s, value: fc.filter(c => c.etapa === s).length })).filter(d => d.value > 0)
-  const vendedorData = vendedores.filter(v => v.ativo).map(v => { const cv = fc.filter(c => c.vendedorId === v.id); return { name: v.nome.split(' ')[0], pipeline: cv.reduce((s, c) => s + (c.valorEstimado || 0), 0), leads: cv.length, conversoes: cv.filter(c => c.etapa === 'cliente_ativo').length } })
+  const vendedorData = vendedores.filter(v => v.ativo).map(v => { const cv = fc.filter(c => c.vendedorId === v.id); return { name: v.nome.split(' ')[0], pipeline: cv.reduce((s, c) => s + (c.valorEstimado || 0), 0), leads: cv.length, conversoes: cv.filter(c => c.etapa === 'follow_up').length } })
   const interacaoData = ['email', 'whatsapp', 'linkedin', 'instagram', 'ligacao', 'reuniao'].map(tipo => ({ name: tipo.charAt(0).toUpperCase() + tipo.slice(1), qtd: fi.filter(i => i.tipo === tipo).length })).filter(d => d.qtd > 0)
 
   const gerarRelatorioPDF = () => {
@@ -45,20 +45,20 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
     const totalLeads = clientes.length
     const leadsAtivos = clientes.filter(c => c.etapa !== 'perdido').length
     const perdidos = clientes.filter(c => c.etapa === 'perdido')
-    const clientesAtivos = clientes.filter(c => c.etapa === 'cliente_ativo')
+    const clientesAtivos = clientes.filter(c => c.etapa === 'follow_up')
     const totalPipeline = clientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
     const valorPerdido = perdidos.reduce((s, c) => s + (c.valorEstimado || 0), 0)
     const valorGanho = clientesAtivos.reduce((s, c) => s + (c.valorEstimado || 0), 0)
     const taxaConversao = totalLeads > 0 ? ((clientesAtivos.length / totalLeads) * 100).toFixed(1) : '0'
     const taxaPerda = totalLeads > 0 ? ((perdidos.length / totalLeads) * 100).toFixed(1) : '0'
     const ticketMedio = leadsAtivos > 0 ? Math.round(totalPipeline / leadsAtivos) : 0
-    const stLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo', 'perdido': 'Perdido' }
+    const stLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativos', 'perdido': 'Perdido' }
     const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
     const pipelineRows = stages.map(s => { const cls = clientes.filter(c => c.etapa === s); return `<tr><td>${stLabels[s]}</td><td style="text-align:center">${cls.length}</td><td style="text-align:right">R$ ${cls.reduce((sum, c) => sum + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
-    const vendRows = vendedores.filter(v => v.ativo).map(v => { const cv = clientes.filter(c => c.vendedorId === v.id); return `<tr><td>${v.nome}</td><td style="text-align:center">${cv.length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'cliente_ativo').length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'perdido').length}</td><td style="text-align:right">R$ ${cv.filter(c => c.etapa !== 'perdido').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
+    const vendRows = vendedores.filter(v => v.ativo).map(v => { const cv = clientes.filter(c => c.vendedorId === v.id); return `<tr><td>${v.nome}</td><td style="text-align:center">${cv.length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'follow_up').length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'perdido').length}</td><td style="text-align:right">R$ ${cv.filter(c => c.etapa !== 'perdido').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
     const catCount = perdidos.reduce((acc, c) => { const k = c.categoriaPerda || 'outro'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)
     const perdaRows = Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${catLabels[k] || k}</td><td style="text-align:center">${v}</td><td style="text-align:right">${totalLeads > 0 ? ((v / totalLeads) * 100).toFixed(1) : 0}%</td></tr>`).join('')
-    const funilStages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo']
+    const funilStages = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
     const passaramPor: Record<string, number> = {}
     funilStages.forEach(s => { passaramPor[s] = 0 })
     clientes.forEach(c => { const etapas = new Set<string>(); etapas.add(c.etapa); (c.historicoEtapas || []).forEach(h => { etapas.add(h.etapa); if (h.de) etapas.add(h.de) }); funilStages.forEach(s => { if (etapas.has(s)) passaramPor[s]++ }) })
@@ -67,7 +67,7 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
     const topRows = topClientes.map(c => { const vend = vendedores.find(v => v.id === c.vendedorId); return `<tr><td>${c.razaoSocial}</td><td>${stLabels[c.etapa] || c.etapa}</td><td style="text-align:center">${c.score || 0}</td><td style="text-align:right">R$ ${(c.valorEstimado || 0).toLocaleString('pt-BR')}</td><td>${vend?.nome || '—'}</td></tr>` }).join('')
     const etapaMaisPerdas = Object.entries(perdidos.reduce((acc, c) => { const k = c.etapaAnterior || 'desconhecido'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1])
     const motivoTop = Object.entries(catCount).sort((a, b) => b[1] - a[1])
-    const probEtapa: Record<string, number> = { 'prospecção': 0.10, 'amostra': 0.25, 'proposta': 0.40, 'negociacao': 0.60, 'follow_up': 0.80, 'cliente_ativo': 0.95 }
+    const probEtapa: Record<string, number> = { 'lead': 0.05, 'prospecção': 0.10, 'amostra': 0.25, 'amostra_perdida': 0.05, 'proposta': 0.40, 'negociacao': 0.60, 'follow_up': 0.80, 'inativo': 0.10 }
     const receitaProjetada = clientes.filter(c => c.etapa !== 'perdido').reduce((s, c) => s + (c.valorEstimado || 0) * (probEtapa[c.etapa] || 0), 0)
     const clientesRisco = clientes.filter(c => { if (!c.dataEntradaEtapa) return false; const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000); return (c.etapa === 'amostra' && dias >= 35) || (c.etapa === 'proposta' && dias >= 25) || (c.etapa === 'negociacao' && dias >= 35) })
     const insights = [
@@ -161,16 +161,16 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
         <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Resumo Executivo</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-4 bg-blue-50 rounded-apple border border-blue-200"><p className="text-xs text-blue-600 font-medium">Total Pipeline</p><p className="text-xl font-bold text-blue-900">R$ {fc.reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
-          <div className="p-4 bg-green-50 rounded-apple border border-green-200"><p className="text-xs text-green-600 font-medium">Vendas Fechadas</p><p className="text-xl font-bold text-green-900">R$ {fc.filter(c => c.etapa === 'cliente_ativo').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
+          <div className="p-4 bg-green-50 rounded-apple border border-green-200"><p className="text-xs text-green-600 font-medium">Vendas Fechadas</p><p className="text-xl font-bold text-green-900">R$ {fc.filter(c => c.etapa === 'follow_up').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
           <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Perdidos</p><p className="text-xl font-bold text-red-900">{fc.filter(c => c.etapa === 'perdido').length} leads</p></div>
-          <div className="p-4 bg-purple-50 rounded-apple border border-purple-200"><p className="text-xs text-purple-600 font-medium">Taxa Conversão</p><p className="text-xl font-bold text-purple-900">{fc.length > 0 ? ((fc.filter(c => c.etapa === 'cliente_ativo').length / fc.length) * 100).toFixed(1) : 0}%</p></div>
+          <div className="p-4 bg-purple-50 rounded-apple border border-purple-200"><p className="text-xs text-purple-600 font-medium">Taxa Conversão</p><p className="text-xl font-bold text-purple-900">{fc.length > 0 ? ((fc.filter(c => c.etapa === 'follow_up').length / fc.length) * 100).toFixed(1) : 0}%</p></div>
         </div>
       </div>
 
       {/* Funil de Conversão */}
       {(() => {
-        const funilStages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo']
-        const funilLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo' }
+        const funilStages = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
+        const funilLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up' }
         const passaramPor: Record<string, number> = {}
         funilStages.forEach(s => { passaramPor[s] = 0 })
         fc.forEach(c => { const etapas = new Set<string>(); etapas.add(c.etapa); (c.historicoEtapas || []).forEach(h => { etapas.add(h.etapa); if (h.de) etapas.add(h.de) }); funilStages.forEach(s => { if (etapas.has(s)) passaramPor[s]++ }) })
@@ -200,9 +200,9 @@ ${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const 
 
       {/* Tempo Médio por Etapa */}
       {(() => {
-        const funilStages = ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo']
-        const funilLabels: Record<string, string> = { 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo' }
-        const stColors = ['#0EA5E9', '#F59E0B', '#6366F1', '#A855F7', '#3B82F6', '#22C55E']
+        const funilStages = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
+        const funilLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up' }
+        const stColors = ['#10B981', '#0EA5E9', '#F59E0B', '#6366F1', '#A855F7', '#3B82F6']
         const temposPorEtapa: Record<string, number[]> = {}
         funilStages.forEach(s => { temposPorEtapa[s] = [] })
         fc.forEach(c => { const hist = c.historicoEtapas || []; for (let i = 0; i < hist.length; i++) { const etapa = hist[i].de; if (etapa && funilStages.includes(etapa)) { const entrada = i > 0 ? new Date(hist[i - 1].data).getTime() : (c.dataEntradaEtapa ? new Date(c.dataEntradaEtapa).getTime() : null); if (entrada) { const saida = new Date(hist[i].data).getTime(); const dias = Math.max(1, Math.floor((saida - entrada) / 86400000)); temposPorEtapa[etapa].push(dias) } } }; if (funilStages.includes(c.etapa) && c.dataEntradaEtapa) { const dias = Math.max(1, Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)); temposPorEtapa[c.etapa].push(dias) } })

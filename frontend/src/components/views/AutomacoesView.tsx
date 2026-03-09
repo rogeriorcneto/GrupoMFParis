@@ -5,8 +5,8 @@ import type { BulkStatus } from '../../lib/botApi'
 
 // ── Stage labels ──
 const stageLabels: Record<string, string> = {
-  'prospecção': 'Prospecção', amostra: 'Amostra', homologado: 'Homologado',
-  negociacao: 'Negociação', pos_venda: 'Pós-venda', cliente_ativo: 'Cliente Ativo', perdido: 'Perdido',
+  lead: 'Leads', 'prospecção': 'Prospecção', amostra: 'Amostra', amostra_perdida: 'Amostra Perdida',
+  proposta: 'Proposta', negociacao: 'Negociação', follow_up: 'Follow-up', inativo: 'Inativos', perdido: 'Perdido',
 }
 
 interface AutomacoesViewProps {

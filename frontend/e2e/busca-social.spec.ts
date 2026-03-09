@@ -5,7 +5,7 @@ test.describe('Busca Social', () => {
   test('view renderiza sem erros para gerente', async ({ page }) => {
     await loginAs(page, 'gerente')
     await page.getByRole('button', { name: /Busca Social/i }).click()
-    await expect(page.getByText('Busca por Redes Sociais')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('h2', { hasText: 'Busca por Redes Sociais' })).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=Cannot read properties')).not.toBeVisible()
   })
 

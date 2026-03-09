@@ -41,7 +41,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
     'proposta': { label: 'Proposta', badge: 'bg-indigo-50 text-indigo-700', dot: 'bg-indigo-500' },
     'negociacao': { label: 'Negociação', badge: 'bg-purple-50 text-purple-700', dot: 'bg-purple-500' },
     'follow_up': { label: 'Follow-up', badge: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
-    'cliente_ativo': { label: 'Cliente Ativo', badge: 'bg-green-50 text-green-700', dot: 'bg-green-500' },
+    'amostra_perdida': { label: 'Amostra Perdida', badge: 'bg-orange-50 text-orange-700', dot: 'bg-orange-500' },
+    'inativo': { label: 'Inativos', badge: 'bg-gray-100 text-gray-700', dot: 'bg-gray-500' },
+    'lead': { label: 'Leads', badge: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
     'perdido': { label: 'Perdido', badge: 'bg-red-50 text-red-700', dot: 'bg-red-500' },
   }
 
@@ -265,7 +267,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
                 <option value="proposta">Proposta</option>
                 <option value="negociacao">Negociação</option>
                 <option value="follow_up">Follow-up</option>
-                <option value="cliente_ativo">Cliente Ativo</option>
+                <option value="amostra_perdida">Amostra Perdida</option>
+                <option value="inativo">Inativos</option>
+                <option value="lead">Leads</option>
                 <option value="perdido">Perdido</option>
               </select>
             </div>

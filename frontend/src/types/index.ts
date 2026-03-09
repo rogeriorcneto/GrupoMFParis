@@ -76,6 +76,9 @@ export interface Cliente {
   categoriaPerda?: 'preco' | 'prazo' | 'qualidade' | 'concorrencia' | 'sem_resposta' | 'outro'
   motivoPerda?: string
   dataPerda?: string
+  segmento?: string
+  localizacao?: string
+  tentativaAmostra?: number
 }
 
 export interface FormData {

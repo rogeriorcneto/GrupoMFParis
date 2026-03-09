@@ -8,8 +8,8 @@ export function calcScore(
   diasInativo: number | undefined
 ): number {
   const baseEtapa: Record<string, number> = {
-    'prospecção': 10, 'amostra': 25, 'proposta': 40,
-    'negociacao': 60, 'follow_up': 80, 'cliente_ativo': 95, 'perdido': 5
+    'lead': 5, 'prospecção': 10, 'amostra': 25, 'amostra_perdida': 15, 'proposta': 40,
+    'negociacao': 60, 'follow_up': 80, 'inativo': 50, 'perdido': 5
   }
   const base = baseEtapa[etapa] || 10
   const bonusValor = Math.min((valorEstimado || 0) / 10000, 15)
@@ -18,29 +18,46 @@ export function calcScore(
   return Math.max(0, Math.min(100, Math.round(base + bonusValor + bonusInteracoes - penalidade)))
 }
 
-/** Deadline thresholds per stage (days) */
+/** Deadline thresholds per stage (days) — auto-move to perdido */
 export const autoMovePrazos: Record<string, number> = {
   'amostra': 45,
   'proposta': 30,
   'negociacao': 45,
   'follow_up': 60,
-  'cliente_ativo': 90,
 }
 
 /** Returns clients that should be auto-moved to "perdido" due to expired deadlines */
 export function getClientsToAutoMove(
   clientes: Cliente[],
   alreadyMovedIds: Set<number>
-): { id: number; dias: number; etapa: string }[] {
+): { id: number; dias: number; etapa: string; destino: string }[] {
   const now = Date.now()
-  const result: { id: number; dias: number; etapa: string }[] = []
+  const result: { id: number; dias: number; etapa: string; destino: string }[] = []
   for (const c of clientes) {
     if (!c.dataEntradaEtapa || alreadyMovedIds.has(c.id)) continue
-    if (c.etapa === 'perdido') continue
+    if (c.etapa === 'perdido' || c.etapa === 'inativo' || c.etapa === 'lead') continue
     const prazo = autoMovePrazos[c.etapa]
-    if (!prazo) continue
-    const dias = Math.floor((now - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
-    if (dias > prazo) {
+    if (prazo) {
+      const dias = Math.floor((now - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
+      if (dias > prazo) {
+        result.push({ id: c.id, dias, etapa: c.etapa, destino: 'perdido' })
+      }
+    }
+  }
+  return result
+}
+
+/** Returns clients that should be auto-moved to "inativo" due to 90d without any activity */
+export function getClientsToAutoInativo(
+  clientes: Cliente[],
+  alreadyMovedIds: Set<number>
+): { id: number; dias: number; etapa: string }[] {
+  const result: { id: number; dias: number; etapa: string }[] = []
+  for (const c of clientes) {
+    if (alreadyMovedIds.has(c.id)) continue
+    if (c.etapa === 'perdido' || c.etapa === 'inativo' || c.etapa === 'lead') continue
+    const dias = c.diasInativo || 0
+    if (dias >= 90) {
       result.push({ id: c.id, dias, etapa: c.etapa })
     }
   }

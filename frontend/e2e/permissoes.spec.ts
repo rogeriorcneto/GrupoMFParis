@@ -31,12 +31,12 @@ test.describe('Permissões — Gerente', () => {
       { button: 'Tarefas', title: 'Tarefas e Agenda' },
       { button: 'Relatórios', title: 'Relatórios e Gráficos' },
       { button: 'Equipe', title: 'Equipe de Vendas' },
-      { button: 'Pedidos', title: 'Lançamento de Pedidos' },
+      { button: '^Pedidos$', title: 'Lançamento de Pedidos' },
     ]
 
     for (const v of views) {
       await page.getByRole('button', { name: new RegExp(v.button, 'i') }).click()
-      await expect(page.getByText(v.title)).toBeVisible({ timeout: 5_000 })
+      await expect(page.locator('h2', { hasText: v.title })).toBeVisible({ timeout: 5_000 })
     }
   })
 })

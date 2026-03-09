@@ -5,7 +5,7 @@ test.describe('Mapa de Leads', () => {
   test('view renderiza sem erros', async ({ page }) => {
     await loginAs(page, 'gerente')
     await page.getByRole('button', { name: /Mapa/i }).click()
-    await expect(page.getByText('Mapa de Leads')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('h2', { hasText: 'Mapa de Leads' })).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=Cannot read properties')).not.toBeVisible()
   })
 

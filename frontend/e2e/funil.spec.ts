@@ -86,7 +86,7 @@ test.describe('Funil de Vendas', () => {
 
     // Deve abrir o painel lateral (ClientePanel) com detalhes do cliente
     // O painel geralmente mostra a razão social ou dados de contato
-    await expect(page.getByText(nome)).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText(nome).first()).toBeVisible({ timeout: 5_000 })
   })
 
   test('cliente aparece na etapa correta após criação em amostra', async ({ page }) => {

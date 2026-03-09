@@ -13,12 +13,12 @@ interface GlobalSearchProps {
 }
 
 const etapaLabels: Record<string, string> = {
-  'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta',
-  'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'cliente_ativo': 'Cliente Ativo', 'perdido': 'Perdido',
+  'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta',
+  'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativos', 'perdido': 'Perdido',
 }
 const etapaCores: Record<string, string> = {
-  'prospecção': 'text-sky-600', 'amostra': 'text-amber-600', 'proposta': 'text-indigo-600',
-  'negociacao': 'text-purple-600', 'follow_up': 'text-blue-600', 'cliente_ativo': 'text-green-600', 'perdido': 'text-red-500',
+  'lead': 'text-emerald-600', 'prospecção': 'text-sky-600', 'amostra': 'text-amber-600', 'amostra_perdida': 'text-orange-600', 'proposta': 'text-indigo-600',
+  'negociacao': 'text-purple-600', 'follow_up': 'text-blue-600', 'inativo': 'text-gray-500', 'perdido': 'text-red-500',
 }
 const prioridadeCores: Record<string, string> = {
   alta: 'text-red-500', media: 'text-yellow-500', baixa: 'text-gray-400',

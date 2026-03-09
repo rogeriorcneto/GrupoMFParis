@@ -262,7 +262,7 @@ function App() {
     const interacoesHoje = interacoes.filter(c => c.data.startsWith(hoje)).length
     const valorTotal = clientes.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
     const ticketMedio = totalLeads > 0 ? valorTotal / totalLeads : 0
-    const taxaConversao = totalLeads > 0 ? (clientes.filter(c => c.etapa === 'cliente_ativo').length / totalLeads) * 100 : 0
+    const taxaConversao = totalLeads > 0 ? (clientes.filter(c => c.etapa === 'follow_up').length / totalLeads) * 100 : 0
 
     return {
       totalLeads,

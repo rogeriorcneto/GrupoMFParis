@@ -1,6 +1,6 @@
 import type { Cliente } from '../types'
 
-export const prazosEtapa: Record<string, number> = { amostra: 45, proposta: 30, negociacao: 45, follow_up: 60, cliente_ativo: 90 }
+export const prazosEtapa: Record<string, number> = { amostra: 45, proposta: 30, negociacao: 45, follow_up: 60 }
 
 export function diasDesde(dateStr?: string): number {
   if (!dateStr) return 0
@@ -58,16 +58,24 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       if (sub === 'expedido') return { text: '� Expedido — em trânsito', color: 'text-blue-600' }
       if (sub === 'entregue') return { text: '📋 Entregue — avaliar satisfação', color: 'text-green-600' }
       if (sub === 'satisfacao_pendente') return { text: '⭐ Coletar feedback do cliente', color: 'text-purple-600' }
-      if (sub === 'concluido') return { text: '✅ Mover para Cliente Ativo', color: 'text-green-600' }
-      if (diasEtapa >= 50) return { text: '� Follow-up parado há ' + diasEtapa + 'd', color: 'text-red-600' }
+      if (sub === 'concluido') return { text: '✅ Ciclo concluído — acompanhar recompra', color: 'text-green-600' }
+      if (diasEtapa >= 50) return { text: '📦 Follow-up parado há ' + diasEtapa + 'd', color: 'text-red-600' }
       return { text: '📦 Acompanhar logística', color: 'text-blue-600' }
     }
-    case 'cliente_ativo': {
-      const diasPedido = diasDesde(cliente.dataUltimoPedido)
-      if (diasPedido >= 80) return { text: '� Sem compra há ' + diasPedido + 'd — risco de inatividade', color: 'text-red-600' }
-      if (diasPedido >= 60) return { text: '🛒 Sugerir recompra — ' + diasPedido + 'd', color: 'text-purple-600' }
-      if (diasPedido >= 30) return { text: '📞 Contato de relacionamento', color: 'text-blue-600' }
-      return { text: '✅ Cliente ativo — carteira OK', color: 'text-green-600' }
+    case 'lead': {
+      if (diasInativo > 7) return { text: '⚠️ Lead parado há ' + diasInativo + 'd', color: 'text-orange-600' }
+      return { text: '📋 Avaliar e encaminhar para prospecção', color: 'text-blue-600' }
+    }
+    case 'amostra_perdida': {
+      const tentativa = cliente.tentativaAmostra || 0
+      if (tentativa >= 2) return { text: '❌ Sem mais tentativas — mover para Perdido', color: 'text-red-600' }
+      return { text: '🔄 2ª tentativa disponível — reenviar amostra', color: 'text-amber-600' }
+    }
+    case 'inativo': {
+      const diasIn = cliente.diasInativo || 0
+      if (diasIn >= 180) return { text: '� Inativo há ' + diasIn + 'd — avaliar descarte', color: 'text-red-600' }
+      if (diasIn >= 120) return { text: '📞 Tentar reativação urgente', color: 'text-orange-600' }
+      return { text: '📋 Avaliar reativação — inativo há ' + diasIn + 'd', color: 'text-blue-600' }
     }
     case 'perdido': {
       const diasPerdido = diasDesde(cliente.dataPerda)
@@ -90,7 +98,7 @@ export function mapEtapaAgendor(etapa: string, status: string): string {
   if (e.includes('follow') || e.includes('pós') || e.includes('pos')) return 'follow_up'
   if (e.includes('amostra')) return 'amostra'
   if (e.includes('homolog')) return 'proposta'
-  if (e.includes('ativo') || e.includes('carteira')) return 'cliente_ativo'
+  if (e.includes('ativo') || e.includes('carteira')) return 'follow_up'
   return 'prospecção'
 }
 

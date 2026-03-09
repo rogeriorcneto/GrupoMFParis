@@ -9,6 +9,8 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState('')
   const [hidePerdidos, setHidePerdidos] = React.useState(false)
+  const [filterSegmento, setFilterSegmento] = React.useState('')
+  const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
 
   const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -191,15 +193,17 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     e.target.value = ''
   }
 
-  const FUNIL_ETAPAS = new Set(['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up', 'cliente_ativo'])
+  const FUNIL_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
 
   const stages = [
+    { title: 'Leads', key: 'lead', badge: 'bg-emerald-100 text-emerald-800', icon: '🌐', prob: 0.05 },
     { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10 },
     { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25 },
+    { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🧪❌', prob: 0.05 },
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40 },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.60 },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80 },
-    { title: 'Cliente Ativo', key: 'cliente_ativo', badge: 'bg-green-100 text-green-800', icon: '✅', prob: 0.95 },
+    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10 },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
   ]
 
@@ -215,18 +219,26 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   , [clientes, filterVendedorId])
 
   const clientesFiltrados = useMemo(() => {
-    const base = clientesFiltradosVendedor.filter(c =>
+    let base = clientesFiltradosVendedor.filter(c =>
       FUNIL_ETAPAS.has(c.etapa) || c.etapa === 'perdido'
     )
-    if (!search.trim()) return base
-    const q = search.toLowerCase()
-    return base.filter(c =>
-      c.razaoSocial.toLowerCase().includes(q) ||
-      (c.nomeFantasia || '').toLowerCase().includes(q) ||
-      (c.contatoNome || '').toLowerCase().includes(q) ||
-      (c.cnpj || '').includes(q)
-    )
-  }, [clientesFiltradosVendedor, search])
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      base = base.filter(c =>
+        c.razaoSocial.toLowerCase().includes(q) ||
+        (c.nomeFantasia || '').toLowerCase().includes(q) ||
+        (c.contatoNome || '').toLowerCase().includes(q) ||
+        (c.cnpj || '').includes(q)
+      )
+    }
+    if (filterSegmento) {
+      base = base.filter(c => c.etapa !== 'lead' || (c.segmento || '').toLowerCase().includes(filterSegmento.toLowerCase()))
+    }
+    if (filterLocalizacao) {
+      base = base.filter(c => c.etapa !== 'lead' || (c.localizacao || '').toLowerCase().includes(filterLocalizacao.toLowerCase()))
+    }
+    return base
+  }, [clientesFiltradosVendedor, search, filterSegmento, filterLocalizacao])
 
   // P1-1: Single O(n) pass to group clients by stage (instead of 7× filter)
   const stageMap = useMemo(() => {
@@ -241,15 +253,15 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
 
   // Memoized metrics using stageMap (no re-filtering)
   const { totalPipeline, receitaPonderada, taxaConversao, tempoMedio, activeCount } = useMemo(() => {
-    let pipeline = 0, weighted = 0, clienteAtivoCount = 0, nonPerdidoCount = 0
+    let pipeline = 0, weighted = 0, followUpCount = 0, nonPerdidoCount = 0
     let totalDias = 0, histCount = 0
     const probMap = new Map(stages.map(s => [s.key, s.prob]))
 
     clientesFiltrados.forEach(c => {
       const prob = probMap.get(c.etapa) || 0
       const val = c.valorEstimado || 0
-      if (c.etapa !== 'perdido') { pipeline += val; nonPerdidoCount++ }
-      if (c.etapa === 'cliente_ativo') clienteAtivoCount++
+      if (c.etapa !== 'perdido' && c.etapa !== 'inativo') { pipeline += val; nonPerdidoCount++ }
+      if (c.etapa === 'follow_up') followUpCount++
       weighted += val * prob
       if (c.historicoEtapas && c.historicoEtapas.length > 1) {
         const h = c.historicoEtapas
@@ -263,7 +275,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     return {
       totalPipeline: pipeline,
       receitaPonderada: weighted,
-      taxaConversao: nonPerdidoCount > 0 ? Math.round((clienteAtivoCount / nonPerdidoCount) * 100) : 0,
+      taxaConversao: nonPerdidoCount > 0 ? Math.round((followUpCount / nonPerdidoCount) * 100) : 0,
       tempoMedio: histCount > 0 ? Math.round(totalDias / histCount) : 0,
       activeCount: nonPerdidoCount,
     }
@@ -347,20 +359,34 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           </div>
         )
       }
-      case 'cliente_ativo': {
-        const diasPedido = diasDesde(cliente.dataUltimoPedido)
-        const ciclo = cliente.cicloRecompra || 60
-        const pctRecompra = Math.min((diasPedido / ciclo) * 100, 100)
+      case 'lead': {
         return (
           <div className="mt-1.5 space-y-1">
-            {cliente.totalCompras !== undefined && <p className="text-[10px] text-green-700">� {cliente.totalCompras} compra(s)</p>}
-            {cliente.notaSatisfacao !== undefined && <p className="text-[10px] text-purple-600">⭐ NPS: {cliente.notaSatisfacao}/5</p>}
-            {cliente.dataUltimoPedido && (
-              <div className="flex items-center gap-1">
-                <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctRecompra >= 100 ? 'bg-purple-500' : pctRecompra >= 67 ? 'bg-blue-500' : 'bg-green-500'}`} style={{ width: `${pctRecompra}%` }} /></div>
-                <span className={`text-[9px] font-bold ${diasPedido >= ciclo ? 'text-purple-600' : 'text-gray-500'}`}>{diasPedido >= ciclo ? '🛒 Recompra!' : `${ciclo - diasPedido}d`}</span>
-              </div>
-            )}
+            {cliente.segmento && <span className="inline-block px-1.5 py-0.5 text-[9px] bg-emerald-100 text-emerald-700 rounded-full">{cliente.segmento}</span>}
+            {cliente.localizacao && <p className="text-[10px] text-gray-500">📍 {cliente.localizacao}</p>}
+            {cliente.origemLead && <span className="inline-block px-1.5 py-0.5 text-[9px] bg-sky-100 text-sky-700 rounded-full">{cliente.origemLead}</span>}
+          </div>
+        )
+      }
+      case 'amostra_perdida': {
+        const tentativa = cliente.tentativaAmostra || 0
+        return (
+          <div className="mt-1.5 space-y-1">
+            {cliente.motivoReprovacao && <p className="text-[10px] text-red-600">❌ {cliente.motivoReprovacao}</p>}
+            <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${tentativa >= 2 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+              {tentativa >= 2 ? 'Sem tentativas' : `${2 - tentativa}ª tentativa disponível`}
+            </span>
+            {cliente.etapaAnterior && <p className="text-[10px] text-gray-500">↩ Veio de: {stageLabels[cliente.etapaAnterior] || cliente.etapaAnterior}</p>}
+          </div>
+        )
+      }
+      case 'inativo': {
+        const diasIn = cliente.diasInativo || 0
+        return (
+          <div className="mt-1.5 space-y-1">
+            <p className="text-[10px] text-gray-600">💤 Inativo há {diasIn} dias</p>
+            {cliente.etapaAnterior && <p className="text-[10px] text-gray-500">↩ Veio de: {stageLabels[cliente.etapaAnterior] || cliente.etapaAnterior}</p>}
+            {cliente.totalCompras !== undefined && cliente.totalCompras > 0 && <p className="text-[10px] text-green-700">🛒 {cliente.totalCompras} compra(s)</p>}
           </div>
         )
       }
@@ -401,7 +427,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
           <p className="text-[10px] text-gray-500 uppercase font-semibold">Taxa Conversão</p>
           <p className="text-lg font-bold text-primary-600">{taxaConversao}%</p>
-          <p className="text-[10px] text-gray-500">Leads → Cliente Ativo</p>
+          <p className="text-[10px] text-gray-500">Leads → Follow-up</p>
         </div>
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-3">
           <p className="text-[10px] text-gray-500 uppercase font-semibold">Tempo Médio</p>
@@ -447,6 +473,20 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
             >
               {hidePerdidos ? '👁 Mostrar Perdidos' : '🙈 Ocultar Perdidos'}
             </button>
+            <input
+              type="text"
+              value={filterSegmento}
+              onChange={e => setFilterSegmento(e.target.value)}
+              placeholder="🏢 Segmento"
+              className="px-2 py-1.5 border border-gray-300 rounded-apple text-sm w-28 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <input
+              type="text"
+              value={filterLocalizacao}
+              onChange={e => setFilterLocalizacao(e.target.value)}
+              placeholder="📍 Localização"
+              className="px-2 py-1.5 border border-gray-300 rounded-apple text-sm w-28 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
             {isGerente && onImportNegocios && (
               <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
                 <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
@@ -471,7 +511,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         </div>
       </div>
 
-      <div className={`flex lg:grid gap-3 overflow-x-auto pb-2 snap-x snap-mandatory lg:overflow-x-visible lg:pb-0 ${hidePerdidos ? 'lg:grid-cols-6' : 'lg:grid-cols-7'}`}>
+      <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
         {stages.filter(s => !(hidePerdidos && s.key === 'perdido')).map((stage) => {
           const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
           const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)

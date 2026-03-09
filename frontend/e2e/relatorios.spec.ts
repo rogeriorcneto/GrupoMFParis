@@ -5,7 +5,7 @@ test.describe('Relatórios e Gráficos', () => {
   test('view renderiza sem erros para gerente', async ({ page }) => {
     await loginAs(page, 'gerente')
     await page.getByRole('button', { name: /Relatórios/i }).click()
-    await expect(page.getByText('Relatórios e Gráficos')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('h2', { hasText: 'Relatórios e Gráficos' })).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=Cannot read properties')).not.toBeVisible()
   })
 
@@ -41,7 +41,7 @@ test.describe('Relatórios e Gráficos', () => {
       await periodoBtn.click()
       await page.waitForTimeout(1_000)
       // Não crashou — sucesso
-      await expect(page.getByText('Relatórios e Gráficos')).toBeVisible()
+      await expect(page.locator('h2', { hasText: 'Relatórios e Gráficos' })).toBeVisible()
     }
   })
 })

@@ -40,7 +40,7 @@ export function calcularScore(
 ): number {
   const baseEtapa: Record<string, number> = {
     'prospecção': 10, 'amostra': 25, 'proposta': 40,
-    'negociacao': 60, 'follow_up': 80, 'cliente_ativo': 95, 'perdido': 5
+    'negociacao': 60, 'follow_up': 80, 'inativo': 10, 'lead': 5, 'amostra_perdida': 15, 'perdido': 5
   }
   const base = baseEtapa[etapa] || 10
   const bonusValor = Math.min(valorEstimado / 10000, 15)

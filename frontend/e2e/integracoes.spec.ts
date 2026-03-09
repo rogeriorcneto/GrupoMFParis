@@ -5,7 +5,7 @@ test.describe('Integrações', () => {
   test('view renderiza sem erros para gerente', async ({ page }) => {
     await loginAs(page, 'gerente')
     await page.getByRole('button', { name: /Integrações/i }).click()
-    await expect(page.getByText('Integrações')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('h2', { hasText: /^Integrações$/ })).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=Cannot read properties')).not.toBeVisible()
   })
 
