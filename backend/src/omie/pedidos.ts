@@ -347,95 +347,59 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  // Buscar pedidos com omie_codigo
-  const { data: pedidos, error } = await supabase
-    .from('pedidos')
-    .select('id, numero, cliente_id, vendedor_id, total_valor, data_criacao, status, omie_codigo, omie_numero, omie_status')
-    .not('omie_codigo', 'is', null)
-    .order('data_criacao', { ascending: false })
-    .limit(100)
+  // Buscar pedidos direto do Omie (mais recentes primeiro via ordenar_por_codigo DESC)
+  const result = await omieCall<any>(
+    '/produtos/pedido/',
+    'ListarPedidos',
+    [{
+      pagina: 1,
+      registros_por_pagina: 50,
+      apenas_importado_api: 'N',
+    }],
+    { credentials: creds }
+  )
 
-  if (error) throw new Error(error.message)
-  if (!pedidos || pedidos.length === 0) return []
+  const pedidosOmie = result?.pedido_venda_produto || []
+  if (pedidosOmie.length === 0) return []
 
-  // Buscar nomes de clientes e vendedores
-  const clienteIds = [...new Set(pedidos.map(p => p.cliente_id))]
-  const vendedorIds = [...new Set(pedidos.map(p => p.vendedor_id))]
+  // Mapear para formato padronizado, mais recentes primeiro
+  const resultado: PedidoAcompanhamento[] = pedidosOmie.map((p: any) => {
+    const cab = p.cabecalho || {}
+    const infoCad = p.infoCadastro || {}
+    const totalPedido = p.total_pedido || {}
 
-  const [clientesRes, vendedoresRes] = await Promise.all([
-    supabase.from('clientes').select('id, razao_social').in('id', clienteIds),
-    supabase.from('vendedores').select('id, nome').in('id', vendedorIds),
-  ])
+    const etapa = cab.etapa || infoCad.cEtapa || ''
+    const descEtapa = cab.descricao_etapa || infoCad.cDescEtapa || etapa
 
-  const clienteMap = new Map((clientesRes.data || []).map((c: any) => [c.id, c.razao_social]))
-  const vendedorMap = new Map((vendedoresRes.data || []).map((v: any) => [v.id, v.nome]))
+    // Mapear etapa Omie para status
+    let statusOmie = 'enviado'
+    const etapaLower = descEtapa.toLowerCase()
+    if (etapaLower.includes('faturado') || etapaLower.includes('faturar')) statusOmie = 'faturado'
+    else if (etapaLower.includes('separar') || etapaLower.includes('produção') || etapaLower.includes('separação')) statusOmie = 'em_producao'
+    else if (etapaLower.includes('expedir') || etapaLower.includes('expedido') || etapaLower.includes('expedição')) statusOmie = 'expedido'
+    else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) statusOmie = 'entregue'
+    else if (etapaLower.includes('cancelado')) statusOmie = 'cancelado'
 
-  // Para cada pedido, tentar consultar status no Omie (com rate-limit awareness)
-  const resultado: PedidoAcompanhamento[] = []
-  let consultasOmie = 0
-  const MAX_CONSULTAS = 10 // Limitar consultas ao Omie por chamada
-
-  for (const p of pedidos) {
-    let statusOmie = p.omie_status || 'enviado'
-    let etapaOmie = ''
-    let nf = ''
-    let codigoRastreio = ''
-    let dataFaturamento = ''
-
-    // Consultar no Omie apenas os primeiros N (evitar rate-limit)
-    if (consultasOmie < MAX_CONSULTAS && p.omie_codigo) {
-      try {
-        const omieData = await omieCall<any>(
-          '/produtos/pedido/',
-          'ConsultarPedido',
-          [{ codigo_pedido: parseInt(p.omie_codigo, 10) }],
-          { credentials: creds }
-        )
-
-        const cab = omieData?.cabecalho || {}
-        const infoCad = omieData?.infoCadastro || {}
-        const transporte = omieData?.transporte || {}
-
-        etapaOmie = cab.descricao_etapa || infoCad.cDescEtapa || cab.etapa || ''
-        nf = infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : ''
-        codigoRastreio = transporte.codigo_rastreio || ''
-        dataFaturamento = infoCad.dDataFaturamento || infoCad.dDtFat || ''
-
-        // Mapear etapa Omie para status legível
-        const etapaLower = etapaOmie.toLowerCase()
-        if (etapaLower.includes('faturado') || etapaLower.includes('faturar')) statusOmie = 'faturado'
-        else if (etapaLower.includes('separar') || etapaLower.includes('produção')) statusOmie = 'em_producao'
-        else if (etapaLower.includes('expedir') || etapaLower.includes('expedido')) statusOmie = 'expedido'
-        else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) statusOmie = 'entregue'
-        else if (etapaLower.includes('cancelado')) statusOmie = 'cancelado'
-        else statusOmie = 'enviado'
-
-        // Atualizar status no banco para cache
-        await supabase.from('pedidos').update({ omie_status: statusOmie }).eq('id', p.id)
-
-        consultasOmie++
-      } catch (err: any) {
-        log.warn({ err: err.message, pedidoId: p.id }, 'Erro ao consultar pedido no Omie (acompanhamento)')
-      }
-    }
-
-    resultado.push({
-      pedidoId: p.id,
-      numero: p.numero,
-      clienteNome: clienteMap.get(p.cliente_id) || 'Cliente não encontrado',
-      clienteId: p.cliente_id,
-      vendedorNome: vendedorMap.get(p.vendedor_id) || 'Vendedor não encontrado',
-      valor: Number(p.total_valor),
-      dataCriacao: p.data_criacao,
-      statusCrm: p.status,
+    return {
+      pedidoId: cab.codigo_pedido || 0,
+      numero: cab.numero_pedido ? String(cab.numero_pedido) : String(cab.codigo_pedido || ''),
+      clienteNome: cab.razao_social || cab.nome_fantasia || String(cab.codigo_cliente || ''),
+      clienteId: cab.codigo_cliente || 0,
+      vendedorNome: cab.codigo_vendedor ? `Vendedor ${cab.codigo_vendedor}` : '',
+      valor: Number(totalPedido.valor_total_pedido || cab.valor_total || 0),
+      dataCriacao: cab.data_previsao || infoCad.dDtInc || '',
+      statusCrm: '',
       statusOmie,
-      etapaOmie,
-      nf,
-      codigoRastreio,
-      dataFaturamento,
-      omieCodigo: p.omie_codigo,
-    })
-  }
+      etapaOmie: descEtapa,
+      nf: infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : '',
+      codigoRastreio: '',
+      dataFaturamento: infoCad.dDataFaturamento || infoCad.dDtFat || '',
+      omieCodigo: String(cab.codigo_pedido || ''),
+    }
+  })
+
+  // Ordenar mais recentes primeiro (por codigo_pedido desc — maior = mais novo)
+  resultado.sort((a: PedidoAcompanhamento, b: PedidoAcompanhamento) => Number(b.omieCodigo) - Number(a.omieCodigo))
 
   return resultado
 }
@@ -515,6 +479,15 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
   for (const cp of contasPagar) {
     totalPagar += Number(cp.valor_documento || 0)
   }
+
+  // Ordenar mais recentes primeiro (por data_vencimento desc)
+  const sortByDate = (a: any, b: any) => {
+    const da = a.data_vencimento || ''
+    const db = b.data_vencimento || ''
+    return db.localeCompare(da)
+  }
+  contasReceber.sort(sortByDate)
+  contasPagar.sort(sortByDate)
 
   return {
     totalReceber,
