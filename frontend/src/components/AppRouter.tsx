@@ -69,7 +69,7 @@ export default function AppRouter({
 }: AppRouterProps) {
   switch (activeView) {
     case 'dashboard':
-      return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} loggedUser={loggedUser} />
+      return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
     case 'aprovacao':
       return <AprovacaoView
         pedidos={pedidos}
@@ -355,6 +355,6 @@ export default function AppRouter({
         loggedUser={loggedUser}
       />
     default:
-      return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} loggedUser={loggedUser} />
+      return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
   }
 }

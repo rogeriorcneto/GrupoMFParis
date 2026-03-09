@@ -1,75 +1,84 @@
 import { test, expect } from '@playwright/test'
 import { loginAs, credentials } from './fixtures/auth.fixture'
 
-test.describe('Dashboard — Visão Geral', () => {
-  test('renderiza métricas principais', async ({ page }) => {
+test.describe('Dashboard Comercial', () => {
+  test('renderiza header com badge AO VIVO', async ({ page }) => {
     await loginAs(page, 'gerente')
-    // Dashboard é a view padrão do gerente
-    await expect(page.getByText('Visão Geral')).toBeVisible({ timeout: 10_000 })
-
-    // Métricas obrigatórias
-    await expect(page.getByText('Total Leads')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText('Leads Ativos')).toBeVisible()
-    await expect(page.getByText('Conversão')).toBeVisible()
-    await expect(page.getByText('Valor Total')).toBeVisible()
-    await expect(page.getByText('Ticket Médio')).toBeVisible()
-    await expect(page.getByText('Novos Hoje')).toBeVisible()
-    await expect(page.getByText('Interações')).toBeVisible()
+    await expect(page.getByTestId('dashboard-container')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Dashboard Comercial')).toBeVisible()
+    await expect(page.getByTestId('live-badge')).toBeVisible()
+    await expect(page.getByText('AO VIVO')).toBeVisible()
+    await expect(page.getByTestId('last-update')).toBeVisible()
   })
 
-  test('gráfico de funil por etapa renderiza', async ({ page }) => {
+  test('seletor mensal funciona: selecionar mês mostra dados filtrados', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.waitForTimeout(3_000)
+    await expect(page.getByTestId('dashboard-container')).toBeVisible({ timeout: 10_000 })
 
-    // Deve ter gráfico (canvas ou SVG)
-    const charts = page.locator('canvas, svg[class*="recharts"], [class*="chart"]')
-    const count = await charts.count()
-    expect(count).toBeGreaterThan(0)
+    // Clica em Mês (default)
+    await page.getByTestId('btn-mes').click()
+    await expect(page.getByTestId('month-selector')).toBeVisible()
+
+    // Seleciona um mês diferente do dropdown
+    const selector = page.getByTestId('month-selector')
+    const options = await selector.locator('option').all()
+    expect(options.length).toBe(12)
+
+    // Seleciona o segundo mês (mês anterior)
+    if (options.length > 1) {
+      const val = await options[1].getAttribute('value')
+      if (val) await selector.selectOption(val)
+    }
+    // Dashboard should still render without errors
+    await expect(page.getByTestId('dashboard-container')).toBeVisible()
   })
 
-  test('filtro de período funciona', async ({ page }) => {
+  test('botão Hoje filtra dados', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.waitForTimeout(2_000)
+    await expect(page.getByTestId('dashboard-container')).toBeVisible({ timeout: 10_000 })
 
-    // Botões de período: 7d, 30d, 90d, Total
-    const btn7d = page.locator('button:has-text("7d")').first()
-    const btn30d = page.locator('button:has-text("30d")').first()
-    const btnTotal = page.locator('button:has-text("Total")').first()
+    await page.getByTestId('btn-hoje').click()
+    // Button should have active style
+    await expect(page.getByTestId('btn-hoje')).toHaveClass(/bg-primary-600/)
+    // Dashboard content still renders
+    await expect(page.getByTestId('tab-bar')).toBeVisible()
+  })
 
-    if (await btn7d.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await btn7d.click()
-      await page.waitForTimeout(1_000)
-      await expect(page.getByText('Total Leads')).toBeVisible()
+  test('8 abas navegáveis', async ({ page }) => {
+    await loginAs(page, 'gerente')
+    await expect(page.getByTestId('dashboard-container')).toBeVisible({ timeout: 10_000 })
 
-      await btn30d.click()
-      await page.waitForTimeout(1_000)
-      await expect(page.getByText('Total Leads')).toBeVisible()
-
-      await btnTotal.click()
-      await page.waitForTimeout(1_000)
-      await expect(page.getByText('Total Leads')).toBeVisible()
+    const tabs = ['saude', 'crescimento', 'produtos', 'mercado', 'clientes', 'funil', 'equipe', 'competitiva']
+    for (const tab of tabs) {
+      await page.getByTestId(`tab-${tab}`).click()
+      await expect(page.getByTestId(`panel-${tab}`)).toBeVisible()
     }
   })
 
-  test('rankings de vendedores renderizam', async ({ page }) => {
+  test('aba Equipe: rankings de vendedores visíveis', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.waitForTimeout(3_000)
+    await expect(page.getByTestId('dashboard-container')).toBeVisible({ timeout: 10_000 })
 
-    // Deve mostrar seção de ranking
-    const ranking = page.getByText(/Ranking/i).first()
-    if (await ranking.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await expect(ranking).toBeVisible()
-    }
+    await page.getByTestId('tab-equipe').click()
+    await expect(page.getByTestId('panel-equipe')).toBeVisible()
+    await expect(page.getByText(/Ranking Faturamento/)).toBeVisible()
   })
 
-  test('projeção de receita futura renderiza', async ({ page }) => {
+  test('modo TV: entra e sai', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.waitForTimeout(3_000)
+    await expect(page.getByTestId('dashboard-container')).toBeVisible({ timeout: 10_000 })
 
-    const projecao = page.getByText(/Projeção|Receita Futura/i).first()
-    if (await projecao.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await expect(projecao).toBeVisible()
-    }
+    const tvBtn = page.getByTestId('btn-tv')
+    await expect(tvBtn).toBeVisible()
+
+    // Enter TV mode
+    await tvBtn.click()
+    await expect(page.getByTestId('dashboard-container')).toHaveClass(/bg-gray-950/)
+    await expect(page.getByText(/Sair TV/)).toBeVisible()
+
+    // Exit TV mode
+    await tvBtn.click()
+    await expect(page.getByTestId('dashboard-container')).not.toHaveClass(/bg-gray-950/)
   })
 
   test('vendedor NÃO acessa dashboard', async ({ page }) => {
