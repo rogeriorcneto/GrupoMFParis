@@ -458,17 +458,38 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
+  // Filtrar últimos 6 meses até 6 meses no futuro
+  const hoje = new Date()
+  const seisAtras = new Date(hoje)
+  seisAtras.setMonth(seisAtras.getMonth() - 6)
+  const seisFrente = new Date(hoje)
+  seisFrente.setMonth(seisFrente.getMonth() + 6)
+
+  const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  const dataInicio = fmt(seisAtras)
+  const dataFim = fmt(seisFrente)
+
   const [receber, pagar] = await Promise.all([
     omieCall<any>(
       '/financas/contareceber/',
       'ListarContasReceber',
-      [{ pagina: 1, registros_por_pagina: 50 }],
+      [{
+        pagina: 1,
+        registros_por_pagina: 50,
+        filtrar_por_data_de: dataInicio,
+        filtrar_por_data_ate: dataFim,
+      }],
       { credentials: creds }
     ).catch(() => ({ conta_receber_cadastro: [] })),
     omieCall<any>(
       '/financas/contapagar/',
       'ListarContasPagar',
-      [{ pagina: 1, registros_por_pagina: 50 }],
+      [{
+        pagina: 1,
+        registros_por_pagina: 50,
+        filtrar_por_data_de: dataInicio,
+        filtrar_por_data_ate: dataFim,
+      }],
       { credentials: creds }
     ).catch(() => ({ conta_pagar_cadastro: [] })),
   ])
@@ -476,7 +497,6 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
   const contasReceber = receber?.conta_receber_cadastro || []
   const contasPagar = pagar?.conta_pagar_cadastro || []
 
-  const hoje = new Date()
   const hojeStr = hoje.toISOString().split('T')[0]
 
   let totalReceber = 0
