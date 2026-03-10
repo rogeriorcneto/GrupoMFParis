@@ -412,15 +412,23 @@ function mapPedidoOmie(p: any): PedidoAcompanhamento {
   }
 }
 
-// Buscar todas as páginas de pedidos do Omie
-async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string }): Promise<any[]> {
-  const PER_PAGE = 500
-  const MAX_PAGES = 50
+// Buscar todas as páginas de pedidos do Omie (com filtro de data para não sobrecarregar)
+async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string }, filtroData?: { de: string; ate: string }): Promise<any[]> {
+  const PER_PAGE = 50 // Omie cap real é ~50
+  const MAX_PAGES = 300 // 300 * 50 = 15.000 pedidos max
 
-  const filtroParams = {
+  // Filtro de data padrão: últimos 12 meses
+  const agora = new Date()
+  const de12meses = new Date(agora)
+  de12meses.setMonth(de12meses.getMonth() - 12)
+  const formatDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+
+  const filtroParams: any = {
     pagina: 1,
     registros_por_pagina: PER_PAGE,
     apenas_importado_api: 'N',
+    filtrar_por_data_de: filtroData?.de || formatDate(de12meses),
+    filtrar_por_data_ate: filtroData?.ate || formatDate(agora),
   }
 
   const firstResult = await omieCall<any>(
@@ -440,6 +448,7 @@ async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string })
     log.info({
       totalRegistros,
       totalPaginas,
+      perPageReal: pedidosOmie.length,
       sampleKeys: Object.keys(sample),
       cabKeys: Object.keys(sample.cabecalho || {}),
       infoCadKeys: Object.keys(sample.infoCadastro || {}),
@@ -473,7 +482,7 @@ async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string })
     }
   }
 
-  log.info({ total: pedidosOmie.length, totalRegistros, paginas: totalPaginas }, 'Pedidos Omie carregados')
+  log.info({ total: pedidosOmie.length, totalRegistros, paginas: totalPaginas, filtro: filtroParams.filtrar_por_data_de + ' a ' + filtroParams.filtrar_por_data_ate }, 'Pedidos Omie carregados')
   return pedidosOmie
 }
 
