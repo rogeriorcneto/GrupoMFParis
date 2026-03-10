@@ -14,6 +14,7 @@ import {
   omieConsultarEntrega,
   omieGetFinanceiroResumo,
   omieSyncLogistics,
+  omieBuscarPedido,
   type PedidoAcompanhamento,
   type EntregaOmieResult,
   type FinanceiroResumo,
@@ -92,6 +93,8 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
   const [busca, setBusca] = useState('')
   const [entregaModal, setEntregaModal] = useState<{ pedidoId: number; data?: EntregaOmieResult; loading: boolean; error?: string } | null>(null)
   const [visibleCount, setVisibleCount] = useState(20)
+  const [buscaLoading, setBuscaLoading] = useState(false)
+  const [buscaResults, setBuscaResults] = useState<PedidoAcompanhamento[] | null>(null)
 
   // Financeiro state
   const [financeiro, setFinanceiro] = useState<FinanceiroResumo | null>(null)
@@ -107,6 +110,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
   const loadPedidos = useCallback(async () => {
     setPedidosLoading(true)
     setPedidosError('')
+    setBuscaResults(null)
     try {
       const res = await omieGetPedidosAcompanhamento()
       if (res.success && res.data) setAcompanhamento(res.data)
@@ -117,6 +121,24 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
       setPedidosLoading(false)
     }
   }, [])
+
+  const handleBuscarOmie = useCallback(async () => {
+    if (!busca.trim()) return
+    setBuscaLoading(true)
+    setPedidosError('')
+    try {
+      const res = await omieBuscarPedido(busca.trim())
+      if (res.success && res.data) {
+        setBuscaResults(res.data)
+      } else {
+        setPedidosError(res.error || 'Erro na busca')
+      }
+    } catch (err: any) {
+      setPedidosError(err.message || 'Erro de conexão')
+    } finally {
+      setBuscaLoading(false)
+    }
+  }, [busca])
 
   const loadFinanceiro = useCallback(async () => {
     setFinLoading(true)
@@ -168,9 +190,11 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
     if (activeTab === 'financeiro' && !financeiro) loadFinanceiro()
   }, [activeTab, acompanhamento.length, financeiro, loadPedidos, loadFinanceiro])
 
-  const filteredPedidos = acompanhamento.filter(p => {
+  // Se temos resultado de busca sob demanda, usar ele; senão filtrar localmente
+  const displaySource = buscaResults ?? acompanhamento
+  const filteredPedidos = displaySource.filter(p => {
     if (filtroStatus && p.statusOmie !== filtroStatus) return false
-    if (busca) {
+    if (busca && !buscaResults) {
       const q = busca.toLowerCase()
       return p.numero.toLowerCase().includes(q) ||
         p.clienteNome.toLowerCase().includes(q) ||
@@ -234,7 +258,8 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                   type="text"
                   placeholder="Buscar por número, cliente, NF, rastreio, código..."
                   value={busca}
-                  onChange={e => { setBusca(e.target.value); setVisibleCount(20) }}
+                  onChange={e => { setBusca(e.target.value); setVisibleCount(20); setBuscaResults(null) }}
+                  onKeyDown={e => { if (e.key === 'Enter' && busca.trim()) handleBuscarOmie() }}
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-400"
                 />
               </div>
@@ -251,6 +276,23 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                   ))}
                 </select>
               </div>
+              <button
+                onClick={handleBuscarOmie}
+                disabled={buscaLoading || !busca.trim()}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold rounded-apple transition-colors"
+                title="Busca direto no Omie por número ou cliente"
+              >
+                <MagnifyingGlassIcon className={`h-4 w-4 ${buscaLoading ? 'animate-spin' : ''}`} />
+                Buscar no Omie
+              </button>
+              {buscaResults && (
+                <button
+                  onClick={() => { setBuscaResults(null); setBusca('') }}
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-apple hover:bg-gray-50 transition-colors"
+                >
+                  ✕ Limpar busca
+                </button>
+              )}
               <button
                 onClick={loadPedidos}
                 disabled={pedidosLoading}
@@ -281,10 +323,17 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
               <div className="bg-red-50 border border-red-200 rounded-apple p-3 text-sm text-red-700">{pedidosError}</div>
             )}
 
-            {pedidosLoading && acompanhamento.length === 0 ? (
+            {buscaResults && (
+              <div className="bg-amber-50 border border-amber-200 rounded-apple p-3 text-sm text-amber-800 flex items-center justify-between">
+                <span>Resultado da busca no Omie: <strong>{buscaResults.length}</strong> pedido(s) encontrado(s) para "{busca}"</span>
+                <button onClick={() => { setBuscaResults(null); setBusca('') }} className="text-amber-600 hover:text-amber-800 font-medium underline text-xs">Voltar para lista completa</button>
+              </div>
+            )}
+
+            {(pedidosLoading || buscaLoading) && acompanhamento.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <ArrowPathIcon className="h-8 w-8 mx-auto animate-spin mb-2" />
-                <p>Carregando pedidos do Omie...</p>
+                <p>{buscaLoading ? 'Buscando no Omie...' : 'Carregando pedidos do Omie...'}</p>
               </div>
             ) : filteredPedidos.length === 0 ? (
               <div className="text-center py-12 text-gray-400">

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
 import { getSyncDiff, syncPullClientes, syncPushClientes } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
-import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro } from '../omie/pedidos.js'
+import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
@@ -151,6 +151,19 @@ omieRouter.get('/pedidos/acompanhamento', rateLimit(10, 60_000), async (_req, re
     res.json({ success: true, data })
   } catch (err: any) {
     log.error({ err }, 'Erro ao listar acompanhamento de pedidos Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.get('/pedidos/buscar', rateLimit(15, 60_000), async (req, res) => {
+  const termo = String(req.query.q || '').trim()
+  if (!termo) { res.status(400).json({ success: false, error: 'Parâmetro q obrigatório' }); return }
+
+  try {
+    const data = await buscarPedidoOmie(termo)
+    res.json({ success: true, data })
+  } catch (err: any) {
+    log.error({ err, termo }, 'Erro ao buscar pedido no Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

@@ -343,13 +343,79 @@ export interface PedidoAcompanhamento {
   omieCodigo: string
 }
 
-export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanhamento[]> {
-  const creds = await getOmieCredentials()
-  if (!creds) throw new Error('Credenciais Omie não configuradas')
+// Helper: converter data dd/mm/aaaa para yyyy-mm-dd (ISO)
+function parseOmieDate(d: string): string {
+  if (!d) return ''
+  const parts = d.split('/')
+  if (parts.length === 3 && parts[0].length <= 2) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+  return d
+}
 
-  // Buscar TODAS as páginas de pedidos do Omie
-  const PER_PAGE = 200
-  const MAX_PAGES = 50 // Segurança: máximo 10.000 pedidos
+// Mapear etapa Omie (código numérico ou texto) para status padronizado
+function mapEtapaToStatus(etapa: string): string {
+  const e = String(etapa).trim()
+  // Códigos numéricos do Omie
+  if (e === '10') return 'enviado'       // Separar / Aguardando
+  if (e === '20') return 'em_producao'   // Separado / Em produção
+  if (e === '30' || e === '40') return 'faturado' // Faturado
+  if (e === '50' || e === '60') return 'expedido' // Expedido / Em trânsito
+  if (e === '70' || e === '80') return 'entregue' // Entregue / Finalizado
+  if (e === '90' || e === '99') return 'cancelado'
+  // Texto descritivo (fallback)
+  const lower = e.toLowerCase()
+  if (lower.includes('faturad') || lower.includes('faturar') || lower.includes('nf')) return 'faturado'
+  if (lower.includes('separ') || lower.includes('produ')) return 'em_producao'
+  if (lower.includes('exped') || lower.includes('trânsito') || lower.includes('transit')) return 'expedido'
+  if (lower.includes('entreg') || lower.includes('finaliz') || lower.includes('conclu')) return 'entregue'
+  if (lower.includes('cancel')) return 'cancelado'
+  return 'enviado'
+}
+
+// Extrair dados de um pedido bruto do Omie para formato padronizado
+function mapPedidoOmie(p: any): PedidoAcompanhamento {
+  const cab = p.cabecalho || {}
+  const infoCad = p.infoCadastro || {}
+  const totalPedido = p.total_pedido || {}
+  const frete = p.frete || {}
+  const obs = p.observacoes || {}
+
+  // Etapa: buscar em todos os campos possíveis
+  const etapaRaw = cab.etapa || infoCad.cEtapa || infoCad.etapa || ''
+  const descEtapa = cab.descricao_etapa || infoCad.cDescricaoEtapa || infoCad.cDescEtapa || ''
+  const statusOmie = mapEtapaToStatus(etapaRaw || descEtapa)
+
+  // Data: preferir data_previsao, senão dInclusao, senão dDtInc
+  const dataRaw = cab.data_previsao || infoCad.dInclusao || infoCad.dDtInc || infoCad.dDtAlt || ''
+  const dataISO = parseOmieDate(dataRaw)
+
+  // NF: buscar em vários campos
+  const nf = infoCad.nNumeroNF || infoCad.numero_nf || cab.numero_nf || ''
+
+  // Rastreio: pode estar no frete
+  const rastreio = frete.codigo_rastreio || frete.outras_informacoes || ''
+
+  return {
+    pedidoId: cab.codigo_pedido || 0,
+    numero: cab.numero_pedido ? String(cab.numero_pedido) : String(cab.codigo_pedido || ''),
+    clienteNome: cab.razao_social || cab.nome_fantasia || String(cab.codigo_cliente || ''),
+    clienteId: cab.codigo_cliente || 0,
+    vendedorNome: cab.codigo_vendedor ? `Vendedor ${cab.codigo_vendedor}` : '',
+    valor: Number(totalPedido.valor_total_pedido || cab.valor_total || 0),
+    dataCriacao: dataISO || dataRaw,
+    statusCrm: '',
+    statusOmie,
+    etapaOmie: descEtapa || etapaRaw,
+    nf: nf ? String(nf) : '',
+    codigoRastreio: rastreio ? String(rastreio) : '',
+    dataFaturamento: parseOmieDate(infoCad.dDataFaturamento || infoCad.dDtFat || infoCad.dFaturamento || ''),
+    omieCodigo: String(cab.codigo_pedido || ''),
+  }
+}
+
+// Buscar todas as páginas de pedidos do Omie
+async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string }): Promise<any[]> {
+  const PER_PAGE = 500
+  const MAX_PAGES = 50
 
   const filtroParams = {
     pagina: 1,
@@ -357,7 +423,6 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     apenas_importado_api: 'N',
   }
 
-  // Primeira chamada para saber total de páginas
   const firstResult = await omieCall<any>(
     '/produtos/pedido/',
     'ListarPedidos',
@@ -365,16 +430,33 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     { credentials: creds }
   )
 
+  const totalRegistros = firstResult?.total_de_registros || 0
   const totalPaginas = Math.min(firstResult?.total_de_paginas || 1, MAX_PAGES)
   let pedidosOmie: any[] = firstResult?.pedido_venda_produto || []
 
-  // Buscar páginas restantes em paralelo (batches de 3 para respeitar rate-limit)
+  // Logar amostra do primeiro pedido para debug de campos
+  if (pedidosOmie.length > 0) {
+    const sample = pedidosOmie[0]
+    log.info({
+      totalRegistros,
+      totalPaginas,
+      sampleKeys: Object.keys(sample),
+      cabKeys: Object.keys(sample.cabecalho || {}),
+      infoCadKeys: Object.keys(sample.infoCadastro || {}),
+      etapa: sample.cabecalho?.etapa,
+      descEtapa: sample.cabecalho?.descricao_etapa,
+      infoCadEtapa: sample.infoCadastro?.cEtapa,
+      infoCadDescEtapa: sample.infoCadastro?.cDescricaoEtapa,
+    }, 'Omie ListarPedidos — sample pedido (debug)')
+  }
+
+  // Buscar páginas restantes
   if (totalPaginas > 1) {
     const pageNumbers = Array.from({ length: totalPaginas - 1 }, (_, i) => i + 2)
-    const BATCH_SIZE = 3
+    const BATCH = 3
 
-    for (let i = 0; i < pageNumbers.length; i += BATCH_SIZE) {
-      const batch = pageNumbers.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < pageNumbers.length; i += BATCH) {
+      const batch = pageNumbers.slice(i, i + BATCH)
       const results = await Promise.all(
         batch.map(pg =>
           omieCall<any>(
@@ -391,61 +473,76 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     }
   }
 
-  log.info({ total: pedidosOmie.length, paginas: totalPaginas }, 'Pedidos Omie carregados para acompanhamento')
+  log.info({ total: pedidosOmie.length, totalRegistros, paginas: totalPaginas }, 'Pedidos Omie carregados')
+  return pedidosOmie
+}
 
+export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanhamento[]> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  const pedidosOmie = await fetchAllPedidosOmie(creds)
   if (pedidosOmie.length === 0) return []
 
-  // Helper: converter data dd/mm/aaaa para yyyy-mm-dd (ISO)
-  const parseOmieDate = (d: string): string => {
-    if (!d || d.length < 10) return ''
-    const parts = d.split('/')
-    if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`
-    return d
+  const resultado = pedidosOmie.map(mapPedidoOmie)
+
+  // Ordenar mais recentes primeiro
+  resultado.sort((a, b) => Number(b.omieCodigo) - Number(a.omieCodigo))
+
+  return resultado
+}
+
+// Busca sob demanda: pesquisar pedidos por número ou cliente direto no Omie
+export async function buscarPedidoOmie(termo: string): Promise<PedidoAcompanhamento[]> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  // Tentar buscar por número do pedido
+  const numeroPedido = parseInt(termo, 10)
+
+  if (!isNaN(numeroPedido) && numeroPedido > 0) {
+    // Busca por código do pedido
+    try {
+      const result = await omieCall<any>(
+        '/produtos/pedido/',
+        'ConsultarPedido',
+        [{ codigo_pedido: numeroPedido }],
+        { credentials: creds }
+      )
+      if (result?.cabecalho) {
+        return [mapPedidoOmie(result)]
+      }
+    } catch {
+      // Tentar como número_pedido
+      try {
+        const result = await omieCall<any>(
+          '/produtos/pedido/',
+          'ConsultarPedido',
+          [{ numero_pedido: termo }],
+          { credentials: creds }
+        )
+        if (result?.cabecalho) {
+          return [mapPedidoOmie(result)]
+        }
+      } catch { /* continua para busca geral */ }
+    }
   }
 
-  // Mapear para formato padronizado
-  const resultado: PedidoAcompanhamento[] = pedidosOmie.map((p: any) => {
+  // Busca geral com filtro (busca por texto no Omie não existe, então buscamos tudo e filtramos)
+  const pedidosOmie = await fetchAllPedidosOmie(creds)
+  const termoLower = termo.toLowerCase()
+  const filtered = pedidosOmie.filter((p: any) => {
     const cab = p.cabecalho || {}
-    const infoCad = p.infoCadastro || {}
-    const totalPedido = p.total_pedido || {}
-
-    const etapa = cab.etapa || infoCad.cEtapa || ''
-    const descEtapa = cab.descricao_etapa || infoCad.cDescEtapa || etapa
-
-    // Mapear etapa Omie para status
-    let statusOmie = 'enviado'
-    const etapaLower = descEtapa.toLowerCase()
-    if (etapaLower.includes('faturado') || etapaLower.includes('faturar')) statusOmie = 'faturado'
-    else if (etapaLower.includes('separar') || etapaLower.includes('produção') || etapaLower.includes('separação')) statusOmie = 'em_producao'
-    else if (etapaLower.includes('expedir') || etapaLower.includes('expedido') || etapaLower.includes('expedição')) statusOmie = 'expedido'
-    else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) statusOmie = 'entregue'
-    else if (etapaLower.includes('cancelado')) statusOmie = 'cancelado'
-
-    // Usar data_previsao do cabecalho, converter para ISO
-    const dataRaw = cab.data_previsao || infoCad.dDtInc || ''
-    const dataISO = parseOmieDate(dataRaw)
-
-    return {
-      pedidoId: cab.codigo_pedido || 0,
-      numero: cab.numero_pedido ? String(cab.numero_pedido) : String(cab.codigo_pedido || ''),
-      clienteNome: cab.razao_social || cab.nome_fantasia || String(cab.codigo_cliente || ''),
-      clienteId: cab.codigo_cliente || 0,
-      vendedorNome: cab.codigo_vendedor ? `Vendedor ${cab.codigo_vendedor}` : '',
-      valor: Number(totalPedido.valor_total_pedido || cab.valor_total || 0),
-      dataCriacao: dataISO || dataRaw,
-      statusCrm: '',
-      statusOmie,
-      etapaOmie: descEtapa,
-      nf: infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : '',
-      codigoRastreio: '',
-      dataFaturamento: parseOmieDate(infoCad.dDataFaturamento || infoCad.dDtFat || ''),
-      omieCodigo: String(cab.codigo_pedido || ''),
-    }
+    return (
+      String(cab.codigo_pedido || '').includes(termo) ||
+      String(cab.numero_pedido || '').includes(termo) ||
+      (cab.razao_social || '').toLowerCase().includes(termoLower) ||
+      (cab.nome_fantasia || '').toLowerCase().includes(termoLower)
+    )
   })
 
-  // Ordenar mais recentes primeiro (por codigo_pedido desc — maior = mais novo)
-  resultado.sort((a: PedidoAcompanhamento, b: PedidoAcompanhamento) => Number(b.omieCodigo) - Number(a.omieCodigo))
-
+  const resultado = filtered.map(mapPedidoOmie)
+  resultado.sort((a, b) => Number(b.omieCodigo) - Number(a.omieCodigo))
   return resultado
 }
 

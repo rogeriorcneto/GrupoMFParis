@@ -143,6 +143,13 @@ export async function omieGetPedidosAcompanhamento(): Promise<{ success: boolean
   return res.json()
 }
 
+// ─── Busca sob demanda no Omie ───
+
+export async function omieBuscarPedido(termo: string): Promise<{ success: boolean; data?: PedidoAcompanhamento[]; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/pedidos/buscar?q=${encodeURIComponent(termo)}`)
+  return res.json()
+}
+
 // ─── Consultar Entrega ───
 
 export interface EntregaOmieResult {
