@@ -484,6 +484,23 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
   const pedidosOmie = await fetchAllPedidosOmie(creds)
   if (pedidosOmie.length === 0) return []
 
+  // Debug: logar todas as etapas únicas encontradas
+  const etapasMap = new Map<string, number>()
+  for (const p of pedidosOmie) {
+    const cab = p.cabecalho || {}
+    const infoCad = p.infoCadastro || {}
+    const etapaRaw = cab.etapa || infoCad.cEtapa || infoCad.etapa || 'VAZIO'
+    const descEtapa = cab.descricao_etapa || infoCad.cDescricaoEtapa || infoCad.cDescEtapa || ''
+    const key = `${etapaRaw}|${descEtapa}`
+    etapasMap.set(key, (etapasMap.get(key) || 0) + 1)
+  }
+  log.info({ etapas: Object.fromEntries(etapasMap), totalPedidos: pedidosOmie.length }, 'Omie — etapas únicas encontradas (debug)')
+
+  // Debug: logar JSON completo do primeiro pedido
+  if (pedidosOmie.length > 0) {
+    log.info({ primeiroPedido: JSON.stringify(pedidosOmie[0]).slice(0, 2000) }, 'Omie — primeiro pedido RAW (debug)')
+  }
+
   const resultado = pedidosOmie.map(mapPedidoOmie)
 
   // Ordenar mais recentes primeiro
