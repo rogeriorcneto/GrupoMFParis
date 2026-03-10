@@ -347,13 +347,14 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  // Filtrar pedidos de 01/01/2026 em diante
+  // Buscar TODAS as páginas de pedidos do Omie
+  const PER_PAGE = 200
+  const MAX_PAGES = 50 // Segurança: máximo 10.000 pedidos
+
   const filtroParams = {
     pagina: 1,
-    registros_por_pagina: 50,
+    registros_por_pagina: PER_PAGE,
     apenas_importado_api: 'N',
-    filtrar_por_data_de: '01/01/2026',
-    filtrar_por_data_ate: '31/12/2030',
   }
 
   // Primeira chamada para saber total de páginas
@@ -364,20 +365,33 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     { credentials: creds }
   )
 
-  const totalPaginas = firstResult?.total_de_paginas || 1
+  const totalPaginas = Math.min(firstResult?.total_de_paginas || 1, MAX_PAGES)
+  let pedidosOmie: any[] = firstResult?.pedido_venda_produto || []
 
-  // Se há mais de 1 página, buscar a última (mais recentes)
-  let pedidosOmie = firstResult?.pedido_venda_produto || []
-
+  // Buscar páginas restantes em paralelo (batches de 3 para respeitar rate-limit)
   if (totalPaginas > 1) {
-    const lastResult = await omieCall<any>(
-      '/produtos/pedido/',
-      'ListarPedidos',
-      [{ ...filtroParams, pagina: totalPaginas }],
-      { credentials: creds }
-    )
-    pedidosOmie = lastResult?.pedido_venda_produto || pedidosOmie
+    const pageNumbers = Array.from({ length: totalPaginas - 1 }, (_, i) => i + 2)
+    const BATCH_SIZE = 3
+
+    for (let i = 0; i < pageNumbers.length; i += BATCH_SIZE) {
+      const batch = pageNumbers.slice(i, i + BATCH_SIZE)
+      const results = await Promise.all(
+        batch.map(pg =>
+          omieCall<any>(
+            '/produtos/pedido/',
+            'ListarPedidos',
+            [{ ...filtroParams, pagina: pg }],
+            { credentials: creds }
+          ).catch(() => ({ pedido_venda_produto: [] }))
+        )
+      )
+      for (const r of results) {
+        pedidosOmie = pedidosOmie.concat(r?.pedido_venda_produto || [])
+      }
+    }
   }
+
+  log.info({ total: pedidosOmie.length, paginas: totalPaginas }, 'Pedidos Omie carregados para acompanhamento')
 
   if (pedidosOmie.length === 0) return []
 
@@ -455,28 +469,39 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
 
   const hoje = new Date()
 
-  // Helper para buscar última página (mais recentes) de uma lista financeira
-  async function fetchUltimaPagina(endpoint: string, method: string, resultKey: string): Promise<any[]> {
-    const params = { pagina: 1, registros_por_pagina: 50 }
+  // Helper para buscar TODAS as páginas de uma lista financeira
+  async function fetchAllPages(endpoint: string, method: string, resultKey: string): Promise<any[]> {
+    const PER_PAGE = 200
+    const MAX_PAGES = 30
+    const params = { pagina: 1, registros_por_pagina: PER_PAGE }
 
-    // Primeira chamada: descobrir total de páginas
     const first = await omieCall<any>(endpoint, method, [params], { credentials: creds! })
-    const totalPag = first?.total_de_paginas || 1
+    const totalPag = Math.min(first?.total_de_paginas || 1, MAX_PAGES)
+    let all: any[] = first?.[resultKey] || []
 
-    // Se só tem 1 página, filtrar localmente por data >= 2026
-    if (totalPag <= 1) {
-      return (first?.[resultKey] || [])
+    if (totalPag > 1) {
+      const pageNumbers = Array.from({ length: totalPag - 1 }, (_, i) => i + 2)
+      const BATCH = 3
+      for (let i = 0; i < pageNumbers.length; i += BATCH) {
+        const batch = pageNumbers.slice(i, i + BATCH)
+        const results = await Promise.all(
+          batch.map(pg =>
+            omieCall<any>(endpoint, method, [{ ...params, pagina: pg }], { credentials: creds! })
+              .catch(() => ({ [resultKey]: [] }))
+          )
+        )
+        for (const r of results) all = all.concat(r?.[resultKey] || [])
+      }
     }
 
-    // Buscar última página (mais recentes)
-    const last = await omieCall<any>(endpoint, method, [{ ...params, pagina: totalPag }], { credentials: creds! })
-    return (last?.[resultKey] || [])
+    log.info({ endpoint, total: all.length, paginas: totalPag }, 'Financeiro Omie carregado')
+    return all
   }
 
   const [contasReceberRaw, contasPagarRaw] = await Promise.all([
-    fetchUltimaPagina('/financas/contareceber/', 'ListarContasReceber', 'conta_receber_cadastro')
+    fetchAllPages('/financas/contareceber/', 'ListarContasReceber', 'conta_receber_cadastro')
       .catch(() => []),
-    fetchUltimaPagina('/financas/contapagar/', 'ListarContasPagar', 'conta_pagar_cadastro')
+    fetchAllPages('/financas/contapagar/', 'ListarContasPagar', 'conta_pagar_cadastro')
       .catch(() => []),
   ])
 
@@ -532,8 +557,8 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
     saldo: totalReceber - totalPagar,
     titulosVencidos,
     titulosAVencer,
-    contasReceber: contasReceber.slice(0, 20),
-    contasPagar: contasPagar.slice(0, 20),
+    contasReceber,
+    contasPagar,
   }
 }
 

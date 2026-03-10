@@ -91,11 +91,14 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
   const [filtroStatus, setFiltroStatus] = useState<string>('')
   const [busca, setBusca] = useState('')
   const [entregaModal, setEntregaModal] = useState<{ pedidoId: number; data?: EntregaOmieResult; loading: boolean; error?: string } | null>(null)
+  const [visibleCount, setVisibleCount] = useState(20)
 
   // Financeiro state
   const [financeiro, setFinanceiro] = useState<FinanceiroResumo | null>(null)
   const [finLoading, setFinLoading] = useState(false)
   const [finError, setFinError] = useState('')
+  const [visibleReceber, setVisibleReceber] = useState(20)
+  const [visiblePagar, setVisiblePagar] = useState(20)
 
   // Logistica state
   const [syncLoading, setSyncLoading] = useState(false)
@@ -172,10 +175,15 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
       return p.numero.toLowerCase().includes(q) ||
         p.clienteNome.toLowerCase().includes(q) ||
         p.nf.includes(q) ||
-        p.codigoRastreio.toLowerCase().includes(q)
+        p.codigoRastreio.toLowerCase().includes(q) ||
+        p.omieCodigo.includes(q) ||
+        String(p.pedidoId).includes(q)
     }
     return true
   })
+
+  const visiblePedidos = filteredPedidos.slice(0, visibleCount)
+  const hasMore = filteredPedidos.length > visibleCount
 
   // Logistica: pedidos in transit
   const pedidosLogistica = acompanhamento.filter(p => ['enviado', 'em_producao', 'faturado', 'expedido'].includes(p.statusOmie))
@@ -224,9 +232,9 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Buscar por número, cliente, NF, rastreio..."
+                  placeholder="Buscar por número, cliente, NF, rastreio, código..."
                   value={busca}
-                  onChange={e => setBusca(e.target.value)}
+                  onChange={e => { setBusca(e.target.value); setVisibleCount(20) }}
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-400"
                 />
               </div>
@@ -234,7 +242,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                 <FunnelIcon className="h-4 w-4 text-gray-400" />
                 <select
                   value={filtroStatus}
-                  onChange={e => setFiltroStatus(e.target.value)}
+                  onChange={e => { setFiltroStatus(e.target.value); setVisibleCount(20) }}
                   className="text-sm border border-gray-300 rounded-apple px-2 py-2 focus:outline-none focus:ring-2 focus:ring-primary-400"
                 >
                   <option value="">Todos os status</option>
@@ -302,7 +310,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredPedidos.map(p => (
+                      {visiblePedidos.map(p => (
                         <tr key={p.pedidoId} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3">
                             <span className="font-semibold text-gray-900">{p.numero}</span>
@@ -331,6 +339,21 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                       ))}
                     </tbody>
                   </table>
+                </div>
+                {/* Pagination footer */}
+                <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                  <span className="text-xs text-gray-500">
+                    Mostrando {visiblePedidos.length} de {filteredPedidos.length} pedidos
+                    {acompanhamento.length !== filteredPedidos.length && ` (${acompanhamento.length} total)`}
+                  </span>
+                  {hasMore && (
+                    <button
+                      onClick={() => setVisibleCount(prev => prev + 30)}
+                      className="px-4 py-1.5 text-sm bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-apple font-medium transition-colors"
+                    >
+                      Carregar mais ({filteredPedidos.length - visibleCount} restantes)
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -395,6 +418,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                     <h3 className="text-sm font-bold text-green-800">Contas a Receber ({financeiro.contasReceber.length})</h3>
                   </div>
                   {financeiro.contasReceber.length > 0 ? (
+                    <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
@@ -406,7 +430,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {financeiro.contasReceber.map((cr: any, idx: number) => (
+                          {financeiro.contasReceber.slice(0, visibleReceber).map((cr: any, idx: number) => (
                             <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-4 py-2 text-gray-700 truncate max-w-[200px]">{cr.nome_cliente || cr.codigo_cliente_fornecedor || '—'}</td>
                               <td className="px-4 py-2 text-right font-medium">R$ {Number(cr.valor_documento || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -421,6 +445,13 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                         </tbody>
                       </table>
                     </div>
+                    {financeiro.contasReceber.length > visibleReceber && (
+                      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Mostrando {visibleReceber} de {financeiro.contasReceber.length}</span>
+                        <button onClick={() => setVisibleReceber(prev => prev + 30)} className="px-3 py-1 text-xs bg-green-50 text-green-700 hover:bg-green-100 rounded-apple font-medium">Carregar mais</button>
+                      </div>
+                    )}
+                    </>
                   ) : (
                     <p className="p-4 text-sm text-gray-400">Nenhuma conta a receber encontrada</p>
                   )}
@@ -432,6 +463,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                     <h3 className="text-sm font-bold text-red-800">Contas a Pagar ({financeiro.contasPagar.length})</h3>
                   </div>
                   {financeiro.contasPagar.length > 0 ? (
+                    <>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
@@ -443,7 +475,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                          {financeiro.contasPagar.map((cp: any, idx: number) => (
+                          {financeiro.contasPagar.slice(0, visiblePagar).map((cp: any, idx: number) => (
                             <tr key={idx} className="hover:bg-gray-50">
                               <td className="px-4 py-2 text-gray-700 truncate max-w-[200px]">{cp.nome_fornecedor || cp.codigo_cliente_fornecedor || '—'}</td>
                               <td className="px-4 py-2 text-right font-medium">R$ {Number(cp.valor_documento || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -458,6 +490,13 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                         </tbody>
                       </table>
                     </div>
+                    {financeiro.contasPagar.length > visiblePagar && (
+                      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                        <span className="text-xs text-gray-500">Mostrando {visiblePagar} de {financeiro.contasPagar.length}</span>
+                        <button onClick={() => setVisiblePagar(prev => prev + 30)} className="px-3 py-1 text-xs bg-red-50 text-red-700 hover:bg-red-100 rounded-apple font-medium">Carregar mais</button>
+                      </div>
+                    )}
+                    </>
                   ) : (
                     <p className="p-4 text-sm text-gray-400">Nenhuma conta a pagar encontrada</p>
                   )}
