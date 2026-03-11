@@ -304,13 +304,15 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {[
                 { label: 'Total Omie', value: acompanhamento.length, color: 'text-gray-900' },
                 { label: 'Enviados', value: acompanhamento.filter(p => p.statusOmie === 'enviado').length, color: 'text-blue-600' },
+                { label: 'Em Produção', value: acompanhamento.filter(p => p.statusOmie === 'em_producao').length, color: 'text-yellow-600' },
                 { label: 'Faturados', value: acompanhamento.filter(p => p.statusOmie === 'faturado').length, color: 'text-green-600' },
                 { label: 'Expedidos', value: acompanhamento.filter(p => p.statusOmie === 'expedido').length, color: 'text-orange-600' },
                 { label: 'Entregues', value: acompanhamento.filter(p => p.statusOmie === 'entregue').length, color: 'text-emerald-600' },
+                { label: 'Cancelados', value: acompanhamento.filter(p => p.statusOmie === 'cancelado').length, color: 'text-red-600' },
               ].map(kpi => (
                 <div key={kpi.label} className="bg-white rounded-apple border border-gray-200 p-3 text-center">
                   <p className={`text-2xl font-bold ${kpi.color}`}>{kpi.value}</p>

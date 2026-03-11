@@ -352,21 +352,26 @@ function parseOmieDate(d: string): string {
 }
 
 // Mapear etapa Omie (código numérico ou texto) para status padronizado
+// Códigos confirmados via debug logs: 00=cancelado, 10=enviado, 20=em_producao, 60=faturado, 70=expedido, 80=entregue
 function mapEtapaToStatus(etapa: string): string {
   const e = String(etapa).trim()
-  // Códigos numéricos do Omie
-  if (e === '10') return 'enviado'       // Separar / Aguardando
-  if (e === '20') return 'em_producao'   // Separado / Em produção
-  if (e === '30' || e === '40') return 'faturado' // Faturado
-  if (e === '50' || e === '60') return 'expedido' // Expedido / Em trânsito
-  if (e === '70' || e === '80') return 'entregue' // Entregue / Finalizado
+  // Códigos numéricos do Omie (confirmados em produção)
+  if (e === '00') return 'cancelado'     // Cancelado / Orçamento cancelado
+  if (e === '10') return 'enviado'       // Pedido enviado / Em aberto
+  if (e === '20') return 'em_producao'   // Em separação / Produção
+  if (e === '30') return 'em_producao'   // Aguardando faturamento
+  if (e === '40') return 'faturado'      // Em faturamento
+  if (e === '50') return 'faturado'      // Faturamento parcial
+  if (e === '60') return 'faturado'      // Faturado (NF emitida)
+  if (e === '70') return 'expedido'      // Expedido / Em trânsito
+  if (e === '80') return 'entregue'      // Entregue / Encerrado
   if (e === '90' || e === '99') return 'cancelado'
   // Texto descritivo (fallback)
   const lower = e.toLowerCase()
   if (lower.includes('faturad') || lower.includes('faturar') || lower.includes('nf')) return 'faturado'
   if (lower.includes('separ') || lower.includes('produ')) return 'em_producao'
   if (lower.includes('exped') || lower.includes('trânsito') || lower.includes('transit')) return 'expedido'
-  if (lower.includes('entreg') || lower.includes('finaliz') || lower.includes('conclu')) return 'entregue'
+  if (lower.includes('entreg') || lower.includes('finaliz') || lower.includes('conclu') || lower.includes('encerr')) return 'entregue'
   if (lower.includes('cancel')) return 'cancelado'
   return 'enviado'
 }
@@ -415,7 +420,7 @@ function mapPedidoOmie(p: any): PedidoAcompanhamento {
 // Buscar todas as páginas de pedidos do Omie (com filtro de data para não sobrecarregar)
 async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string }, filtroData?: { de: string; ate: string }): Promise<any[]> {
   const PER_PAGE = 50 // Omie cap real é ~50
-  const MAX_PAGES = 300 // 300 * 50 = 15.000 pedidos max
+  const MAX_PAGES = 500 // 500 * 50 = 25.000 pedidos max
 
   // Filtro de data padrão: últimos 12 meses
   const agora = new Date()
