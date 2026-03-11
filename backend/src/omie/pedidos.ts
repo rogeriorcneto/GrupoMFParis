@@ -465,6 +465,7 @@ async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string },
   }
 
   // Buscar páginas restantes
+  let failedPages = 0
   if (totalPaginas > 1) {
     const pageNumbers = Array.from({ length: totalPaginas - 1 }, (_, i) => i + 2)
     const BATCH = 3
@@ -478,16 +479,24 @@ async function fetchAllPedidosOmie(creds: { appKey: string; appSecret: string },
             'ListarPedidos',
             [{ ...filtroParams, pagina: pg }],
             { credentials: creds }
-          ).catch(() => ({ pedido_venda_produto: [] }))
+          ).catch((err) => {
+            failedPages++
+            log.warn({ pg, error: err?.message || String(err) }, 'Omie ListarPedidos — falha ao buscar página')
+            return { pedido_venda_produto: [] }
+          })
         )
       )
       for (const r of results) {
         pedidosOmie = pedidosOmie.concat(r?.pedido_venda_produto || [])
       }
+      // Pequeno delay entre batches para evitar rate limit
+      if (i + BATCH < pageNumbers.length) {
+        await new Promise(r => setTimeout(r, 300))
+      }
     }
   }
 
-  log.info({ total: pedidosOmie.length, totalRegistros, paginas: totalPaginas, filtro: filtroParams.filtrar_por_data_de + ' a ' + filtroParams.filtrar_por_data_ate }, 'Pedidos Omie carregados')
+  log.info({ total: pedidosOmie.length, totalRegistros, paginas: totalPaginas, failedPages, filtro: filtroParams.filtrar_por_data_de + ' a ' + filtroParams.filtrar_por_data_ate }, 'Pedidos Omie carregados')
   return pedidosOmie
 }
 
