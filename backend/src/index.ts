@@ -561,7 +561,7 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
     const { error: updateErr } = await supabase
       .from('pedidos')
       .update({
-        status: 'aprovado',
+        status: 'confirmado',
         aprovado_por: userId,
         data_aprovacao: new Date().toISOString(),
       })

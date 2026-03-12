@@ -155,6 +155,11 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   if (pedError || !pedido) throw new Error(`Pedido ${pedidoId} não encontrado no CRM`)
 
+  // Pedido precisa estar confirmado (aprovado pelo gerente)
+  if (pedido.status !== 'confirmado') {
+    throw new Error(`Pedido ${pedidoId} não está aprovado. Status atual: "${pedido.status}". Somente pedidos confirmados podem ser enviados ao Omie.`)
+  }
+
   // Já foi enviado ao Omie?
   if (pedido.omie_codigo) {
     throw new Error(`Pedido ${pedidoId} já foi enviado ao Omie (código: ${pedido.omie_codigo})`)

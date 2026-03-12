@@ -1,7 +1,7 @@
 import React from 'react'
 import { PaperAirplaneIcon, ShoppingCartIcon, PhotoIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline'
 import type { Pedido, Cliente, Produto, Vendedor, ItemPedido } from '../../types'
-import { omieEnviarPedido } from '../../lib/omieApi'
+import { enviarPedidoOmie } from '../../lib/botApi'
 
 function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, showToast }: {
   pedidos: Pedido[]
@@ -30,30 +30,13 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   const [showClienteDropdown, setShowClienteDropdown] = React.useState(false)
   const [enviandoOmie, setEnviandoOmie] = React.useState<number | null>(null)
 
-  const handleConfirmarEEnviarOmie = async (pedido: Pedido) => {
-    // 1. Confirmar o pedido no CRM
-    onUpdatePedido({ ...pedido, status: 'confirmado' })
-    // 2. Enviar ao Omie
-    setEnviandoOmie(pedido.id)
-    try {
-      const result = await omieEnviarPedido(pedido.id)
-      if (result.success) {
-        showToast?.('success', `Pedido ${pedido.numero} confirmado e enviado ao Omie! Código: ${result.omie_codigo}`)
-      } else {
-        showToast?.('error', `Pedido confirmado, mas falha ao enviar ao Omie: ${result.error}`)
-      }
-    } catch {
-      showToast?.('error', 'Pedido confirmado, mas erro ao conectar com Omie. Tente enviar manualmente.')
-    }
-    setEnviandoOmie(null)
-  }
-
+  // Reenviar ao Omie manualmente (para pedidos já confirmados que falharam o envio)
   const handleEnviarOmieManual = async (pedido: Pedido) => {
     setEnviandoOmie(pedido.id)
     try {
-      const result = await omieEnviarPedido(pedido.id)
+      const result = await enviarPedidoOmie(pedido.id)
       if (result.success) {
-        showToast?.('success', `Pedido ${pedido.numero} enviado ao Omie! Código: ${result.omie_codigo}`)
+        showToast?.('success', `Pedido ${pedido.numero} enviado ao Omie!`)
       } else {
         showToast?.('error', `Falha ao enviar ao Omie: ${result.error}`)
       }
@@ -369,17 +352,11 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     {isGerente && pedido.status === 'enviado' && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                         <button
-                          onClick={() => handleConfirmarEEnviarOmie(pedido)}
-                          disabled={enviandoOmie === pedido.id}
-                          className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-apple hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                          onClick={() => onUpdatePedido({ ...pedido, status: 'confirmado' })}
+                          className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-apple hover:bg-green-700 flex items-center gap-1"
                         >
-                          {enviandoOmie === pedido.id ? (
-                            <><svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando ao Omie...</>
-                          ) : (
-                            <>✅ Confirmar + Enviar Omie</>
-                          )}
+                          ✅ Aprovar (envia ao Omie)
                         </button>
-                        <button onClick={() => onUpdatePedido({ ...pedido, status: 'confirmado' })} className="px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 text-xs font-semibold rounded-apple hover:bg-green-100">✅ Só Confirmar</button>
                         <button onClick={() => onUpdatePedido({ ...pedido, status: 'cancelado' })} className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 text-xs font-semibold rounded-apple hover:bg-red-100">❌ Cancelar</button>
                       </div>
                     )}
