@@ -114,7 +114,9 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
     try {
       const res = await omieGetPedidosAcompanhamento()
       if (res.success && res.data) setAcompanhamento(res.data)
-      else setPedidosError(res.error || 'Erro ao carregar pedidos')
+      else {
+        setPedidosError(res.error || 'Erro ao carregar pedidos')
+      }
     } catch (err: any) {
       setPedidosError(err.message || 'Erro de conexão')
     } finally {
@@ -146,7 +148,9 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
     try {
       const res = await omieGetFinanceiroResumo()
       if (res.success && res.data) setFinanceiro(res.data)
-      else setFinError(res.error || 'Erro ao carregar financeiro')
+      else {
+        setFinError(res.error || 'Erro ao carregar financeiro')
+      }
     } catch (err: any) {
       setFinError(err.message || 'Erro de conexão')
     } finally {

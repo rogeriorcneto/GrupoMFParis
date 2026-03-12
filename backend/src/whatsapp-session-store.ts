@@ -10,7 +10,7 @@ import { log } from './logger.js'
  *
  * Drop-in replacement for useMultiFileAuthState().
  */
-export async function useSupabaseAuthState(prefix = 'bot'): Promise<{
+export async function useSupabaseAuthState(prefix = 'bot', options?: { fresh?: boolean }): Promise<{
   state: AuthenticationState
   saveCreds: () => Promise<void>
   clearSession: () => Promise<void>
@@ -48,7 +48,7 @@ export async function useSupabaseAuthState(prefix = 'bot'): Promise<{
 
   // ── Creds ─────────────────────────────────────────────────────────────────
 
-  const creds = (await readData('creds')) ?? initAuthCreds()
+  const creds = options?.fresh ? initAuthCreds() : ((await readData('creds')) ?? initAuthCreds())
 
   // ── Keys (Signal Protocol) ────────────────────────────────────────────────
 

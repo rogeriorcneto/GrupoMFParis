@@ -387,7 +387,8 @@ export default function AppRouter({
         }}
       />
     case 'omie':
-      return <OmieView pedidos={pedidos} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} />
+      // Renderizado abaixo como componente persistente
+      return null
     case 'ia':
       return <AssistenteIAView
         clientes={clientes}
@@ -399,4 +400,27 @@ export default function AppRouter({
     default:
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
   }
+}
+
+/** Wrapper que mantém OmieView sempre montado após primeira visita (evita reload ao trocar de aba) */
+export function PersistentViews({ activeView, pedidos, clientes, vendedores, loggedUser }: {
+  activeView: string
+  pedidos: Pedido[]
+  clientes: Cliente[]
+  vendedores: Vendedor[]
+  loggedUser: Vendedor | null
+}) {
+  const [omieVisited, setOmieVisited] = React.useState(false)
+
+  React.useEffect(() => {
+    if (activeView === 'omie') setOmieVisited(true)
+  }, [activeView])
+
+  if (!omieVisited) return null
+
+  return (
+    <div style={{ display: activeView === 'omie' ? 'block' : 'none' }} className="h-full">
+      <OmieView pedidos={pedidos} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} />
+    </div>
+  )
 }

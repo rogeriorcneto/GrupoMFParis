@@ -175,9 +175,18 @@ export async function sendUserWhatsAppMessage(
 
 export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
   const existing = sessions.get(vendedorId)
-  if (existing && (existing.status === 'connected' || existing.status === 'connecting')) {
-    log.warn(`WhatsApp do vendedor ${vendedorId} já está conectado ou conectando`)
+  if (existing && existing.status === 'connected') {
+    log.warn(`WhatsApp do vendedor ${vendedorId} já está conectado`)
     return
+  }
+
+  // Se já está "connecting" ou "qr", limpar antes de reconectar
+  if (existing && (existing.status === 'connecting' || existing.status === 'qr')) {
+    if (existing.sock) {
+      try { existing.sock.end(undefined) } catch { /* ignore */ }
+      existing.sock = null
+    }
+    sessions.delete(vendedorId)
   }
 
   // Check max sessions limit
@@ -185,14 +194,20 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     throw new Error(`Limite de ${MAX_SESSIONS} sessões WhatsApp atingido. Desconecte uma sessão primeiro.`)
   }
 
-  const session = existing || createEmptySession(vendedorId)
+  const session = createEmptySession(vendedorId)
   session.status = 'connecting'
   sessions.set(vendedorId, session)
 
   log.info(`📱 Iniciando conexão WhatsApp para vendedor ${vendedorId}...`)
 
   try {
-    const { state, saveCreds } = await useSupabaseAuthState(`user_${vendedorId}`)
+    // Limpar credenciais antigas e usar creds frescas para forçar QR code novo
+    const { state, saveCreds, clearSession } = await useSupabaseAuthState(`user_${vendedorId}`, { fresh: true })
+    try {
+      await clearSession()
+      log.info(`🧹 Credenciais antigas limpas para vendedor ${vendedorId}`)
+    } catch (e) { log.warn({ err: e }, `Aviso ao limpar sessão do vendedor ${vendedorId}`) }
+
     const { version } = await fetchLatestBaileysVersion()
 
     const sock = makeWASocket({
@@ -222,24 +237,18 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       if (connection === 'close') {
         session.qrDataUrl = null
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
+        log.info(`🔴 WhatsApp do vendedor ${vendedorId} desconectou (reason: ${reason})`)
 
-        if (reason === DisconnectReason.loggedOut) {
-          log.info(`🔴 WhatsApp do vendedor ${vendedorId} deslogado pelo usuário`)
-          session.status = 'disconnected'
-          session.connectedNumber = null
-          session.startTime = null
-          session.reconnectAttempts = 0
-          sessions.delete(vendedorId)
-        } else if (session.reconnectAttempts < MAX_RECONNECT) {
-          session.reconnectAttempts++
-          log.info(`🔄 Reconectando vendedor ${vendedorId}... (tentativa ${session.reconnectAttempts}/${MAX_RECONNECT})`)
-          session.status = 'disconnected'
-          setTimeout(() => connectUserWhatsApp(vendedorId), 3000 * session.reconnectAttempts)
-        } else {
-          log.error(`❌ Máximo de tentativas de reconexão atingido para vendedor ${vendedorId}`)
-          session.status = 'disconnected'
-          sessions.delete(vendedorId)
+        // Sempre limpar — o usuário precisa escanear QR de novo
+        session.status = 'disconnected'
+        session.connectedNumber = null
+        session.startTime = null
+        session.reconnectAttempts = 0
+        if (session.sock) {
+          try { session.sock.end(undefined) } catch { /* ignore */ }
+          session.sock = null
         }
+        sessions.delete(vendedorId)
       }
 
       if (connection === 'open') {

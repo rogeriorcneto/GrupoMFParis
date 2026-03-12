@@ -22,7 +22,7 @@ import Toast from './components/Toast'
 import ClienteFormModal from './components/ClienteFormModal'
 import AIModal from './components/AIModal'
 import FunilModals from './components/FunilModals'
-import AppRouter from './components/AppRouter'
+import AppRouter, { PersistentViews } from './components/AppRouter'
 import GlobalSearch from './components/GlobalSearch'
 
 function App() {
@@ -386,21 +386,30 @@ function App() {
               </div>
             </div>
           ) : (
-            <AppRouter
-              activeView={activeView} loggedUser={loggedUser}
-              clientes={clientes} interacoes={interacoes} vendedores={vendedores}
-              tarefas={tarefas} atividades={atividades} templates={templates}
-              templatesMsgs={templatesMsgs} cadencias={cadencias} campanhas={campanhas}
-              jobs={jobs} produtos={produtos} pedidos={pedidos} dashboardMetrics={dashboardMetrics}
-              setClientes={setClientes} setInteracoes={setInteracoes} setVendedores={setVendedores}
-              setTarefas={setTarefas} setTemplates={setTemplates} setTemplatesMsgs={setTemplatesMsgs}
-              setCampanhas={setCampanhas} setProdutos={setProdutos} setPedidos={setPedidos}
-              showToast={showToast} openModal={openModal} handleEditCliente={handleEditCliente}
-              handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDrop={handleDrop}
-              handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
-              moverCliente={moverCliente}
-              startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
-            />
+            <>
+              <AppRouter
+                activeView={activeView} loggedUser={loggedUser}
+                clientes={clientes} interacoes={interacoes} vendedores={vendedores}
+                tarefas={tarefas} atividades={atividades} templates={templates}
+                templatesMsgs={templatesMsgs} cadencias={cadencias} campanhas={campanhas}
+                jobs={jobs} produtos={produtos} pedidos={pedidos} dashboardMetrics={dashboardMetrics}
+                setClientes={setClientes} setInteracoes={setInteracoes} setVendedores={setVendedores}
+                setTarefas={setTarefas} setTemplates={setTemplates} setTemplatesMsgs={setTemplatesMsgs}
+                setCampanhas={setCampanhas} setProdutos={setProdutos} setPedidos={setPedidos}
+                showToast={showToast} openModal={openModal} handleEditCliente={handleEditCliente}
+                handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDrop={handleDrop}
+                handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
+                moverCliente={moverCliente}
+                startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
+              />
+              <PersistentViews
+                activeView={activeView}
+                pedidos={pedidos}
+                clientes={clientes}
+                vendedores={vendedores}
+                loggedUser={loggedUser}
+              />
+            </>
           )}
         </div>
 

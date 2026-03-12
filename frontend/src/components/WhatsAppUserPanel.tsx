@@ -45,19 +45,46 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const chatEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Estado local de "aguardando QR" — persiste independente do status do backend
+  const [waitingForQR, setWaitingForQR] = useState(false)
+  const retryCountRef = useRef(0)
+  const MAX_RETRIES = 3
+  const connectStartRef = useRef(0)
+  const QR_TIMEOUT = 30_000 // 30s para gerar QR
+
   // Poll status + QR
   const fetchStatus = useCallback(async () => {
     try {
       const status = await getUserWhatsAppStatus()
       setWaStatus(status)
       setBotOnline(true)
-      setError(null)
 
       if (status.status === 'qr' || status.status === 'connecting') {
         const qrRes = await getUserWhatsAppQR()
         setQrData(qrRes.qr)
+        if (qrRes.qr) {
+          setWaitingForQR(false)
+          setError(null)
+        }
+      } else if (status.connected) {
+        setQrData(null)
+        setWaitingForQR(false)
+        setError(null)
+        retryCountRef.current = 0
       } else {
         setQrData(null)
+      }
+
+      // Se estava esperando QR e o backend voltou a 'disconnected', tentar de novo
+      if (waitingForQR && status.status === 'disconnected') {
+        if (retryCountRef.current < MAX_RETRIES) {
+          retryCountRef.current++
+          console.log(`[WA] Re-tentando conexão (${retryCountRef.current}/${MAX_RETRIES})...`)
+          await connectUserWhatsApp()
+        } else if (Date.now() - connectStartRef.current > QR_TIMEOUT) {
+          setWaitingForQR(false)
+          setError('Não foi possível gerar o QR Code. Verifique se o backend está online e tente novamente.')
+        }
       }
 
       // Salvar token para o beforeunload poder desconectar ao fechar página
@@ -73,18 +100,62 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     } catch (err: any) {
       if (err?.message === 'AUTH_EXPIRED') {
         setError('Sessão expirada. Faça login novamente.')
+        setWaitingForQR(false)
         if (pollRef.current) clearInterval(pollRef.current)
         return
       }
       setBotOnline(false)
     }
+  }, [waitingForQR])
+
+  // Função de conectar (usada pelo auto-connect e pelo botão)
+  const startConnect = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    setWaitingForQR(true)
+    retryCountRef.current = 0
+    connectStartRef.current = Date.now()
+    try {
+      const result = await connectUserWhatsApp()
+      if (!result.success) {
+        setError(result.error || 'Erro ao conectar')
+        setWaitingForQR(false)
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao conectar')
+      setWaitingForQR(false)
+    }
+    setLoading(false)
   }, [])
 
+  // Auto-connect on mount
+  const autoConnectRef = useRef(false)
   useEffect(() => {
-    fetchStatus()
-    pollRef.current = setInterval(fetchStatus, 3000)
+    const init = async () => {
+      try {
+        const status = await getUserWhatsAppStatus()
+        setWaStatus(status)
+        setBotOnline(true)
+        if (status.connected) return // Já conectado, não precisa fazer nada
+        if (status.status === 'qr' || status.status === 'connecting') {
+          // Já está gerando QR, só buscar
+          const qrRes = await getUserWhatsAppQR()
+          setQrData(qrRes.qr)
+          return
+        }
+        // Desconectado — auto-conectar
+        if (!autoConnectRef.current) {
+          autoConnectRef.current = true
+          await startConnect()
+        }
+      } catch {
+        setBotOnline(false)
+      }
+    }
+    init()
+    pollRef.current = setInterval(fetchStatus, 2000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [fetchStatus])
+  }, [fetchStatus, startConnect])
 
   // Load chat history when connected + cliente
   useEffect(() => {
@@ -108,18 +179,14 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   }, [messages])
 
   const handleConnect = async () => {
-    setLoading(true)
-    setError(null)
-    const result = await connectUserWhatsApp()
-    if (!result.success) setError(result.error || 'Erro ao conectar')
-    setLoading(false)
+    await startConnect()
   }
 
   const handleDisconnect = async () => {
     setLoading(true)
     const result = await disconnectUserWhatsApp()
     if (!result.success) setError(result.error || 'Erro ao desconectar')
-    else { setQrData(null); setMessages([]) }
+    else { setQrData(null); setMessages([]); setWaitingForQR(false) }
     setLoading(false)
   }
 
@@ -219,12 +286,12 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         <div className="flex items-center gap-2 mb-3">
           <span className={`inline-block w-2.5 h-2.5 rounded-full ${
             waStatus.status === 'qr' ? 'bg-yellow-400 animate-pulse' :
-            waStatus.status === 'connecting' ? 'bg-blue-400 animate-pulse' :
+            (waStatus.status === 'connecting' || waitingForQR) ? 'bg-blue-400 animate-pulse' :
             'bg-gray-300'
           }`} />
           <span className="text-sm text-gray-600">
             {waStatus.status === 'qr' ? 'Escaneie o QR Code abaixo' :
-             waStatus.status === 'connecting' ? 'Conectando...' :
+             (waStatus.status === 'connecting' || waitingForQR) ? 'Gerando QR Code...' :
              !botOnline ? 'Backend offline' : 'Desconectado'}
           </span>
         </div>
@@ -250,7 +317,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           </div>
         )}
 
-        {!qrData && botOnline && waStatus.status === 'disconnected' && (
+        {/* Gerando QR Code (aguardando QR do backend) */}
+        {!qrData && botOnline && (waitingForQR || waStatus.status === 'connecting') && (
+          <div className="flex flex-col items-center py-8">
+            <div className="inline-block animate-spin h-10 w-10 border-4 border-green-600 border-t-transparent rounded-full mb-4" />
+            <p className="text-sm font-medium text-gray-700">Gerando QR Code...</p>
+            <p className="text-xs text-gray-400 mt-1">Aguarde alguns segundos</p>
+          </div>
+        )}
+
+        {!qrData && botOnline && !waitingForQR && waStatus.status === 'disconnected' && (
           <div className="text-center py-6">
             <div className="text-5xl mb-3">📱</div>
             <p className="text-sm text-gray-600 mb-4">
