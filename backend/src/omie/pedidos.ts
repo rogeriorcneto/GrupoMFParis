@@ -27,18 +27,38 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
 
   if (error || !cliente) throw new Error(`Cliente ${clienteId} não encontrado no CRM`)
 
-  // Se já tem código Omie, retornar
+  // Se já tem código Omie vinculado, retornar
   if (cliente.omie_codigo) {
     return parseInt(cliente.omie_codigo, 10)
   }
 
-  // Senão, criar/atualizar no Omie via UpsertClienteCpfCnpj
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
   const cnpj = (cliente.cnpj || '').replace(/\D/g, '')
   if (!cnpj) throw new Error(`Cliente ${clienteId} (${cliente.razao_social}) não tem CNPJ. Cadastre o CNPJ primeiro.`)
 
+  // 1. Buscar se já existe no Omie por CNPJ (evita duplicata)
+  try {
+    const busca = await omieCall<any>(
+      '/geral/clientes/',
+      'ListarClientes',
+      [{ pagina: 1, registros_por_pagina: 5, clientesFiltro: { cnpj_cpf: cnpj } }],
+      { skipCache: true, credentials: creds }
+    )
+    const encontrado = busca?.clientes_cadastro?.[0]
+    if (encontrado?.codigo_cliente_omie) {
+      const codigoOmie = encontrado.codigo_cliente_omie
+      await supabase.from('clientes').update({ omie_codigo: String(codigoOmie) }).eq('id', clienteId)
+      log.info({ clienteId, codigoOmie, cnpj }, '🔗 Cliente já existia no Omie — vinculado ao CRM')
+      return codigoOmie
+    }
+  } catch {
+    // Busca falhou — seguir com Upsert (que cria se necessário)
+    log.info({ clienteId, cnpj }, '⚠️ Busca prévia no Omie falhou, tentando Upsert...')
+  }
+
+  // 2. Criar/atualizar via UpsertClienteCpfCnpj (dedup nativo por CNPJ)
   log.info({ clienteId, cnpj, razao: cliente.razao_social }, '🔄 Criando/atualizando cliente no Omie...')
 
   const omieData = {
@@ -93,27 +113,54 @@ async function garantirProdutoOmie(produtoId: number): Promise<number> {
 
   if (error || !produto) throw new Error(`Produto ${produtoId} não encontrado no CRM`)
 
-  // Se já tem código Omie, retornar
+  // Se já tem código Omie vinculado, retornar
   if (produto.omie_codigo) {
     return parseInt(produto.omie_codigo, 10)
   }
 
-  // Senão, criar no Omie
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
+  const codigoIntegracao = `CRM-PROD-${produtoId}`
+  const skuBusca = produto.sku || codigoIntegracao
+
+  // 1. Buscar se produto já existe no Omie (por código/SKU ou descrição)
+  try {
+    const busca = await omieCall<any>(
+      '/geral/produtos/',
+      'ListarProdutos',
+      [{ pagina: 1, registros_por_pagina: 20, filtrar_apenas_descricao: produto.nome || '' }],
+      { skipCache: true, credentials: creds }
+    )
+    const encontrados = busca?.produto_servico_cadastro || []
+    // Match por código SKU ou por descrição exata
+    const match = encontrados.find((p: any) =>
+      (p.codigo && p.codigo === skuBusca) ||
+      (p.codigo_produto_integracao && p.codigo_produto_integracao === codigoIntegracao) ||
+      (p.descricao && p.descricao.toLowerCase() === (produto.nome || '').toLowerCase())
+    )
+    if (match?.codigo_produto) {
+      const codigoOmie = match.codigo_produto
+      await supabase.from('produtos').update({ omie_codigo: String(codigoOmie) }).eq('id', produtoId)
+      log.info({ produtoId, codigoOmie, nome: produto.nome }, '🔗 Produto já existia no Omie — vinculado ao CRM')
+      return codigoOmie
+    }
+  } catch {
+    log.info({ produtoId, nome: produto.nome }, '⚠️ Busca prévia de produto no Omie falhou, tentando criar...')
+  }
+
+  // 2. Produto não existe no Omie — criar
   log.info({ produtoId, nome: produto.nome }, '🔄 Criando produto no Omie...')
 
-  const codigoIntegracao = `CRM-PROD-${produtoId}`
   const omieData = {
     codigo_produto_integracao: codigoIntegracao,
     descricao: produto.nome || '',
     unidade: produto.unidade || 'UN',
     valor_unitario: produto.preco || 0,
-    ncm: '21069090', // NCM genérico para alimentos (ajustar conforme necessidade)
+    ncm: '21069090',
     peso_bruto: produto.peso_kg || 0,
     peso_liq: produto.peso_kg || 0,
-    codigo: produto.sku || codigoIntegracao,
+    codigo: skuBusca,
   }
 
   const response = await omieCall<any>(
