@@ -148,10 +148,49 @@ export default function AppRouter({
         }}
         onImportClientes={async (novos) => {
           try {
-            const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
-            const saved = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
-            setClientes(prev => [...prev, ...saved])
-            showToast('success', `${saved.length} cliente(s) importado(s) com sucesso!`)
+            const vendedorId = loggedUser?.id
+            const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || vendedorId }))
+
+            // Dedup: separar novos vs existentes (por CNPJ ou razão social)
+            const realmente_novos: Omit<Cliente, 'id'>[] = []
+            let atualizados = 0
+
+            for (const novoCliente of comVendedor) {
+              // Buscar duplicata por CNPJ
+              let existente: Cliente | null = null
+              if (novoCliente.cnpj && novoCliente.cnpj.trim()) {
+                existente = await db.checkCnpjDuplicado(novoCliente.cnpj)
+              }
+              // Se não achou por CNPJ, buscar por razão social exata
+              if (!existente && novoCliente.razaoSocial) {
+                const match = clientes.find(c =>
+                  c.razaoSocial.toLowerCase().trim() === novoCliente.razaoSocial.toLowerCase().trim()
+                )
+                if (match) existente = match
+              }
+
+              if (existente) {
+                // Cliente já existe → atualizar vendedorId para o vendedor que importou
+                await db.updateCliente(existente.id, { vendedorId: vendedorId })
+                setClientes(prev => prev.map(c => c.id === existente!.id ? { ...c, vendedorId } : c))
+                atualizados++
+              } else {
+                realmente_novos.push(novoCliente as Omit<Cliente, 'id'>)
+              }
+            }
+
+            // Inserir apenas os realmente novos
+            let novosInseridos = 0
+            if (realmente_novos.length > 0) {
+              const saved = await db.insertClientesBatch(realmente_novos)
+              setClientes(prev => [...prev, ...saved])
+              novosInseridos = saved.length
+            }
+
+            const msgs: string[] = []
+            if (novosInseridos > 0) msgs.push(`${novosInseridos} novo(s)`)
+            if (atualizados > 0) msgs.push(`${atualizados} atualizado(s) para você`)
+            showToast('success', `Importação concluída: ${msgs.join(', ')}`)
           } catch (err) { logger.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
         }}
         onDeleteCliente={async (id) => {

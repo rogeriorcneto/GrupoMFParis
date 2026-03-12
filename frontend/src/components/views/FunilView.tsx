@@ -578,9 +578,15 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                           </div>
                         )}
                         <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'whatsapp', 'contato') }} className="px-1 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="WhatsApp">💬</button>
-                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'email', 'contato') }} className="px-1 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium" title="Email">📧</button>
-                          <button onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Ligar">📞</button>
+                          {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="Abrir WhatsApp">� WA</button>
+                          )}
+                          {cliente.contatoEmail && (
+                            <a href={`mailto:${cliente.contatoEmail}?subject=Contato - ${encodeURIComponent(cliente.razaoSocial)}`} onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'email', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium no-underline" title="Enviar Email">📧</a>
+                          )}
+                          {(cliente.contatoTelefone || cliente.contatoCelular) && (
+                            <a href={`tel:${(cliente.contatoCelular || cliente.contatoTelefone || '').replace(/\D/g, '')}`} onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium no-underline" title="Ligar">📞</a>
+                          )}
                         </div>
                       </div>
                     )
