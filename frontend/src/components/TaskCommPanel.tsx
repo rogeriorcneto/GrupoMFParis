@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { XMarkIcon, PaperAirplaneIcon, PhoneIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor, Interacao } from '../types'
 import { sendWhatsApp, sendEmailViaBot, fetchWhatsAppMessages } from '../lib/botApi'
-import { fetchInteracoesByCliente } from '../lib/database'
+import { fetchInteracoesByCliente, insertInteracao, insertAtividade } from '../lib/database'
 
 interface Message {
   id: number
@@ -51,6 +51,30 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
   const whatsappNumber = cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
   const phoneNumber = cliente.contatoTelefone || cliente.contatoCelular || ''
   const cleanPhone = phoneNumber.replace(/\D/g, '')
+
+  // Registrar ligação no banco ao clicar em "Ligar"
+  const registerCall = async (numero: string) => {
+    try {
+      await insertInteracao({
+        clienteId: cliente.id,
+        tipo: 'ligacao',
+        data: new Date().toISOString(),
+        assunto: `Ligação para ${cliente.contatoNome || cliente.razaoSocial}`,
+        descricao: `Ligação realizada para ${numero} — ${cliente.razaoSocial}`,
+        automatico: false,
+      })
+      await insertAtividade({
+        tipo: 'ligacao',
+        descricao: `Ligação para ${cliente.razaoSocial} (${numero})`,
+        vendedorNome: loggedUser?.nome || 'Vendedor',
+        timestamp: new Date().toISOString(),
+      })
+      showToast?.('success', `Ligação registrada para ${cliente.razaoSocial}`)
+    } catch (err) {
+      // Ligação já foi iniciada via tel:, apenas falhou o registro
+      console.error('Erro ao registrar ligação:', err)
+    }
+  }
 
   // Load WhatsApp history from DB
   const loadWaHistory = useCallback(async () => {
@@ -473,6 +497,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   {cliente.contatoTelefone && (
                     <a
                       href={`tel:${cliente.contatoTelefone.replace(/\D/g, '')}`}
+                      onClick={() => registerCall(cliente.contatoTelefone)}
                       className="flex items-center justify-center gap-3 w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
                       <PhoneIcon className="h-5 w-5" />
@@ -482,6 +507,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   {cliente.contatoCelular && cliente.contatoCelular !== cliente.contatoTelefone && (
                     <a
                       href={`tel:${cliente.contatoCelular.replace(/\D/g, '')}`}
+                      onClick={() => registerCall(cliente.contatoCelular!)}
                       className="flex items-center justify-center gap-3 w-full py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
                       <PhoneIcon className="h-5 w-5" />
@@ -491,6 +517,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   {cliente.contatoTelefoneFixo && (
                     <a
                       href={`tel:${cliente.contatoTelefoneFixo.replace(/\D/g, '')}`}
+                      onClick={() => registerCall(cliente.contatoTelefoneFixo!)}
                       className="flex items-center justify-center gap-3 w-full py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
                       <PhoneIcon className="h-5 w-5" />

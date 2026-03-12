@@ -2,6 +2,7 @@ import React from 'react'
 import { XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon, ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../../types'
 import { logger } from '../../utils/logger'
+import { insertInteracao, insertAtividade } from '../../lib/database'
 import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
@@ -164,6 +165,30 @@ const TarefasView: React.FC<{
   const isGerente = loggedUser?.cargo === 'gerente'
 
   const hoje = new Date().toISOString().split('T')[0]
+
+  // Registrar ligação no banco ao clicar em "Ligar"
+  const registerCall = async (cliente: Cliente) => {
+    const numero = cliente.contatoTelefone || cliente.contatoCelular || ''
+    try {
+      await insertInteracao({
+        clienteId: cliente.id,
+        tipo: 'ligacao',
+        data: new Date().toISOString(),
+        assunto: `Ligação para ${cliente.contatoNome || cliente.razaoSocial}`,
+        descricao: `Ligação realizada para ${numero} — ${cliente.razaoSocial}`,
+        automatico: false,
+      })
+      await insertAtividade({
+        tipo: 'ligacao',
+        descricao: `Ligação para ${cliente.razaoSocial} (${numero})`,
+        vendedorNome: loggedUser?.nome || 'Vendedor',
+        timestamp: new Date().toISOString(),
+      })
+      showToast?.('success', `Ligação registrada para ${cliente.razaoSocial}`)
+    } catch (err) {
+      logger.error('Erro ao registrar ligação:', err)
+    }
+  }
 
   // Vendedor só vê seus clientes; gerente vê todos
   const meusClientes = React.useMemo(() =>
@@ -378,7 +403,7 @@ const TarefasView: React.FC<{
                                   {(cliente.contatoTelefone || cliente.contatoCelular) && (
                                     <a
                                       href={`tel:${(cliente.contatoTelefone || cliente.contatoCelular || '').replace(/\D/g, '')}`}
-                                      onClick={(e) => e.stopPropagation()}
+                                      onClick={(e) => { e.stopPropagation(); registerCall(cliente) }}
                                       title="Ligar"
                                       className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-full transition-colors"
                                     >
