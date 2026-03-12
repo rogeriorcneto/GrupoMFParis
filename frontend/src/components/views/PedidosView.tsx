@@ -15,7 +15,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 }) {
   const isGerente = loggedUser.cargo === 'gerente'
   const [tab, setTab] = React.useState<'novo' | 'historico'>('novo')
-  const clientesDisponiveis = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser.id)
+  const clientesDisponiveis = (isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser.id)).filter(c => c.etapa !== 'perdido' && c.etapa !== 'inativo')
   const produtosAtivos = produtos.filter(p => p.ativo)
   const [selectedClienteId, setSelectedClienteId] = React.useState<number | ''>(clientesDisponiveis[0]?.id ?? '')
   const [itensPedido, setItensPedido] = React.useState<ItemPedido[]>([])
@@ -70,8 +70,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   const handleEnviarPedido = async (status: 'rascunho' | 'enviado') => {
     if (!selectedClienteId || isSaving) return
     const clienteAlvo = clientes.find(c => c.id === Number(selectedClienteId))
-    if (clienteAlvo?.etapa === 'perdido') {
-      showToast?.('error', 'Cliente marcado como Perdido. Reative-o no funil antes de lançar pedido.')
+    if (clienteAlvo && (clienteAlvo.etapa === 'perdido' || clienteAlvo.etapa === 'inativo')) {
+      showToast?.('error', `Cliente está em "${clienteAlvo.etapa === 'perdido' ? 'Perdido' : 'Inativos'}". Mova-o de volta no funil antes de lançar pedido.`)
       return
     }
     if (itensPedido.length === 0) {

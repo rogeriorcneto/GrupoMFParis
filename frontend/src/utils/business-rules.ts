@@ -47,17 +47,18 @@ export function getClientsToAutoMove(
   return result
 }
 
-/** Returns clients that should be auto-moved to "inativo" due to 90d without any activity */
+/** Returns clients that should be auto-moved to "inativo" due to 120d without any activity */
 export function getClientsToAutoInativo(
   clientes: Cliente[],
   alreadyMovedIds: Set<number>
 ): { id: number; dias: number; etapa: string }[] {
   const result: { id: number; dias: number; etapa: string }[] = []
+  const skipEtapas = new Set(['perdido', 'inativo', 'lead', 'follow_up', 'negociacao'])
   for (const c of clientes) {
     if (alreadyMovedIds.has(c.id)) continue
-    if (c.etapa === 'perdido' || c.etapa === 'inativo' || c.etapa === 'lead') continue
+    if (skipEtapas.has(c.etapa)) continue
     const dias = c.diasInativo || 0
-    if (dias >= 90) {
+    if (dias >= 120) {
       result.push({ id: c.id, dias, etapa: c.etapa })
     }
   }

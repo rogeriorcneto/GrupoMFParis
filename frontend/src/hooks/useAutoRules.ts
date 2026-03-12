@@ -130,7 +130,7 @@ export function useAutoRules({
     }
   }, [clientes, addNotificacao, setClientes, setAtividades])
 
-  // Auto-move para "inativo" — clientes com 90+ dias sem atividade
+  // Auto-move para "inativo" — clientes com 120+ dias sem atividade (exceto follow_up/negociacao)
   const autoInativoIds = useRef<Set<number>>(new Set())
   const autoInativoRunRef = useRef(false)
   useEffect(() => {

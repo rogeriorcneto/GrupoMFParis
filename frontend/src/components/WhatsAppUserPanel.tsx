@@ -75,16 +75,14 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         setQrData(null)
       }
 
-      // Se estava esperando QR e o backend voltou a 'disconnected', tentar de novo
+      // Se estava esperando QR e o backend voltou a 'disconnected', apenas checar timeout
+      // NÃO chamar connectUserWhatsApp() de novo — o backend faz reconexão interna
       if (waitingForQR && status.status === 'disconnected') {
-        if (retryCountRef.current < MAX_RETRIES) {
-          retryCountRef.current++
-          console.log(`[WA] Re-tentando conexão (${retryCountRef.current}/${MAX_RETRIES})...`)
-          await connectUserWhatsApp()
-        } else if (Date.now() - connectStartRef.current > QR_TIMEOUT) {
+        if (Date.now() - connectStartRef.current > QR_TIMEOUT) {
           setWaitingForQR(false)
           setError('Não foi possível gerar o QR Code. Verifique se o backend está online e tente novamente.')
         }
+        // Caso contrário, aguardar — o backend pode estar reconectando
       }
 
       // Salvar token para o beforeunload poder desconectar ao fechar página

@@ -341,6 +341,12 @@ export default function AppRouter({
         onAddPedido={async (p) => {
           try {
             const saved = await db.insertPedido(p)
+            // Atualizar ultimaInteracao do cliente (evita auto-inativo)
+            const now = new Date().toISOString()
+            try {
+              await db.updateCliente(p.clienteId, { ultimaInteracao: now.split('T')[0] })
+              setClientes(prev => prev.map(c => c.id === p.clienteId ? { ...c, ultimaInteracao: now.split('T')[0], diasInativo: 0 } : c))
+            } catch { /* non-critical */ }
             const params = getParametrosAprovacao()
             if (pedidoPassaAutoAprovacao(saved, params)) {
               try {

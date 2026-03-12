@@ -233,12 +233,10 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
   log.info(`📱 Iniciando conexão WhatsApp para vendedor ${vendedorId}...`)
 
   try {
-    // Limpar credenciais antigas e usar creds frescas para forçar QR code novo
-    const { state, saveCreds, clearSession } = await useSupabaseAuthState(`user_${vendedorId}`, { fresh: true })
-    try {
-      await clearSession()
-      log.info(`🧹 Credenciais antigas limpas para vendedor ${vendedorId}`)
-    } catch (e) { log.warn({ err: e }, `Aviso ao limpar sessão do vendedor ${vendedorId}`) }
+    // Tentar restaurar sessão existente; se não houver, gerar creds frescas (QR novo)
+    const { state, saveCreds, clearSession } = await useSupabaseAuthState(`user_${vendedorId}`)
+    const hasSavedCreds = !!state.creds.registered
+    log.info(`🔑 Vendedor ${vendedorId}: sessão salva=${hasSavedCreds}`)
 
     const { version } = await fetchVersionSafe()
     log.info({ version }, `📡 Versão Baileys para vendedor ${vendedorId}`)
@@ -276,16 +274,50 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         const errorMsg = (lastDisconnect?.error as Boom)?.message || 'unknown'
         log.info(`🔴 WhatsApp do vendedor ${vendedorId} desconectou (reason: ${reason}, msg: ${errorMsg})`)
 
-        // Sempre limpar — o usuário precisa escanear QR de novo
-        session.status = 'disconnected'
-        session.connectedNumber = null
-        session.startTime = null
-        session.reconnectAttempts = 0
-        if (session.sock) {
-          try { session.sock.end(undefined) } catch { /* ignore */ }
-          session.sock = null
+        const isLoggedOut = reason === DisconnectReason.loggedOut
+        const isRestartRequired = reason === DisconnectReason.restartRequired
+
+        if (isLoggedOut) {
+          // Logout real: limpar sessão e exigir novo QR
+          log.info(`🚪 Vendedor ${vendedorId} fez logout — limpando sessão`)
+          try { await clearSession() } catch { /* ignore */ }
+          session.status = 'disconnected'
+          session.connectedNumber = null
+          session.startTime = null
+          session.reconnectAttempts = 0
+          if (session.sock) {
+            try { session.sock.end(undefined) } catch { /* ignore */ }
+            session.sock = null
+          }
+          sessions.delete(vendedorId)
+        } else if (isRestartRequired || session.reconnectAttempts < MAX_RECONNECT) {
+          // Desconexão temporária: reconectar com credenciais salvas
+          session.reconnectAttempts++
+          log.info(`🔄 Reconectando vendedor ${vendedorId} (tentativa ${session.reconnectAttempts}/${MAX_RECONNECT})...`)
+          if (session.sock) {
+            try { session.sock.end(undefined) } catch { /* ignore */ }
+            session.sock = null
+          }
+          sessions.delete(vendedorId)
+          // Delay antes de reconectar
+          setTimeout(() => {
+            connectUserWhatsApp(vendedorId).catch(err => {
+              log.error({ err }, `Falha ao reconectar vendedor ${vendedorId}`)
+            })
+          }, 2000)
+        } else {
+          // Esgotou tentativas de reconexão
+          log.warn(`⚠️ Vendedor ${vendedorId}: máximo de reconexões atingido`)
+          session.status = 'disconnected'
+          session.connectedNumber = null
+          session.startTime = null
+          session.reconnectAttempts = 0
+          if (session.sock) {
+            try { session.sock.end(undefined) } catch { /* ignore */ }
+            session.sock = null
+          }
+          sessions.delete(vendedorId)
         }
-        sessions.delete(vendedorId)
       }
 
       if (connection === 'open') {
