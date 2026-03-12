@@ -95,7 +95,6 @@ export async function connectWhatsApp(): Promise<void> {
         keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
       },
       logger: baileysLogger,
-      printQRInTerminal: true,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
     })

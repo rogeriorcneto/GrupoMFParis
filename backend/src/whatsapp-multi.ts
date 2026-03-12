@@ -249,7 +249,6 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       },
       logger: baileysLogger,
       browser: ['CRM MF Paris', 'Chrome', '127.0.0.1'],
-      printQRInTerminal: false,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 30_000,
