@@ -9,7 +9,7 @@ import * as QRCode from 'qrcode'
 import { log } from './logger.js'
 import { useSupabaseAuthState } from './whatsapp-session-store.js'
 
-const baileysLogger = pino({ level: 'silent' })
+const baileysLogger = pino({ level: 'warn' })
 
 // ============================================
 // Per-user WhatsApp session
@@ -45,6 +45,38 @@ const sessions = new Map<number, UserWhatsAppSession>()
 
 // Cleanup inactive sessions every hour
 let cleanupInterval: ReturnType<typeof setInterval> | null = null
+
+/** Verifica se a tabela whatsapp_session existe no Supabase */
+export async function checkWhatsAppSessionTable(): Promise<boolean> {
+  try {
+    const { supabase } = await import('./supabase.js')
+    const { error } = await supabase.from('whatsapp_session').select('key').limit(1)
+    if (error) {
+      log.error({ error }, '❌ Tabela whatsapp_session NÃO existe no Supabase! Execute a migration 20250312000001_whatsapp_session.sql')
+      return false
+    }
+    log.info('✅ Tabela whatsapp_session verificada')
+    return true
+  } catch (err) {
+    log.error({ err }, '❌ Erro ao verificar tabela whatsapp_session')
+    return false
+  }
+}
+
+/** fetchLatestBaileysVersion com timeout de 10s */
+async function fetchVersionSafe(): Promise<{ version: [number, number, number] }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10_000)
+  try {
+    const result = await fetchLatestBaileysVersion()
+    return result
+  } catch (err) {
+    log.warn({ err }, 'Falha ao buscar versão Baileys, usando default')
+    return { version: [2, 3000, 1015901307] as [number, number, number] }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
 
 export function startSessionCleanup(): void {
   if (cleanupInterval) return
@@ -208,7 +240,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       log.info(`🧹 Credenciais antigas limpas para vendedor ${vendedorId}`)
     } catch (e) { log.warn({ err: e }, `Aviso ao limpar sessão do vendedor ${vendedorId}`) }
 
-    const { version } = await fetchLatestBaileysVersion()
+    const { version } = await fetchVersionSafe()
+    log.info({ version }, `📡 Versão Baileys para vendedor ${vendedorId}`)
 
     const sock = makeWASocket({
       version,
@@ -217,9 +250,12 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
       },
       logger: baileysLogger,
+      browser: ['CRM MF Paris', 'Chrome', '127.0.0.1'],
       printQRInTerminal: false,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
+      connectTimeoutMs: 30_000,
+      retryRequestDelayMs: 250,
     })
 
     session.sock = sock
@@ -237,7 +273,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       if (connection === 'close') {
         session.qrDataUrl = null
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
-        log.info(`🔴 WhatsApp do vendedor ${vendedorId} desconectou (reason: ${reason})`)
+        const errorMsg = (lastDisconnect?.error as Boom)?.message || 'unknown'
+        log.info(`🔴 WhatsApp do vendedor ${vendedorId} desconectou (reason: ${reason}, msg: ${errorMsg})`)
 
         // Sempre limpar — o usuário precisa escanear QR de novo
         session.status = 'disconnected'

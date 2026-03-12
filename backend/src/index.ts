@@ -7,7 +7,7 @@ import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, s
 import {
   connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
-  startSessionCleanup,
+  startSessionCleanup, checkWhatsAppSessionTable,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -633,6 +633,9 @@ async function start() {
     log.error({ err }, 'Erro ao auto-conectar WhatsApp')
     log.info('Use POST /api/whatsapp/connect ou a interface do CRM para conectar.')
   }
+
+  // Verify whatsapp_session table exists
+  checkWhatsAppSessionTable().catch(() => {})
 
   // Start per-user WhatsApp session cleanup (removes inactive sessions after 24h)
   startSessionCleanup()
