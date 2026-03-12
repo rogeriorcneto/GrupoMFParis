@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, FunilViewProps } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
+import CallRecorder from '../CallRecorder'
 
 function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
@@ -13,6 +14,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const [hideAmostraPerdida, setHideAmostraPerdida] = React.useState(true)
   const [filterSegmento, setFilterSegmento] = React.useState('')
   const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
+  const [callRecordingCliente, setCallRecordingCliente] = useState<Cliente | null>(null)
 
   const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -585,7 +587,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                             <a href={`mailto:${cliente.contatoEmail}?subject=Contato - ${encodeURIComponent(cliente.razaoSocial)}`} onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'email', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium no-underline" title="Enviar Email">📧</a>
                           )}
                           {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                            <a href={`tel:${(cliente.contatoCelular || cliente.contatoTelefone || '').replace(/\D/g, '')}`} onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium no-underline" title="Ligar">📞</a>
+                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Ligar com gravação">📞</button>
                           )}
                         </div>
                       </div>
@@ -598,6 +600,16 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           })}
         </div>
       </div>
+
+      {/* Call Recorder overlay */}
+      {callRecordingCliente && (
+        <CallRecorder
+          cliente={callRecordingCliente}
+          vendedorId={loggedUser?.id}
+          phoneNumber={(callRecordingCliente.contatoCelular || callRecordingCliente.contatoTelefone || '').replace(/\D/g, '')}
+          onClose={() => setCallRecordingCliente(null)}
+        />
+      )}
     </div>
   )
 }

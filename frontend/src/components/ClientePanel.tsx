@@ -4,6 +4,7 @@ import type { Cliente, Interacao, Tarefa, Vendedor } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
+import CallRecorder from './CallRecorder'
 
 interface ClientePanelProps {
   cliente: Cliente
@@ -44,6 +45,7 @@ export default function ClientePanel({
   const [panelTarefaData, setPanelTarefaData] = useState(new Date().toISOString().split('T')[0])
   const [panelTarefaTipo, setPanelTarefaTipo] = useState<Tarefa['tipo']>('follow-up')
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
+  const [showCallRecorder, setShowCallRecorder] = useState(false)
 
   const vendedor = vendedores.find(v => v.id === c.vendedorId)
   const diasNaEtapa = c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0
@@ -139,7 +141,15 @@ export default function ClientePanel({
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div><p className="text-xs text-gray-500">Nome</p><p className="font-medium text-gray-900">{c.contatoNome}</p></div>
                   <div><p className="text-xs text-gray-500">CNPJ</p><p className="font-medium text-gray-900">{c.cnpj}</p></div>
-                  <div><p className="text-xs text-gray-500">Telefone</p><p className="font-medium text-gray-900">{c.contatoTelefone}</p></div>
+                  <div><p className="text-xs text-gray-500">Telefone</p>
+                    {(c.contatoTelefone || c.contatoCelular) ? (
+                      <button onClick={() => setShowCallRecorder(true)} className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer flex items-center gap-1" title="Ligar com gravação">
+                        📞 {c.contatoCelular || c.contatoTelefone}
+                      </button>
+                    ) : (
+                      <p className="font-medium text-gray-900">{c.contatoTelefone || '-'}</p>
+                    )}
+                  </div>
                   <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail}</p></div>
                 </div>
                 {c.endereco && <div><p className="text-xs text-gray-500">Endereço</p><p className="text-sm text-gray-900">{c.endereco}</p></div>}
@@ -529,6 +539,16 @@ export default function ClientePanel({
 
         </div>
       </div>
+
+      {/* Call Recorder overlay */}
+      {showCallRecorder && (
+        <CallRecorder
+          cliente={c}
+          vendedorId={loggedUser?.id}
+          phoneNumber={(c.contatoCelular || c.contatoTelefone || '').replace(/\D/g, '')}
+          onClose={() => setShowCallRecorder(false)}
+        />
+      )}
     </div>
   )
 }
