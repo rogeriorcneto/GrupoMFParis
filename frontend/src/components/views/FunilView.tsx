@@ -195,19 +195,25 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     e.target.value = ''
   }
 
-  const FUNIL_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
+  // Vendedor vê apenas: Prospecção, Amostra, Proposta, Negociação, Follow-up
+  // Gerente vê todas: Leads, Prospecção, Amostra, Amostra Perdida, Proposta, Negociação, Follow-up, Inativos, Perdido
+  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up'])
+  const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
+  const FUNIL_ETAPAS = isGerente ? GERENTE_ETAPAS : VENDEDOR_ETAPAS
 
-  const stages = [
-    { title: 'Leads', key: 'lead', badge: 'bg-emerald-100 text-emerald-800', icon: '🌐', prob: 0.05 },
-    { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10 },
-    { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25 },
-    { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🧪❌', prob: 0.05 },
-    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40 },
-    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.60 },
-    { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80 },
-    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10 },
-    { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0 }
+  const allStages = [
+    { title: 'Leads', key: 'lead', badge: 'bg-emerald-100 text-emerald-800', icon: '🌐', prob: 0.05, gerenteOnly: true },
+    { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10, gerenteOnly: false },
+    { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25, gerenteOnly: false },
+    { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🧪❌', prob: 0.05, gerenteOnly: true },
+    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
+    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.60, gerenteOnly: false },
+    { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
+    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10, gerenteOnly: true },
+    { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: true }
   ]
+
+  const stages = allStages.filter(s => isGerente || !s.gerenteOnly)
 
   const displayedStages = useMemo(() => {
     return stages.filter(stage => {
@@ -216,7 +222,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
       if (hideAmostraPerdida && stage.key === 'amostra_perdida') return false
       return true
     })
-  }, [hideAmostraPerdida, hideInativos, hidePerdidos])
+  }, [hideAmostraPerdida, hideInativos, hidePerdidos, isGerente])
 
   // P1-2: O(1) vendedor lookup instead of O(m) find per card
   const vendedorMap = useMemo(() => {
@@ -477,20 +483,24 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           <option value="antigo">Mais antigo</option>
           <option value="recente">Mais recente</option>
         </select>
-        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+        {isGerente && (
+          <>
+            <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
 
-        <div className="h-5 w-px bg-gray-300" />
+            <div className="h-5 w-px bg-gray-300" />
 
-        <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
-          🧪
-        </button>
-        <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
-          💤
-        </button>
-        <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
-          ❌
-        </button>
+            <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
+              🧪
+            </button>
+            <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
+              💤
+            </button>
+            <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
+              ❌
+            </button>
+          </>
+        )}
 
         {isGerente && onImportNegocios && (
           <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-2.5 rounded-lg transition-colors shadow-sm flex items-center gap-1 cursor-pointer text-xs ml-auto">
