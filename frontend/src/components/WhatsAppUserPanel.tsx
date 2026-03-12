@@ -9,6 +9,7 @@ import {
   type UserWAStatus,
 } from '../lib/botApi'
 import CallRecorder from './CallRecorder'
+import { formatBrazilianPhone } from '../utils/validators'
 
 interface WhatsAppUserPanelProps {
   loggedUser: Vendedor | null
@@ -252,7 +253,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }])
 
-    const result = await sendUserWhatsApp(whatsappNumber.replace(/\D/g, ''), msg, cliente.id)
+    const result = await sendUserWhatsApp(formatBrazilianPhone(whatsappNumber), msg, cliente.id)
     if (!result.success) {
       setMessages(prev => [...prev, {
         id: Date.now() + 1, text: '❌ Falha: ' + (result.error || 'Erro'), from: 'system',
@@ -321,7 +322,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     const durationLabel = `${Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:${(voiceSeconds % 60).toString().padStart(2, '0')}`
     setMessages(prev => [...prev, { id: Date.now(), text: `🎙️ Áudio (${durationLabel})`, from: 'me', time: now }])
     // Send as text fallback (actual audio sending requires WhatsApp media API)
-    const result = await sendUserWhatsApp(whatsappNumber.replace(/\D/g, ''), `🎙️ [Mensagem de voz — ${durationLabel}]`, cliente.id)
+    const result = await sendUserWhatsApp(formatBrazilianPhone(whatsappNumber), `🎙️ [Mensagem de voz — ${durationLabel}]`, cliente.id)
     if (!result.success) showToast?.('error', 'Falha ao enviar áudio: ' + (result.error || ''))
     else showToast?.('success', 'Áudio enviado!')
     // Cleanup

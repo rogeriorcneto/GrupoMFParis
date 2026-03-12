@@ -11,6 +11,45 @@ export function formatCNPJ(v: string): string {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
 }
 
+/**
+ * Normaliza número de telefone para formato WhatsApp brasileiro: 55 + DDD + número (10-11 dígitos)
+ * Exemplos:
+ *   (11) 98765-4321  → 5511987654321
+ *   11987654321       → 5511987654321
+ *   5511987654321     → 5511987654321
+ *   +55 11 98765-4321 → 5511987654321
+ *   011987654321      → 5511987654321
+ */
+export function formatBrazilianPhone(phone: string): string {
+  let d = phone.replace(/\D/g, '')
+  if (!d) return ''
+
+  // Remove leading '+' artifacts (already stripped by \D)
+  // Remove leading '0' (trunk prefix for landline calls)
+  if (d.startsWith('0') && !d.startsWith('00')) {
+    d = d.slice(1)
+  }
+
+  // If starts with 55 and has 12-13 digits → already has country code
+  if (d.startsWith('55') && d.length >= 12 && d.length <= 13) {
+    return d
+  }
+
+  // If 10-11 digits (DDD + number) → add 55
+  if (d.length >= 10 && d.length <= 11) {
+    return `55${d}`
+  }
+
+  // If 8-9 digits (no DDD) — can't determine DDD, return as-is with 55
+  // This is a fallback; ideally the number should have DDD
+  if (d.length >= 8 && d.length <= 9) {
+    return `55${d}`
+  }
+
+  // Already formatted or unknown format — return as-is
+  return d
+}
+
 export function formatTelefone(v: string): string {
   const d = v.replace(/\D/g, '').slice(0, 11)
   if (d.length <= 2) return d.length ? `(${d}` : ''

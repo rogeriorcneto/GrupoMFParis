@@ -3,6 +3,7 @@ import { XMarkIcon, PaperAirplaneIcon, PhoneIcon, ClockIcon } from '@heroicons/r
 import type { Cliente, Vendedor, Interacao } from '../types'
 import { sendWhatsApp, sendEmailViaBot, fetchWhatsAppMessages } from '../lib/botApi'
 import { fetchInteracoesByCliente, insertInteracao, insertAtividade } from '../lib/database'
+import { formatBrazilianPhone } from '../utils/validators'
 
 interface Message {
   id: number
@@ -156,7 +157,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
     }])
 
     const result = await sendWhatsApp(
-      whatsappNumber.replace(/\D/g, ''),
+      formatBrazilianPhone(whatsappNumber),
       msg,
       cliente.id,
       loggedUser?.nome,
@@ -280,7 +281,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                       </div>
                     </div>
                     <a
-                      href={`https://wa.me/${whatsappNumber.replace(/\D/g, '')}`}
+                      href={`https://wa.me/${formatBrazilianPhone(whatsappNumber)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-green-700 hover:text-green-800 underline"
@@ -535,7 +536,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                 {cleanPhone && (
                   <div className="pt-2 border-t border-gray-200">
                     <a
-                      href={`https://wa.me/${cleanPhone}`}
+                      href={`https://wa.me/${formatBrazilianPhone(phoneNumber)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-apple text-sm font-medium transition-colors"

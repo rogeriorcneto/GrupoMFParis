@@ -62,12 +62,23 @@ export async function disconnectWhatsApp(): Promise<void> {
   }
 }
 
+/** Normaliza telefone para formato WhatsApp brasileiro: 55 + DDD + número */
+function formatBrazilianPhone(phone: string): string {
+  let d = phone.replace(/\D/g, '')
+  if (!d) return ''
+  if (d.startsWith('0') && !d.startsWith('00')) d = d.slice(1)
+  if (d.startsWith('55') && d.length >= 12 && d.length <= 13) return d
+  if (d.length >= 10 && d.length <= 11) return `55${d}`
+  if (d.length >= 8 && d.length <= 9) return `55${d}`
+  return d
+}
+
 export async function sendWhatsAppMessage(number: string, text: string): Promise<{ success: boolean; error?: string }> {
   if (!sock || connectionStatus !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado' }
   }
   try {
-    const jid = number.replace(/\D/g, '') + '@s.whatsapp.net'
+    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     await sock.sendMessage(jid, { text })
     return { success: true }
   } catch (err: any) {
