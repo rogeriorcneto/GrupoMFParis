@@ -125,6 +125,22 @@ export async function sendUserWhatsApp(
   }
 }
 
+/** Query CRM AI from vendedor's WhatsApp chat panel */
+export async function queryWhatsAppAI(
+  message: string, history?: { role: string; content: string }[]
+): Promise<{ success: boolean; reply?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
 /** Get all user WhatsApp sessions (gerente only) */
 export async function getAllUserWhatsAppSessions(): Promise<UserWAStatus[]> {
   try {

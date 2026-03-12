@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
 import { getSyncDiff, syncPullClientes, syncPushClientes } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
-import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie } from '../omie/pedidos.js'
+import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
@@ -177,6 +177,28 @@ omieRouter.post('/pedidos/:id/consultar-entrega', rateLimit(30, 60_000), async (
     res.json({ success: true, data })
   } catch (err: any) {
     log.error({ err, pedidoId }, 'Erro ao consultar entrega do pedido no Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Enviar Pedido ao Omie (quando gerente confirma venda) ───
+
+omieRouter.post('/pedidos/:id/enviar', rateLimit(10, 60_000), async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (!pedidoId || isNaN(pedidoId)) {
+    res.status(400).json({ success: false, error: 'ID do pedido inválido' })
+    return
+  }
+
+  try {
+    const result = await onPedidoAprovado(pedidoId)
+    if (result.success) {
+      res.json({ success: true, omie_codigo: result.omie_codigo, message: 'Pedido enviado ao Omie com sucesso!' })
+    } else {
+      res.status(400).json({ success: false, error: result.error })
+    }
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao enviar pedido para Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

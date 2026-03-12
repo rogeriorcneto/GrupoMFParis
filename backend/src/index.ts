@@ -269,6 +269,97 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
   }
 })
 
+// IA no WhatsApp pessoal do vendedor
+app.post('/api/whatsapp/user/ai', requireAuth, rateLimit(30, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const { message, history } = req.body
+  if (!message) {
+    res.status(400).json({ success: false, error: 'Campo obrigatório: message' })
+    return
+  }
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) {
+      res.status(500).json({ success: false, error: 'GEMINI_API_KEY não configurada no servidor' })
+      return
+    }
+
+    // Build CRM context (same as WhatsApp bot IA)
+    const isGerente = vendedor.cargo === 'gerente'
+    const clientes = isGerente ? await db.fetchClientes() : await db.fetchClientesByVendedor(vendedor.id)
+    const vendedores = await db.fetchVendedores()
+    const pedidos = await db.fetchPedidos()
+    const interacoes = await db.fetchInteracoes()
+
+    const vMap = new Map<number, string>(vendedores.map((v: any) => [v.id, v.nome]))
+    const ativos = clientes.filter((c: any) => c.etapa !== 'perdido')
+    const perdidos = clientes.filter((c: any) => c.etapa === 'perdido')
+    const valorTotal = ativos.reduce((s: number, c: any) => s + (c.valorEstimado || 0), 0)
+    const inativos30 = ativos.filter((c: any) => (c.diasInativo || 0) > 30).length
+
+    const fmtC = (c: any) => [c.razaoSocial, c.nomeFantasia || '', c.cnpj || '', c.etapa, c.score || 0, c.valorEstimado || 0, c.diasInativo || 0, vMap.get(c.vendedorId) || '?', c.contatoNome || '', c.contatoTelefone || '', c.contatoEmail || ''].join('|')
+
+    const top10 = [...ativos].sort((a: any, b: any) => (b.score || 0) - (a.score || 0)).slice(0, 10)
+
+    const ctx = [
+      'Voce e a Assistente de IA do CRM Grupo MF Paris. Responda de forma direta e util.',
+      `Usuario: ${vendedor.nome} (${vendedor.cargo}). ${isGerente ? 'Visao: TODOS os clientes' : 'Visao: apenas SEUS clientes'}`,
+      `Total clientes: ${clientes.length} (${ativos.length} ativos, ${perdidos.length} perdidos). Carteira: R$ ${valorTotal.toLocaleString('pt-BR')}. Inativos +30d: ${inativos30}`,
+      `Pedidos: ${pedidos.length} total. Interacoes: ${interacoes.length}`,
+      'TOP 10 Score: nome|fantasia|cnpj|etapa|score|valor|diasInativo|vendedor|contato|tel|email',
+      ...top10.map((c: any) => fmtC(c)),
+      'Amostra clientes (50):',
+      ...ativos.slice(0, 50).map((c: any) => fmtC(c)),
+      'Responda em portugues do Brasil. Seja direta, sem frases genericas de encerramento. Use dados reais acima.',
+    ].join('\n')
+
+    // Build Gemini request with conversation history
+    const chatHistory = (history || []).slice(-20)
+    const contents = [
+      { role: 'user', parts: [{ text: ctx }] },
+      { role: 'model', parts: [{ text: 'Entendido, tenho os dados do CRM. Vou responder de forma direta.' }] },
+      ...chatHistory.map((m: any) => ({
+        role: m.role === 'assistant' ? 'model' as const : 'user' as const,
+        parts: [{ text: m.content }],
+      })),
+      { role: 'user', parts: [{ text: message }] },
+    ]
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const geminiRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, generationConfig: { temperature: 0.7, maxOutputTokens: 2048 } }),
+    })
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text()
+      log.error({ error: errText }, 'Erro na Gemini API (WhatsApp user AI)')
+      res.status(500).json({ success: false, error: 'Erro ao consultar a IA' })
+      return
+    }
+
+    const geminiData = await geminiRes.json() as any
+    const reply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta da IA.'
+
+    // Log activity
+    await db.insertAtividade({
+      tipo: 'ia',
+      descricao: `IA WhatsApp: ${message.substring(0, 80)}`,
+      vendedorNome: vendedor.nome,
+    })
+
+    res.json({ success: true, reply })
+  } catch (err: any) {
+    log.error({ err }, 'Erro no handler IA WhatsApp user')
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
 // Gerente: ver todas as sessões de usuários
 app.get('/api/whatsapp/user/sessions', requireAuth, requireGerente, (_req, res) => {
   res.json(getAllUserSessions())

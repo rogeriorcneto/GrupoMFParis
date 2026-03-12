@@ -5,6 +5,7 @@ import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
   connectUserWhatsApp, disconnectUserWhatsApp,
   sendUserWhatsApp, fetchWhatsAppMessages,
+  queryWhatsAppAI,
   type UserWAStatus,
 } from '../lib/botApi'
 
@@ -39,6 +40,8 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const [chatText, setChatText] = useState('')
   const [sending, setSending] = useState(false)
   const [chatLoading, setChatLoading] = useState(false)
+  const [aiMode, setAiMode] = useState(false)
+  const [aiHistory, setAiHistory] = useState<{ role: string; content: string }[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -110,14 +113,49 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   }
 
   const handleSend = async () => {
-    if (!chatText.trim() || !cliente) return
+    if (!chatText.trim()) return
+    const msg = chatText.trim()
+
+    // Check if it's an AI command: /ia <pergunta>
+    const isAiCommand = msg.toLowerCase().startsWith('/ia ') || aiMode
+    const aiQuestion = msg.toLowerCase().startsWith('/ia ') ? msg.slice(4).trim() : msg
+
+    if (isAiCommand && aiQuestion) {
+      setChatText('')
+      setSending(true)
+
+      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      setMessages(prev => [...prev, {
+        id: Date.now(), text: `🤖 ${aiQuestion}`, from: 'me', time: now,
+      }])
+
+      const newHistory = [...aiHistory, { role: 'user', content: aiQuestion }]
+      const result = await queryWhatsAppAI(aiQuestion, aiHistory)
+
+      if (result.success && result.reply) {
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1, text: result.reply!, from: 'system',
+          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        }])
+        newHistory.push({ role: 'assistant', content: result.reply })
+      } else {
+        setMessages(prev => [...prev, {
+          id: Date.now() + 1, text: '❌ ' + (result.error || 'Erro na IA'), from: 'system',
+          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        }])
+      }
+      setAiHistory(newHistory.slice(-20))
+      setSending(false)
+      return
+    }
+
+    if (!cliente) return
     const whatsappNumber = cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
     if (!whatsappNumber) {
       showToast?.('error', 'Cliente não possui número de WhatsApp.')
       return
     }
 
-    const msg = chatText.trim()
     setChatText('')
     setSending(true)
 
@@ -312,13 +350,20 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           {/* Input */}
           <div className="p-3 bg-gray-100 border-t border-gray-200 rounded-b-apple">
             <div className="flex gap-2">
+              <button
+                onClick={() => { setAiMode(!aiMode); if (!aiMode) setAiHistory([]) }}
+                title={aiMode ? 'Modo IA ativo — clique para desativar' : 'Ativar Assistente IA'}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${aiMode ? 'bg-purple-600 text-white shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-purple-100'}`}
+              >
+                🤖
+              </button>
               <textarea
                 value={chatText}
                 onChange={e => setChatText(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Digite uma mensagem..."
+                placeholder={aiMode ? 'Pergunte algo à IA do CRM...' : 'Digite uma mensagem... (ou /ia para IA)'}
                 rows={1}
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 text-sm resize-none"
+                className={`flex-1 px-4 py-2.5 border rounded-full focus:outline-none focus:ring-2 text-sm resize-none ${aiMode ? 'border-purple-300 focus:ring-purple-500 bg-purple-50' : 'border-gray-300 focus:ring-green-500'}`}
               />
               <button
                 onClick={handleSend}

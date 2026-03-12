@@ -183,6 +183,13 @@ export async function omieGetFinanceiroResumo(): Promise<{ success: boolean; dat
   return res.json()
 }
 
+// ─── Enviar Pedido ao Omie (quando gerente confirma venda) ───
+
+export async function omieEnviarPedido(pedidoId: number): Promise<{ success: boolean; omie_codigo?: string; message?: string; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/pedidos/${pedidoId}/enviar`, { method: 'POST' })
+  return res.json()
+}
+
 // ─── Sync Logístico ───
 
 export async function omieSyncLogistics(): Promise<{ success: boolean; data?: { atualizados: number; semPedido: number; erros: any[] }; error?: string }> {
