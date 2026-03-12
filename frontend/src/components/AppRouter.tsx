@@ -137,6 +137,7 @@ export default function AppRouter({
       return <ClientesView 
         clientes={clientes} 
         vendedores={vendedores}
+        loggedUser={loggedUser}
         onNewCliente={openModal}
         onEditCliente={handleEditCliente}
         onUpdateCliente={async (id, changes) => {

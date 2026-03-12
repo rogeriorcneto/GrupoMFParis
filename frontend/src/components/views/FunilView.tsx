@@ -231,9 +231,11 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     return m
   }, [vendedores])
 
-  const clientesFiltradosVendedor = useMemo(() =>
-    filterVendedorId ? clientes.filter(c => c.vendedorId === filterVendedorId) : clientes
-  , [clientes, filterVendedorId])
+  // Vendedor só vê seus clientes; gerente pode filtrar por vendedor ou ver todos
+  const clientesFiltradosVendedor = useMemo(() => {
+    if (!isGerente && loggedUser?.id) return clientes.filter(c => c.vendedorId === loggedUser.id)
+    return filterVendedorId ? clientes.filter(c => c.vendedorId === filterVendedorId) : clientes
+  }, [clientes, filterVendedorId, isGerente, loggedUser?.id])
 
   const clientesFiltrados = useMemo(() => {
     let base = clientesFiltradosVendedor.filter(c =>
@@ -483,11 +485,11 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           <option value="antigo">Mais antigo</option>
           <option value="recente">Mais recente</option>
         </select>
+        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+
         {isGerente && (
           <>
-            <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-            <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-
             <div className="h-5 w-px bg-gray-300" />
 
             <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>

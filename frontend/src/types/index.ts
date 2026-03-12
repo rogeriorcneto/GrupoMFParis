@@ -311,6 +311,7 @@ export interface FunilViewProps {
 export interface ClientesViewProps {
   clientes: Cliente[]
   vendedores: Vendedor[]
+  loggedUser: Vendedor | null
   onNewCliente: () => void
   onEditCliente: (cliente: Cliente) => void
   onUpdateCliente?: (id: number, changes: Partial<Cliente>) => Promise<void>

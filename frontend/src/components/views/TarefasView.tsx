@@ -165,9 +165,14 @@ const TarefasView: React.FC<{
 
   const hoje = new Date().toISOString().split('T')[0]
 
+  // Vendedor só vê seus clientes; gerente vê todos
+  const meusClientes = React.useMemo(() =>
+    isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
+  , [clientes, isGerente, loggedUser?.id])
+
   const filteredTarefas = tarefas.filter(t => {
     const matchStatus = filterStatus === 'todas' || t.status === filterStatus
-    const matchVendedor = isGerente ? true : (!t.vendedorId || t.vendedorId === loggedUser?.id)
+    const matchVendedor = isGerente ? true : (t.vendedorId === loggedUser?.id)
     return matchStatus && matchVendedor
   })
 
@@ -247,11 +252,11 @@ const TarefasView: React.FC<{
             onClick={() => {
               const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
               const sugeridas: Tarefa[] = [
-                { id: Date.now() + 1, clienteId: clientes.find(c => c.diasInativo && c.diasInativo > 7)?.id, titulo: 'Follow-up com leads inativos', descricao: 'Entrar em contato com clientes sem interação há mais de 7 dias', data: hoje, hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta' },
-                { id: Date.now() + 2, clienteId: clientes.find(c => c.etapa === 'negociacao')?.id, titulo: 'Enviar proposta comercial', descricao: 'Preparar e enviar proposta para leads em negociação', data: hoje, hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'alta' },
-                { id: Date.now() + 3, titulo: 'Revisar pipeline de vendas', descricao: 'Analisar funil e identificar gargalos', data: amanha, hora: '09:00', tipo: 'outro', status: 'pendente', prioridade: 'media' },
-                { id: Date.now() + 4, clienteId: clientes.find(c => c.etapa === 'amostra')?.id, titulo: 'Agendar reunião de apresentação', descricao: 'Marcar reunião para apresentar produtos', data: amanha, hora: '15:00', tipo: 'reuniao', status: 'pendente', prioridade: 'media' },
-                { id: Date.now() + 5, titulo: 'Atualizar CRM e registros', descricao: 'Revisar e atualizar informações de clientes', data: amanha, tipo: 'outro', status: 'pendente', prioridade: 'baixa' }
+                { id: Date.now() + 1, clienteId: meusClientes.find(c => c.diasInativo && c.diasInativo > 7)?.id, vendedorId: loggedUser?.id, titulo: 'Follow-up com leads inativos', descricao: 'Entrar em contato com clientes sem interação há mais de 7 dias', data: hoje, hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta' },
+                { id: Date.now() + 2, clienteId: meusClientes.find(c => c.etapa === 'negociacao')?.id, vendedorId: loggedUser?.id, titulo: 'Enviar proposta comercial', descricao: 'Preparar e enviar proposta para leads em negociação', data: hoje, hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'alta' },
+                { id: Date.now() + 3, vendedorId: loggedUser?.id, titulo: 'Revisar pipeline de vendas', descricao: 'Analisar funil e identificar gargalos', data: amanha, hora: '09:00', tipo: 'outro', status: 'pendente', prioridade: 'media' },
+                { id: Date.now() + 4, clienteId: meusClientes.find(c => c.etapa === 'amostra')?.id, vendedorId: loggedUser?.id, titulo: 'Agendar reunião de apresentação', descricao: 'Marcar reunião para apresentar produtos', data: amanha, hora: '15:00', tipo: 'reuniao', status: 'pendente', prioridade: 'media' },
+                { id: Date.now() + 5, vendedorId: loggedUser?.id, titulo: 'Atualizar CRM e registros', descricao: 'Revisar e atualizar informações de clientes', data: amanha, tipo: 'outro', status: 'pendente', prioridade: 'baixa' }
               ]
               sugeridas.forEach(t => onAddTarefa(t))
               alert(`✨ IA adicionou ${sugeridas.length} tarefas sugeridas!`)
@@ -473,7 +478,7 @@ const TarefasView: React.FC<{
                   )}
                   {showClienteList && clienteSearch.length >= 2 && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-apple shadow-lg max-h-48 overflow-y-auto">
-                      {clientes
+                      {meusClientes
                         .filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase()) || (c.cnpj || '').includes(clienteSearch))
                         .slice(0, 20)
                         .map(c => (
@@ -483,7 +488,7 @@ const TarefasView: React.FC<{
                           </button>
                         ))
                       }
-                      {clientes.filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase())).length === 0 && (
+                      {meusClientes.filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase())).length === 0 && (
                         <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
                       )}
                     </div>
@@ -491,10 +496,14 @@ const TarefasView: React.FC<{
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Responsável *</label>
-                  <select value={newVendedorId} onChange={(e) => setNewVendedorId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    <option value="">Todos (sem filtro)</option>
-                    {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome} {v.cargo === 'gerente' ? '(Gerente)' : ''}</option>)}
-                  </select>
+                  {isGerente ? (
+                    <select value={newVendedorId} onChange={(e) => setNewVendedorId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
+                      <option value="">Todos (sem filtro)</option>
+                      {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome} {v.cargo === 'gerente' ? '(Gerente)' : ''}</option>)}
+                    </select>
+                  ) : (
+                    <input type="text" readOnly value={loggedUser?.nome || ''} className="w-full px-3 py-2 border border-gray-200 rounded-apple bg-gray-50 text-gray-600 cursor-not-allowed" />
+                  )}
                 </div>
               </div>
             </div>
@@ -510,7 +519,7 @@ const TarefasView: React.FC<{
       {showWorkspace && (
         <Workspace
           loggedUser={loggedUser}
-          clientes={clientes}
+          clientes={meusClientes}
           vendedores={vendedores}
           interacoes={interacoes}
           pedidos={pedidos}

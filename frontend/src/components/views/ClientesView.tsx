@@ -3,7 +3,12 @@ import { PlusIcon, AdjustmentsHorizontalIcon, MagnifyingGlassIcon, EllipsisVerti
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
 
-const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNewCliente, onEditCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
+const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, loggedUser, onNewCliente, onEditCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
+  const isGerente = loggedUser?.cargo === 'gerente'
+  // Vendedor só vê seus clientes; gerente vê todos
+  const scopedClientes = React.useMemo(() =>
+    isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
+  , [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
   const [showFilters, setShowFilters] = React.useState(false)
   const [filterEtapa, setFilterEtapa] = React.useState('')
@@ -24,7 +29,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
 
   React.useEffect(() => { setVisibleCount(PAGE_SIZE) }, [debouncedSearch, filterEtapa, filterVendedor, filterScoreMin, filterValorMin])
 
-  const filteredClientes = clientes.filter(cliente => {
+  const filteredClientes = scopedClientes.filter(cliente => {
     const matchSearch = cliente.razaoSocial.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       cliente.contatoNome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
       cliente.cnpj.includes(debouncedSearch)
@@ -159,7 +164,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
   }
 
   const handleExportCSV = () => {
-    const exportData = filtersActive || debouncedSearch ? filteredClientes : clientes
+    const exportData = filtersActive || debouncedSearch ? filteredClientes : scopedClientes
     const csv = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado,etapa,score\n' +
       exportData.map(c => `"${c.razaoSocial}","${c.cnpj}","${c.contatoNome}","${c.contatoTelefone}","${c.contatoEmail}","${c.endereco || ''}","${c.valorEstimado || ''}","${c.etapa}","${c.score || 0}"`).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
@@ -193,7 +198,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Clientes</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {filteredClientes.length}{filtersActive ? ` de ${clientes.length}` : ''} cliente{filteredClientes.length !== 1 ? 's' : ''}
+            {filteredClientes.length}{filtersActive ? ` de ${scopedClientes.length}` : ''} cliente{filteredClientes.length !== 1 ? 's' : ''}
             {totalValor > 0 ? ` · R$ ${totalValor.toLocaleString('pt-BR')} em pipeline` : ''}
           </p>
         </div>
@@ -300,9 +305,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, onNew
       {/* Empty state */}
       {filteredClientes.length === 0 && (
         <div className="bg-white rounded-apple border border-gray-200 py-16 text-center">
-          <div className="text-4xl mb-3">{clientes.length === 0 ? '📋' : '🔍'}</div>
-          <p className="text-gray-600 font-medium">{clientes.length === 0 ? 'Nenhum cliente cadastrado ainda' : 'Nenhum cliente encontrado'}</p>
-          <p className="text-sm text-gray-400 mt-1">{clientes.length === 0 ? 'Clique em "Novo Cliente" ou importe um CSV para começar.' : 'Tente ajustar os filtros ou o termo de busca.'}</p>
+          <div className="text-4xl mb-3">{scopedClientes.length === 0 ? '📋' : '🔍'}</div>
+          <p className="text-gray-600 font-medium">{scopedClientes.length === 0 ? 'Nenhum cliente cadastrado ainda' : 'Nenhum cliente encontrado'}</p>
+          <p className="text-sm text-gray-400 mt-1">{scopedClientes.length === 0 ? 'Clique em "Novo Cliente" ou importe um CSV para começar.' : 'Tente ajustar os filtros ou o termo de busca.'}</p>
         </div>
       )}
 
