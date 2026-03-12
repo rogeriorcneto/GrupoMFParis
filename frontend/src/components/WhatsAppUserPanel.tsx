@@ -59,6 +59,17 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       } else {
         setQrData(null)
       }
+
+      // Salvar token para o beforeunload poder desconectar ao fechar página
+      if (status.connected) {
+        try {
+          const { supabase } = await import('../lib/supabase')
+          const { data } = await supabase.auth.getSession()
+          if (data.session?.access_token) {
+            sessionStorage.setItem('wa_auth_token', data.session.access_token)
+          }
+        } catch { /* ignore */ }
+      }
     } catch (err: any) {
       if (err?.message === 'AUTH_EXPIRED') {
         setError('Sessão expirada. Faça login novamente.')

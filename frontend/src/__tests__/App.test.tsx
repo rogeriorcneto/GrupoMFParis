@@ -64,6 +64,9 @@ vi.mock('../utils/logger', () => ({
 vi.mock('../lib/botApi', () => ({
   sendEmailViaBot: vi.fn().mockResolvedValue({ success: true }),
   sendWhatsApp: vi.fn().mockResolvedValue({ success: true }),
+  disconnectUserWhatsApp: vi.fn().mockResolvedValue({ success: true }),
+  aprovarPedidoComOmie: vi.fn().mockResolvedValue({ success: true, pedido_aprovado: true, omie: { success: true } }),
+  enviarPedidoOmie: vi.fn().mockResolvedValue({ success: true }),
   BOT_URL: 'http://localhost:3001',
 }))
 

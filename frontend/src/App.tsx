@@ -14,6 +14,7 @@ import { useAutoRules } from './hooks/useAutoRules'
 import { useClienteForm } from './hooks/useClienteForm'
 import { useFunilActions } from './hooks/useFunilActions'
 import { logger } from './utils/logger'
+import { disconnectUserWhatsApp } from './lib/botApi'
 import LoginScreen from './components/LoginScreen'
 import Sidebar, { viewsPermitidas } from './components/Sidebar'
 import TopBar from './components/TopBar'
@@ -150,9 +151,37 @@ function App() {
     }
     checkSession()
 
+    // Desconectar WhatsApp ao fechar/recarregar a página
+    const handleBeforeUnload = () => {
+      const token = sessionStorage.getItem('wa_auth_token')
+      if (token) {
+        const url = `${(import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'}/api/whatsapp/user/disconnect`
+        // fetch com keepalive envia mesmo ao fechar a aba (suporta headers)
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: '{}',
+          keepalive: true,
+        }).catch(() => {})
+        sessionStorage.removeItem('wa_auth_token')
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    // Se é um novo carregamento de página (sem flag de sessão), desconectar sessão WA anterior
+    if (!sessionStorage.getItem('wa_page_alive')) {
+      sessionStorage.setItem('wa_page_alive', '1')
+      // Desconectar sessão antiga (se existir) ao abrir nova aba/página
+      disconnectUserWhatsApp().catch(() => {})
+    }
+
     // Escutar mudanças de auth (login/logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_OUT') {
+        // Desconectar WhatsApp ao fazer logout
+        try { await disconnectUserWhatsApp() } catch { /* ignore */ }
+        sessionStorage.removeItem('wa_auth_token')
+        sessionStorage.removeItem('wa_page_alive')
         setLoggedUser(null)
         setClientes([])
         setInteracoes([])
@@ -170,7 +199,10 @@ function App() {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
   }, [loadAllData])
 
   // Realtime: auto-sync clientes, interacoes, tarefas from other users
@@ -324,7 +356,13 @@ function App() {
         activeView={activeView} setActiveView={setActiveView}
         loggedUser={loggedUser} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         onOpenAI={() => setShowAIModal(true)}
-        onSignOut={async () => { await db.signOut(); setLoggedUser(null) }}
+        onSignOut={async () => {
+          try { await disconnectUserWhatsApp() } catch { /* ignore */ }
+          sessionStorage.removeItem('wa_auth_token')
+          sessionStorage.removeItem('wa_page_alive')
+          await db.signOut()
+          setLoggedUser(null)
+        }}
         pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado').length : 0}
       />
 
