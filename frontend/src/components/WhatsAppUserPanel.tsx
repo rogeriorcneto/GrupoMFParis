@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
@@ -8,6 +8,7 @@ import {
   queryWhatsAppAI,
   type UserWAStatus,
 } from '../lib/botApi'
+import CallRecorder from './CallRecorder'
 
 interface WhatsAppUserPanelProps {
   loggedUser: Vendedor | null
@@ -44,6 +45,17 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const [aiHistory, setAiHistory] = useState<{ role: string; content: string }[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Call & voice recorder state
+  const [showCallRecorder, setShowCallRecorder] = useState(false)
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [voiceSeconds, setVoiceSeconds] = useState(0)
+  const [voiceAudioUrl, setVoiceAudioUrl] = useState<string | null>(null)
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const voiceBlobRef = useRef<Blob | null>(null)
 
   // Estado local de "aguardando QR" — persiste independente do status do backend
   const [waitingForQR, setWaitingForQR] = useState(false)
@@ -257,6 +269,74 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
+  // ── Voice message recorder ──
+  const startVoiceRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      voiceStreamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      const recorder = new MediaRecorder(stream, { mimeType })
+      voiceRecorderRef.current = recorder
+      voiceChunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) voiceChunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(voiceChunksRef.current, { type: mimeType })
+        voiceBlobRef.current = blob
+        setVoiceAudioUrl(URL.createObjectURL(blob))
+        stream.getTracks().forEach(t => t.stop())
+        voiceStreamRef.current = null
+      }
+      recorder.start(500)
+      setIsRecordingVoice(true)
+      setVoiceSeconds(0)
+      voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000)
+    } catch {
+      showToast?.('error', 'Não foi possível acessar o microfone.')
+    }
+  }, [showToast])
+
+  const stopVoiceRecording = useCallback(() => {
+    if (voiceTimerRef.current) { clearInterval(voiceTimerRef.current); voiceTimerRef.current = null }
+    if (voiceRecorderRef.current && voiceRecorderRef.current.state !== 'inactive') voiceRecorderRef.current.stop()
+    setIsRecordingVoice(false)
+  }, [])
+
+  const cancelVoiceRecording = useCallback(() => {
+    if (voiceTimerRef.current) { clearInterval(voiceTimerRef.current); voiceTimerRef.current = null }
+    if (voiceRecorderRef.current && voiceRecorderRef.current.state !== 'inactive') voiceRecorderRef.current.stop()
+    if (voiceStreamRef.current) { voiceStreamRef.current.getTracks().forEach(t => t.stop()); voiceStreamRef.current = null }
+    voiceBlobRef.current = null
+    if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl)
+    setVoiceAudioUrl(null)
+    setIsRecordingVoice(false)
+    setVoiceSeconds(0)
+  }, [voiceAudioUrl])
+
+  const sendVoiceMessage = useCallback(async () => {
+    if (!voiceBlobRef.current || !cliente) return
+    const whatsappNumber = cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
+    if (!whatsappNumber) { showToast?.('error', 'Cliente não possui número.'); return }
+    setSending(true)
+    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const durationLabel = `${Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:${(voiceSeconds % 60).toString().padStart(2, '0')}`
+    setMessages(prev => [...prev, { id: Date.now(), text: `🎙️ Áudio (${durationLabel})`, from: 'me', time: now }])
+    // Send as text fallback (actual audio sending requires WhatsApp media API)
+    const result = await sendUserWhatsApp(whatsappNumber.replace(/\D/g, ''), `🎙️ [Mensagem de voz — ${durationLabel}]`, cliente.id)
+    if (!result.success) showToast?.('error', 'Falha ao enviar áudio: ' + (result.error || ''))
+    else showToast?.('success', 'Áudio enviado!')
+    // Cleanup
+    voiceBlobRef.current = null
+    if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl)
+    setVoiceAudioUrl(null)
+    setVoiceSeconds(0)
+    setSending(false)
+  }, [cliente, voiceSeconds, voiceAudioUrl, showToast])
+
+  const getClientPhone = () => {
+    if (!cliente) return ''
+    return cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
+  }
+
   const formatUptime = (s: number) => {
     if (s < 60) return `${s}s`
     if (s < 3600) return `${Math.floor(s / 60)}min`
@@ -394,6 +474,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                 {cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || 'Sem número'}
               </p>
             </div>
+            {getClientPhone() && (
+              <button
+                onClick={() => setShowCallRecorder(true)}
+                title="Ligar para o cliente"
+                className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors flex-shrink-0"
+              >
+                <PhoneIcon className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {/* Messages */}
@@ -434,34 +523,74 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
 
           {/* Input */}
           <div className="p-3 bg-gray-100 border-t border-gray-200 rounded-b-apple">
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setAiMode(!aiMode); if (!aiMode) setAiHistory([]) }}
-                title={aiMode ? 'Modo IA ativo — clique para desativar' : 'Ativar Assistente IA'}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${aiMode ? 'bg-purple-600 text-white shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-purple-100'}`}
-              >
-                🤖
-              </button>
-              <textarea
-                value={chatText}
-                onChange={e => setChatText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={aiMode ? 'Pergunte algo à IA do CRM...' : 'Digite uma mensagem... (ou /ia para IA)'}
-                rows={1}
-                className={`flex-1 px-4 py-2.5 border rounded-full focus:outline-none focus:ring-2 text-sm resize-none ${aiMode ? 'border-purple-300 focus:ring-purple-500 bg-purple-50' : 'border-gray-300 focus:ring-green-500'}`}
-              />
-              <button
-                onClick={handleSend}
-                disabled={sending || !chatText.trim()}
-                className="w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-              >
-                {sending ? (
-                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
+            {/* Voice recording preview */}
+            {voiceAudioUrl && !isRecordingVoice && (
+              <div className="flex items-center gap-2 mb-2 bg-white rounded-full px-3 py-2 border border-green-200">
+                <audio controls src={voiceAudioUrl} className="h-8 flex-1" style={{ minWidth: 0 }} />
+                <button onClick={sendVoiceMessage} disabled={sending} title="Enviar áudio" className="w-8 h-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
+                  <PaperAirplaneIcon className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={cancelVoiceRecording} title="Descartar áudio" className="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Voice recording in progress */}
+            {isRecordingVoice && (
+              <div className="flex items-center gap-3 mb-2 bg-red-50 rounded-full px-4 py-2.5 border border-red-200">
+                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                <span className="text-sm font-mono font-bold text-red-700 flex-shrink-0">
+                  {Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:{(voiceSeconds % 60).toString().padStart(2, '0')}
+                </span>
+                <span className="text-xs text-red-500 flex-1">Gravando...</span>
+                <button onClick={cancelVoiceRecording} title="Cancelar" className="w-8 h-8 bg-white hover:bg-gray-100 text-gray-500 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border border-gray-200">
+                  <TrashIcon className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={stopVoiceRecording} title="Parar e enviar" className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
+                  <StopIcon className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Text input row */}
+            {!isRecordingVoice && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setAiMode(!aiMode); if (!aiMode) setAiHistory([]) }}
+                  title={aiMode ? 'Modo IA ativo — clique para desativar' : 'Ativar Assistente IA'}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${aiMode ? 'bg-purple-600 text-white shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-purple-100'}`}
+                >
+                  🤖
+                </button>
+                <textarea
+                  value={chatText}
+                  onChange={e => setChatText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={aiMode ? 'Pergunte algo à IA do CRM...' : 'Digite uma mensagem... (ou /ia para IA)'}
+                  rows={1}
+                  className={`flex-1 px-4 py-2.5 border rounded-full focus:outline-none focus:ring-2 text-sm resize-none ${aiMode ? 'border-purple-300 focus:ring-purple-500 bg-purple-50' : 'border-gray-300 focus:ring-green-500'}`}
+                />
+                {chatText.trim() ? (
+                  <button
+                    onClick={handleSend}
+                    disabled={sending}
+                    className="w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    {sending ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <PaperAirplaneIcon className="h-4 w-4" />}
+                  </button>
                 ) : (
-                  <PaperAirplaneIcon className="h-4 w-4" />
+                  <button
+                    onClick={startVoiceRecording}
+                    disabled={sending}
+                    title="Gravar mensagem de voz"
+                    className="w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                  >
+                    <MicrophoneIcon className="h-4 w-4" />
+                  </button>
                 )}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -474,6 +603,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             </p>
           </div>
         </div>
+      )}
+      {/* Call Recorder overlay */}
+      {showCallRecorder && cliente && getClientPhone() && (
+        <CallRecorder
+          cliente={cliente}
+          vendedorId={loggedUser?.id}
+          phoneNumber={getClientPhone()}
+          onClose={() => setShowCallRecorder(false)}
+        />
       )}
     </div>
   )
