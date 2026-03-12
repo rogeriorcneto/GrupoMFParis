@@ -3,6 +3,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Interacao, Tarefa, Vendedor } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
+import WhatsAppUserPanel from './WhatsAppUserPanel'
 
 interface ClientePanelProps {
   cliente: Cliente
@@ -34,7 +35,7 @@ export default function ClientePanel({
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda,
   setInteracoes, setClientes, setTarefas, addNotificacao
 }: ClientePanelProps) {
-  const [panelTab, setPanelTab] = useState<'info' | 'atividades' | 'tarefas' | 'timeline'>('info')
+  const [panelTab, setPanelTab] = useState<'info' | 'atividades' | 'tarefas' | 'timeline' | 'whatsapp'>('info')
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
   const [panelNota, setPanelNota] = useState('')
@@ -117,7 +118,7 @@ export default function ClientePanel({
 
           {/* Tabs */}
           <div className="flex border-t border-gray-100">
-            {([['info', '📋 Info'], ['timeline', '🕐 Timeline'], ['atividades', '📞 Ativ.'], ['tarefas', '✅ Tarefas']] as const).map(([key, label]) => (
+            {([['info', '📋 Info'], ['timeline', '🕐 Timeline'], ['atividades', '📞 Ativ.'], ['tarefas', '✅ Tarefas'], ['whatsapp', '📱 WhatsApp']] as const).map(([key, label]) => (
               <button key={key} onClick={() => setPanelTab(key)} className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${panelTab === key ? 'text-primary-700 border-b-2 border-primary-600 bg-primary-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
                 {label}
                 {key === 'atividades' && clienteInteracoes.length > 0 ? ` (${clienteInteracoes.length})` : ''}
@@ -514,6 +515,16 @@ export default function ClientePanel({
                 )}
               </div>
             </>
+          )}
+
+          {/* === ABA WHATSAPP === */}
+          {panelTab === 'whatsapp' && (
+            <WhatsAppUserPanel
+              loggedUser={loggedUser}
+              cliente={c}
+              showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'WhatsApp' : 'Erro WhatsApp', texto, c.id)}
+              compact
+            />
           )}
 
         </div>
