@@ -9,7 +9,7 @@ import * as QRCode from 'qrcode'
 import { handleMessage } from './bot.js'
 import { log } from './logger.js'
 import { useSupabaseAuthState } from './whatsapp-session-store.js'
-import { formatBrazilianPhone } from './whatsapp-multi.js'
+import { formatBrazilianPhone, resolveWhatsAppJid } from './whatsapp-multi.js'
 
 const baileysLogger = pino({ level: 'silent' })
 
@@ -68,8 +68,15 @@ export async function sendWhatsAppMessage(number: string, text: string): Promise
     return { success: false, error: 'WhatsApp não está conectado' }
   }
   try {
-    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
-    await sock.sendMessage(jid, { text })
+    // Validar número via WhatsApp antes de enviar
+    const resolved = await resolveWhatsAppJid(sock, number)
+    if (!resolved) {
+      // Fallback: tentar enviar direto com formato básico (pode falhar silenciosamente)
+      const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
+      await sock.sendMessage(jid, { text })
+      return { success: true }
+    }
+    await sock.sendMessage(resolved.jid, { text })
     return { success: true }
   } catch (err: any) {
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }

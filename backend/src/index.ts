@@ -9,7 +9,7 @@ import {
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
   startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
   getUserWhatsAppContacts, getUserWhatsAppChats,
-  sendUserWhatsAppAudio, sendUserWhatsAppImage,
+  sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -295,6 +295,25 @@ app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
     res.json(merged)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
+// Verificar se número existe no WhatsApp
+app.post('/api/whatsapp/user/check-number', requireAuth, rateLimit(20, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const { number } = req.body
+  if (!number) {
+    res.status(400).json({ exists: false, error: 'Campo obrigatório: number' })
+    return
+  }
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ exists: false, error: 'Vendedor não encontrado' }); return }
+    const result = await checkNumberOnWhatsApp(vendedor.id, number)
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ exists: false, error: err?.message || 'Erro interno' })
   }
 })
 

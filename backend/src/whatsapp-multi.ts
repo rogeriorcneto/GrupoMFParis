@@ -207,23 +207,95 @@ export function formatBrazilianPhone(phone: string): string {
   if (d.startsWith('0') && !d.startsWith('00')) d = d.slice(1)
   // Já tem código de país 55 e tamanho correto (12=fixo, 13=celular)
   if (d.startsWith('55') && d.length >= 12 && d.length <= 13) {
-    log.info(`📞 formatBrazilianPhone: "${phone}" → "${d}" (já com +55)`)
     return d
   }
   // DDD + número (10=fixo, 11=celular) → adicionar 55
   if (d.length >= 10 && d.length <= 11) {
-    const result = `55${d}`
-    log.info(`📞 formatBrazilianPhone: "${phone}" → "${result}" (adicionou 55)`)
-    return result
+    return `55${d}`
   }
   // Número curto sem DDD — fallback
   if (d.length >= 8 && d.length <= 9) {
-    const result = `55${d}`
-    log.warn(`⚠️ formatBrazilianPhone: "${phone}" → "${result}" (sem DDD, pode estar errado)`)
-    return result
+    return `55${d}`
   }
-  log.warn(`⚠️ formatBrazilianPhone: "${phone}" → "${d}" (formato não reconhecido, ${d.length} dígitos)`)
   return d
+}
+
+/**
+ * Gera variações de um número brasileiro para tentar encontrar no WhatsApp.
+ * Lida com o problema do 9º dígito: celulares brasileiros podem estar
+ * cadastrados COM ou SEM o 9 extra dependendo de quando a conta foi criada.
+ */
+export function generateBrazilianPhoneVariations(formatted: string): string[] {
+  const variations = [formatted]
+  // Precisa começar com 55 e ter DDD (2 dígitos após 55)
+  if (!formatted.startsWith('55') || formatted.length < 12) return variations
+
+  const ddd = formatted.slice(2, 4)
+  const localNumber = formatted.slice(4)
+
+  if (localNumber.length === 9 && localNumber.startsWith('9')) {
+    // Tem 9º dígito → tentar SEM (remover o 9 extra)
+    const semNono = `55${ddd}${localNumber.slice(1)}`
+    variations.push(semNono)
+  } else if (localNumber.length === 8 && /^[6-9]/.test(localNumber)) {
+    // Celular antigo sem 9º dígito (começa com 6-9) → tentar COM 9
+    // Fixos começam com 2-5, não devem receber o 9
+    const comNono = `55${ddd}9${localNumber}`
+    variations.push(comNono)
+  }
+
+  return variations
+}
+
+/**
+ * Resolve o JID correto de um número usando Baileys onWhatsApp().
+ * Tenta o número formatado e variações com/sem 9º dígito.
+ * Retorna o JID validado ou null se não encontrar.
+ */
+export async function resolveWhatsAppJid(
+  sock: ReturnType<typeof import('@whiskeysockets/baileys').default>,
+  rawNumber: string
+): Promise<{ jid: string; exists: boolean; number: string } | null> {
+  const formatted = formatBrazilianPhone(rawNumber)
+  if (!formatted) return null
+
+  const variations = generateBrazilianPhoneVariations(formatted)
+
+  for (const num of variations) {
+    try {
+      const results = await sock.onWhatsApp(num)
+      const result = results?.[0]
+      if (result?.exists) {
+        log.info(`✅ Número ${rawNumber} → validado como ${result.jid}`)
+        return {
+          jid: result.jid,
+          exists: true,
+          number: num,
+        }
+      }
+    } catch (err) {
+      log.warn({ err, num }, `⚠️ Erro ao verificar ${num} no WhatsApp`)
+    }
+  }
+
+  log.warn(`❌ Número ${rawNumber} (variações: ${variations.join(', ')}) não encontrado no WhatsApp`)
+  return null
+}
+
+/** Verifica se um número existe no WhatsApp (endpoint público) */
+export async function checkNumberOnWhatsApp(
+  vendedorId: number,
+  rawNumber: string
+): Promise<{ exists: boolean; jid?: string; number?: string; error?: string }> {
+  const session = sessions.get(vendedorId)
+  if (!session || !session.sock || session.status !== 'connected') {
+    return { exists: false, error: 'WhatsApp não está conectado' }
+  }
+  const result = await resolveWhatsAppJid(session.sock, rawNumber)
+  if (result) {
+    return { exists: true, jid: result.jid, number: result.number }
+  }
+  return { exists: false, error: `Número ${rawNumber} não está cadastrado no WhatsApp` }
 }
 
 export async function sendUserWhatsAppMessage(
@@ -236,8 +308,12 @@ export async function sendUserWhatsAppMessage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
-    await session.sock.sendMessage(jid, { text })
+    // Validar número via WhatsApp antes de enviar
+    const resolved = await resolveWhatsAppJid(session.sock, number)
+    if (!resolved) {
+      return { success: false, error: `Número ${number} não encontrado no WhatsApp. Verifique se o número está correto e possui WhatsApp.` }
+    }
+    await session.sock.sendMessage(resolved.jid, { text })
     return { success: true }
   } catch (err: any) {
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
@@ -270,12 +346,15 @@ export async function sendUserWhatsAppAudio(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
+    const resolved = await resolveWhatsAppJid(session.sock, number)
+    if (!resolved) {
+      return { success: false, error: `Número ${number} não encontrado no WhatsApp.` }
+    }
     const buffer = Buffer.from(audioBase64, 'base64')
-    await session.sock.sendMessage(jid, {
+    await session.sock.sendMessage(resolved.jid, {
       audio: buffer,
       mimetype,
-      ptt: true, // push-to-talk (aparece como mensagem de voz)
+      ptt: true,
     })
     return { success: true }
   } catch (err: any) {
@@ -296,9 +375,12 @@ export async function sendUserWhatsAppImage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
+    const resolved = await resolveWhatsAppJid(session.sock, number)
+    if (!resolved) {
+      return { success: false, error: `Número ${number} não encontrado no WhatsApp.` }
+    }
     const buffer = Buffer.from(imageBase64, 'base64')
-    await session.sock.sendMessage(jid, {
+    await session.sock.sendMessage(resolved.jid, {
       image: buffer,
       mimetype,
       caption: caption || undefined,

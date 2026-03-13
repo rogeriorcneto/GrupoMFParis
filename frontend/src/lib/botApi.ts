@@ -109,6 +109,22 @@ export async function disconnectUserWhatsApp(): Promise<{ success: boolean; erro
   }
 }
 
+/** Verifica se um número existe no WhatsApp */
+export async function checkWhatsAppNumber(
+  number: string
+): Promise<{ exists: boolean; jid?: string; number?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/check-number`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { exists: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
 /** Send a WhatsApp message via the logged user's own WhatsApp session */
 export async function sendUserWhatsApp(
   number: string, text: string, clienteId?: number
