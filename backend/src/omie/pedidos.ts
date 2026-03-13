@@ -176,26 +176,40 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
     codigo: skuBusca,
   }
 
-  const response = await omieCall<any>(
-    '/geral/produtos/',
-    'IncluirProduto',
-    [omieData],
-    { skipCache: true, credentials: creds }
-  )
+  try {
+    const response = await omieCall<any>(
+      '/geral/produtos/',
+      'IncluirProduto',
+      [omieData],
+      { skipCache: true, credentials: creds }
+    )
 
-  const codigoOmie = response.codigo_produto
-  if (!codigoOmie) {
-    throw new Error(`Omie não retornou codigo_produto para produto ${produto.nome}`)
+    const codigoOmie = response.codigo_produto
+    if (!codigoOmie) {
+      throw new Error(`Omie não retornou codigo_produto para produto ${produto.nome}`)
+    }
+
+    // Salvar código Omie no CRM
+    await supabase
+      .from('produtos')
+      .update({ omie_codigo: String(codigoOmie) })
+      .eq('id', produtoId)
+
+    log.info({ produtoId, codigoOmie }, '✅ Produto criado no Omie')
+    return { codigoOmie, ...meta }
+  } catch (createErr: any) {
+    // Se o erro indica que o produto já existe, extrair o código da mensagem
+    const errMsg = createErr?.message || String(createErr)
+    const codigoMatch = errMsg.match(/c[oó]digo\s+(\d+)/i)
+    if (codigoMatch) {
+      const codigoExistente = parseInt(codigoMatch[1], 10)
+      log.info({ produtoId, codigoExistente, nome: produto.nome }, '🔗 Produto já existia no Omie (detectado via erro) — vinculando')
+      await supabase.from('produtos').update({ omie_codigo: String(codigoExistente) }).eq('id', produtoId)
+      return { codigoOmie: codigoExistente, ...meta }
+    }
+    // Rethrow se não conseguimos extrair o código
+    throw createErr
   }
-
-  // Salvar código Omie no CRM
-  await supabase
-    .from('produtos')
-    .update({ omie_codigo: String(codigoOmie) })
-    .eq('id', produtoId)
-
-  log.info({ produtoId, codigoOmie }, '✅ Produto criado no Omie')
-  return { codigoOmie, ...meta }
 }
 
 // ============================================
