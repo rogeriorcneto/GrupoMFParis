@@ -130,6 +130,7 @@ export const sampleCliente = (overrides = {}) => ({
   score: 50,
   valorEstimado: 100000,
   produtosInteresse: ['Sacaria'],
+  redesSociais: '@empresateste',
   ultimaInteracao: '2025-02-01',
   diasInativo: 5,
   historicoEtapas: [],

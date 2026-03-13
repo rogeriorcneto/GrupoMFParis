@@ -13,6 +13,7 @@ const emptyForm: FormData = {
   enderecoRua2: '', enderecoNumero2: '', enderecoComplemento2: '',
   enderecoBairro2: '', enderecoCidade2: '', enderecoEstado2: '', enderecoCep2: '',
   cnaePrimario: '', cnaeSecundario: '',
+  redesSociais: '',
   valorEstimado: '',
   produtosInteresse: '', produtosQuantidades: {}, vendedorId: ''
 }
@@ -98,6 +99,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     if (isSaving) return
 
     if (!formData.razaoSocial.trim()) { showToast('error', 'Razão Social é obrigatória.'); return }
+    if (!formData.redesSociais.trim()) { showToast('error', 'Redes Sociais é obrigatório.'); return }
 
     const cnpjDigits = formData.cnpj.replace(/\D/g, '')
     if (cnpjDigits.length > 0 && !validarCNPJ(formData.cnpj)) {
@@ -208,6 +210,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       enderecoCep2: cliente.enderecoCep2 || '',
       cnaePrimario: cliente.cnaePrimario || '',
       cnaeSecundario: cliente.cnaeSecundario || '',
+      redesSociais: cliente.redesSociais || '',
       produtosInteresse: cliente.produtosInteresse?.join(', ') || '',
       produtosQuantidades: {},
       valorEstimado: cliente.valorEstimado?.toString() || '',

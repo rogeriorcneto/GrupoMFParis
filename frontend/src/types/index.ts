@@ -35,6 +35,7 @@ export interface Cliente {
   cnaePrimario?: string
   cnaeSecundario?: string
   whatsapp?: string
+  redesSociais?: string
   omieCodigo?: string
   etapa: string
   score?: number
@@ -107,6 +108,7 @@ export interface FormData {
   enderecoCep2: string
   cnaePrimario: string
   cnaeSecundario: string
+  redesSociais: string
   valorEstimado?: string
   produtosInteresse: string
   produtosQuantidades: Record<string, number>

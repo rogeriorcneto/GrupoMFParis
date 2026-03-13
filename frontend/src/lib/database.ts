@@ -39,6 +39,7 @@ export function clienteFromDb(row: any): Cliente {
     enderecoCep2: row.endereco_cep2 ?? undefined,
     cnaePrimario: row.cnae_primario ?? undefined,
     cnaeSecundario: row.cnae_secundario ?? undefined,
+    redesSociais: row.redes_sociais ?? undefined,
     whatsapp: row.whatsapp ?? undefined,
     omieCodigo: row.omie_codigo ?? undefined,
     etapa: row.etapa,
@@ -115,6 +116,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.enderecoCep2 !== undefined) row.endereco_cep2 = c.enderecoCep2
   if (c.cnaePrimario !== undefined) row.cnae_primario = c.cnaePrimario
   if (c.cnaeSecundario !== undefined) row.cnae_secundario = c.cnaeSecundario
+  if (c.redesSociais !== undefined) row.redes_sociais = c.redesSociais
   if (c.whatsapp !== undefined) row.whatsapp = c.whatsapp
   if (c.omieCodigo !== undefined) row.omie_codigo = c.omieCodigo
   if (c.etapa !== undefined) row.etapa = c.etapa

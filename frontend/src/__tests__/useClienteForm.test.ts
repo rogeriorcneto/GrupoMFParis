@@ -137,6 +137,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Teste' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@teste' } } as any)
         result.current.handleInputChange({ target: { name: 'cnpj', value: '11.111.111/1111-11' } } as any)
       })
 
@@ -153,6 +154,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Teste' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@teste' } } as any)
         result.current.handleInputChange({ target: { name: 'contatoEmail', value: 'invalido' } } as any)
       })
 
@@ -169,6 +171,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Teste' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@teste' } } as any)
         result.current.handleInputChange({ target: { name: 'valorEstimado', value: '-500' } } as any)
       })
 
@@ -187,6 +190,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Nova Empresa' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@novaempresa' } } as any)
         result.current.handleInputChange({ target: { name: 'contatoEmail', value: 'test@test.com' } } as any)
         result.current.handleInputChange({ target: { name: 'valorEstimado', value: '50000' } } as any)
       })
@@ -210,6 +214,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
 
       await act(async () => {
@@ -255,6 +260,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
 
       await act(async () => {
@@ -275,6 +281,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
 
       await act(async () => {
@@ -291,6 +298,7 @@ describe('useClienteForm', () => {
 
       act(() => {
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
+        result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
 
       await act(async () => {
