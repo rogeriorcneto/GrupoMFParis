@@ -646,12 +646,20 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
       return
     }
 
-    const userId = (req as any).userId
+    const authUid = (req as any).userId
+    // Converter auth UUID para vendedor.id numérico
+    const { data: vendedorData } = await supabase
+      .from('vendedores')
+      .select('id')
+      .eq('auth_id', authUid)
+      .single()
+    const aprovadoPorId = vendedorData?.id || null
+
     const { error: updateErr } = await supabase
       .from('pedidos')
       .update({
         status: 'confirmado',
-        aprovado_por: userId,
+        aprovado_por: aprovadoPorId,
         data_aprovacao: new Date().toISOString(),
       })
       .eq('id', pedidoId)
