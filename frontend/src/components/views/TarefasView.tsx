@@ -2,6 +2,7 @@ import React from 'react'
 import { XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon, ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../../types'
 import { logger } from '../../utils/logger'
+import { formatBrazilianPhone } from '../../utils/validators'
 import { insertInteracao, insertAtividade } from '../../lib/database'
 import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
@@ -402,7 +403,7 @@ const TarefasView: React.FC<{
                                   )}
                                   {(cliente.contatoTelefone || cliente.contatoCelular) && (
                                     <a
-                                      href={`tel:${(cliente.contatoTelefone || cliente.contatoCelular || '').replace(/\D/g, '')}`}
+                                      href={`tel:+${formatBrazilianPhone(cliente.contatoTelefone || cliente.contatoCelular || '')}`}
                                       onClick={(e) => { e.stopPropagation(); registerCall(cliente) }}
                                       title="Ligar"
                                       className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-full transition-colors"

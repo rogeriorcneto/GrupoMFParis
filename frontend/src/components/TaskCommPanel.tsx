@@ -497,7 +497,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                 <div className="space-y-3">
                   {cliente.contatoTelefone && (
                     <a
-                      href={`tel:${cliente.contatoTelefone.replace(/\D/g, '')}`}
+                      href={`tel:+${formatBrazilianPhone(cliente.contatoTelefone)}`}
                       onClick={() => registerCall(cliente.contatoTelefone)}
                       className="flex items-center justify-center gap-3 w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
@@ -507,7 +507,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   )}
                   {cliente.contatoCelular && cliente.contatoCelular !== cliente.contatoTelefone && (
                     <a
-                      href={`tel:${cliente.contatoCelular.replace(/\D/g, '')}`}
+                      href={`tel:+${formatBrazilianPhone(cliente.contatoCelular)}`}
                       onClick={() => registerCall(cliente.contatoCelular!)}
                       className="flex items-center justify-center gap-3 w-full py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
@@ -517,7 +517,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   )}
                   {cliente.contatoTelefoneFixo && (
                     <a
-                      href={`tel:${cliente.contatoTelefoneFixo.replace(/\D/g, '')}`}
+                      href={`tel:+${formatBrazilianPhone(cliente.contatoTelefoneFixo!)}`}
                       onClick={() => registerCall(cliente.contatoTelefoneFixo!)}
                       className="flex items-center justify-center gap-3 w-full py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >

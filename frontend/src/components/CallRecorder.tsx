@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { PhoneIcon, StopIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { supabase } from '../lib/supabase'
+import { formatBrazilianPhone } from '../utils/validators'
 import type { Cliente } from '../types'
 
 export type CallMode = 'phone' | 'whatsapp'
@@ -97,12 +98,12 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
       }, 1000)
 
       // Open the call link based on mode
-      const cleanNum = phoneNumber.replace(/\D/g, '')
+      const formattedNum = formatBrazilianPhone(phoneNumber)
       if (callMode === 'whatsapp') {
         // WhatsApp voice call — open in new tab so recording continues
-        window.open(`https://wa.me/${cleanNum}`, '_blank')
+        window.open(`https://wa.me/${formattedNum}`, '_blank')
       } else {
-        window.open(`tel:${cleanNum}`, '_self')
+        window.open(`tel:+${formattedNum}`, '_self')
       }
 
     } catch (err: any) {
@@ -270,7 +271,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
               </button>
               {callMode === 'phone' && (
                 <a
-                  href={`tel:${phoneNumber.replace(/\D/g, '')}`}
+                  href={`tel:+${formatBrazilianPhone(phoneNumber)}`}
                   onClick={() => onClose()}
                   className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors no-underline"
                 >
