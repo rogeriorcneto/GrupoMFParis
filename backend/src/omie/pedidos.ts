@@ -69,13 +69,13 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
     email: cliente.contato_email || '',
     telefone1_numero: (cliente.contato_telefone || '').replace(/\D/g, '').slice(0, 15),
     telefone2_numero: (cliente.contato_celular || '').replace(/\D/g, '').slice(0, 15),
-    endereco: cliente.endereco_rua || '',
-    endereco_numero: cliente.endereco_numero || '',
+    endereco: cliente.endereco_rua || 'Não informado',
+    endereco_numero: cliente.endereco_numero || 'S/N',
     complemento: cliente.endereco_complemento || '',
-    bairro: cliente.endereco_bairro || '',
-    cidade: cliente.endereco_cidade || '',
-    estado: cliente.endereco_estado || '',
-    cep: (cliente.endereco_cep || '').replace(/\D/g, ''),
+    bairro: cliente.endereco_bairro || 'Centro',
+    cidade: cliente.endereco_cidade || 'São Paulo',
+    estado: cliente.endereco_estado || 'SP',
+    cep: (cliente.endereco_cep || '01001000').replace(/\D/g, ''),
   }
 
   const response = await omieCall<any>(
