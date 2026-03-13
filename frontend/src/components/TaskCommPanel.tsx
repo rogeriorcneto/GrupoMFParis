@@ -157,7 +157,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
     }])
 
     const result = await sendWhatsApp(
-      formatBrazilianPhone(whatsappNumber),
+      whatsappNumber.replace(/\D/g, ''),
       msg,
       cliente.id,
       loggedUser?.nome,

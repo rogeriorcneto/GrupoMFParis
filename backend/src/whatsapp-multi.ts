@@ -188,13 +188,29 @@ export async function disconnectAllSessions(): Promise<void> {
 }
 
 /** Normaliza telefone para formato WhatsApp brasileiro: 55 + DDD + número */
-function formatBrazilianPhone(phone: string): string {
+export function formatBrazilianPhone(phone: string): string {
   let d = phone.replace(/\D/g, '')
   if (!d) return ''
+  // Remove prefixo de tronco (0XX)
   if (d.startsWith('0') && !d.startsWith('00')) d = d.slice(1)
-  if (d.startsWith('55') && d.length >= 12 && d.length <= 13) return d
-  if (d.length >= 10 && d.length <= 11) return `55${d}`
-  if (d.length >= 8 && d.length <= 9) return `55${d}`
+  // Já tem código de país 55 e tamanho correto (12=fixo, 13=celular)
+  if (d.startsWith('55') && d.length >= 12 && d.length <= 13) {
+    log.info(`📞 formatBrazilianPhone: "${phone}" → "${d}" (já com +55)`)
+    return d
+  }
+  // DDD + número (10=fixo, 11=celular) → adicionar 55
+  if (d.length >= 10 && d.length <= 11) {
+    const result = `55${d}`
+    log.info(`📞 formatBrazilianPhone: "${phone}" → "${result}" (adicionou 55)`)
+    return result
+  }
+  // Número curto sem DDD — fallback
+  if (d.length >= 8 && d.length <= 9) {
+    const result = `55${d}`
+    log.warn(`⚠️ formatBrazilianPhone: "${phone}" → "${result}" (sem DDD, pode estar errado)`)
+    return result
+  }
+  log.warn(`⚠️ formatBrazilianPhone: "${phone}" → "${d}" (formato não reconhecido, ${d.length} dígitos)`)
   return d
 }
 

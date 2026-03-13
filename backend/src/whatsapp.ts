@@ -9,6 +9,7 @@ import * as QRCode from 'qrcode'
 import { handleMessage } from './bot.js'
 import { log } from './logger.js'
 import { useSupabaseAuthState } from './whatsapp-session-store.js'
+import { formatBrazilianPhone } from './whatsapp-multi.js'
 
 const baileysLogger = pino({ level: 'silent' })
 
@@ -60,17 +61,6 @@ export async function disconnectWhatsApp(): Promise<void> {
   } catch {
     // Ignore
   }
-}
-
-/** Normaliza telefone para formato WhatsApp brasileiro: 55 + DDD + número */
-function formatBrazilianPhone(phone: string): string {
-  let d = phone.replace(/\D/g, '')
-  if (!d) return ''
-  if (d.startsWith('0') && !d.startsWith('00')) d = d.slice(1)
-  if (d.startsWith('55') && d.length >= 12 && d.length <= 13) return d
-  if (d.length >= 10 && d.length <= 11) return `55${d}`
-  if (d.length >= 8 && d.length <= 9) return `55${d}`
-  return d
 }
 
 export async function sendWhatsAppMessage(number: string, text: string): Promise<{ success: boolean; error?: string }> {

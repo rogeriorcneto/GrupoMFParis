@@ -7,7 +7,7 @@ import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, s
 import {
   connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
-  startSessionCleanup, checkWhatsAppSessionTable,
+  startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -112,7 +112,7 @@ app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, r
       const db = await import('./database.js')
       // Salvar mensagem no histórico
       await db.insertWhatsAppMessage({
-        numero: number.replace(/\D/g, ''),
+        numero: formatBrazilianPhone(number),
         clienteId: clienteId || undefined,
         vendedorId: vendedorId || undefined,
         direcao: 'enviada',
@@ -240,7 +240,7 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
     if (result.success) {
       try {
         await db.insertWhatsAppMessage({
-          numero: number.replace(/\D/g, ''),
+          numero: formatBrazilianPhone(number),
           clienteId: clienteId || undefined,
           vendedorId: vendedor.id,
           direcao: 'enviada',

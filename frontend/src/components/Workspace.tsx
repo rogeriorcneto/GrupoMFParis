@@ -231,7 +231,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
     const number = selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone || ''
     if (!number) { showToast?.('error', 'Cliente sem número de WhatsApp'); return }
     setWaSending(true)
-    const result = await sendUserWhatsApp(formatBrazilianPhone(number), waText.trim(), selectedCliente.id)
+    const result = await sendUserWhatsApp(number.replace(/\D/g, ''), waText.trim(), selectedCliente.id)
     if (result.success) {
       showToast?.('success', 'WhatsApp enviado!')
       logAction('whatsapp', `WhatsApp para ${selectedCliente.razaoSocial}: ${waText.trim().substring(0, 60)}`, selectedCliente.razaoSocial)
