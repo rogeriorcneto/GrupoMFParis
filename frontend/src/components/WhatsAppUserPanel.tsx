@@ -581,32 +581,6 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={async () => {
-                if (validating) return
-                setValidating(true)
-                setValidationResult(null)
-                try {
-                  const result = await validateWhatsAppContacts()
-                  setValidationResult(result)
-                  showToast?.('success', `Validação concluída: ${result.valid} válidos, ${result.invalid} inválidos de ${result.total} contatos`)
-                } catch (err: any) {
-                  showToast?.('error', err?.message || 'Erro ao validar contatos')
-                }
-                setValidating(false)
-              }}
-              disabled={validating}
-              title="Validar todos os números dos contatos no WhatsApp"
-              className={`p-1.5 rounded-full transition-colors ${validating ? 'bg-yellow-200 text-yellow-700 animate-pulse' : 'text-green-700 hover:bg-green-100'}`}
-            >
-              {validating ? (
-                <ArrowPathIcon className="h-4 w-4 animate-spin" />
-              ) : (
-                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-                </svg>
-              )}
-            </button>
-            <button
               onClick={() => { setShowContacts(!showContacts); if (!showContacts) loadContacts() }}
               title="Contatos do WhatsApp"
               className={`p-1.5 rounded-full transition-colors ${showContacts ? 'bg-green-600 text-white' : 'text-green-700 hover:bg-green-100'}`}
@@ -628,6 +602,92 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Validation banner — validates ALL CRM clients against WhatsApp */}
+      <div className="px-4 py-2.5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+        {!validating && !validationResult && (
+          <button
+            onClick={async () => {
+              setValidating(true)
+              setValidationResult(null)
+              try {
+                const result = await validateWhatsAppContacts()
+                setValidationResult(result)
+              } catch (err: any) {
+                showToast?.('error', err?.message || 'Erro ao validar contatos')
+                setValidating(false)
+              }
+            }}
+            className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-white border border-blue-200 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition-colors shadow-sm"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+            </svg>
+            Validar todos os números do CRM no WhatsApp
+          </button>
+        )}
+
+        {validating && (
+          <div className="flex items-center gap-3 py-1">
+            <ArrowPathIcon className="h-5 w-5 text-blue-600 animate-spin flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-800">Validando números dos clientes...</p>
+              <p className="text-[11px] text-blue-600">Verificando cada número nos servidores do WhatsApp (pode levar alguns minutos)</p>
+              <div className="mt-1.5 h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {validationResult && !validating && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-800">
+                Validação concluída — {validationResult.total} clientes verificados
+              </p>
+              <button
+                onClick={() => setValidationResult(null)}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1 bg-green-100 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-bold text-green-700">{validationResult.valid}</p>
+                <p className="text-[10px] text-green-600 font-medium">Válidos</p>
+              </div>
+              <div className="flex-1 bg-red-100 rounded-lg px-3 py-2 text-center">
+                <p className="text-lg font-bold text-red-700">{validationResult.invalid}</p>
+                <p className="text-[10px] text-red-600 font-medium">Inválidos</p>
+              </div>
+              {validationResult.errors > 0 && (
+                <div className="flex-1 bg-yellow-100 rounded-lg px-3 py-2 text-center">
+                  <p className="text-lg font-bold text-yellow-700">{validationResult.errors}</p>
+                  <p className="text-[10px] text-yellow-600 font-medium">Erros</p>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={async () => {
+                setValidating(true)
+                setValidationResult(null)
+                try {
+                  const result = await validateWhatsAppContacts()
+                  setValidationResult(result)
+                } catch (err: any) {
+                  showToast?.('error', err?.message || 'Erro ao validar contatos')
+                }
+                setValidating(false)
+              }}
+              className="w-full text-xs text-blue-600 hover:text-blue-800 font-medium py-1"
+            >
+              ↻ Validar novamente
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Contacts sidebar overlay */}
