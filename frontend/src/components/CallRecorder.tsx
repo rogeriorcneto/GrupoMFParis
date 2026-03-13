@@ -3,10 +3,14 @@ import { PhoneIcon, StopIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react
 import { supabase } from '../lib/supabase'
 import type { Cliente } from '../types'
 
+export type CallMode = 'phone' | 'whatsapp'
+
 interface CallRecorderProps {
-  cliente: Cliente
+  cliente?: Cliente | null
   vendedorId?: number
   phoneNumber: string
+  contactName?: string
+  callMode?: CallMode
   onClose: () => void
   onSaved?: (gravacao: GravacaoMeta) => void
 }
@@ -26,7 +30,7 @@ export interface GravacaoMeta {
 
 type RecordingState = 'idle' | 'requesting' | 'recording' | 'stopped' | 'uploading' | 'saved' | 'error'
 
-export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose, onSaved }: CallRecorderProps) {
+export default function CallRecorder({ cliente, vendedorId, phoneNumber, contactName, callMode = 'phone', onClose, onSaved }: CallRecorderProps) {
   const [state, setState] = useState<RecordingState>('idle')
   const [seconds, setSeconds] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -92,8 +96,14 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
         setSeconds(s => s + 1)
       }, 1000)
 
-      // Also open the tel: link to start the actual call
-      window.open(`tel:${phoneNumber.replace(/\D/g, '')}`, '_self')
+      // Open the call link based on mode
+      const cleanNum = phoneNumber.replace(/\D/g, '')
+      if (callMode === 'whatsapp') {
+        // WhatsApp voice call — open in new tab so recording continues
+        window.open(`https://wa.me/${cleanNum}`, '_blank')
+      } else {
+        window.open(`tel:${cleanNum}`, '_self')
+      }
 
     } catch (err: any) {
       setError(err?.message === 'Permission denied'
@@ -101,7 +111,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
         : `Erro ao acessar microfone: ${err?.message || 'Desconhecido'}`)
       setState('error')
     }
-  }, [phoneNumber])
+  }, [phoneNumber, callMode])
 
   const stopRecording = useCallback(() => {
     if (timerRef.current) {
@@ -121,7 +131,8 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
 
     const blob = audioBlobRef.current
     const ext = blob.type.includes('webm') ? 'webm' : 'mp4'
-    const fileName = `call_${cliente.id}_${Date.now()}.${ext}`
+    const clienteIdForFile = cliente?.id || 'wa'
+    const fileName = `call_${clienteIdForFile}_${Date.now()}.${ext}`
     const storagePath = `${vendedorId || 'unknown'}/${fileName}`
 
     let arquivoUrl: string | null = null
@@ -155,7 +166,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
       const { data, error: dbError } = await supabase
         .from('gravacoes_chamada')
         .insert({
-          cliente_id: cliente.id,
+          cliente_id: cliente?.id || null,
           vendedor_id: vendedorId || null,
           numero_telefone: phoneNumber,
           duracao_segundos: seconds,
@@ -163,6 +174,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
           arquivo_path: arquivoPath,
           tamanho_bytes: blob.size,
           notas: notas.trim() || null,
+          tipo_chamada: callMode,
         })
         .select()
         .single()
@@ -193,7 +205,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
       setError(`Erro ao salvar: ${err?.message || 'Desconhecido'}. Verifique se a tabela gravacoes_chamada existe.`)
       setState('error')
     }
-  }, [cliente.id, vendedorId, phoneNumber, seconds, notas, onSaved, onClose])
+  }, [cliente?.id, vendedorId, phoneNumber, seconds, notas, callMode, onSaved, onClose])
 
   const discardRecording = useCallback(() => {
     audioBlobRef.current = null
@@ -222,7 +234,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
           )}
           <PhoneIcon className="h-4 w-4" />
           <span className="text-sm font-semibold truncate max-w-[160px]">
-            {cliente.razaoSocial || cliente.nomeFantasia || 'Cliente'}
+            {contactName || cliente?.razaoSocial || cliente?.nomeFantasia || 'Contato'}
           </span>
         </div>
         {state !== 'recording' && (
@@ -237,27 +249,35 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
         {state === 'idle' && (
           <div className="text-center">
             <p className="text-sm text-gray-600 mb-3">
-              Iniciar ligação para <strong>{phoneNumber}</strong> com gravação?
+              {callMode === 'whatsapp'
+                ? <>Ligar via <strong>WhatsApp</strong> para <strong>{phoneNumber}</strong> com gravação?</>
+                : <>Iniciar ligação para <strong>{phoneNumber}</strong> com gravação?</>}
             </p>
             <p className="text-xs text-gray-400 mb-4">
-              O microfone gravará sua voz durante a chamada. A ligação será iniciada pelo app do telefone.
+              {callMode === 'whatsapp'
+                ? 'O WhatsApp abrirá em nova aba. O microfone do PC gravará a conversa pelo alto-falante.'
+                : 'O microfone gravará sua voz durante a chamada. A ligação será iniciada pelo app do telefone.'}
             </p>
             <div className="flex gap-2 justify-center">
               <button
                 onClick={startRecording}
-                className="flex items-center gap-1.5 px-4 py-2 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition-colors"
+                className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-sm font-semibold transition-colors ${
+                  callMode === 'whatsapp' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
+                }`}
               >
                 <MicrophoneIcon className="h-4 w-4" />
-                Ligar e Gravar
+                {callMode === 'whatsapp' ? 'Ligar via WhatsApp + Gravar' : 'Ligar e Gravar'}
               </button>
-              <a
-                href={`tel:${phoneNumber.replace(/\D/g, '')}`}
-                onClick={() => onClose()}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors no-underline"
-              >
-                <PhoneIcon className="h-4 w-4" />
-                Só Ligar
-              </a>
+              {callMode === 'phone' && (
+                <a
+                  href={`tel:${phoneNumber.replace(/\D/g, '')}`}
+                  onClick={() => onClose()}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors no-underline"
+                >
+                  <PhoneIcon className="h-4 w-4" />
+                  Só Ligar
+                </a>
+              )}
             </div>
           </div>
         )}
@@ -277,7 +297,11 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
               <MicrophoneIcon className="h-6 w-6 text-red-500 animate-pulse" />
               <span className="text-3xl font-mono font-bold text-gray-900">{formatTime(seconds)}</span>
             </div>
-            <p className="text-xs text-gray-500 mb-4">Gravando... Clique em parar quando encerrar a ligação.</p>
+            <p className="text-xs text-gray-500 mb-4">
+              {callMode === 'whatsapp'
+                ? 'Gravando via microfone... Use o WhatsApp na outra aba. Clique em parar ao encerrar.'
+                : 'Gravando... Clique em parar quando encerrar a ligação.'}
+            </p>
             <button
               onClick={stopRecording}
               className="flex items-center gap-2 mx-auto px-6 py-2.5 bg-red-500 text-white rounded-xl text-sm font-semibold hover:bg-red-600 transition-colors"
@@ -337,7 +361,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, onClose
           <div className="text-center py-4">
             <div className="text-4xl mb-2">✅</div>
             <p className="text-sm font-semibold text-green-700">Gravação salva com sucesso!</p>
-            <p className="text-xs text-gray-500 mt-1">{formatTime(seconds)} — {cliente.razaoSocial}</p>
+            <p className="text-xs text-gray-500 mt-1">{formatTime(seconds)} — {contactName || cliente?.razaoSocial || phoneNumber}</p>
           </div>
         )}
 
