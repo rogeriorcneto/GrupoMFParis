@@ -298,6 +298,91 @@ export async function checkNumberOnWhatsApp(
   return { exists: false, error: `Número ${rawNumber} não está cadastrado no WhatsApp` }
 }
 
+/**
+ * Valida em lote todos os números de telefone dos clientes no WhatsApp.
+ * Para cada cliente que tem telefone/celular/whatsapp, verifica se o número
+ * existe no WhatsApp e salva o resultado no banco (whatsapp_valido, whatsapp_jid).
+ * Retorna estatísticas da validação.
+ */
+export async function validateContactsOnWhatsApp(
+  vendedorId: number
+): Promise<{ total: number; valid: number; invalid: number; errors: number; details: Array<{ clienteId: number; nome: string; number: string; valid: boolean; jid?: string }> }> {
+  const session = sessions.get(vendedorId)
+  if (!session || !session.sock || session.status !== 'connected') {
+    throw new Error('WhatsApp não está conectado')
+  }
+
+  const { supabase } = await import('./supabase.js')
+
+  // Buscar todos os clientes que têm algum telefone
+  const { data: clientes, error } = await supabase
+    .from('clientes')
+    .select('id, razao_social, contato_nome, whatsapp, contato_celular, contato_telefone')
+    .or('whatsapp.neq.,contato_celular.neq.,contato_telefone.neq.')
+
+  if (error) throw error
+  if (!clientes || clientes.length === 0) {
+    return { total: 0, valid: 0, invalid: 0, errors: 0, details: [] }
+  }
+
+  let valid = 0
+  let invalid = 0
+  let errors = 0
+  const details: Array<{ clienteId: number; nome: string; number: string; valid: boolean; jid?: string }> = []
+
+  for (const cliente of clientes) {
+    const rawNumber = cliente.whatsapp || cliente.contato_celular || cliente.contato_telefone || ''
+    if (!rawNumber || rawNumber.replace(/\D/g, '').length < 8) {
+      continue // Pular números muito curtos
+    }
+
+    try {
+      const result = await resolveWhatsAppJid(session.sock!, rawNumber)
+
+      if (result) {
+        valid++
+        // Salvar resultado positivo no banco
+        await supabase.from('clientes').update({
+          whatsapp_valido: true,
+          whatsapp_jid: result.jid,
+          whatsapp_validado_em: new Date().toISOString(),
+        }).eq('id', cliente.id)
+
+        details.push({
+          clienteId: cliente.id,
+          nome: cliente.contato_nome || cliente.razao_social,
+          number: rawNumber,
+          valid: true,
+          jid: result.jid,
+        })
+      } else {
+        invalid++
+        await supabase.from('clientes').update({
+          whatsapp_valido: false,
+          whatsapp_jid: null,
+          whatsapp_validado_em: new Date().toISOString(),
+        }).eq('id', cliente.id)
+
+        details.push({
+          clienteId: cliente.id,
+          nome: cliente.contato_nome || cliente.razao_social,
+          number: rawNumber,
+          valid: false,
+        })
+      }
+
+      // Rate limit: esperar 500ms entre verificações para não sobrecarregar WhatsApp
+      await new Promise(resolve => setTimeout(resolve, 500))
+    } catch (err) {
+      errors++
+      log.warn({ err, clienteId: cliente.id }, 'Erro ao validar número do cliente')
+    }
+  }
+
+  log.info(`📋 Validação em lote: ${clientes.length} clientes, ${valid} válidos, ${invalid} inválidos, ${errors} erros`)
+  return { total: clientes.length, valid, invalid, errors, details }
+}
+
 export async function sendUserWhatsAppMessage(
   vendedorId: number,
   number: string,

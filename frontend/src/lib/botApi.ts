@@ -125,6 +125,21 @@ export async function checkWhatsAppNumber(
   }
 }
 
+/** Validar todos os contatos do CRM no WhatsApp (em lote) */
+export async function validateWhatsAppContacts(): Promise<{
+  total: number; valid: number; invalid: number; errors: number;
+  details: Array<{ clienteId: number; nome: string; number: string; valid: boolean; jid?: string }>
+}> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/validate-contacts`, {
+      method: 'POST',
+    })
+    return await res.json()
+  } catch (err: any) {
+    throw new Error(err?.message || 'Erro de conexão')
+  }
+}
+
 /** Send a WhatsApp message via the logged user's own WhatsApp session */
 export async function sendUserWhatsApp(
   number: string, text: string, clienteId?: number

@@ -7,6 +7,7 @@ import {
   sendUserWhatsApp, fetchWhatsAppMessages,
   queryWhatsAppAI, getUserWhatsAppContacts,
   sendUserWhatsAppAudio, sendUserWhatsAppImage,
+  validateWhatsAppContacts,
   type UserWAStatus, type WAContactItem,
 } from '../lib/botApi'
 import CallRecorder, { type CallMode } from './CallRecorder'
@@ -69,6 +70,10 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
 
   // Image attachment
   const imageInputRef = useRef<HTMLInputElement>(null)
+
+  // Validation state
+  const [validating, setValidating] = useState(false)
+  const [validationResult, setValidationResult] = useState<{ total: number; valid: number; invalid: number; errors: number } | null>(null)
 
   // Estado local de "aguardando QR" — persiste independente do status do backend
   const [waitingForQR, setWaitingForQR] = useState(false)
@@ -575,6 +580,32 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={async () => {
+                if (validating) return
+                setValidating(true)
+                setValidationResult(null)
+                try {
+                  const result = await validateWhatsAppContacts()
+                  setValidationResult(result)
+                  showToast?.('success', `Validação concluída: ${result.valid} válidos, ${result.invalid} inválidos de ${result.total} contatos`)
+                } catch (err: any) {
+                  showToast?.('error', err?.message || 'Erro ao validar contatos')
+                }
+                setValidating(false)
+              }}
+              disabled={validating}
+              title="Validar todos os números dos contatos no WhatsApp"
+              className={`p-1.5 rounded-full transition-colors ${validating ? 'bg-yellow-200 text-yellow-700 animate-pulse' : 'text-green-700 hover:bg-green-100'}`}
+            >
+              {validating ? (
+                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+              ) : (
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
             <button
               onClick={() => { setShowContacts(!showContacts); if (!showContacts) loadContacts() }}
               title="Contatos do WhatsApp"

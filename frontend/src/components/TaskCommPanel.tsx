@@ -494,6 +494,23 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   <p className="text-sm text-gray-500">{cliente.razaoSocial}</p>
                 </div>
 
+                {/* WhatsApp validation badge */}
+                {cliente.whatsappValido !== undefined && cliente.whatsappValido !== null && (
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    cliente.whatsappValido
+                      ? 'bg-green-50 text-green-700 border border-green-200'
+                      : 'bg-red-50 text-red-700 border border-red-200'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${cliente.whatsappValido ? 'bg-green-500' : 'bg-red-500'}`} />
+                    {cliente.whatsappValido ? 'WhatsApp verificado ✓' : 'Número não encontrado no WhatsApp ✗'}
+                    {cliente.whatsappValidadoEm && (
+                      <span className="text-[10px] opacity-60 ml-auto">
+                        {new Date(cliente.whatsappValidadoEm).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   {cliente.contatoTelefone && (
                     <a

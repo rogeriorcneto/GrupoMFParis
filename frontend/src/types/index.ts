@@ -80,6 +80,9 @@ export interface Cliente {
   segmento?: string
   localizacao?: string
   tentativaAmostra?: number
+  whatsappValido?: boolean | null
+  whatsappJid?: string
+  whatsappValidadoEm?: string
 }
 
 export interface FormData {

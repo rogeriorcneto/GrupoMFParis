@@ -51,6 +51,9 @@ export interface Cliente {
   dataPerda?: string
   dataProposta?: string
   valorProposta?: number
+  whatsappValido?: boolean | null
+  whatsappJid?: string
+  whatsappValidadoEm?: string
 }
 
 export interface Tarefa {
@@ -154,6 +157,9 @@ function clienteFromDb(row: any): Cliente {
     dataPerda: row.data_perda,
     dataProposta: row.data_proposta,
     valorProposta: row.valor_proposta ? Number(row.valor_proposta) : undefined,
+    whatsappValido: row.whatsapp_valido ?? null,
+    whatsappJid: row.whatsapp_jid || '',
+    whatsappValidadoEm: row.whatsapp_validado_em || '',
   }
 }
 
@@ -177,6 +183,9 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.dataEntradaEtapa !== undefined) row.data_entrada_etapa = c.dataEntradaEtapa
   if (c.notas !== undefined) row.notas = c.notas
   if (c.origemLead !== undefined) row.origem_lead = c.origemLead
+  if (c.whatsappValido !== undefined) row.whatsapp_valido = c.whatsappValido
+  if (c.whatsappJid !== undefined) row.whatsapp_jid = c.whatsappJid
+  if (c.whatsappValidadoEm !== undefined) row.whatsapp_validado_em = c.whatsappValidadoEm
   return row
 }
 

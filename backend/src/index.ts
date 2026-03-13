@@ -10,6 +10,7 @@ import {
   startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
   getUserWhatsAppContacts, getUserWhatsAppChats,
   sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
+  validateContactsOnWhatsApp,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -314,6 +315,20 @@ app.post('/api/whatsapp/user/check-number', requireAuth, rateLimit(20, 60_000), 
     res.json(result)
   } catch (err: any) {
     res.status(500).json({ exists: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+// Validar todos os contatos no WhatsApp (em lote)
+app.post('/api/whatsapp/user/validate-contacts', requireAuth, rateLimit(2, 300_000), async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    const result = await validateContactsOnWhatsApp(vendedor.id)
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
   }
 })
 
