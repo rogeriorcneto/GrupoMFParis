@@ -283,7 +283,7 @@ app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
     const chats = getUserWhatsAppChats(vendedor.id)
     // Merge: enrich contacts with chat data (last message time, unread count)
     const merged = contacts
-      .filter(c => !c.jid.endsWith('@g.us') && !c.jid.endsWith('@broadcast'))
+      .filter(c => c.jid.endsWith('@s.whatsapp.net') && !c.jid.endsWith('@g.us') && !c.jid.endsWith('@broadcast') && !c.jid.endsWith('@lid'))
       .map(c => {
         const chat = chats.find(ch => ch.jid === c.jid)
         return {

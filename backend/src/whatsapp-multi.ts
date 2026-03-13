@@ -608,9 +608,17 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     sock.ev.on('creds.update', saveCreds)
 
     // ── Contacts & Chats sync ──
+    // Helper: verifica se JID é um contato individual válido (não grupo, broadcast, ou LID)
+    const isValidContactJid = (jid: string): boolean => {
+      if (!jid) return false
+      if (jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@lid')) return false
+      if (!jid.endsWith('@s.whatsapp.net')) return false
+      return true
+    }
+
     const upsertContacts = (contactsRaw: any[]) => {
       for (const c of contactsRaw) {
-        if (!c.id || c.id.endsWith('@g.us') || c.id.endsWith('@broadcast')) continue
+        if (!isValidContactJid(c.id)) continue
         const num = c.id.replace('@s.whatsapp.net', '')
         const name = c.name || c.notify || c.verifiedName || num
         const existing = session.contacts.find(x => x.jid === c.id)
@@ -634,7 +642,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     sock.ev.on('chats.upsert', (chats) => {
       for (const chat of chats) {
-        if (!chat.id || chat.id.endsWith('@g.us') || chat.id.endsWith('@broadcast')) continue
+        if (!isValidContactJid(chat.id)) continue
         const existing = session.chats.find(x => x.jid === chat.id)
         const ts = typeof chat.conversationTimestamp === 'number'
           ? chat.conversationTimestamp
@@ -652,9 +660,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           })
         }
         // Also ensure this chat has a contact entry
-        const num = chat.id.replace('@s.whatsapp.net', '')
-        if (!session.contacts.find(x => x.jid === chat.id)) {
-          session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
+        if (isValidContactJid(chat.id)) {
+          const num = chat.id.replace('@s.whatsapp.net', '')
+          if (!session.contacts.find(x => x.jid === chat.id)) {
+            session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
+          }
         }
       }
       log.info(`💬 Vendedor ${vendedorId}: ${chats.length} chats recebidos (total: ${session.chats.length})`)
@@ -684,7 +694,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       }
       if (syncChats) {
         for (const chat of syncChats) {
-          if (!chat.id || chat.id.endsWith('@g.us') || chat.id.endsWith('@broadcast')) continue
+          if (!isValidContactJid(chat.id)) continue
           const ts = typeof chat.conversationTimestamp === 'number'
             ? chat.conversationTimestamp
             : typeof chat.conversationTimestamp === 'object' && (chat.conversationTimestamp as any)?.low
@@ -693,9 +703,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           if (!session.chats.find(x => x.jid === chat.id)) {
             session.chats.push({ jid: chat.id, lastMsgTimestamp: ts, unreadCount: chat.unreadCount ?? 0 })
           }
-          const num = chat.id.replace('@s.whatsapp.net', '')
-          if (!session.contacts.find(x => x.jid === chat.id)) {
-            session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
+          if (isValidContactJid(chat.id)) {
+            const num = chat.id.replace('@s.whatsapp.net', '')
+            if (!session.contacts.find(x => x.jid === chat.id)) {
+              session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
+            }
           }
         }
         log.info(`💬 Vendedor ${vendedorId}: history sync — ${syncChats.length} chats (total: ${session.chats.length})`)
