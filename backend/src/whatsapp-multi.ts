@@ -524,6 +524,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       markOnlineOnConnect: false,
       connectTimeoutMs: 30_000,
       retryRequestDelayMs: 250,
+      syncFullHistory: true,
     })
 
     session.sock = sock
@@ -601,6 +602,17 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           session.connectedNumber = me.id.split(':')[0].split('@')[0]
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
         }
+
+        // Auto-validar todos os números do CRM contra o WhatsApp (background, após 10s para sync inicial)
+        setTimeout(async () => {
+          try {
+            log.info(`📋 Vendedor ${vendedorId}: iniciando validação automática dos números do CRM...`)
+            const result = await validateContactsOnWhatsApp(vendedorId)
+            log.info(`✅ Vendedor ${vendedorId}: validação automática concluída — ${result.valid} válidos, ${result.invalid} inválidos de ${result.total} clientes`)
+          } catch (err) {
+            log.warn({ err }, `⚠️ Vendedor ${vendedorId}: erro na validação automática`)
+          }
+        }, 10_000)
       }
     })
 
