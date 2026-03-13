@@ -125,6 +125,57 @@ export async function sendUserWhatsApp(
   }
 }
 
+/** Fetch WhatsApp contacts from the logged user's session */
+export interface WAContactItem {
+  jid: string
+  name: string
+  number: string
+  notify?: string
+  lastMsgTimestamp?: number
+  unreadCount?: number
+}
+
+export async function getUserWhatsAppContacts(): Promise<WAContactItem[]> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/contacts`)
+    return await res.json()
+  } catch {
+    return []
+  }
+}
+
+/** Send audio via the logged user's WhatsApp */
+export async function sendUserWhatsAppAudio(
+  number: string, audioBase64: string, mimetype?: string, clienteId?: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/send-audio`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, audioBase64, mimetype, clienteId }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+/** Send image via the logged user's WhatsApp */
+export async function sendUserWhatsAppImage(
+  number: string, imageBase64: string, mimetype?: string, caption?: string, clienteId?: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/send-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, imageBase64, mimetype, caption, clienteId }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
 /** Query CRM AI from vendedor's WhatsApp chat panel */
 export async function queryWhatsAppAI(
   message: string, history?: { role: string; content: string }[]

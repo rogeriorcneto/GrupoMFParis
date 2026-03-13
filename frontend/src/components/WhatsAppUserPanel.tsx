@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
   connectUserWhatsApp, disconnectUserWhatsApp,
   sendUserWhatsApp, fetchWhatsAppMessages,
-  queryWhatsAppAI,
-  type UserWAStatus,
+  queryWhatsAppAI, getUserWhatsAppContacts,
+  sendUserWhatsAppAudio, sendUserWhatsAppImage,
+  type UserWAStatus, type WAContactItem,
 } from '../lib/botApi'
 import CallRecorder from './CallRecorder'
 import { formatBrazilianPhone } from '../utils/validators'
@@ -57,6 +58,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const voiceChunksRef = useRef<Blob[]>([])
   const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const voiceBlobRef = useRef<Blob | null>(null)
+
+  // Contacts sidebar state
+  const [showContacts, setShowContacts] = useState(false)
+  const [waContacts, setWaContacts] = useState<WAContactItem[]>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
+  const [contactSearch, setContactSearch] = useState('')
+  const [selectedContact, setSelectedContact] = useState<WAContactItem | null>(null)
+
+  // Image attachment
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // Estado local de "aguardando QR" — persiste independente do status do backend
   const [waitingForQR, setWaitingForQR] = useState(false)
@@ -168,26 +179,109 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [fetchStatus, startConnect])
 
-  // Load chat history when connected + cliente
+  // Load contacts when connected
+  const loadContacts = useCallback(async () => {
+    if (!waStatus.connected) return
+    setContactsLoading(true)
+    try {
+      const contacts = await getUserWhatsAppContacts()
+      setWaContacts(contacts)
+    } catch { /* ignore */ }
+    setContactsLoading(false)
+  }, [waStatus.connected])
+
   useEffect(() => {
-    if (!waStatus.connected || !cliente?.id) return
+    if (waStatus.connected) loadContacts()
+  }, [waStatus.connected, loadContacts])
+
+  // Refresh contacts every 15s when contacts panel is open
+  useEffect(() => {
+    if (!showContacts || !waStatus.connected) return
+    const iv = setInterval(loadContacts, 15_000)
+    return () => clearInterval(iv)
+  }, [showContacts, waStatus.connected, loadContacts])
+
+  // Determine current chat target number
+  const getChatNumber = useCallback((): string => {
+    if (cliente) {
+      return (cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || '').replace(/\D/g, '')
+    }
+    if (selectedContact) return selectedContact.number
+    return ''
+  }, [cliente, selectedContact])
+
+  const getChatName = useCallback((): string => {
+    if (cliente) return cliente.contatoNome || cliente.razaoSocial
+    if (selectedContact) return selectedContact.name || selectedContact.notify || selectedContact.number
+    return ''
+  }, [cliente, selectedContact])
+
+  const hasChatTarget = !!(cliente || selectedContact)
+
+  // Load chat history when connected + (cliente or selectedContact)
+  useEffect(() => {
+    if (!waStatus.connected) return
+    if (!cliente?.id && !selectedContact) return
     setChatLoading(true)
-    fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
-      .then(msgs => {
-        setMessages(msgs.map((m: any) => ({
-          id: m.id || Date.now(),
-          text: m.mensagem,
-          from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
-          time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-        })))
-      })
-      .catch(() => {})
-      .finally(() => setChatLoading(false))
-  }, [waStatus.connected, cliente?.id])
+    if (cliente?.id) {
+      fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
+        .then(msgs => {
+          setMessages(msgs.map((m: any) => ({
+            id: m.id || Date.now(),
+            text: m.mensagem,
+            from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+            time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          })))
+        })
+        .catch(() => {})
+        .finally(() => setChatLoading(false))
+    } else if (selectedContact) {
+      fetchWhatsAppMessages({ numero: selectedContact.number, limit: 100 })
+        .then(msgs => {
+          setMessages(msgs.map((m: any) => ({
+            id: m.id || Date.now(),
+            text: m.mensagem,
+            from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+            time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          })))
+        })
+        .catch(() => {})
+        .finally(() => setChatLoading(false))
+    }
+  }, [waStatus.connected, cliente?.id, selectedContact])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Handle image send
+  const handleImageSend = useCallback(async (file: File) => {
+    const num = getChatNumber()
+    if (!num) { showToast?.('error', 'Sem número para enviar.'); return }
+    setSending(true)
+    try {
+      const reader = new FileReader()
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string
+          resolve(result.split(',')[1]) // strip data:...;base64,
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      setMessages(prev => [...prev, { id: Date.now(), text: `📷 [Imagem] ${file.name}`, from: 'me', time: now }])
+      const result = await sendUserWhatsAppImage(num, base64, file.type, undefined, cliente?.id)
+      if (!result.success) {
+        showToast?.('error', 'Falha ao enviar imagem: ' + (result.error || ''))
+      } else {
+        showToast?.('success', 'Imagem enviada!')
+      }
+    } catch (err: any) {
+      showToast?.('error', 'Erro ao processar imagem: ' + (err?.message || ''))
+    }
+    setSending(false)
+  }, [getChatNumber, cliente?.id, showToast])
 
   const handleConnect = async () => {
     await startConnect()
@@ -238,10 +332,9 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       return
     }
 
-    if (!cliente) return
-    const whatsappNumber = cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
-    if (!whatsappNumber) {
-      showToast?.('error', 'Cliente não possui número de WhatsApp.')
+    const chatNum = getChatNumber()
+    if (!chatNum) {
+      showToast?.('error', 'Selecione um contato para enviar mensagem.')
       return
     }
 
@@ -253,7 +346,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }])
 
-    const result = await sendUserWhatsApp(whatsappNumber.replace(/\D/g, ''), msg, cliente.id)
+    const result = await sendUserWhatsApp(chatNum, msg, cliente?.id)
     if (!result.success) {
       setMessages(prev => [...prev, {
         id: Date.now() + 1, text: '❌ Falha: ' + (result.error || 'Erro'), from: 'system',
@@ -314,24 +407,37 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   }, [voiceAudioUrl])
 
   const sendVoiceMessage = useCallback(async () => {
-    if (!voiceBlobRef.current || !cliente) return
-    const whatsappNumber = cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || ''
-    if (!whatsappNumber) { showToast?.('error', 'Cliente não possui número.'); return }
+    if (!voiceBlobRef.current) return
+    const chatNum = getChatNumber()
+    if (!chatNum) { showToast?.('error', 'Selecione um contato para enviar.'); return }
     setSending(true)
     const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     const durationLabel = `${Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:${(voiceSeconds % 60).toString().padStart(2, '0')}`
     setMessages(prev => [...prev, { id: Date.now(), text: `🎙️ Áudio (${durationLabel})`, from: 'me', time: now }])
-    // Send as text fallback (actual audio sending requires WhatsApp media API)
-    const result = await sendUserWhatsApp(whatsappNumber.replace(/\D/g, ''), `🎙️ [Mensagem de voz — ${durationLabel}]`, cliente.id)
-    if (!result.success) showToast?.('error', 'Falha ao enviar áudio: ' + (result.error || ''))
-    else showToast?.('success', 'Áudio enviado!')
+    try {
+      // Convert blob to base64
+      const reader = new FileReader()
+      const audioBase64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const r = reader.result as string
+          resolve(r.split(',')[1])
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(voiceBlobRef.current!)
+      })
+      const result = await sendUserWhatsAppAudio(chatNum, audioBase64, voiceBlobRef.current!.type, cliente?.id)
+      if (!result.success) showToast?.('error', 'Falha ao enviar áudio: ' + (result.error || ''))
+      else showToast?.('success', 'Áudio enviado!')
+    } catch (err: any) {
+      showToast?.('error', 'Erro ao processar áudio: ' + (err?.message || ''))
+    }
     // Cleanup
     voiceBlobRef.current = null
     if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl)
     setVoiceAudioUrl(null)
     setVoiceSeconds(0)
     setSending(false)
-  }, [cliente, voiceSeconds, voiceAudioUrl, showToast])
+  }, [getChatNumber, cliente?.id, voiceSeconds, voiceAudioUrl, showToast])
 
   const getClientPhone = () => {
     if (!cliente) return ''
@@ -424,9 +530,35 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     )
   }
 
+  // Filtered contacts for search
+  const filteredContacts = waContacts.filter(c => {
+    if (!contactSearch.trim()) return true
+    const q = contactSearch.toLowerCase()
+    return c.name.toLowerCase().includes(q) || c.number.includes(q) || (c.notify || '').toLowerCase().includes(q)
+  })
+
+  const selectWAContact = (contact: WAContactItem) => {
+    setSelectedContact(contact)
+    setShowContacts(false)
+    setMessages([])
+  }
+
   // ─── Connected ───
   return (
     <div className={`bg-white rounded-apple shadow-apple-sm border-2 border-green-200 flex flex-col ${compact ? '' : 'h-[600px]'}`}>
+      {/* Hidden file input for images */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0]
+          if (file) handleImageSend(file)
+          e.target.value = ''
+        }}
+      />
+
       {/* Header */}
       <div className="px-4 py-3 border-b border-green-100 bg-green-50 rounded-t-apple">
         <div className="flex items-center justify-between">
@@ -442,6 +574,13 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              onClick={() => { setShowContacts(!showContacts); if (!showContacts) loadContacts() }}
+              title="Contatos do WhatsApp"
+              className={`p-1.5 rounded-full transition-colors ${showContacts ? 'bg-green-600 text-white' : 'text-green-700 hover:bg-green-100'}`}
+            >
+              <UserGroupIcon className="h-4 w-4" />
+            </button>
             <button
               onClick={handleDisconnect}
               disabled={loading}
@@ -459,30 +598,115 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         </div>
       </div>
 
-      {/* Chat area (requires cliente) */}
-      {cliente ? (
+      {/* Contacts sidebar overlay */}
+      {showContacts && (
+        <div className="border-b border-gray-200 bg-white max-h-[350px] flex flex-col">
+          <div className="px-3 py-2 border-b border-gray-100">
+            <div className="relative">
+              <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={contactSearch}
+                onChange={e => setContactSearch(e.target.value)}
+                placeholder="Buscar contato..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-50"
+                autoFocus
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1 px-1">
+              {waContacts.length} contatos sincronizados
+            </p>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {contactsLoading && waContacts.length === 0 ? (
+              <div className="text-center py-6">
+                <div className="inline-block animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full" />
+                <p className="text-xs text-gray-500 mt-2">Carregando contatos...</p>
+              </div>
+            ) : filteredContacts.length === 0 ? (
+              <div className="text-center py-6">
+                <ChatBubbleLeftRightIcon className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                <p className="text-xs text-gray-500">
+                  {contactSearch ? 'Nenhum contato encontrado' : 'Nenhum contato sincronizado ainda'}
+                </p>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Os contatos aparecem conforme você usa o WhatsApp
+                </p>
+              </div>
+            ) : (
+              filteredContacts.map(c => (
+                <button
+                  key={c.jid}
+                  onClick={() => selectWAContact(c)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-green-50 transition-colors text-left border-b border-gray-50 ${
+                    selectedContact?.jid === c.jid ? 'bg-green-50' : ''
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-sm font-bold">
+                      {(c.name || c.number).charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {c.notify || c.name || c.number}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      +{c.number}
+                      {c.lastMsgTimestamp ? ` • ${new Date(c.lastMsgTimestamp * 1000).toLocaleDateString('pt-BR')}` : ''}
+                    </p>
+                  </div>
+                  {(c.unreadCount ?? 0) > 0 && (
+                    <span className="w-5 h-5 bg-green-500 text-white text-[10px] rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                      {c.unreadCount}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Chat area */}
+      {hasChatTarget ? (
         <>
-          {/* Client info bar */}
+          {/* Contact info bar */}
           <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
               <span className="text-white text-sm font-bold">
-                {(cliente.contatoNome || cliente.razaoSocial).charAt(0).toUpperCase()}
+                {getChatName().charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{cliente.contatoNome || cliente.razaoSocial}</p>
+              <p className="text-sm font-medium text-gray-900 truncate">{getChatName()}</p>
               <p className="text-xs text-gray-500 truncate">
-                {cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone || 'Sem número'}
+                +{getChatNumber()}
+                {selectedContact && !cliente && (
+                  <span className="ml-1 text-green-600">(Contato WhatsApp)</span>
+                )}
               </p>
             </div>
-            {getClientPhone() && (
-              <button
-                onClick={() => setShowCallRecorder(true)}
-                title="Ligar para o cliente"
-                className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors flex-shrink-0"
-              >
-                <PhoneIcon className="h-4 w-4" />
-              </button>
+            {getChatNumber() && (
+              <>
+                {cliente && (
+                  <button
+                    onClick={() => setShowCallRecorder(true)}
+                    title="Ligar para o cliente"
+                    className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors flex-shrink-0"
+                  >
+                    <PhoneIcon className="h-4 w-4" />
+                  </button>
+                )}
+                {selectedContact && !cliente && (
+                  <button
+                    onClick={() => { setSelectedContact(null); setMessages([]) }}
+                    title="Voltar para contatos"
+                    className="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors flex-shrink-0"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -496,7 +720,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             {!chatLoading && messages.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-sm text-gray-600 bg-white bg-opacity-80 inline-block px-4 py-2 rounded-lg shadow-sm">
-                  Envie uma mensagem para {cliente.contatoNome || cliente.razaoSocial}
+                  Envie uma mensagem para {getChatName()}
                 </p>
               </div>
             )}
@@ -556,27 +780,35 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
 
             {/* Text input row */}
             {!isRecordingVoice && (
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <button
                   onClick={() => { setAiMode(!aiMode); if (!aiMode) setAiHistory([]) }}
                   title={aiMode ? 'Modo IA ativo — clique para desativar' : 'Ativar Assistente IA'}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${aiMode ? 'bg-purple-600 text-white shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-purple-100'}`}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 text-xs ${aiMode ? 'bg-purple-600 text-white shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-purple-100'}`}
                 >
                   🤖
+                </button>
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={sending || !getChatNumber()}
+                  title="Enviar imagem"
+                  className="w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-gray-200 text-gray-600 hover:bg-blue-100 hover:text-blue-600 disabled:opacity-40"
+                >
+                  <PhotoIcon className="h-4 w-4" />
                 </button>
                 <textarea
                   value={chatText}
                   onChange={e => setChatText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={aiMode ? 'Pergunte algo à IA do CRM...' : 'Digite uma mensagem... (ou /ia para IA)'}
+                  placeholder={aiMode ? 'Pergunte algo à IA do CRM...' : 'Mensagem...'}
                   rows={1}
-                  className={`flex-1 px-4 py-2.5 border rounded-full focus:outline-none focus:ring-2 text-sm resize-none ${aiMode ? 'border-purple-300 focus:ring-purple-500 bg-purple-50' : 'border-gray-300 focus:ring-green-500'}`}
+                  className={`flex-1 px-3 py-2 border rounded-full focus:outline-none focus:ring-2 text-sm resize-none ${aiMode ? 'border-purple-300 focus:ring-purple-500 bg-purple-50' : 'border-gray-300 focus:ring-green-500'}`}
                 />
                 {chatText.trim() ? (
                   <button
                     onClick={handleSend}
                     disabled={sending}
-                    className="w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                    className="w-9 h-9 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
                   >
                     {sending ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <PaperAirplaneIcon className="h-4 w-4" />}
                   </button>
@@ -585,7 +817,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                     onClick={startVoiceRecording}
                     disabled={sending}
                     title="Gravar mensagem de voz"
-                    className="w-10 h-10 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                    className="w-9 h-9 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
                   >
                     <MicrophoneIcon className="h-4 w-4" />
                   </button>
@@ -595,13 +827,22 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           </div>
         </>
       ) : (
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
           <div className="text-center">
             <div className="text-5xl mb-3">✅</div>
             <p className="text-gray-700 font-semibold">WhatsApp Business conectado!</p>
             <p className="text-sm text-gray-500 mt-2">
-              Selecione uma tarefa com cliente para enviar mensagens.
+              {cliente === null && !selectedContact
+                ? 'Selecione uma tarefa com cliente ou abra seus contatos do WhatsApp.'
+                : 'Selecione um contato para enviar mensagens.'}
             </p>
+            <button
+              onClick={() => { setShowContacts(true); loadContacts() }}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full text-sm font-medium hover:bg-green-700 transition-colors"
+            >
+              <UserGroupIcon className="h-4 w-4" />
+              Ver Contatos ({waContacts.length})
+            </button>
           </div>
         </div>
       )}

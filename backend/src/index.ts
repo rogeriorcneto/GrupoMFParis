@@ -8,6 +8,8 @@ import {
   connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
   startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
+  getUserWhatsAppContacts, getUserWhatsAppChats,
+  sendUserWhatsAppAudio, sendUserWhatsAppImage,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -262,6 +264,93 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
       } catch (err) {
         log.error({ err }, 'Erro ao registrar mensagem/interação WhatsApp (user)')
       }
+    }
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+// Contatos do WhatsApp do vendedor
+app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    const contacts = getUserWhatsAppContacts(vendedor.id)
+    const chats = getUserWhatsAppChats(vendedor.id)
+    // Merge: enrich contacts with chat data (last message time, unread count)
+    const merged = contacts
+      .filter(c => !c.jid.endsWith('@g.us') && !c.jid.endsWith('@broadcast'))
+      .map(c => {
+        const chat = chats.find(ch => ch.jid === c.jid)
+        return {
+          ...c,
+          lastMsgTimestamp: chat?.lastMsgTimestamp || 0,
+          unreadCount: chat?.unreadCount || 0,
+        }
+      })
+      .sort((a, b) => (b.lastMsgTimestamp || 0) - (a.lastMsgTimestamp || 0))
+    res.json(merged)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
+// Enviar áudio via WhatsApp do vendedor
+app.post('/api/whatsapp/user/send-audio', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const { number, audioBase64, mimetype, clienteId } = req.body
+  if (!number || !audioBase64) {
+    res.status(400).json({ success: false, error: 'Campos obrigatórios: number, audioBase64' })
+    return
+  }
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    const result = await sendUserWhatsAppAudio(vendedor.id, number, audioBase64, mimetype || 'audio/ogg; codecs=opus')
+    if (result.success) {
+      try {
+        await db.insertWhatsAppMessage({
+          numero: formatBrazilianPhone(number),
+          clienteId: clienteId || undefined,
+          vendedorId: vendedor.id,
+          direcao: 'enviada',
+          mensagem: '🎙️ [Áudio]',
+        })
+      } catch { /* non-critical */ }
+    }
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+// Enviar imagem via WhatsApp do vendedor
+app.post('/api/whatsapp/user/send-image', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const { number, imageBase64, mimetype, caption, clienteId } = req.body
+  if (!number || !imageBase64) {
+    res.status(400).json({ success: false, error: 'Campos obrigatórios: number, imageBase64' })
+    return
+  }
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    const result = await sendUserWhatsAppImage(vendedor.id, number, imageBase64, mimetype || 'image/jpeg', caption)
+    if (result.success) {
+      try {
+        await db.insertWhatsAppMessage({
+          numero: formatBrazilianPhone(number),
+          clienteId: clienteId || undefined,
+          vendedorId: vendedor.id,
+          direcao: 'enviada',
+          mensagem: caption ? `📷 [Imagem] ${caption}` : '📷 [Imagem]',
+        })
+      } catch { /* non-critical */ }
     }
     res.json(result)
   } catch (err: any) {

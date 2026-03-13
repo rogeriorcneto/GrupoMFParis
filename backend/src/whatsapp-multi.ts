@@ -15,6 +15,14 @@ const baileysLogger = pino({ level: 'warn' })
 // Per-user WhatsApp session
 // ============================================
 
+export interface WAContact {
+  jid: string
+  name: string
+  number: string
+  notify?: string
+  imgUrl?: string
+}
+
 export interface UserWhatsAppSession {
   sock: ReturnType<typeof makeWASocket> | null
   qrDataUrl: string | null
@@ -23,6 +31,8 @@ export interface UserWhatsAppSession {
   startTime: number | null
   reconnectAttempts: number
   vendedorId: number
+  contacts: WAContact[]
+  chats: { jid: string; lastMsgTimestamp?: number; unreadCount?: number }[]
 }
 
 export interface UserWhatsAppStatus {
@@ -109,6 +119,8 @@ function createEmptySession(vendedorId: number): UserWhatsAppSession {
     startTime: null,
     reconnectAttempts: 0,
     vendedorId,
+    contacts: [],
+    chats: [],
   }
 }
 
@@ -229,6 +241,71 @@ export async function sendUserWhatsAppMessage(
     return { success: true }
   } catch (err: any) {
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
+  }
+}
+
+/** Busca contatos do WhatsApp do vendedor (populados via eventos Baileys) */
+export function getUserWhatsAppContacts(vendedorId: number): WAContact[] {
+  const session = sessions.get(vendedorId)
+  if (!session || session.status !== 'connected') return []
+  return session.contacts
+}
+
+/** Busca chats recentes do vendedor */
+export function getUserWhatsAppChats(vendedorId: number): { jid: string; lastMsgTimestamp?: number; unreadCount?: number }[] {
+  const session = sessions.get(vendedorId)
+  if (!session || session.status !== 'connected') return []
+  return session.chats
+}
+
+/** Envia áudio via WhatsApp do vendedor (aceita Buffer base64) */
+export async function sendUserWhatsAppAudio(
+  vendedorId: number,
+  number: string,
+  audioBase64: string,
+  mimetype: string = 'audio/ogg; codecs=opus'
+): Promise<{ success: boolean; error?: string }> {
+  const session = sessions.get(vendedorId)
+  if (!session || !session.sock || session.status !== 'connected') {
+    return { success: false, error: 'WhatsApp não está conectado para este usuário' }
+  }
+  try {
+    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
+    const buffer = Buffer.from(audioBase64, 'base64')
+    await session.sock.sendMessage(jid, {
+      audio: buffer,
+      mimetype,
+      ptt: true, // push-to-talk (aparece como mensagem de voz)
+    })
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao enviar áudio' }
+  }
+}
+
+/** Envia imagem via WhatsApp do vendedor (aceita Buffer base64) */
+export async function sendUserWhatsAppImage(
+  vendedorId: number,
+  number: string,
+  imageBase64: string,
+  mimetype: string = 'image/jpeg',
+  caption?: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = sessions.get(vendedorId)
+  if (!session || !session.sock || session.status !== 'connected') {
+    return { success: false, error: 'WhatsApp não está conectado para este usuário' }
+  }
+  try {
+    const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
+    const buffer = Buffer.from(imageBase64, 'base64')
+    await session.sock.sendMessage(jid, {
+      image: buffer,
+      mimetype,
+      caption: caption || undefined,
+    })
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao enviar imagem' }
   }
 }
 
@@ -362,6 +439,101 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     // Save credentials on update
     sock.ev.on('creds.update', saveCreds)
+
+    // ── Contacts & Chats sync ──
+    const upsertContacts = (contactsRaw: any[]) => {
+      for (const c of contactsRaw) {
+        if (!c.id || c.id.endsWith('@g.us') || c.id.endsWith('@broadcast')) continue
+        const num = c.id.replace('@s.whatsapp.net', '')
+        const name = c.name || c.notify || c.verifiedName || num
+        const existing = session.contacts.find(x => x.jid === c.id)
+        if (existing) {
+          if (c.name) existing.name = c.name
+          if (c.notify) existing.notify = c.notify
+        } else {
+          session.contacts.push({ jid: c.id, name, number: num, notify: c.notify })
+        }
+      }
+    }
+
+    sock.ev.on('contacts.upsert', (contacts) => {
+      log.info(`📇 Vendedor ${vendedorId}: ${contacts.length} contatos recebidos (upsert)`)
+      upsertContacts(contacts)
+    })
+
+    sock.ev.on('contacts.update', (updates) => {
+      upsertContacts(updates)
+    })
+
+    sock.ev.on('chats.upsert', (chats) => {
+      for (const chat of chats) {
+        if (!chat.id || chat.id.endsWith('@g.us') || chat.id.endsWith('@broadcast')) continue
+        const existing = session.chats.find(x => x.jid === chat.id)
+        const ts = typeof chat.conversationTimestamp === 'number'
+          ? chat.conversationTimestamp
+          : typeof chat.conversationTimestamp === 'object' && chat.conversationTimestamp?.low
+            ? chat.conversationTimestamp.low
+            : undefined
+        if (existing) {
+          if (ts) existing.lastMsgTimestamp = ts
+          existing.unreadCount = chat.unreadCount ?? existing.unreadCount
+        } else {
+          session.chats.push({
+            jid: chat.id,
+            lastMsgTimestamp: ts,
+            unreadCount: chat.unreadCount ?? 0,
+          })
+        }
+        // Also ensure this chat has a contact entry
+        const num = chat.id.replace('@s.whatsapp.net', '')
+        if (!session.contacts.find(x => x.jid === chat.id)) {
+          session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
+        }
+      }
+      log.info(`💬 Vendedor ${vendedorId}: ${chats.length} chats recebidos (total: ${session.chats.length})`)
+    })
+
+    sock.ev.on('chats.update', (updates) => {
+      for (const u of updates) {
+        if (!u.id) continue
+        const existing = session.chats.find(x => x.jid === u.id)
+        if (existing) {
+          if (u.unreadCount !== undefined && u.unreadCount !== null) existing.unreadCount = u.unreadCount
+          const ts = typeof u.conversationTimestamp === 'number'
+            ? u.conversationTimestamp
+            : typeof u.conversationTimestamp === 'object' && (u.conversationTimestamp as any)?.low
+              ? (u.conversationTimestamp as any).low
+              : undefined
+          if (ts) existing.lastMsgTimestamp = ts
+        }
+      }
+    })
+
+    // messaging-history.set fires when Baileys syncs history on reconnect
+    sock.ev.on('messaging-history.set', ({ contacts: syncContacts, chats: syncChats }) => {
+      if (syncContacts) {
+        log.info(`📇 Vendedor ${vendedorId}: history sync — ${syncContacts.length} contatos`)
+        upsertContacts(syncContacts)
+      }
+      if (syncChats) {
+        for (const chat of syncChats) {
+          if (!chat.id || chat.id.endsWith('@g.us') || chat.id.endsWith('@broadcast')) continue
+          const ts = typeof chat.conversationTimestamp === 'number'
+            ? chat.conversationTimestamp
+            : typeof chat.conversationTimestamp === 'object' && (chat.conversationTimestamp as any)?.low
+              ? (chat.conversationTimestamp as any).low
+              : undefined
+          if (!session.chats.find(x => x.jid === chat.id)) {
+            session.chats.push({ jid: chat.id, lastMsgTimestamp: ts, unreadCount: chat.unreadCount ?? 0 })
+          }
+          const num = chat.id.replace('@s.whatsapp.net', '')
+          if (!session.contacts.find(x => x.jid === chat.id)) {
+            session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
+          }
+        }
+        log.info(`💬 Vendedor ${vendedorId}: history sync — ${syncChats.length} chats (total: ${session.chats.length})`)
+      }
+    })
 
     // Handle incoming messages — save to DB linked to this vendedor
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
