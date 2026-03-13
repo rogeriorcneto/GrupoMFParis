@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon, ArrowPathIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline'
 import type { Pedido, Cliente, Vendedor } from '../../types'
 
 export interface ParametrosAprovacao {
@@ -133,11 +133,24 @@ export default function AprovacaoView({
     }
   }, [pedidos, pendentes])
 
+  const [omieResultMap, setOmieResultMap] = useState<Record<number, { success: boolean; erro?: string; codigo?: string }>>({}) 
+
   const handleAprovar = async (pedido: Pedido) => {
     setLoadingId(pedido.id)
     try {
       await onAprovar(pedido)
-      showToast('success', `Pedido ${pedido.numero} aprovado com sucesso!`)
+      // Após aprovação, o pedido terá omieCodigo ou omieErro atualizado no state
+      // Vamos marcar localmente para feedback imediato
+      const updated = pedidos.find(p => p.id === pedido.id)
+      if (updated?.omieCodigo) {
+        setOmieResultMap(prev => ({ ...prev, [pedido.id]: { success: true, codigo: updated.omieCodigo } }))
+        showToast('success', `Pedido ${pedido.numero} aprovado e enviado ao Omie! ✅`)
+      } else if (updated?.omieErro) {
+        setOmieResultMap(prev => ({ ...prev, [pedido.id]: { success: false, erro: updated.omieErro } }))
+        showToast('error', `Pedido aprovado, mas Omie rejeitou: ${updated.omieErro}`)
+      } else {
+        showToast('success', `Pedido ${pedido.numero} aprovado com sucesso!`)
+      }
     } catch {
       showToast('error', 'Erro ao aprovar pedido. Tente novamente.')
     } finally {
@@ -237,6 +250,39 @@ export default function AprovacaoView({
               <div className="mt-2 p-2 bg-red-50 rounded-apple border border-red-200">
                 <p className="text-xs font-semibold text-red-700">Motivo da recusa:</p>
                 <p className="text-xs text-red-600">{pedido.motivoRecusa}</p>
+              </div>
+            )}
+
+            {/* Status Omie */}
+            {pedido.status === 'confirmado' && pedido.omieCodigo && (
+              <div className="mt-2 p-2.5 bg-green-50 rounded-apple border border-green-200">
+                <div className="flex items-center gap-2">
+                  <CloudArrowUpIcon className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-green-800">Enviado ao Omie com sucesso</p>
+                </div>
+                <div className="flex flex-wrap gap-3 mt-1 text-xs text-green-700">
+                  <span>Código: <strong>{pedido.omieCodigo}</strong></span>
+                  {pedido.omieNumero && <span>Nº: <strong>{pedido.omieNumero}</strong></span>}
+                  {pedido.omieStatus && <span>Status: <strong>{pedido.omieStatus}</strong></span>}
+                </div>
+              </div>
+            )}
+            {pedido.status === 'confirmado' && !pedido.omieCodigo && pedido.omieErro && (
+              <div className="mt-2 p-2.5 bg-amber-50 rounded-apple border border-amber-300">
+                <div className="flex items-center gap-2">
+                  <XCircleIcon className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-amber-800">Omie rejeitou o pedido</p>
+                </div>
+                <p className="text-xs text-amber-700 mt-1 break-words">{pedido.omieErro}</p>
+                <p className="text-[10px] text-amber-500 mt-1">Corrija os dados e reenvie manualmente em Omie ERP → Acompanhamento</p>
+              </div>
+            )}
+            {pedido.status === 'confirmado' && !pedido.omieCodigo && !pedido.omieErro && (
+              <div className="mt-2 p-2 bg-gray-50 rounded-apple border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <ArrowPathIcon className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <p className="text-xs text-gray-500">Omie: pendente de envio</p>
+                </div>
               </div>
             )}
           </div>

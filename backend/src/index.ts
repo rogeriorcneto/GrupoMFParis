@@ -672,6 +672,15 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
     // 2. Enviar automaticamente ao Omie
     const omieResult = await onPedidoAprovado(pedidoId)
 
+    // 3. Salvar resultado do Omie no pedido (erro ou sucesso)
+    if (omieResult.success) {
+      await supabase.from('pedidos').update({ omie_erro: null }).eq('id', pedidoId)
+    } else {
+      await supabase.from('pedidos').update({
+        omie_erro: omieResult.error || 'Erro desconhecido ao enviar para o Omie',
+      }).eq('id', pedidoId)
+    }
+
     res.json({
       success: true,
       pedido_aprovado: true,
@@ -689,9 +698,11 @@ app.post('/api/pedidos/:id/enviar-omie', requireAuth, requireGerente, async (req
 
   try {
     const response = await criarPedidoOmie(pedidoId)
+    await supabase.from('pedidos').update({ omie_erro: null }).eq('id', pedidoId)
     res.json({ success: true, omie: response })
   } catch (err: any) {
     log.error({ err, pedidoId }, 'Erro ao enviar pedido para Omie')
+    await supabase.from('pedidos').update({ omie_erro: err.message || 'Erro ao enviar para Omie' }).eq('id', pedidoId)
     res.status(500).json({ success: false, error: err.message })
   }
 })

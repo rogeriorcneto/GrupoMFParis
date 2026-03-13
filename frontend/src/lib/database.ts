@@ -251,6 +251,7 @@ export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
     omieCodigo: row.omie_codigo || undefined,
     omieNumero: row.omie_numero || undefined,
     omieStatus: row.omie_status || undefined,
+    omieErro: row.omie_erro || undefined,
   }
 }
 

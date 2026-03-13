@@ -361,18 +361,26 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                       </div>
                     )}
                     {isGerente && pedido.status === 'confirmado' && !pedido.omieCodigo && (
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
-                        <button
-                          onClick={() => handleEnviarOmieManual(pedido)}
-                          disabled={enviandoOmie === pedido.id}
-                          className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-apple hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
-                        >
-                          {enviandoOmie === pedido.id ? (
-                            <><svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando...</>
-                          ) : (
-                            <><CloudArrowUpIcon className="h-3.5 w-3.5" /> Enviar ao Omie</>
-                          )}
-                        </button>
+                      <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                        {pedido.omieErro && (
+                          <div className="p-2 bg-amber-50 rounded-apple border border-amber-300">
+                            <p className="text-[10px] font-semibold text-amber-800">⚠️ Omie rejeitou:</p>
+                            <p className="text-[10px] text-amber-700 break-words">{pedido.omieErro}</p>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEnviarOmieManual(pedido)}
+                            disabled={enviandoOmie === pedido.id}
+                            className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-apple hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {enviandoOmie === pedido.id ? (
+                              <><svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando...</>
+                            ) : (
+                              <><CloudArrowUpIcon className="h-3.5 w-3.5" /> {pedido.omieErro ? 'Reenviar ao Omie' : 'Enviar ao Omie'}</>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
                     {pedido.status === 'rascunho' && pedido.vendedorId === loggedUser.id && (

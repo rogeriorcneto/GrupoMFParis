@@ -80,12 +80,20 @@ export default function AppRouter({
         onAprovar={async (pedido) => {
           try {
             const result = await aprovarPedidoComOmie(pedido.id)
-            setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id } : p))
-            if (result.omie?.success) {
-              addNotificacao('success', 'Pedido aprovado + Omie', `Pedido ${pedido.numero} aprovado e enviado ao Omie! (Cód: ${result.omie.omie_codigo})`, pedido.clienteId)
-            } else {
-              addNotificacao('success', 'Pedido aprovado', `Pedido ${pedido.numero} aprovado! ${result.omie?.error ? '⚠️ Omie: ' + result.omie.error : ''}`, pedido.clienteId)
+            const omieUpdate: Partial<Pedido> = {
+              status: 'confirmado' as const,
+              dataAprovacao: new Date().toISOString(),
+              aprovadoPor: loggedUser?.id,
             }
+            if (result.omie?.success) {
+              omieUpdate.omieCodigo = String(result.omie.omie_codigo || '')
+              omieUpdate.omieErro = undefined
+              addNotificacao('success', 'Pedido aprovado + Omie ✅', `Pedido ${pedido.numero} aprovado e enviado ao Omie com sucesso! (Cód: ${result.omie.omie_codigo})`, pedido.clienteId)
+            } else {
+              omieUpdate.omieErro = result.omie?.error || 'Erro desconhecido ao enviar para o Omie'
+              addNotificacao('warning', 'Pedido aprovado — Omie com erro', `Pedido ${pedido.numero} foi aprovado, mas o Omie rejeitou: ${result.omie?.error || 'erro desconhecido'}`, pedido.clienteId)
+            }
+            setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, ...omieUpdate } : p))
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
         }}
         onRecusar={async (pedido, motivo) => {

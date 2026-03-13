@@ -294,6 +294,7 @@ export interface Pedido {
   omieCodigo?: string
   omieNumero?: string
   omieStatus?: string
+  omieErro?: string
 }
 
 export interface FunilViewProps {
