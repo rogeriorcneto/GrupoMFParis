@@ -104,7 +104,14 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
 // Garantir que produto existe no Omie
 // ============================================
 
-async function garantirProdutoOmie(produtoId: number): Promise<number> {
+interface ProdutoOmieResult {
+  codigoOmie: number
+  descricao: string
+  unidade: string
+  ncm: string
+}
+
+async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult> {
   const { data: produto, error } = await supabase
     .from('produtos')
     .select('*')
@@ -113,9 +120,15 @@ async function garantirProdutoOmie(produtoId: number): Promise<number> {
 
   if (error || !produto) throw new Error(`Produto ${produtoId} não encontrado no CRM`)
 
+  const meta = {
+    descricao: produto.nome || '',
+    unidade: produto.unidade || 'UN',
+    ncm: produto.ncm || '21069090',
+  }
+
   // Se já tem código Omie vinculado, retornar
   if (produto.omie_codigo) {
-    return parseInt(produto.omie_codigo, 10)
+    return { codigoOmie: parseInt(produto.omie_codigo, 10), ...meta }
   }
 
   const creds = await getOmieCredentials()
@@ -143,7 +156,7 @@ async function garantirProdutoOmie(produtoId: number): Promise<number> {
       const codigoOmie = match.codigo_produto
       await supabase.from('produtos').update({ omie_codigo: String(codigoOmie) }).eq('id', produtoId)
       log.info({ produtoId, codigoOmie, nome: produto.nome }, '🔗 Produto já existia no Omie — vinculado ao CRM')
-      return codigoOmie
+      return { codigoOmie, ...meta }
     }
   } catch {
     log.info({ produtoId, nome: produto.nome }, '⚠️ Busca prévia de produto no Omie falhou, tentando criar...')
@@ -182,7 +195,7 @@ async function garantirProdutoOmie(produtoId: number): Promise<number> {
     .eq('id', produtoId)
 
   log.info({ produtoId, codigoOmie }, '✅ Produto criado no Omie')
-  return codigoOmie
+  return { codigoOmie, ...meta }
 }
 
 // ============================================
@@ -231,14 +244,17 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   const det = []
   for (let i = 0; i < itens.length; i++) {
     const item = itens[i]
-    const codigoProdutoOmie = await garantirProdutoOmie(item.produto_id)
+    const prodOmie = await garantirProdutoOmie(item.produto_id)
 
     det.push({
       ide: {
         codigo_item_integracao: `CRM-${pedidoId}-${i}`,
       },
       produto: {
-        codigo_produto: codigoProdutoOmie,
+        codigo_produto: prodOmie.codigoOmie,
+        descricao: prodOmie.descricao,
+        unidade: prodOmie.unidade,
+        ncm: prodOmie.ncm,
         quantidade: item.quantidade,
         valor_unitario: item.preco,
         tipo_desconto: 'V',
@@ -247,11 +263,55 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     })
   }
 
-  // 3. Montar pedido Omie conforme documentação
+  // 3. Buscar categoria e conta corrente padrão do Omie
+  let codigoCategoria = '1.01.03' // Receita de Vendas (padrão comum)
+  let codigoContaCorrente: number | undefined
+
+  try {
+    const catResult = await omieCall<any>(
+      '/geral/categorias/',
+      'ListarCategorias',
+      [{ pagina: 1, registros_por_pagina: 500 }],
+      { credentials: creds }
+    )
+    const cats = catResult?.categoria_cadastro || []
+    // Preferir '1.01.03' (Receita de Vendas), senão primeira categoria de receita
+    const catReceita = cats.find((c: any) => c.codigo === '1.01.03')
+      || cats.find((c: any) => String(c.codigo || '').startsWith('1.'))
+    if (catReceita?.codigo) codigoCategoria = catReceita.codigo
+    log.info({ codigoCategoria, totalCats: cats.length }, '📂 Categoria Omie selecionada')
+  } catch (err: any) {
+    log.warn({ err: err.message }, '⚠️ Não foi possível buscar categorias Omie, usando padrão 1.01.03')
+  }
+
+  try {
+    const ccResult = await omieCall<any>(
+      '/geral/contacorrente/',
+      'ListarContasCorrentes',
+      [{ pagina: 1, registros_por_pagina: 50 }],
+      { credentials: creds }
+    )
+    const contas = ccResult?.ListarContasCorrentes || ccResult?.conta_corrente_lista || []
+    // Usar a primeira conta corrente ativa
+    const contaPrincipal = contas.find((c: any) => c.tipo !== 'CI') || contas[0]
+    if (contaPrincipal?.nCodCC) codigoContaCorrente = contaPrincipal.nCodCC
+    log.info({ codigoContaCorrente, totalContas: contas.length }, '🏦 Conta corrente Omie selecionada')
+  } catch (err: any) {
+    log.warn({ err: err.message }, '⚠️ Não foi possível buscar contas correntes Omie')
+  }
+
+  // 4. Montar pedido Omie conforme documentação
   const dataPrevisao = new Date()
   dataPrevisao.setDate(dataPrevisao.getDate() + 7) // Previsão: 7 dias
 
-  const omiePedido = {
+  const infAdic: any = {
+    codigo_categoria: codigoCategoria,
+    consumidor_final: 'N',
+    enviar_email: 'N',
+  }
+  if (codigoContaCorrente) infAdic.codigo_conta_corrente = codigoContaCorrente
+
+  const omiePedido: any = {
     cabecalho: {
       codigo_pedido_integracao: `CRM-PED-${pedidoId}`,
       codigo_cliente: codigoClienteOmie,
@@ -266,15 +326,17 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     frete: {
       modalidade: '9', // Sem frete
     },
-    informacoes_adicionais: {
-      consumidor_final: 'N',
-      enviar_email: 'N',
-    },
+    informacoes_adicionais: infAdic,
+  }
+
+  // Adicionar observações do CRM se houver
+  if (pedido.observacoes) {
+    omiePedido.observacoes = { obs_venda: pedido.observacoes }
   }
 
   log.info({ pedidoId, omiePedido: JSON.stringify(omiePedido) }, '📤 Enviando pedido para Omie...')
 
-  // 4. Enviar ao Omie
+  // 5. Enviar ao Omie
   const response = await omieCall<OmiePedidoResponse>(
     '/produtos/pedido/',
     'IncluirPedido',
@@ -284,7 +346,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   log.info({ pedidoId, omieResponse: response }, '✅ Pedido criado no Omie')
 
-  // 5. Salvar código Omie no pedido do CRM
+  // 6. Salvar código Omie no pedido do CRM
   await supabase
     .from('pedidos')
     .update({
