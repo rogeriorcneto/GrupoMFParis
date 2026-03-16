@@ -1,6 +1,7 @@
 import React from 'react'
-import { PlusIcon, XMarkIcon, PhotoIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, PhotoIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import type { Produto } from '../../types'
+import { omieSyncProdutos } from '../../lib/omieApi'
 
 const ProdutosView: React.FC<{
   produtos: Produto[]
@@ -8,8 +9,11 @@ const ProdutosView: React.FC<{
   onUpdate: (p: Produto) => void
   onDelete: (id: number) => void
   isGerente: boolean
-}> = ({ produtos, onAdd, onUpdate, onDelete, isGerente }) => {
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
+  onRefresh?: () => void
+}> = ({ produtos, onAdd, onUpdate, onDelete, isGerente, showToast, onRefresh }) => {
   const [search, setSearch] = React.useState('')
+  const [syncing, setSyncing] = React.useState(false)
   const [filterCategoria, setFilterCategoria] = React.useState('')
   const [filterAtivo, setFilterAtivo] = React.useState<string>('')
   const [showModal, setShowModal] = React.useState(false)
@@ -89,9 +93,27 @@ const ProdutosView: React.FC<{
           <p className="mt-1 text-sm text-gray-600">{produtos.filter(p => p.ativo).length} produtos ativos — {produtos.length} total</p>
         </div>
         {isGerente && (
-          <button onClick={openNew} className="px-4 py-2.5 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm flex items-center self-start">
-            <PlusIcon className="h-4 w-4 mr-2" /> Novo Produto
-          </button>
+          <div className="flex gap-2 self-start">
+            <button onClick={async () => {
+              setSyncing(true)
+              try {
+                const res = await omieSyncProdutos()
+                if (res.success && res.data) {
+                  showToast?.('success', `Sync concluído! ${res.data.inseridos} novos, ${res.data.atualizados} atualizados (${res.data.totalOmie} no Omie)`)
+                  onRefresh?.()
+                } else {
+                  showToast?.('error', res.error || 'Erro ao sincronizar produtos do Omie')
+                }
+              } catch (err: any) {
+                showToast?.('error', err?.message || 'Erro ao sincronizar')
+              } finally { setSyncing(false) }
+            }} disabled={syncing} className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-apple hover:bg-gray-50 shadow-apple-sm flex items-center disabled:opacity-50">
+              <ArrowPathIcon className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Sincronizando...' : 'Sync Omie'}
+            </button>
+            <button onClick={openNew} className="px-4 py-2.5 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm flex items-center">
+              <PlusIcon className="h-4 w-4 mr-2" /> Novo Produto
+            </button>
+          </div>
         )}
       </div>
 

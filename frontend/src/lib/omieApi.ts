@@ -190,6 +190,20 @@ export async function omieEnviarPedido(pedidoId: number): Promise<{ success: boo
   return res.json()
 }
 
+// ─── Sync Produtos Omie → CRM ───
+
+export interface SyncProdutosResult {
+  inseridos: number
+  atualizados: number
+  totalOmie: number
+  erros: { codigo: string; erro: string }[]
+}
+
+export async function omieSyncProdutos(): Promise<{ success: boolean; data?: SyncProdutosResult; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/sync/produtos`, { method: 'POST' })
+  return res.json()
+}
+
 // ─── Sync Logístico ───
 
 export async function omieSyncLogistics(): Promise<{ success: boolean; data?: { atualizados: number; semPedido: number; erros: any[] }; error?: string }> {

@@ -248,6 +248,17 @@ omieRouter.post('/sync/push', rateLimit(3, 60_000), async (_req, res) => {
   }
 })
 
+omieRouter.post('/sync/produtos', rateLimit(3, 60_000), async (req, res) => {
+  try {
+    const { syncPullProdutos } = await import('../omie/sync-produtos.js')
+    const result = await syncPullProdutos()
+    res.json({ success: true, data: result })
+  } catch (err: any) {
+    log.error({ err }, 'Erro no sync de produtos Omie → CRM')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 omieRouter.post('/sync/logistics', rateLimit(3, 60_000), async (_req, res) => {
   try {
     const result = await syncOmieLogistics()

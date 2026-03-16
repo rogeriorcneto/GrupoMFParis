@@ -343,6 +343,8 @@ export default function AppRouter({
           } catch (err) { logger.error('Erro ao deletar produto:', err) }
         }}
         isGerente={loggedUser?.cargo === 'gerente'}
+        showToast={showToast}
+        onRefresh={async () => { try { const p = await db.fetchProdutos(); setProdutos(p) } catch {} }}
       />
     case 'pedidos':
       return <PedidosView pedidos={pedidos} clientes={clientes} produtos={produtos} vendedores={vendedores} showToast={showToast} loggedUser={loggedUser || { id: 0, nome: 'Sistema', email: '', cargo: 'vendedor', ativo: true, metaVendas: 0, metaLeads: 0, metaConversao: 0 } as Vendedor}
