@@ -374,7 +374,7 @@ export default function AppRouter({
               setPedidos(prev => [...prev, saved])
               showToast('success', `Pedido ${p.numero} enviado para aprovação!`)
             }
-          } catch (err) { logger.error('Erro ao criar pedido:', err); showToast('error', 'Erro ao salvar pedido. Tente novamente.') }
+          } catch (err: any) { logger.error('Erro ao criar pedido:', err); showToast('error', err?.message || 'Erro ao salvar pedido. Tente novamente.'); throw err }
         }}
         onUpdatePedido={async (p) => {
           try {

@@ -393,14 +393,21 @@ export async function sendUserWhatsAppMessage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    // Validar número via WhatsApp antes de enviar
-    const resolved = await resolveWhatsAppJid(session.sock, number)
-    if (!resolved) {
-      return { success: false, error: `Número ${number} não encontrado no WhatsApp. Verifique se o número está correto e possui WhatsApp.` }
+    // Tentar resolver JID via onWhatsApp; se falhar, usar número formatado direto
+    let jid: string
+    try {
+      const resolved = await resolveWhatsAppJid(session.sock, number)
+      jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
+      if (!resolved) log.warn(`⚠️ resolveWhatsAppJid falhou para ${number}, enviando direto para ${jid}`)
+    } catch {
+      jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
+      log.warn(`⚠️ Erro no resolveWhatsAppJid para ${number}, fallback para ${jid}`)
     }
-    await session.sock.sendMessage(resolved.jid, { text })
+    log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
+    await session.sock.sendMessage(jid, { text })
     return { success: true }
   } catch (err: any) {
+    log.error({ err, number }, `❌ Falha ao enviar mensagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
   }
 }
@@ -431,18 +438,22 @@ export async function sendUserWhatsAppAudio(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    const resolved = await resolveWhatsAppJid(session.sock, number)
-    if (!resolved) {
-      return { success: false, error: `Número ${number} não encontrado no WhatsApp.` }
+    let jid: string
+    try {
+      const resolved = await resolveWhatsAppJid(session.sock, number)
+      jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
+    } catch {
+      jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
     const buffer = Buffer.from(audioBase64, 'base64')
-    await session.sock.sendMessage(resolved.jid, {
+    await session.sock.sendMessage(jid, {
       audio: buffer,
       mimetype,
       ptt: true,
     })
     return { success: true }
   } catch (err: any) {
+    log.error({ err, number }, `❌ Falha ao enviar áudio para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar áudio' }
   }
 }
@@ -460,18 +471,22 @@ export async function sendUserWhatsAppImage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    const resolved = await resolveWhatsAppJid(session.sock, number)
-    if (!resolved) {
-      return { success: false, error: `Número ${number} não encontrado no WhatsApp.` }
+    let jid: string
+    try {
+      const resolved = await resolveWhatsAppJid(session.sock, number)
+      jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
+    } catch {
+      jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
     const buffer = Buffer.from(imageBase64, 'base64')
-    await session.sock.sendMessage(resolved.jid, {
+    await session.sock.sendMessage(jid, {
       image: buffer,
       mimetype,
       caption: caption || undefined,
     })
     return { success: true }
   } catch (err: any) {
+    log.error({ err, number }, `❌ Falha ao enviar imagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar imagem' }
   }
 }

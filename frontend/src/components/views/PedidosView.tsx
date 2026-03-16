@@ -95,6 +95,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       await onAddPedido(novoPedido)
       if (status === 'enviado') setPedidoEnviado({ ...novoPedido, id: 0 } as Pedido)
       setItensPedido([]); setObservacoes(''); setSelectedClienteId(clientesDisponiveis[0]?.id ?? '')
+    } catch {
+      // Erro já tratado no AppRouter (toast de erro) — não mostrar modal de sucesso
     } finally { setIsSaving(false) }
   }
 
