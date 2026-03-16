@@ -833,20 +833,35 @@ export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
     quantidade: i.quantidade,
   }))
 
-  const { data, error } = await supabase.rpc('insert_pedido_atomico', {
-    p_numero: p.numero,
-    p_cliente_id: p.clienteId,
-    p_vendedor_id: p.vendedorId,
-    p_observacoes: p.observacoes,
-    p_status: p.status,
-    p_total_valor: p.totalValor,
-    p_data_criacao: p.dataCriacao,
-    p_data_envio: p.dataEnvio || '',
-    p_itens: itensJson,
-  })
-  if (error) throw error
+  // Insert pedido (PostgREST handles TEXT→TIMESTAMPTZ cast automatically)
+  const { data: pedidoRow, error: pedidoError } = await supabase
+    .from('pedidos')
+    .insert({
+      numero: p.numero,
+      cliente_id: p.clienteId,
+      vendedor_id: p.vendedorId,
+      observacoes: p.observacoes,
+      status: p.status,
+      total_valor: p.totalValor,
+      data_criacao: p.dataCriacao,
+      data_envio: p.dataEnvio || null,
+    })
+    .select()
+    .single()
+  if (pedidoError) throw pedidoError
 
-  return pedidoFromDb(data, itensJson)
+  // Insert itens
+  if (itensJson.length > 0) {
+    const itensRows = itensJson.map(i => ({ ...i, pedido_id: pedidoRow.id }))
+    const { error: itensError } = await supabase.from('itens_pedido').insert(itensRows)
+    if (itensError) {
+      // Rollback pedido if itens fail
+      await supabase.from('pedidos').delete().eq('id', pedidoRow.id)
+      throw itensError
+    }
+  }
+
+  return pedidoFromDb(pedidoRow, itensJson)
 }
 
 export async function updatePedidoStatus(id: number, status: string): Promise<void> {

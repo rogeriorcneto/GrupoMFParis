@@ -356,7 +356,8 @@ export default function AppRouter({
               setClientes(prev => prev.map(c => c.id === p.clienteId ? { ...c, ultimaInteracao: now.split('T')[0], diasInativo: 0 } : c))
             } catch { /* non-critical */ }
             const params = getParametrosAprovacao()
-            if (pedidoPassaAutoAprovacao(saved, params)) {
+            // Vendedor: SEMPRE vai para aprovação do gerente. Auto-aprovação só para gerente.
+            if (loggedUser?.cargo === 'gerente' && pedidoPassaAutoAprovacao(saved, params)) {
               try {
                 const omieResult = await aprovarPedidoComOmie(saved.id)
                 setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
