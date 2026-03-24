@@ -5,11 +5,16 @@ import {
   MagnifyingGlassIcon, PencilSquareIcon, CheckCircleIcon,
   ClipboardDocumentIcon, ClockIcon, UserGroupIcon,
   PlusIcon, ChevronRightIcon,
+  MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon,
 } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../types'
 import { callAI, buildCRMContext } from '../lib/gemini'
 import type { AIMessage } from '../lib/gemini'
-import { sendUserWhatsApp, getUserWhatsAppStatus } from '../lib/botApi'
+import {
+  sendUserWhatsApp, getUserWhatsAppStatus,
+  fetchWhatsAppChatMessages, fetchWhatsAppMessages,
+  sendUserWhatsAppAudio, sendUserWhatsAppImage,
+} from '../lib/botApi'
 import { sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
@@ -93,10 +98,23 @@ const Workspace: React.FC<WorkspaceProps> = ({
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // WhatsApp tool
+  // WhatsApp chat
   const [waText, setWaText] = useState('')
   const [waSending, setWaSending] = useState(false)
   const [waConnected, setWaConnected] = useState(false)
+  const [waMessages, setWaMessages] = useState<{ id: number; text: string; from: 'me' | 'them' | 'system'; time: string }[]>([])
+  const [waChatLoading, setWaChatLoading] = useState(false)
+  const waChatEndRef = useRef<HTMLDivElement>(null)
+  // Voice recording
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [voiceSeconds, setVoiceSeconds] = useState(0)
+  const [voiceAudioUrl, setVoiceAudioUrl] = useState<string | null>(null)
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const voiceBlobRef = useRef<Blob | null>(null)
+  const waImageInputRef = useRef<HTMLInputElement>(null)
 
   // Email tool
   const [emailTo, setEmailTo] = useState('')
@@ -154,13 +172,6 @@ const Workspace: React.FC<WorkspaceProps> = ({
     getUserWhatsAppStatus().then(s => setWaConnected(s.connected)).catch(() => {})
   }, [])
 
-  // Pre-fill email when client selected
-  useEffect(() => {
-    if (selectedCliente) {
-      setEmailTo(selectedCliente.contatoEmail || '')
-    }
-  }, [selectedCliente])
-
   // ─── Register action (all workspace actions logged) ───
 
   const logAction = useCallback(async (tipo: string, descricao: string, clienteNome?: string) => {
@@ -185,6 +196,157 @@ const Workspace: React.FC<WorkspaceProps> = ({
       // Silent fail — don't block UX
     }
   }, [loggedUser])
+
+  // Load WA chat messages when client changes
+  const getWaChatNumber = useCallback((): string => {
+    if (!selectedCliente) return ''
+    return (selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone || '').replace(/\D/g, '')
+  }, [selectedCliente])
+
+  useEffect(() => {
+    if (!waConnected || !selectedCliente) { setWaMessages([]); return }
+    const num = getWaChatNumber()
+    if (!num) return
+    setWaChatLoading(true)
+    // Try in-memory cache first, then DB
+    fetchWhatsAppChatMessages({ numero: num, limit: 100 }).then(cached => {
+      if (cached && cached.length > 0) {
+        setWaMessages(cached.map((m: any) => ({
+          id: m.id || Date.now(), text: m.text,
+          from: m.fromMe ? 'me' as const : 'them' as const,
+          time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        })))
+        setWaChatLoading(false)
+        return
+      }
+      // Fallback: DB
+      const p = selectedCliente.id
+        ? fetchWhatsAppMessages({ clienteId: selectedCliente.id, limit: 100 })
+        : fetchWhatsAppMessages({ numero: num, limit: 100 })
+      p.then(dbMsgs => {
+        setWaMessages((dbMsgs || []).map((m: any) => ({
+          id: m.id || Date.now(), text: m.mensagem,
+          from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+          time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        })))
+      }).catch(() => {}).finally(() => setWaChatLoading(false))
+    }).catch(() => setWaChatLoading(false))
+  }, [waConnected, selectedCliente, getWaChatNumber])
+
+  // Auto-scroll WA chat
+  useEffect(() => {
+    waChatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [waMessages])
+
+  // Poll WA messages every 8s when chat is open
+  useEffect(() => {
+    if (!waConnected || !selectedCliente || activeTool !== 'whatsapp') return
+    const num = getWaChatNumber()
+    if (!num) return
+    const iv = setInterval(() => {
+      fetchWhatsAppChatMessages({ numero: num, limit: 100 }).then(cached => {
+        if (cached && cached.length > 0) {
+          setWaMessages(cached.map((m: any) => ({
+            id: m.id || Date.now(), text: m.text,
+            from: m.fromMe ? 'me' as const : 'them' as const,
+            time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          })))
+        }
+      }).catch(() => {})
+    }, 8_000)
+    return () => clearInterval(iv)
+  }, [waConnected, selectedCliente, activeTool, getWaChatNumber])
+
+  // ── WA Voice Recording ──
+  const startVoiceRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      voiceStreamRef.current = stream
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+      const recorder = new MediaRecorder(stream, { mimeType })
+      voiceRecorderRef.current = recorder
+      voiceChunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) voiceChunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(voiceChunksRef.current, { type: mimeType })
+        voiceBlobRef.current = blob
+        setVoiceAudioUrl(URL.createObjectURL(blob))
+        stream.getTracks().forEach(t => t.stop())
+        voiceStreamRef.current = null
+      }
+      recorder.start(500)
+      setIsRecordingVoice(true)
+      setVoiceSeconds(0)
+      voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000)
+    } catch { showToast?.('error', 'Não foi possível acessar o microfone.') }
+  }, [showToast])
+
+  const stopVoiceRecording = useCallback(() => {
+    if (voiceTimerRef.current) { clearInterval(voiceTimerRef.current); voiceTimerRef.current = null }
+    if (voiceRecorderRef.current && voiceRecorderRef.current.state !== 'inactive') voiceRecorderRef.current.stop()
+    setIsRecordingVoice(false)
+  }, [])
+
+  const cancelVoiceRecording = useCallback(() => {
+    if (voiceTimerRef.current) { clearInterval(voiceTimerRef.current); voiceTimerRef.current = null }
+    if (voiceRecorderRef.current && voiceRecorderRef.current.state !== 'inactive') voiceRecorderRef.current.stop()
+    if (voiceStreamRef.current) { voiceStreamRef.current.getTracks().forEach(t => t.stop()); voiceStreamRef.current = null }
+    voiceBlobRef.current = null
+    if (voiceAudioUrl) URL.revokeObjectURL(voiceAudioUrl)
+    setVoiceAudioUrl(null)
+    setIsRecordingVoice(false)
+    setVoiceSeconds(0)
+  }, [voiceAudioUrl])
+
+  const sendVoiceMessage = useCallback(async () => {
+    if (!voiceBlobRef.current) return
+    const chatNum = getWaChatNumber()
+    if (!chatNum) { showToast?.('error', 'Sem número.'); return }
+    setWaSending(true)
+    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const dur = `${Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:${(voiceSeconds % 60).toString().padStart(2, '0')}`
+    setWaMessages(prev => [...prev, { id: Date.now(), text: `🎙️ Áudio (${dur})`, from: 'me', time: now }])
+    try {
+      const reader = new FileReader()
+      const b64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(voiceBlobRef.current!)
+      })
+      const result = await sendUserWhatsAppAudio(chatNum, b64, voiceBlobRef.current!.type, selectedCliente?.id)
+      if (!result.success) showToast?.('error', 'Falha ao enviar áudio')
+      else { showToast?.('success', 'Áudio enviado!'); logAction('whatsapp', `Áudio WA para ${selectedCliente?.razaoSocial} (${dur})`, selectedCliente?.razaoSocial) }
+    } catch { showToast?.('error', 'Erro ao processar áudio') }
+    cancelVoiceRecording()
+    setWaSending(false)
+  }, [getWaChatNumber, voiceSeconds, selectedCliente, showToast, cancelVoiceRecording, logAction])
+
+  const handleWaImageSend = useCallback(async (file: File) => {
+    const num = getWaChatNumber()
+    if (!num) { showToast?.('error', 'Sem número.'); return }
+    setWaSending(true)
+    try {
+      const reader = new FileReader()
+      const b64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      setWaMessages(prev => [...prev, { id: Date.now(), text: `📷 [Imagem] ${file.name}`, from: 'me', time: now }])
+      const result = await sendUserWhatsAppImage(num, b64, file.type, undefined, selectedCliente?.id)
+      if (!result.success) showToast?.('error', 'Falha ao enviar imagem')
+      else { showToast?.('success', 'Imagem enviada!'); logAction('whatsapp', `Imagem WA para ${selectedCliente?.razaoSocial}`, selectedCliente?.razaoSocial) }
+    } catch { showToast?.('error', 'Erro ao processar imagem') }
+    setWaSending(false)
+  }, [getWaChatNumber, selectedCliente, showToast, logAction])
+
+  // Pre-fill email when client selected
+  useEffect(() => {
+    if (selectedCliente) {
+      setEmailTo(selectedCliente.contatoEmail || '')
+    }
+  }, [selectedCliente])
 
   // ─── AI Chat ───
 
@@ -228,18 +390,25 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
   const handleSendWA = async () => {
     if (!waText.trim() || !selectedCliente) return
-    const number = selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone || ''
-    if (!number) { showToast?.('error', 'Cliente sem número de WhatsApp'); return }
+    const chatNum = getWaChatNumber()
+    if (!chatNum) { showToast?.('error', 'Cliente sem número de WhatsApp'); return }
+    const msg = waText.trim()
+    setWaText('')
     setWaSending(true)
-    const result = await sendUserWhatsApp(number.replace(/\D/g, ''), waText.trim(), selectedCliente.id)
+    const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    setWaMessages(prev => [...prev, { id: Date.now(), text: msg, from: 'me', time: now }])
+    const result = await sendUserWhatsApp(chatNum, msg, selectedCliente.id)
     if (result.success) {
-      showToast?.('success', 'WhatsApp enviado!')
-      logAction('whatsapp', `WhatsApp para ${selectedCliente.razaoSocial}: ${waText.trim().substring(0, 60)}`, selectedCliente.razaoSocial)
-      setWaText('')
+      logAction('whatsapp', `WhatsApp para ${selectedCliente.razaoSocial}: ${msg.substring(0, 60)}`, selectedCliente.razaoSocial)
     } else {
+      setWaMessages(prev => [...prev, { id: Date.now() + 1, text: '❌ ' + (result.error || 'Erro ao enviar'), from: 'system', time: now }])
       showToast?.('error', result.error || 'Erro ao enviar')
     }
     setWaSending(false)
+  }
+
+  const handleWaKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendWA() }
   }
 
   // ─── Email Send ───
@@ -432,9 +601,9 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 </div>
               )}
 
-              {/* ── WHATSAPP ── */}
+              {/* ── WHATSAPP CHAT ── */}
               {activeTool === 'whatsapp' && (
-                <div className="space-y-3">
+                <div className="flex flex-col h-full">
                   {!selectedCliente ? (
                     <div className="text-center py-6">
                       <DevicePhoneMobileIcon className="h-8 w-8 text-gray-300 mx-auto mb-2" />
@@ -448,24 +617,89 @@ const Workspace: React.FC<WorkspaceProps> = ({
                     </div>
                   ) : (
                     <>
-                      <div className="p-2 bg-green-50 border border-green-200 rounded-apple">
-                        <p className="text-xs text-green-800">Para: <strong>{selectedCliente.razaoSocial}</strong></p>
-                        <p className="text-xs text-green-600">{selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone}</p>
+                      {/* Chat header */}
+                      <div className="px-3 py-2 bg-green-50 border-b border-green-200 flex-shrink-0">
+                        <p className="text-xs text-green-800 font-semibold truncate">{selectedCliente.razaoSocial}</p>
+                        <p className="text-[10px] text-green-600">{selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone}</p>
                       </div>
-                      <textarea
-                        value={waText}
-                        onChange={e => setWaText(e.target.value)}
-                        placeholder="Digite a mensagem..."
-                        rows={4}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                      <button
-                        onClick={handleSendWA}
-                        disabled={waSending || !waText.trim()}
-                        className="w-full px-4 py-2.5 bg-green-600 text-white rounded-apple font-semibold text-sm hover:bg-green-700 disabled:opacity-50 transition-colors"
-                      >
-                        {waSending ? 'Enviando...' : 'Enviar WhatsApp'}
-                      </button>
+
+                      {/* Messages area */}
+                      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-[#e5ddd5] min-h-0" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'200\' height=\'200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cdefs%3E%3Cpattern id=\'a\' width=\'40\' height=\'40\' patternUnits=\'userSpaceOnUse\'%3E%3Cpath d=\'M0 20h40M20 0v40\' stroke=\'%23d4cfc4\' stroke-width=\'.3\'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'%23e5ddd5\'/%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'url(%23a)\'/%3E%3C/svg%3E")' }}>
+                        {waChatLoading ? (
+                          <div className="text-center py-4">
+                            <div className="inline-block animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full" />
+                            <p className="text-[10px] text-gray-500 mt-1">Carregando mensagens...</p>
+                          </div>
+                        ) : waMessages.length === 0 ? (
+                          <div className="text-center py-4">
+                            <p className="text-xs text-gray-500 bg-white/80 inline-block px-3 py-1 rounded-full">Nenhuma mensagem ainda</p>
+                          </div>
+                        ) : (
+                          waMessages.map((m, i) => (
+                            <div key={`${m.id}-${i}`} className={`flex ${m.from === 'me' ? 'justify-end' : m.from === 'system' ? 'justify-center' : 'justify-start'}`}>
+                              {m.from === 'system' ? (
+                                <div className="bg-yellow-100 text-yellow-800 text-[10px] px-2 py-0.5 rounded-full max-w-[90%]">{m.text}</div>
+                              ) : (
+                                <div className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs shadow-sm ${m.from === 'me' ? 'bg-[#dcf8c6] text-gray-900' : 'bg-white text-gray-900'}`}>
+                                  <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
+                                  <p className={`text-[9px] mt-0.5 ${m.from === 'me' ? 'text-green-700' : 'text-gray-400'} text-right`}>{m.time}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                        <div ref={waChatEndRef} />
+                      </div>
+
+                      {/* Voice recording bar */}
+                      {(isRecordingVoice || voiceAudioUrl) && (
+                        <div className="px-3 py-2 bg-red-50 border-t border-red-200 flex items-center gap-2 flex-shrink-0">
+                          {isRecordingVoice ? (
+                            <>
+                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                              <span className="text-xs text-red-700 font-mono flex-1">{Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:{(voiceSeconds % 60).toString().padStart(2, '0')}</span>
+                              <button onClick={stopVoiceRecording} className="p-1 bg-red-600 text-white rounded-full" title="Parar"><StopIcon className="h-4 w-4" /></button>
+                              <button onClick={cancelVoiceRecording} className="p-1 text-red-600 hover:bg-red-100 rounded-full" title="Cancelar"><TrashIcon className="h-4 w-4" /></button>
+                            </>
+                          ) : voiceAudioUrl ? (
+                            <>
+                              <audio src={voiceAudioUrl} controls className="flex-1 h-8" style={{ maxHeight: 32 }} />
+                              <button onClick={sendVoiceMessage} disabled={waSending} className="p-1.5 bg-green-600 text-white rounded-full disabled:opacity-50" title="Enviar áudio"><PaperAirplaneIcon className="h-4 w-4" /></button>
+                              <button onClick={cancelVoiceRecording} className="p-1 text-red-600 hover:bg-red-100 rounded-full" title="Descartar"><TrashIcon className="h-4 w-4" /></button>
+                            </>
+                          ) : null}
+                        </div>
+                      )}
+
+                      {/* Hidden image input */}
+                      <input type="file" ref={waImageInputRef} accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleWaImageSend(f); e.target.value = '' }} />
+
+                      {/* Input bar */}
+                      {!isRecordingVoice && !voiceAudioUrl && (
+                        <div className="px-2 py-2 border-t border-gray-200 bg-gray-50 flex items-end gap-1.5 flex-shrink-0">
+                          <button onClick={() => waImageInputRef.current?.click()} disabled={waSending} className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors flex-shrink-0" title="Enviar foto">
+                            <PhotoIcon className="h-5 w-5" />
+                          </button>
+                          <textarea
+                            value={waText}
+                            onChange={e => setWaText(e.target.value)}
+                            onKeyDown={handleWaKeyDown}
+                            placeholder="Mensagem..."
+                            rows={1}
+                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded-2xl text-xs resize-none focus:outline-none focus:ring-1 focus:ring-green-500 max-h-20"
+                            style={{ minHeight: 32 }}
+                          />
+                          {waText.trim() ? (
+                            <button onClick={handleSendWA} disabled={waSending} className="p-1.5 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-50 flex-shrink-0 transition-colors" title="Enviar">
+                              <PaperAirplaneIcon className="h-5 w-5" />
+                            </button>
+                          ) : (
+                            <button onClick={startVoiceRecording} disabled={waSending} className="p-1.5 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-full flex-shrink-0 transition-colors" title="Gravar áudio">
+                              <MicrophoneIcon className="h-5 w-5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
