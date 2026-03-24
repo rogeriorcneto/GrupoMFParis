@@ -59,6 +59,143 @@ app.get('/api/health', (_req, res) => {
 // ─── Gemini AI Route (protegido por auth) ───
 app.post('/api/gemini', requireAuth, geminiHandler)
 
+// ─── AI Context Data (WhatsApp msgs + calls + products + tasks) ───
+app.get('/api/ai/data', requireAuth, async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+
+    // WhatsApp messages — last 200 across all contacts for this vendedor
+    const { data: waMsgs } = await supabase
+      .from('whatsapp_messages')
+      .select('numero, mensagem, direcao, created_at')
+      .eq('vendedor_id', vendedor.id)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    // Call recordings — all for this vendedor
+    const { data: calls } = await supabase
+      .from('gravacoes_chamada')
+      .select('id, cliente_id, numero_telefone, duracao_segundos, notas, tipo_chamada, transcricao, created_at')
+      .eq('vendedor_id', vendedor.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    // Products
+    const { data: produtos } = await supabase
+      .from('produtos')
+      .select('nome, sku, categoria, preco, unidade, estoque, ativo, omie_codigo')
+      .eq('ativo', true)
+
+    // Tasks — pending/in-progress for this vendedor
+    const { data: tarefas } = await supabase
+      .from('tarefas')
+      .select('titulo, descricao, prioridade, status, data_vencimento, created_at')
+      .eq('vendedor_id', vendedor.id)
+      .in('status', ['pendente', 'em_andamento'])
+      .order('data_vencimento', { ascending: true })
+      .limit(30)
+
+    res.json({
+      whatsappMessages: waMsgs || [],
+      callRecordings: calls || [],
+      produtos: produtos || [],
+      tarefas: tarefas || [],
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
+// ─── AI: Transcrever áudio de ligação via Gemini ───
+app.post('/api/ai/transcribe/:id', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const callId = Number(req.params.id)
+  if (!callId) { res.status(400).json({ error: 'ID inválido' }); return }
+
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+
+    // Fetch call record
+    const { data: call, error: callErr } = await supabase
+      .from('gravacoes_chamada')
+      .select('*')
+      .eq('id', callId)
+      .single()
+    if (callErr || !call) { res.status(404).json({ error: 'Gravação não encontrada' }); return }
+
+    // If already transcribed, return it
+    if (call.transcricao) {
+      res.json({ success: true, transcription: call.transcricao })
+      return
+    }
+
+    // Need audio file to transcribe
+    if (!call.arquivo_path) {
+      res.status(400).json({ error: 'Gravação sem arquivo de áudio associado' })
+      return
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) { res.status(500).json({ error: 'GEMINI_API_KEY não configurada' }); return }
+
+    // Download audio from Supabase Storage
+    const { data: audioData, error: dlErr } = await supabase.storage
+      .from('call-recordings')
+      .download(call.arquivo_path)
+    if (dlErr || !audioData) {
+      res.status(500).json({ error: 'Erro ao baixar arquivo de áudio' })
+      return
+    }
+
+    // Convert to base64
+    const arrayBuffer = await audioData.arrayBuffer()
+    const base64Audio = Buffer.from(arrayBuffer).toString('base64')
+    const mimeType = call.arquivo_path.endsWith('.webm') ? 'audio/webm' : 'audio/mp4'
+
+    // Call Gemini with audio
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const geminiRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64Audio } },
+            { text: 'Transcreva este áudio de uma ligação comercial/profissional em português do Brasil. Forneça a transcrição completa e fiel, identificando os interlocutores como "Vendedor" e "Cliente" quando possível. Se o áudio não for claro, indique [inaudível]. Ao final, adicione um breve resumo da conversa em 2-3 frases.' }
+          ]
+        }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+      }),
+    })
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text()
+      log.error({ error: errText }, 'Erro na transcrição Gemini')
+      res.status(500).json({ error: 'Erro ao transcrever áudio via IA' })
+      return
+    }
+
+    const geminiData = await geminiRes.json() as any
+    const transcription = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Não foi possível transcrever.'
+
+    // Save transcription to DB
+    await supabase
+      .from('gravacoes_chamada')
+      .update({ transcricao: transcription })
+      .eq('id', callId)
+
+    res.json({ success: true, transcription })
+  } catch (err: any) {
+    log.error({ err }, 'Erro na transcrição de áudio')
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
 // ─── WhatsApp Routes (protegidos por auth) ───
 
 app.get('/api/whatsapp/status', requireAuth, (_req, res) => {
@@ -279,7 +416,7 @@ app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
-    const contacts = getUserWhatsAppContacts(vendedor.id)
+    const contacts = await getUserWhatsAppContacts(vendedor.id)
     const chats = getUserWhatsAppChats(vendedor.id)
     // Merge: enrich contacts with chat data (last message time, unread count)
     const merged = contacts
@@ -341,7 +478,7 @@ app.post('/api/whatsapp/user/check-number', requireAuth, rateLimit(20, 60_000), 
 })
 
 // Validar todos os contatos no WhatsApp (em lote)
-app.post('/api/whatsapp/user/validate-contacts', requireAuth, rateLimit(2, 300_000), async (req, res) => {
+app.post('/api/whatsapp/user/validate-contacts', requireAuth, rateLimit(5, 300_000), async (req, res) => {
   const userId = (req as any).userId
   try {
     const db = await import('./database.js')

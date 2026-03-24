@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
-import { getSyncDiff, syncPullClientes, syncPushClientes } from '../omie/sync.js'
+import { getSyncDiff, syncPullClientes, syncPushClientes, syncPushSingleCliente } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
@@ -244,6 +244,18 @@ omieRouter.post('/sync/push', rateLimit(3, 60_000), async (_req, res) => {
     res.json({ success: true, data: result })
   } catch (err: any) {
     log.error({ err }, 'Erro no sync push CRM → Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.post('/sync/cliente/:id', rateLimit(10, 60_000), async (req, res) => {
+  try {
+    const clienteId = Number(req.params.id)
+    if (!clienteId) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+    const result = await syncPushSingleCliente(clienteId)
+    res.json(result)
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao enviar cliente ao Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

@@ -145,7 +145,7 @@ const ProdutosView: React.FC<{
             <div className="p-4">
               <div className="flex items-start justify-between mb-1">
                 <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${catColor[p.categoria]}`}>{catLabel[p.categoria]}</span>
-                {p.sku && <span className="text-xs text-gray-400 font-mono">{p.sku}</span>}
+                {(p.sku || p.omieCodigo) && <span className="text-xs text-gray-400 font-mono">{p.sku || `#${p.omieCodigo}`}</span>}
               </div>
               <h3 className="font-semibold text-gray-900 mt-2 text-sm leading-tight">{p.nome}</h3>
               <p className="text-xs text-gray-500 mt-1 line-clamp-2">{p.descricao}</p>
@@ -195,7 +195,7 @@ const ProdutosView: React.FC<{
               <p className="text-sm text-gray-600 mt-3">{previewProd.descricao}</p>
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Preço</p><p className="text-lg font-bold text-primary-600">R$ {previewProd.preco.toFixed(2).replace('.', ',')}/{previewProd.unidade}</p></div>
-                {previewProd.sku && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">SKU</p><p className="text-sm font-mono font-semibold text-gray-900">{previewProd.sku}</p></div>}
+                {(previewProd.sku || previewProd.omieCodigo) && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Código{previewProd.omieCodigo ? ' (Omie)' : ''}</p><p className="text-sm font-mono font-semibold text-gray-900">{previewProd.sku || `#${previewProd.omieCodigo}`}</p></div>}
                 {previewProd.estoque !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Estoque</p><p className="text-sm font-semibold text-gray-900">{previewProd.estoque} {previewProd.unidade}</p></div>}
                 {previewProd.pesoKg !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Peso</p><p className="text-sm font-semibold text-gray-900">{previewProd.pesoKg} kg</p></div>}
                 {previewProd.margemLucro !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Margem</p><p className="text-sm font-semibold text-gray-900">{previewProd.margemLucro}%</p></div>}

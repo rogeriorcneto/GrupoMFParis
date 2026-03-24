@@ -67,6 +67,33 @@ export async function fetchWhatsAppChatMessages(params: { jid?: string; numero?:
   }
 }
 
+/** Fetch AI context data (WhatsApp msgs, calls, products, tasks) */
+export interface AIContextData {
+  whatsappMessages: { numero: string; mensagem: string; direcao: string; created_at: string }[]
+  callRecordings: { id: number; cliente_id: number | null; numero_telefone: string; duracao_segundos: number; notas: string | null; tipo_chamada: string; transcricao: string | null; created_at: string }[]
+  produtos: { nome: string; sku: string; categoria: string; preco: number; unidade: string; estoque: number | null; ativo: boolean; omie_codigo: string | null }[]
+  tarefas: { titulo: string; descricao: string; prioridade: string; status: string; data_vencimento: string | null; created_at: string }[]
+}
+
+export async function fetchAIContextData(): Promise<AIContextData> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/ai/data`)
+    return await res.json()
+  } catch {
+    return { whatsappMessages: [], callRecordings: [], produtos: [], tarefas: [] }
+  }
+}
+
+/** Transcribe a call recording via Gemini AI */
+export async function transcribeCallRecording(callId: number): Promise<{ success: boolean; transcription?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/ai/transcribe/${callId}`, { method: 'POST' })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
 /** Send an email via backend */
 export async function sendEmailViaBot(to: string, subject: string, body: string, clienteId?: number, vendedorNome?: string): Promise<{ success: boolean; error?: string }> {
   try {

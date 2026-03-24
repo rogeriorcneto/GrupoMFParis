@@ -422,11 +422,44 @@ export async function sendUserWhatsAppMessage(
   }
 }
 
-/** Busca contatos do WhatsApp do vendedor (populados via eventos Baileys) */
-export function getUserWhatsAppContacts(vendedorId: number): WAContact[] {
+/** Busca contatos do WhatsApp do vendedor (Baileys + DB fallback) */
+export async function getUserWhatsAppContacts(vendedorId: number): Promise<WAContact[]> {
   const session = sessions.get(vendedorId)
   if (!session || session.status !== 'connected') return []
-  return session.contacts
+
+  const baileysContacts = session.contacts
+
+  // If Baileys has enough contacts, return them directly
+  if (baileysContacts.length >= 5) return baileysContacts
+
+  // Fallback: also include validated CRM clients from DB
+  try {
+    const { supabase } = await import('./supabase.js')
+    const { data: dbClients } = await supabase
+      .from('clientes')
+      .select('razao_social, contato_nome, whatsapp_jid, contato_celular, contato_telefone, whatsapp')
+      .eq('whatsapp_valido', true)
+      .not('whatsapp_jid', 'is', null)
+      .limit(500)
+
+    if (dbClients && dbClients.length > 0) {
+      const existingJids = new Set(baileysContacts.map(c => c.jid))
+      for (const c of dbClients) {
+        if (!c.whatsapp_jid || existingJids.has(c.whatsapp_jid)) continue
+        const num = c.whatsapp_jid.replace('@s.whatsapp.net', '')
+        baileysContacts.push({
+          jid: c.whatsapp_jid,
+          name: c.contato_nome || c.razao_social || num,
+          number: num,
+        })
+        existingJids.add(c.whatsapp_jid)
+      }
+    }
+  } catch (err) {
+    log.warn({ err }, 'Falha ao buscar contatos validados do DB')
+  }
+
+  return baileysContacts
 }
 
 /** Busca chats recentes do vendedor */
@@ -687,16 +720,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
         }
 
-        // Auto-validar todos os números do CRM contra o WhatsApp (background, após 10s para sync inicial)
-        setTimeout(async () => {
-          try {
-            log.info(`📋 Vendedor ${vendedorId}: iniciando validação automática dos números do CRM...`)
-            const result = await validateContactsOnWhatsApp(vendedorId)
-            log.info(`✅ Vendedor ${vendedorId}: validação automática concluída — ${result.valid} válidos, ${result.invalid} inválidos de ${result.total} clientes`)
-          } catch (err) {
-            log.warn({ err }, `⚠️ Vendedor ${vendedorId}: erro na validação automática`)
-          }
-        }, 10_000)
+        // Auto-validation removed: was too heavy (1369 clients × 500ms = 11min blocking).
+        // Validation is now manual-only via the validate-contacts endpoint.
       }
     })
 
@@ -808,35 +833,51 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         }
         log.info(`💬 Vendedor ${vendedorId}: history sync — ${syncChats.length} chats (total: ${session.chats.length})`)
       }
-      // Cache messages from history sync
-      if (syncMessages && Array.isArray(syncMessages)) {
-        let msgCount = 0
-        for (const msg of syncMessages) {
-          const jid = msg.key?.remoteJid
-          if (!jid || !isValidContactJid(jid)) continue
-          cacheMessage(session, jid, msg)
-          msgCount++
-        }
-        if (msgCount > 0) {
-          log.info(`📨 Vendedor ${vendedorId}: history sync — ${msgCount} mensagens cacheadas`)
-        }
+      // Cache messages from history sync (deferred to not block contact sync)
+      if (syncMessages && Array.isArray(syncMessages) && syncMessages.length > 0) {
+        log.info(`📨 Vendedor ${vendedorId}: history sync — ${syncMessages.length} mensagens recebidas, cacheando em background...`)
+        // Process in next tick to not block contacts/chats sync
+        setImmediate(() => {
+          let msgCount = 0
+          for (const msg of syncMessages) {
+            const jid = msg.key?.remoteJid
+            if (!jid || !isValidContactJid(jid)) continue
+            cacheMessage(session, jid, msg)
+            msgCount++
+          }
+          if (msgCount > 0) {
+            log.info(`📨 Vendedor ${vendedorId}: ${msgCount} mensagens cacheadas em background`)
+          }
+        })
       }
     })
 
     // Handle ALL messages — cache in memory + save new incoming to DB
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
+      // History sync (append) — cache in background, don't block event loop
+      if (type !== 'notify') {
+        setImmediate(() => {
+          for (const msg of msgs) {
+            if (!msg.message) continue
+            const jid = msg.key.remoteJid
+            if (!jid || !isValidContactJid(jid)) continue
+            cacheMessage(session, jid, msg)
+          }
+        })
+        return
+      }
+
+      // Real-time messages (notify) — cache + save to DB
       for (const msg of msgs) {
         if (!msg.message) continue
         const jid = msg.key.remoteJid
         if (!jid || !isValidContactJid(jid)) continue
 
-        // Always cache the message in memory (for chat display)
+        // Cache in memory for chat display
         cacheMessage(session, jid, msg)
 
-        // Only save NEW incoming messages to DB (not history sync)
-        if (type !== 'notify') continue
+        // Save incoming messages to DB
         if (msg.key.fromMe) continue
-
         const { text } = extractMessageContent(msg)
         if (!text.trim()) continue
 

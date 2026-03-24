@@ -3,6 +3,7 @@ import type { Cliente, Interacao, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
 import { formatCNPJ, formatTelefone, validarCNPJ } from '../utils/validators'
 import { logger } from '../utils/logger'
+import { omiePushSingleCliente } from '../lib/omieApi'
 
 const emptyForm: FormData = {
   razaoSocial: '', nomeFantasia: '', cnpj: '', cnpj2: '', contatoNome: '',
@@ -176,6 +177,11 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         })
         setInteracoes(prev => [savedI, ...prev])
         showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
+        // Auto-push para o Omie (fire-and-forget, não bloqueia)
+        omiePushSingleCliente(savedC.id).then(r => {
+          if (r.success) logger.log(`Cliente ${savedC.id} enviado ao Omie (código: ${r.omieCodigo})`)
+          else logger.warn(`Omie push falhou para cliente ${savedC.id}: ${r.error}`)
+        }).catch(() => {})
       }
       setFormData({ ...emptyForm })
       setShowModal(false)

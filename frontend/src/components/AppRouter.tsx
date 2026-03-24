@@ -412,6 +412,8 @@ export default function AppRouter({
         pedidos={pedidos}
         vendedores={vendedores}
         interacoes={interacoes}
+        produtos={produtos}
+        tarefas={tarefas}
         loggedUser={loggedUser}
       />
     default:

@@ -231,6 +231,61 @@ export async function syncPullClientes(vendedorIdPadrao?: number): Promise<SyncP
 }
 
 // ============================================
+// Push Single Client — CRM → Omie (após cadastro)
+// ============================================
+
+export interface SinglePushResult {
+  success: boolean
+  omieCodigo?: string
+  error?: string
+}
+
+export async function syncPushSingleCliente(clienteId: number): Promise<SinglePushResult> {
+  const creds = await getOmieCredentials()
+  if (!creds) return { success: false, error: 'Credenciais Omie não configuradas' }
+
+  const { data: cliente, error: fetchErr } = await supabase
+    .from('clientes')
+    .select('*')
+    .eq('id', clienteId)
+    .single()
+
+  if (fetchErr || !cliente) return { success: false, error: 'Cliente não encontrado no CRM' }
+
+  const omieData = crmToOmie(cliente)
+
+  // Omie exige cnpj_cpf para UpsertClienteCpfCnpj
+  if (!omieData.cnpj_cpf || omieData.cnpj_cpf.replace(/\D/g, '').length < 11) {
+    return { success: false, error: 'Cliente sem CNPJ/CPF válido — não pode ser enviado ao Omie' }
+  }
+
+  try {
+    const response = await omieCall<any>(
+      '/geral/clientes/',
+      'UpsertClienteCpfCnpj',
+      [omieData],
+      { skipCache: true, credentials: creds }
+    )
+
+    const omieCodigo = String(response.codigo_cliente_omie || '')
+
+    // Salvar omie_codigo no CRM
+    if (omieCodigo && !cliente.omie_codigo) {
+      await supabase
+        .from('clientes')
+        .update({ omie_codigo: omieCodigo })
+        .eq('id', clienteId)
+    }
+
+    log.info({ clienteId, omieCodigo }, 'Cliente enviado ao Omie com sucesso')
+    return { success: true, omieCodigo }
+  } catch (err: any) {
+    log.error({ err, clienteId }, 'Erro ao enviar cliente ao Omie')
+    return { success: false, error: err.message }
+  }
+}
+
+// ============================================
 // Sync Push — CRM → Omie
 // ============================================
 

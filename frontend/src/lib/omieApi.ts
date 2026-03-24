@@ -183,6 +183,17 @@ export async function omieGetFinanceiroResumo(): Promise<{ success: boolean; dat
   return res.json()
 }
 
+// ─── Push Single Cliente CRM → Omie ───
+
+export async function omiePushSingleCliente(clienteId: number): Promise<{ success: boolean; omieCodigo?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${OMIE_BASE}/sync/cliente/${clienteId}`, { method: 'POST' })
+    return res.json()
+  } catch {
+    return { success: false, error: 'Erro de conexão com o backend' }
+  }
+}
+
 // ─── Enviar Pedido ao Omie (quando gerente confirma venda) ───
 
 export async function omieEnviarPedido(pedidoId: number): Promise<{ success: boolean; omie_codigo?: string; message?: string; error?: string }> {

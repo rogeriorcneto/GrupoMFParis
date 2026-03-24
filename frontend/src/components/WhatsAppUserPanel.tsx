@@ -200,12 +200,26 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     if (waStatus.connected) loadContacts()
   }, [waStatus.connected, loadContacts])
 
-  // Refresh contacts every 15s when contacts panel is open
+  // Fast polling (3s) for first 60s after connect to progressively show contacts
   useEffect(() => {
-    if (!showContacts || !waStatus.connected) return
-    const iv = setInterval(loadContacts, 15_000)
-    return () => clearInterval(iv)
-  }, [showContacts, waStatus.connected, loadContacts])
+    if (!waStatus.connected) return
+    const connectTime = Date.now()
+    let cancelled = false
+    let slowIv: ReturnType<typeof setInterval> | null = null
+
+    const fastPoll = () => {
+      if (cancelled) return
+      loadContacts()
+      if (Date.now() - connectTime < 60_000) {
+        setTimeout(fastPoll, 3_000)
+      } else if (showContacts) {
+        slowIv = setInterval(loadContacts, 15_000)
+      }
+    }
+    setTimeout(fastPoll, 3_000)
+
+    return () => { cancelled = true; if (slowIv) clearInterval(slowIv) }
+  }, [waStatus.connected, showContacts, loadContacts])
 
   // Determine current chat target number
   const getChatNumber = useCallback((): string => {

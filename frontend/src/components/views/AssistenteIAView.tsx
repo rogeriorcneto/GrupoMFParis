@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
-import type { Cliente, Pedido, Vendedor, Interacao } from '../../types'
+import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
+import type { Tarefa } from '../../types'
 import { callAI, buildCRMContext } from '../../lib/gemini'
 import type { AIMessage } from '../../lib/gemini'
 import { loadConversation, saveConversation, clearConversation } from '../../lib/aiConversations'
+import { fetchAIContextData, type AIContextData } from '../../lib/botApi'
 
 interface ChatMessage {
   id: string
@@ -17,6 +19,8 @@ interface AssistenteIAViewProps {
   pedidos: Pedido[]
   vendedores: Vendedor[]
   interacoes: Interacao[]
+  produtos: Produto[]
+  tarefas: Tarefa[]
   loggedUser: Vendedor
 }
 
@@ -24,37 +28,37 @@ const PROMPT_CATEGORIES = [
   {
     label: '📊 Relatórios',
     prompts: [
-      'Gere um relatório completo do funil de vendas atual',
+      'Gere um relatório 360° completo: funil, WhatsApp, ligações, pedidos e sugestões',
       'Quais são os clientes mais valiosos em carteira?',
       'Qual é a taxa de conversão por etapa do funil?',
-      'Mostre o desempenho de cada vendedor',
+      'Mostre o desempenho de cada vendedor com dados de comunicação',
     ],
   },
   {
-    label: '⚠️ Alertas',
+    label: '📱 WhatsApp',
     prompts: [
-      'Quais clientes estão inativos há mais de 30 dias?',
-      'Quais clientes têm prazo de cotação vencendo?',
-      'Liste os pedidos aguardando aprovação',
-      'Quais leads estão com score baixo e precisam de atenção?',
+      'Analise as mensagens de WhatsApp recentes e identifique oportunidades',
+      'Quais clientes responderam no WhatsApp mas não tiveram follow-up?',
+      'Resuma as conversas mais recentes do WhatsApp',
+      'Quais clientes estão mais engajados no WhatsApp?',
+    ],
+  },
+  {
+    label: '📞 Ligações',
+    prompts: [
+      'Resuma as ligações gravadas recentes e extraia insights',
+      'Quais foram as principais objeções identificadas nas ligações?',
+      'Liste as ligações com transcrição e analise o sentimento',
+      'Quais clientes precisam de uma ligação de follow-up?',
     ],
   },
   {
     label: '🎯 Estratégia',
     prompts: [
       'Quais são os 5 clientes mais próximos de fechar negócio?',
-      'Sugira uma estratégia de follow-up para os clientes em negociação',
-      'Quais clientes em proposta devem ser priorizados para negociação?',
+      'Sugira uma estratégia de follow-up baseada nos dados de WhatsApp e ligações',
       'Analise o pipeline e projete o faturamento do mês',
-    ],
-  },
-  {
-    label: '🔍 Busca',
-    prompts: [
-      'Encontre todos os clientes do estado de São Paulo',
-      'Quais clientes foram perdidos nos últimos 60 dias?',
-      'Liste os clientes por cidade com maior concentração',
-      'Mostre todos os clientes sem interação recente',
+      'Cruze dados de WhatsApp, ligações e funil para sugerir próximos passos',
     ],
   },
 ]
@@ -88,11 +92,11 @@ function renderInline(text: string): React.ReactNode {
   })
 }
 
-export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, loggedUser }: AssistenteIAViewProps) {
+export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, produtos, tarefas, loggedUser }: AssistenteIAViewProps) {
   const welcomeMsg: ChatMessage = {
     id: '0',
     role: 'assistant',
-    text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos** e **${vendedores.length} vendedores**.\n\nPode perguntar qualquer coisa sobre os dados, pedir relatórios, análises ou dicas de estratégia.`,
+    text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos**, **${vendedores.length} vendedores** + mensagens de WhatsApp, ligações e produtos.\n\nPode perguntar qualquer coisa: relatórios, análise de WhatsApp, transcrições de ligações, estratégias baseadas em dados reais.`,
     timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
   }
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMsg])
@@ -102,8 +106,14 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   const [activeCategory, setActiveCategory] = useState(0)
   const [copied, setCopied] = useState<string | null>(null)
   const [conversationLoaded, setConversationLoaded] = useState(false)
+  const [extraData, setExtraData] = useState<AIContextData | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Fetch extra AI context data (WhatsApp msgs, calls, etc.) on mount
+  useEffect(() => {
+    fetchAIContextData().then(data => setExtraData(data)).catch(() => {})
+  }, [])
 
   // Load saved conversation on mount
   useEffect(() => {
@@ -128,7 +138,13 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const systemPrompt = buildCRMContext({ clientes, pedidos, vendedores, interacoes, loggedUser })
+  const systemPrompt = buildCRMContext({
+    clientes, pedidos, vendedores, interacoes, loggedUser,
+    whatsappMessages: extraData?.whatsappMessages,
+    callRecordings: extraData?.callRecordings,
+    produtos: extraData?.produtos || produtos,
+    tarefas: extraData?.tarefas || tarefas,
+  })
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return
@@ -234,6 +250,15 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
           </div>
           <div className="flex justify-between text-xs text-gray-600">
             <span>👤 Vendedores</span><span className="font-bold">{vendedores.length}</span>
+          </div>
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>📱 Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span>
+          </div>
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>📞 Ligações</span><span className="font-bold">{extraData?.callRecordings?.length || '...'}</span>
+          </div>
+          <div className="flex justify-between text-xs text-gray-600">
+            <span>📦 Produtos</span><span className="font-bold">{(extraData?.produtos || produtos).length}</span>
           </div>
         </div>
       </div>

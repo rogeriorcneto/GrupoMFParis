@@ -186,6 +186,7 @@ function produtoFromDb(row: any): Produto {
     ativo: row.ativo,
     destaque: row.destaque,
     dataCadastro: row.created_at ? row.created_at.split('T')[0] : '',
+    omieCodigo: row.omie_codigo || undefined,
   }
 }
 

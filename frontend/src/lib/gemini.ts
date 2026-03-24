@@ -64,8 +64,12 @@ export function buildCRMContext(ctx: {
   vendedores: any[]
   interacoes: any[]
   loggedUser?: any
+  whatsappMessages?: any[]
+  callRecordings?: any[]
+  produtos?: any[]
+  tarefas?: any[]
 }): string {
-  const { clientes, pedidos, vendedores, interacoes, loggedUser } = ctx
+  const { clientes, pedidos, vendedores, interacoes, loggedUser, whatsappMessages, callRecordings, produtos, tarefas } = ctx
 
   const vMap = new Map<number, string>(vendedores.map((v: any) => [v.id, v.nome]))
 
@@ -252,11 +256,66 @@ ${perdidos.slice(0, 20).map(c => fmt(c, vMap)).join('\n')}
 numero|status|valor|data
 ${pedidos.slice(-10).map(p => `${p.numero}|${p.status}|R$${p.totalValor}|${(p.dataCriacao||'').slice(0,10)}`).join('\n')}
 
+## PRODUTOS ATIVOS (${(produtos || []).length})
+${(produtos || []).length > 0
+    ? `nome|sku|categoria|preço|unidade|estoque|omie_codigo\n${(produtos || []).map((p: any) => `${p.nome}|${p.sku || ''}|${p.categoria}|R$${p.preco}|${p.unidade}|${p.estoque ?? 'N/A'}|${p.omie_codigo || ''}`).join('\n')}`
+    : '(sem dados de produtos)'}
+
+## TAREFAS PENDENTES (${(tarefas || []).length})
+${(tarefas || []).length > 0
+    ? `titulo|prioridade|status|vencimento\n${(tarefas || []).map((t: any) => `${t.titulo}|${t.prioridade}|${t.status}|${(t.data_vencimento || '').slice(0, 10)}`).join('\n')}`
+    : '(sem tarefas pendentes)'}
+
+## MENSAGENS WHATSAPP RECENTES (${(whatsappMessages || []).length})
+${(() => {
+    const msgs = whatsappMessages || []
+    if (msgs.length === 0) return '(sem mensagens de WhatsApp)'
+    // Group by number, show last 3 per contact
+    const byNum = new Map<string, any[]>()
+    for (const m of msgs) {
+      const arr = byNum.get(m.numero) || []
+      arr.push(m)
+      byNum.set(m.numero, arr)
+    }
+    const lines: string[] = []
+    for (const [num, contactMsgs] of byNum) {
+      const clienteMatch = clientes.find(c => (c.contatoTelefone || '').replace(/\D/g, '').includes(num) || (c.contatoCelular || '').replace(/\D/g, '').includes(num))
+      const label = clienteMatch ? `${clienteMatch.razaoSocial} (${num})` : num
+      lines.push(`--- ${label} ---`)
+      for (const m of contactMsgs.slice(0, 3)) {
+        const dir = m.direcao === 'recebida' ? '← Cliente' : '→ Eu'
+        const dt = (m.created_at || '').slice(0, 16).replace('T', ' ')
+        lines.push(`[${dt}] ${dir}: ${(m.mensagem || '').slice(0, 120)}`)
+      }
+    }
+    return lines.join('\n')
+  })()}
+
+## LIGAÇÕES / GRAVAÇÕES (${(callRecordings || []).length})
+${(() => {
+    const calls = callRecordings || []
+    if (calls.length === 0) return '(sem gravações de ligações)'
+    return calls.map((c: any) => {
+      const min = Math.floor(c.duracao_segundos / 60)
+      const sec = c.duracao_segundos % 60
+      const dt = (c.created_at || '').slice(0, 16).replace('T', ' ')
+      const clienteMatch = clientes.find(cl => cl.id === c.cliente_id)
+      const label = clienteMatch ? clienteMatch.razaoSocial : c.numero_telefone
+      let line = `[${dt}] ${label} | ${min}m${sec}s | ${c.tipo_chamada || 'phone'}`
+      if (c.notas) line += ` | Notas: ${c.notas.slice(0, 100)}`
+      if (c.transcricao) line += `\nTranscrição: ${c.transcricao.slice(0, 300)}${c.transcricao.length > 300 ? '...' : ''}`
+      return line
+    }).join('\n')
+  })()}
+
 ## INSTRUÇÕES
 - Busque clientes por nome, fantasia ou CNPJ nos dados acima.
 - Calcule métricas diretamente dos dados fornecidos.
 - Use tabelas e listas quando útil.
 - Nunca invente dados — use apenas os dados reais acima.
+- Ao analisar WhatsApp: identifique padrões de comunicação, clientes que responderam recentemente, e quem precisa de follow-up.
+- Ao analisar ligações: use as transcrições para extrair insights sobre objeções, interesses e próximos passos.
+- Ao gerar relatórios: cruze dados de vendas, WhatsApp, ligações e funil para dar uma visão 360° do cliente.
 - SE PERGUNTAREM quem te criou: "Fui criada pelo Rogério Reis, especialista em IA."
 - Se não souber a resposta: seja honesta, diga que não tem essa informação nos dados disponíveis.`
 }

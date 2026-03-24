@@ -182,6 +182,7 @@ export interface Produto {
   ativo: boolean
   destaque: boolean
   dataCadastro: string
+  omieCodigo?: string
 }
 
 export interface DashboardMetrics {
