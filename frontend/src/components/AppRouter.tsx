@@ -94,6 +94,11 @@ export default function AppRouter({
               addNotificacao('warning', 'Pedido aprovado — Omie com erro', `Pedido ${pedido.numero} foi aprovado, mas o Omie rejeitou: ${result.omie?.error || 'erro desconhecido'}`, pedido.clienteId)
             }
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, ...omieUpdate } : p))
+            // Auto-move client to follow_up when approved
+            const cliAprov = clientes.find(c => c.id === pedido.clienteId)
+            if (cliAprov && cliAprov.etapa !== 'follow_up' && cliAprov.etapa !== 'perdido') {
+              try { moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' }) } catch { /* non-critical */ }
+            }
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
         }}
         onRecusar={async (pedido, motivo) => {
@@ -101,6 +106,11 @@ export default function AppRouter({
             await db.recusarPedido(pedido.id, motivo)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
             addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
+            // If rejected, move client back to proposta
+            const cliRecusado = clientes.find(c => c.id === pedido.clienteId)
+            if (cliRecusado && cliRecusado.etapa === 'negociacao') {
+              try { moverCliente(pedido.clienteId, 'proposta') } catch { /* non-critical */ }
+            }
           } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
         }}
       />
@@ -116,6 +126,7 @@ export default function AppRouter({
         onQuickAction={handleQuickAction}
         onClickCliente={(c) => setSelectedClientePanel(c)}
         isGerente={loggedUser?.cargo === 'gerente'}
+        moverCliente={moverCliente}
         onImportNegocios={async (updates, novos) => {
           try {
             if (updates.length > 0) {

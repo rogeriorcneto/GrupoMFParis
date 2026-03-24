@@ -313,6 +313,7 @@ export interface FunilViewProps {
   onClickCliente?: (c: Cliente) => void
   isGerente?: boolean
   onImportNegocios?: (updates: { clienteId: number; changes: Partial<Cliente> }[], novos: Omit<Cliente, 'id'>[]) => void
+  moverCliente?: (clienteId: number, toStage: string, extras?: Partial<Cliente>) => void
 }
 
 export interface ClientesViewProps {

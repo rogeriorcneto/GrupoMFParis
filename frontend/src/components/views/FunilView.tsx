@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, FunilViewProps } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
+import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import CallRecorder from '../CallRecorder'
 
-function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
+function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
@@ -15,6 +16,20 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
   const [filterSegmento, setFilterSegmento] = React.useState('')
   const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
   const [callRecordingCliente, setCallRecordingCliente] = useState<Cliente | null>(null)
+  const [lockProcessing, setLockProcessing] = useState(false)
+
+  // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
+  const amostraLockedClients = useMemo(() => {
+    if (!loggedUser || isGerente) return []
+    return getAmostraLocked(clientes, loggedUser.id)
+  }, [clientes, loggedUser, isGerente])
+
+  const followUpLockedClients = useMemo(() => {
+    if (!loggedUser || isGerente) return []
+    return getFollowUpLocked(clientes, loggedUser.id)
+  }, [clientes, loggedUser, isGerente])
+
+  const hasLock = amostraLockedClients.length > 0 || followUpLockedClients.length > 0
 
   const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -312,9 +327,30 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     const dias = diasDesde(cliente.dataEntradaEtapa)
     switch (cliente.etapa) {
       case 'prospecção': {
+        const diasInativoProsp = cliente.diasInativo || 0
+        const diasEtapaProsp = dias
+        const pctContato = Math.min((diasInativoProsp / 5) * 100, 100)
+        const pctEtapa60 = Math.min((diasEtapaProsp / 60) * 100, 100)
         return (
           <div className="mt-1.5 space-y-1">
-            {cliente.diasInativo !== undefined && cliente.diasInativo > 3 && <p className="text-[10px] text-orange-600">⏳ Inativo há {cliente.diasInativo}d</p>}
+            {diasInativoProsp >= 3 && (
+              <div className="flex items-center gap-1">
+                <span className={`text-[9px] font-bold ${diasInativoProsp >= 5 ? 'text-red-600' : 'text-orange-600'}`}>
+                  {diasInativoProsp >= 5 ? '🚨' : '⏳'} Sem contato: {diasInativoProsp}d / 5d
+                </span>
+              </div>
+            )}
+            {diasInativoProsp >= 3 && (
+              <div className="flex items-center gap-1">
+                <div className="flex-1 bg-gray-200 rounded-full h-1"><div className={`h-1 rounded-full transition-all ${pctContato >= 100 ? 'bg-red-500' : 'bg-orange-400'}`} style={{ width: `${pctContato}%` }} /></div>
+              </div>
+            )}
+            {diasEtapaProsp >= 30 && (
+              <div className="flex items-center gap-1">
+                <div className="flex-1 bg-gray-200 rounded-full h-1"><div className={`h-1 rounded-full transition-all ${pctEtapa60 >= 100 ? 'bg-red-500' : 'bg-yellow-400'}`} style={{ width: `${pctEtapa60}%` }} /></div>
+                <span className={`text-[9px] font-bold ${diasEtapaProsp >= 60 ? 'text-red-600' : 'text-yellow-600'}`}>{Math.max(60 - diasEtapaProsp, 0)}d</span>
+              </div>
+            )}
             {cliente.origemLead && <span className="inline-block px-1.5 py-0.5 text-[9px] bg-sky-100 text-sky-700 rounded-full">{cliente.origemLead}</span>}
           </div>
         )
@@ -339,8 +375,8 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         )
       }
       case 'proposta': {
-        const pctPrazo = Math.min((dias / 30) * 100, 100)
-        const diasRestam = Math.max(30 - dias, 0)
+        const pctPrazo = Math.min((dias / 60) * 100, 100)
+        const diasRestam = Math.max(60 - dias, 0)
         return (
           <div className="mt-1.5 space-y-1">
             {cliente.valorEstimado && <p className="text-[10px] font-bold text-indigo-700">� R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p>}
@@ -369,14 +405,25 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         const subLabel = cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando'
         const subIdx = cliente.statusFollowUp ? ['pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0
         const pctSub = Math.min(((subIdx + 1) / 7) * 100, 100)
+        const subBadgeColor = cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' :
+          cliente.statusFollowUp === 'entregue' ? 'bg-emerald-100 text-emerald-700' :
+          cliente.statusFollowUp === 'expedido' ? 'bg-cyan-100 text-cyan-700' :
+          cliente.statusFollowUp === 'faturado' ? 'bg-indigo-100 text-indigo-700' :
+          'bg-blue-100 text-blue-700'
         return (
           <div className="mt-1.5 space-y-1">
-            <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{subLabel}</span>
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${subBadgeColor}`}>{subLabel}</span>
+              {cliente.omieStatusLogistico && (
+                <span className="inline-block px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded-full border border-gray-200">🔄 Omie: {cliente.omieStatusLogistico}</span>
+              )}
+            </div>
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className="h-1.5 rounded-full transition-all bg-blue-500" style={{ width: `${pctSub}%` }} /></div>
             </div>
-            {cliente.omieCodigoRastreio && <p className="text-[10px] text-gray-500">� Rastreio: {cliente.omieCodigoRastreio}</p>}
-            {cliente.omieNotaFiscal && <p className="text-[10px] text-gray-500">� NF: {cliente.omieNotaFiscal}</p>}
+            {cliente.omieCodigoRastreio && <p className="text-[10px] text-gray-500">🚚 Rastreio: {cliente.omieCodigoRastreio}</p>}
+            {cliente.omieNotaFiscal && <p className="text-[10px] text-gray-500">📄 NF: {cliente.omieNotaFiscal}</p>}
+            {cliente.omieDataFaturamento && <p className="text-[10px] text-gray-400">Faturado: {cliente.omieDataFaturamento}</p>}
           </div>
         )
       }
@@ -609,6 +656,147 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
           phoneNumber={(callRecordingCliente.contatoCelular || callRecordingCliente.contatoTelefone || '').replace(/\D/g, '')}
           onClose={() => setCallRecordingCliente(null)}
         />
+      )}
+
+      {/* ─── LOCK MODAL: Amostra 45d ─── */}
+      {amostraLockedClients.length > 0 && !lockProcessing && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="bg-red-600 px-6 py-4">
+              <h2 className="text-white font-bold text-lg flex items-center gap-2">
+                🔒 Ação Obrigatória — Amostra Vencida
+              </h2>
+              <p className="text-red-100 text-sm mt-1">
+                {amostraLockedClients.length === 1
+                  ? 'Este cliente está há mais de 45 dias em Amostra sem resultado.'
+                  : `${amostraLockedClients.length} clientes estão há mais de 45 dias em Amostra sem resultado.`}
+              </p>
+            </div>
+            <div className="px-6 py-4 max-h-[400px] overflow-y-auto space-y-3">
+              {amostraLockedClients.map(c => {
+                const dias = diasDesde(c.dataEntradaEtapa)
+                return (
+                  <div key={c.id} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">{c.razaoSocial}</p>
+                        <p className="text-xs text-gray-500">{dias} dias em Amostra</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => {
+                          if (!moverCliente) return
+                          setLockProcessing(true)
+                          moverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] })
+                          setTimeout(() => setLockProcessing(false), 500)
+                        }}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
+                      >
+                        ✅ Aprovada → Proposta
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!moverCliente) return
+                          setLockProcessing(true)
+                          const tentativa = (c.tentativaAmostra || 0)
+                          if (tentativa >= 2) {
+                            moverCliente(c.id, 'perdido', {
+                              resultadoAmostra: 'reprovada',
+                              dataResultadoAmostra: new Date().toISOString().split('T')[0],
+                              categoriaPerda: 'qualidade',
+                              motivoPerda: 'Amostra reprovada (sem mais tentativas)',
+                              dataPerda: new Date().toISOString().split('T')[0],
+                            })
+                          } else {
+                            moverCliente(c.id, 'amostra_perdida', {
+                              resultadoAmostra: 'reprovada',
+                              dataResultadoAmostra: new Date().toISOString().split('T')[0],
+                              motivoReprovacao: 'Prazo de 45 dias vencido',
+                            })
+                          }
+                          setTimeout(() => setLockProcessing(false), 500)
+                        }}
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
+                      >
+                        ❌ Reprovada{(c.tentativaAmostra || 0) >= 2 ? ' → Perdido' : ' → Amostra Perdida'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="px-6 py-3 bg-gray-50 border-t">
+              <p className="text-xs text-gray-500 text-center">Você precisa definir o resultado de cada amostra para continuar usando o sistema.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── LOCK MODAL: Follow-up 45d após entrega ─── */}
+      {followUpLockedClients.length > 0 && amostraLockedClients.length === 0 && !lockProcessing && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="bg-amber-600 px-6 py-4">
+              <h2 className="text-white font-bold text-lg flex items-center gap-2">
+                🔒 Ação Obrigatória — Follow-up Pendente
+              </h2>
+              <p className="text-amber-100 text-sm mt-1">
+                {followUpLockedClients.length === 1
+                  ? 'Este cliente foi entregue há mais de 45 dias sem atualização.'
+                  : `${followUpLockedClients.length} clientes foram entregues há mais de 45 dias sem atualização.`}
+              </p>
+            </div>
+            <div className="px-6 py-4 max-h-[400px] overflow-y-auto space-y-3">
+              {followUpLockedClients.map(c => {
+                const diasSinceUpdate = diasDesde(c.ultimaInteracao || c.dataEntradaEtapa)
+                return (
+                  <div key={c.id} className="border border-gray-200 rounded-lg p-3">
+                    <div>
+                      <p className="font-semibold text-sm text-gray-900">{c.razaoSocial}</p>
+                      <p className="text-xs text-gray-500">{diasSinceUpdate} dias sem atualização após entrega</p>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => {
+                          if (!moverCliente) return
+                          setLockProcessing(true)
+                          moverCliente(c.id, 'follow_up', {
+                            statusFollowUp: 'satisfacao_pendente',
+                            ultimaInteracao: new Date().toISOString().split('T')[0],
+                          })
+                          setTimeout(() => setLockProcessing(false), 500)
+                        }}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
+                      >
+                        ⭐ Coletar Satisfação
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!moverCliente) return
+                          setLockProcessing(true)
+                          moverCliente(c.id, 'proposta', {
+                            statusFollowUp: 'concluido',
+                            ultimaInteracao: new Date().toISOString().split('T')[0],
+                            totalCompras: (c.totalCompras || 0) + 1,
+                            dataUltimoPedido: new Date().toISOString().split('T')[0],
+                          })
+                          setTimeout(() => setLockProcessing(false), 500)
+                        }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
+                      >
+                        📝 Nova Proposta
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="px-6 py-3 bg-gray-50 border-t">
+              <p className="text-xs text-gray-500 text-center">Atualize o status de cada cliente para desbloquear o sistema.</p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

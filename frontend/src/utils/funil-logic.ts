@@ -1,6 +1,6 @@
 import type { Cliente } from '../types'
 
-export const prazosEtapa: Record<string, number> = { amostra: 45, proposta: 30, negociacao: 45, follow_up: 60 }
+export const prazosEtapa: Record<string, number> = { amostra: 45, proposta: 60, negociacao: 45, follow_up: 60 }
 
 export function diasDesde(dateStr?: string): number {
   if (!dateStr) return 0
@@ -23,8 +23,9 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
   const diasEtapa = diasDesde(cliente.dataEntradaEtapa)
   switch (cliente.etapa) {
     case 'prospecção':
-      if (diasInativo > 7) return { text: '📞 Ligar agora — inativo há ' + diasInativo + 'd', color: 'text-orange-600' }
-      if (diasInativo > 3) return { text: '💬 Enviar WhatsApp de contato', color: 'text-blue-600' }
+      if (diasInativo >= 5) return { text: '🚨 URGENTE: sem contato há ' + diasInativo + 'd — lead será devolvido!', color: 'text-red-600' }
+      if (diasInativo >= 3) return { text: '📞 Ligar agora — inativo há ' + diasInativo + 'd (prazo: 5d)', color: 'text-orange-600' }
+      if (diasInativo > 1) return { text: '💬 Enviar WhatsApp de contato', color: 'text-blue-600' }
       return { text: '📧 Enviar apresentação', color: 'text-green-600' }
     case 'amostra': {
       const sub = cliente.statusAmostra
@@ -43,8 +44,8 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       return { text: '⏳ Aguardar avaliação', color: 'text-gray-500' }
     }
     case 'proposta':
-      if (diasEtapa >= 25) return { text: '🚨 Enviar proposta URGENTE', color: 'text-red-600' }
-      if (diasEtapa >= 10) return { text: '📞 Follow-up da proposta', color: 'text-orange-600' }
+      if (diasEtapa >= 50) return { text: '🚨 Enviar proposta URGENTE (' + (60 - diasEtapa) + 'd restantes!)', color: 'text-red-600' }
+      if (diasEtapa >= 30) return { text: '📞 Follow-up da proposta — ' + (60 - diasEtapa) + 'd restantes', color: 'text-orange-600' }
       return { text: '📝 Preparar proposta comercial', color: 'text-blue-600' }
     case 'negociacao':
       if (diasEtapa >= 35) return { text: '🚨 Cobrar resposta proposta', color: 'text-red-600' }
@@ -63,7 +64,9 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       return { text: '📦 Acompanhar logística', color: 'text-blue-600' }
     }
     case 'lead': {
-      if (diasInativo > 7) return { text: '⚠️ Lead parado há ' + diasInativo + 'd', color: 'text-orange-600' }
+      const diasLead = diasDesde(cliente.dataEntradaEtapa)
+      if (diasLead >= 3) return { text: '🚨 Lead há ' + diasLead + 'd sem vendedor! Atribuir agora.', color: 'text-red-600' }
+      if (diasLead >= 2) return { text: '⚠️ Lead há ' + diasLead + 'd — atribuir vendedor (prazo: 3d)', color: 'text-orange-600' }
       return { text: '📋 Avaliar e encaminhar para prospecção', color: 'text-blue-600' }
     }
     case 'amostra_perdida': {

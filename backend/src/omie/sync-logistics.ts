@@ -96,7 +96,7 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
         newStatusFollowUp = 'faturado'
       } else if (etapaLower.includes('separar') || etapaLower.includes('produção') || etapaLower.includes('producao')) {
         newStatusFollowUp = 'em_producao'
-      } else if (etapaLower.includes('expedir') || etapaLower.includes('enviado') || etapaLower.includes('expedido')) {
+      } else if (etapaLower.includes('expedir') || etapaLower.includes('enviado') || etapaLower.includes('expedido') || etapaLower.includes('coletado')) {
         newStatusFollowUp = 'expedido'
       } else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) {
         newStatusFollowUp = 'entregue'
@@ -112,12 +112,14 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
 
       if (!changed) continue
 
-      const updates: Record<string, any> = { updated_at: new Date().toISOString() }
+      const nowIso = new Date().toISOString()
+      const updates: Record<string, any> = { updated_at: nowIso, ultima_interacao: nowIso.split('T')[0] }
       if (statusLogistico) updates.omie_status_logistico = statusLogistico
       if (codigoRastreio) updates.omie_codigo_rastreio = codigoRastreio
       if (notaFiscal) updates.omie_nota_fiscal = notaFiscal
       if (dataFaturamento) updates.omie_data_faturamento = dataFaturamento
-      if (newStatusFollowUp !== cliente.status_follow_up) updates.status_follow_up = newStatusFollowUp
+      const statusChanged = newStatusFollowUp !== cliente.status_follow_up
+      if (statusChanged) updates.status_follow_up = newStatusFollowUp
 
       const { error: updateErr } = await supabase
         .from('clientes')
@@ -127,7 +129,57 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
       if (updateErr) throw new Error(updateErr.message)
       atualizados++
 
-      log.info({ clienteId: cliente.id, razaoSocial: cliente.razao_social, status: statusLogistico, nf: notaFiscal },
+      // Insert notification + activity when follow_up sub-status changes
+      if (statusChanged) {
+        const statusLabels: Record<string, string> = {
+          'faturado': 'Faturado',
+          'em_producao': 'Em Produção',
+          'expedido': 'Expedido/Coletado',
+          'entregue': 'Entregue',
+        }
+        const label = statusLabels[newStatusFollowUp] || newStatusFollowUp
+        const isEntregue = newStatusFollowUp === 'entregue'
+
+        // Insert notification
+        try {
+          await supabase.from('notificacoes').insert({
+            tipo: isEntregue ? 'success' : 'info',
+            titulo: isEntregue ? '📦 Pedido Entregue!' : `📦 Status Omie: ${label}`,
+            mensagem: `${cliente.razao_social}: status atualizado para ${label}${notaFiscal ? ` (NF: ${notaFiscal})` : ''}`,
+            cliente_id: cliente.id,
+            lida: false,
+            created_at: nowIso,
+          })
+        } catch { /* non-critical */ }
+
+        // Insert activity
+        try {
+          await supabase.from('atividades').insert({
+            tipo: 'moveu',
+            descricao: `[Omie] ${cliente.razao_social}: ${label}${notaFiscal ? ` — NF ${notaFiscal}` : ''}`,
+            vendedor_nome: 'Sistema/Omie',
+            timestamp: nowIso,
+          })
+        } catch { /* non-critical */ }
+
+        // If entregue, create follow-up task
+        if (isEntregue) {
+          try {
+            await supabase.from('tarefas').insert({
+              titulo: `Coletar satisfação: ${cliente.razao_social}`,
+              descricao: `Pedido entregue — coletar feedback de satisfação do cliente.`,
+              cliente_id: cliente.id,
+              tipo: 'follow_up',
+              prioridade: 'alta',
+              status: 'pendente',
+              data_vencimento: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+              created_at: nowIso,
+            })
+          } catch { /* non-critical */ }
+        }
+      }
+
+      log.info({ clienteId: cliente.id, razaoSocial: cliente.razao_social, status: statusLogistico, nf: notaFiscal, followUpStatus: newStatusFollowUp },
         'syncOmieLogistics: Cliente atualizado')
     } catch (err: any) {
       erros.push({ clienteId: cliente.id, erro: err.message })

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { Cliente, Interacao, Atividade, Vendedor, HistoricoEtapa } from '../types'
+import type { Cliente, Interacao, Atividade, Vendedor, HistoricoEtapa, Pedido } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo } from '../utils/business-rules'
+import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo, getProspeccaoToReturn, getLeadsNeedingAssignment, getPedidosPendingApproval } from '../utils/business-rules'
 
 interface UseAutoRulesParams {
   clientes: Cliente[]
@@ -10,6 +10,7 @@ interface UseAutoRulesParams {
   interacoes: Interacao[]
   vendedores: Vendedor[]
   loggedUser: Vendedor | null
+  pedidos: Pedido[]
   setAtividades: React.Dispatch<React.SetStateAction<Atividade[]>>
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
 }
@@ -22,7 +23,7 @@ interface UseAutoRulesParams {
  * - Dynamic score recalculation with debounced persistence
  */
 export function useAutoRules({
-  clientes, setClientes, interacoes, vendedores, loggedUser, setAtividades, addNotificacao
+  clientes, setClientes, interacoes, vendedores, loggedUser, pedidos, setAtividades, addNotificacao
 }: UseAutoRulesParams) {
 
   // Recalculate diasInativo based on ultimaInteracao and persist (runs on mount + every hour)
@@ -93,44 +94,52 @@ export function useAutoRules({
       setClientes(prev => prev.map(c => {
         const match = clientesParaMover.find(m => m.id === c.id)
         if (!match) return c
-        const hist: HistoricoEtapa = { etapa: 'perdido', data: nowStr, de: c.etapa }
-        return {
-          ...c, etapa: 'perdido', etapaAnterior: c.etapa, dataEntradaEtapa: nowStr,
+        const dest = match.destino
+        const hist: HistoricoEtapa = { etapa: dest, data: nowStr, de: c.etapa }
+        const extras: Partial<Cliente> = {
+          etapa: dest, etapaAnterior: c.etapa, dataEntradaEtapa: nowStr,
           historicoEtapas: [...(c.historicoEtapas || []), hist],
-          categoriaPerda: 'sem_resposta' as const, dataPerda: nowStr.split('T')[0],
-          motivoPerda: `[Sistema] Prazo de ${match.etapa === 'amostra' ? '45' : match.etapa === 'proposta' ? '30' : match.etapa === 'negociacao' ? '45' : match.etapa === 'follow_up' ? '60' : '90'} dias na etapa "${match.etapa}" vencido — movido automaticamente`
         }
+        if (dest === 'perdido') {
+          extras.categoriaPerda = 'sem_resposta' as const
+          extras.dataPerda = nowStr.split('T')[0]
+          extras.motivoPerda = `[Sistema] Prazo de ${match.dias}d na etapa "${match.etapa}" vencido — movido automaticamente`
+        }
+        return { ...c, ...extras }
       }))
-      // Capture client names before state update (avoid stale closure)
       const moveInfo = clientesParaMover.map(m => {
         const cl = clientes.find(c => c.id === m.id)
         return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', fromStage: m.etapa }
       })
-      // Persist each auto-move to Supabase
       const persistAutoMoves = async () => {
         for (const m of moveInfo) {
-          const motivo = `[Sistema] Prazo de ${m.etapa === 'amostra' ? '45' : m.etapa === 'proposta' ? '30' : m.etapa === 'negociacao' ? '45' : m.etapa === 'follow_up' ? '60' : '90'} dias na etapa "${m.etapa}" vencido — movido automaticamente`
+          const dest = m.destino
+          const updates: Record<string, any> = { etapa: dest, etapaAnterior: m.fromStage, dataEntradaEtapa: nowStr }
+          if (dest === 'perdido') {
+            updates.categoriaPerda = 'sem_resposta'
+            updates.dataPerda = nowStr.split('T')[0]
+            updates.motivoPerda = `[Sistema] Prazo de ${m.dias}d na etapa "${m.etapa}" vencido — movido automaticamente`
+          }
           try {
-            await db.updateCliente(m.id, {
-              etapa: 'perdido', etapaAnterior: m.fromStage, dataEntradaEtapa: nowStr,
-              categoriaPerda: 'sem_resposta', dataPerda: nowStr.split('T')[0], motivoPerda: motivo
-            })
-            await db.insertHistoricoEtapa(m.id, { etapa: 'perdido', data: nowStr, de: m.fromStage })
+            await db.updateCliente(m.id, updates)
+            await db.insertHistoricoEtapa(m.id, { etapa: dest, data: nowStr, de: m.fromStage })
+            const destLabel = dest === 'inativo' ? 'Inativos' : 'Perdido'
             const savedAtiv = await db.insertAtividade({
               tipo: 'moveu',
-              descricao: `${m.razaoSocial} movido para Perdido automaticamente (prazo ${m.etapa === 'amostra' ? '45d' : m.etapa === 'proposta' ? '30d' : m.etapa === 'negociacao' ? '45d' : m.etapa === 'follow_up' ? '60d' : '90d'} vencido)`,
+              descricao: `${m.razaoSocial} movido para ${destLabel} automaticamente (prazo ${m.dias}d vencido)`,
               vendedorNome: 'Sistema', timestamp: nowStr
             })
             setAtividades(prev => [savedAtiv, ...prev])
           } catch (err) { logger.error('Erro auto-move Supabase:', err) }
-          addNotificacao('error', 'Movido automaticamente', `${m.razaoSocial} → Perdido (prazo ${m.dias}d vencido)`, m.id)
+          const destLabel = dest === 'inativo' ? 'Inativos' : 'Perdido'
+          addNotificacao('error', 'Movido automaticamente', `${m.razaoSocial} → ${destLabel} (prazo ${m.dias}d vencido)`, m.id)
         }
       }
       persistAutoMoves()
     }
   }, [clientes, addNotificacao, setClientes, setAtividades])
 
-  // Auto-move para "inativo" — clientes com 120+ dias sem atividade (exceto follow_up/negociacao)
+  // Auto-move para "inativo" — clientes com 90+ dias sem atividade (exceto follow_up/negociacao)
   const autoInativoIds = useRef<Set<number>>(new Set())
   const autoInativoRunRef = useRef(false)
   useEffect(() => {
@@ -207,4 +216,79 @@ export function useAutoRules({
       return updated
     })
   }, [interacoes, setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Prospecção: devolver lead ao gerente (5d sem contato ou 60d sem amostra) ───
+  const returnedIds = useRef<Set<number>>(new Set())
+  const returnRunRef = useRef(false)
+  useEffect(() => {
+    if (returnRunRef.current || clientes.length === 0 || vendedores.length === 0) return
+    returnRunRef.current = true
+    setTimeout(() => { returnRunRef.current = false }, 60000)
+
+    const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo)
+    if (!gerente) return
+
+    const toReturn = getProspeccaoToReturn(clientes, gerente.id, returnedIds.current)
+    if (toReturn.length === 0) return
+    toReturn.forEach(m => returnedIds.current.add(m.id))
+
+    const nowStr = new Date().toISOString()
+    setClientes(prev => prev.map(c => {
+      const match = toReturn.find(m => m.id === c.id)
+      if (!match) return c
+      return { ...c, vendedorId: gerente.id }
+    }))
+
+    const returnInfo = toReturn.map(m => {
+      const cl = clientes.find(c => c.id === m.id)
+      return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', vendedorAnterior: cl?.vendedorId }
+    })
+    const persistReturns = async () => {
+      for (const m of returnInfo) {
+        const motivoLabel = m.motivo === 'sem_contato_5d' ? 'sem contato em 5 dias' : 'sem envio de amostra em 60 dias'
+        try {
+          await db.updateCliente(m.id, { vendedorId: gerente.id })
+          const savedAtiv = await db.insertAtividade({
+            tipo: 'moveu',
+            descricao: `${m.razaoSocial} devolvido ao gerente (${motivoLabel})`,
+            vendedorNome: 'Sistema', timestamp: nowStr
+          })
+          setAtividades(prev => [savedAtiv, ...prev])
+        } catch (err) { logger.error('Erro ao devolver lead:', err) }
+        addNotificacao('warning', 'Lead devolvido', `${m.razaoSocial} devolvido ao gerente (${motivoLabel})`, m.id)
+      }
+    }
+    persistReturns()
+  }, [clientes, vendedores, addNotificacao, setClientes, setAtividades])
+
+  // ─── Lead: notificar gerente se lead sem vendedor há 3+ dias ───
+  const leadNotifRef = useRef(false)
+  useEffect(() => {
+    if (leadNotifRef.current || !loggedUser || loggedUser.cargo !== 'gerente') return
+    if (clientes.length === 0 || vendedores.length === 0) return
+    leadNotifRef.current = true
+    setTimeout(() => { leadNotifRef.current = false }, 3600000) // re-check hourly
+
+    const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo)
+    if (!gerente) return
+    const staleLeads = getLeadsNeedingAssignment(clientes, gerente.id)
+    for (const lead of staleLeads) {
+      addNotificacao('warning', 'Lead sem vendedor', `${lead.razaoSocial} está há ${lead.dias}d sem vendedor atribuído!`, lead.id)
+    }
+  }, [clientes, vendedores, loggedUser, addNotificacao])
+
+  // ─── Gerente: notificar pedidos pendentes de aprovação há 2+ dias ───
+  const pedidoNotifRef = useRef(false)
+  useEffect(() => {
+    if (pedidoNotifRef.current || !loggedUser || loggedUser.cargo !== 'gerente') return
+    if (pedidos.length === 0) return
+    pedidoNotifRef.current = true
+    setTimeout(() => { pedidoNotifRef.current = false }, 3600000)
+
+    const stale = getPedidosPendingApproval(pedidos)
+    for (const p of stale) {
+      const cl = clientes.find(c => c.id === p.clienteId)
+      addNotificacao('error', 'Pedido aguardando aprovação', `Pedido ${p.numero}${cl ? ` (${cl.razaoSocial})` : ''} está há ${p.dias}d pendente!`, p.clienteId)
+    }
+  }, [pedidos, clientes, loggedUser, addNotificacao])
 }

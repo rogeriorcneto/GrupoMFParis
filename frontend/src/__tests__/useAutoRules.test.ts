@@ -40,6 +40,7 @@ const defaultParams = () => ({
   interacoes: [{ id: 1, clienteId: 1, tipo: 'email' as const, data: new Date().toISOString(), assunto: '', descricao: '', automatico: false }],
   vendedores: [sampleVendedor()],
   loggedUser: sampleVendedor(),
+  pedidos: [],
   setAtividades: vi.fn(),
   addNotificacao: vi.fn(),
 })

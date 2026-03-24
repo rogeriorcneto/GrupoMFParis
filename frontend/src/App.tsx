@@ -258,7 +258,7 @@ function App() {
   }, [loggedUser, addNotificacao]), isLoggedIn)
 
   // Auto business rules: diasInativo recalc, orphan fix, auto-move, score calc
-  useAutoRules({ clientes, setClientes, interacoes, vendedores, loggedUser, setAtividades, addNotificacao })
+  useAutoRules({ clientes, setClientes, interacoes, vendedores, loggedUser, pedidos, setAtividades, addNotificacao })
 
   // Client form state + handlers
   const {
