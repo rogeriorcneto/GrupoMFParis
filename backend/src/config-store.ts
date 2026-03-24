@@ -12,6 +12,12 @@ export interface BotConfigData {
   whatsappNumero: string
   omieAppKey: string
   omieAppSecret: string
+  twilioAccountSid: string
+  twilioAuthToken: string
+  twilioPhoneNumber: string
+  twilioTwimlAppSid: string
+  twilioApiKey: string
+  twilioApiSecret: string
 }
 
 const DEFAULT_CONFIG: BotConfigData = {
@@ -23,6 +29,12 @@ const DEFAULT_CONFIG: BotConfigData = {
   whatsappNumero: '',
   omieAppKey: '',
   omieAppSecret: '',
+  twilioAccountSid: '',
+  twilioAuthToken: '',
+  twilioPhoneNumber: '',
+  twilioTwimlAppSid: '',
+  twilioApiKey: '',
+  twilioApiSecret: '',
 }
 
 // In-memory cache to avoid hitting DB on every request
@@ -61,6 +73,12 @@ export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData
       whatsappNumero: data.whatsapp_numero || '',
       omieAppKey: data.omie_app_key || '',
       omieAppSecret: data.omie_app_secret || '',
+      twilioAccountSid: data.twilio_account_sid || process.env.TWILIO_ACCOUNT_SID || '',
+      twilioAuthToken: decrypt(data.twilio_auth_token) || process.env.TWILIO_AUTH_TOKEN || '',
+      twilioPhoneNumber: data.twilio_phone_number || process.env.TWILIO_PHONE_NUMBER || '',
+      twilioTwimlAppSid: data.twilio_twiml_app_sid || process.env.TWILIO_TWIML_APP_SID || '',
+      twilioApiKey: data.twilio_api_key || process.env.TWILIO_API_KEY || '',
+      twilioApiSecret: decrypt(data.twilio_api_secret) || process.env.TWILIO_API_SECRET || '',
     }
     cacheLoaded = true
     return { ...cachedConfig }
@@ -95,6 +113,12 @@ export async function saveConfig(data: Partial<BotConfigData>, client?: Supabase
         whatsapp_numero: updated.whatsappNumero,
         omie_app_key: updated.omieAppKey ? encrypt(updated.omieAppKey) : '',
         omie_app_secret: updated.omieAppSecret ? encrypt(updated.omieAppSecret) : '',
+        twilio_account_sid: updated.twilioAccountSid || '',
+        twilio_auth_token: updated.twilioAuthToken ? encrypt(updated.twilioAuthToken) : '',
+        twilio_phone_number: updated.twilioPhoneNumber || '',
+        twilio_twiml_app_sid: updated.twilioTwimlAppSid || '',
+        twilio_api_key: updated.twilioApiKey || '',
+        twilio_api_secret: updated.twilioApiSecret ? encrypt(updated.twilioApiSecret) : '',
         updated_at: new Date().toISOString(),
       })
 
@@ -140,5 +164,11 @@ function configFromEnv(): BotConfigData {
     whatsappNumero: '',
     omieAppKey: process.env.OMIE_APP_KEY || '',
     omieAppSecret: process.env.OMIE_APP_SECRET || '',
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+    twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
+    twilioTwimlAppSid: process.env.TWILIO_TWIML_APP_SID || '',
+    twilioApiKey: process.env.TWILIO_API_KEY || '',
+    twilioApiSecret: process.env.TWILIO_API_SECRET || '',
   }
 }

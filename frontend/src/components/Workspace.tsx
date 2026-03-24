@@ -6,6 +6,7 @@ import {
   ClipboardDocumentIcon, ClockIcon, UserGroupIcon,
   PlusIcon, ChevronRightIcon,
   MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon,
+  PhoneIcon, PhoneXMarkIcon,
 } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../types'
 import { callAI, buildCRMContext } from '../lib/gemini'
@@ -18,6 +19,7 @@ import {
 import { sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
+import { getTwilioToken, getCallRecording } from '../lib/twilioApi'
 import { loadConversation, saveConversation, clearConversation } from '../lib/aiConversations'
 
 // ── Types ──
@@ -115,6 +117,16 @@ const Workspace: React.FC<WorkspaceProps> = ({
   const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const voiceBlobRef = useRef<Blob | null>(null)
   const waImageInputRef = useRef<HTMLInputElement>(null)
+
+  // Twilio VOIP call
+  const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'ringing' | 'in-progress' | 'ended' | 'error'>('idle')
+  const [callDuration, setCallDuration] = useState(0)
+  const [callMuted, setCallMuted] = useState(false)
+  const [callError, setCallError] = useState<string | null>(null)
+  const [callRecordingUrl, setCallRecordingUrl] = useState<string | null>(null)
+  const twilioDeviceRef = useRef<any>(null)
+  const activeCallRef = useRef<any>(null)
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Email tool
   const [emailTo, setEmailTo] = useState('')
@@ -358,6 +370,141 @@ const Workspace: React.FC<WorkspaceProps> = ({
     } catch { showToast?.('error', 'Erro ao processar imagem') }
     setWaSending(false)
   }, [getWaChatNumber, selectedCliente, showToast, logAction])
+
+  // ── Twilio VOIP Call ──
+
+  const startCall = useCallback(async () => {
+    const num = getWaChatNumber()
+    if (!num) { showToast?.('error', 'Sem número para ligar.'); return }
+
+    setCallStatus('connecting')
+    setCallError(null)
+    setCallDuration(0)
+    setCallRecordingUrl(null)
+    setCallMuted(false)
+
+    try {
+      // Get Twilio token
+      const { token } = await getTwilioToken()
+
+      // Dynamically import Twilio Voice SDK
+      const { Device } = await import('@twilio/voice-sdk')
+
+      // Create or reuse device
+      if (!twilioDeviceRef.current) {
+        const device = new Device(token, { edge: 'sao-paulo', closeProtection: true })
+        twilioDeviceRef.current = device
+        await device.register()
+      } else {
+        twilioDeviceRef.current.updateToken(token)
+      }
+
+      // Format number for Twilio (needs +55 prefix)
+      let formattedNum = num.replace(/\D/g, '')
+      if (!formattedNum.startsWith('55')) formattedNum = `55${formattedNum}`
+      formattedNum = `+${formattedNum}`
+
+      // Make the call
+      const call = await twilioDeviceRef.current.connect({
+        params: { To: formattedNum },
+      })
+      activeCallRef.current = call
+
+      call.on('ringing', () => setCallStatus('ringing'))
+      call.on('accept', () => {
+        setCallStatus('in-progress')
+        // Start call timer
+        const startTs = Date.now()
+        callTimerRef.current = setInterval(() => {
+          setCallDuration(Math.floor((Date.now() - startTs) / 1000))
+        }, 1000)
+      })
+      call.on('disconnect', async () => {
+        setCallStatus('ended')
+        if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
+        activeCallRef.current = null
+
+        // Try to get recording
+        const callSid = call.parameters?.CallSid
+        if (callSid) {
+          // Wait a bit for recording to be ready
+          setTimeout(async () => {
+            try {
+              const rec = await getCallRecording(callSid)
+              if (rec) setCallRecordingUrl(rec.recordingUrl)
+            } catch { /* recording may not be ready yet */ }
+          }, 3000)
+        }
+
+        // Log the call activity
+        logAction('call', `Ligação para ${selectedCliente?.razaoSocial} (${selectedCliente?.whatsapp || selectedCliente?.contatoCelular || num})`, selectedCliente?.razaoSocial)
+        if (selectedCliente) {
+          try {
+            await db.insertAtividade({
+              tipo: 'ligacao',
+              descricao: `[Workspace] Ligação VOIP para ${selectedCliente.razaoSocial} (${formattedNum})`,
+              vendedorNome: loggedUser?.nome || 'Vendedor',
+              timestamp: new Date().toISOString(),
+            })
+            await db.insertInteracao({
+              clienteId: selectedCliente.id,
+              tipo: 'ligacao',
+              data: new Date().toISOString(),
+              assunto: 'Ligação VOIP via CRM',
+              descricao: `Ligação para ${formattedNum}`,
+              automatico: false,
+            })
+          } catch { /* non-critical */ }
+        }
+      })
+      call.on('error', (err: any) => {
+        setCallStatus('error')
+        setCallError(err?.message || 'Erro na chamada')
+        if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
+        activeCallRef.current = null
+      })
+      call.on('cancel', () => {
+        setCallStatus('idle')
+        if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
+        activeCallRef.current = null
+      })
+    } catch (err: any) {
+      setCallStatus('error')
+      setCallError(err?.message || 'Erro ao iniciar chamada. Verifique se o Twilio está configurado.')
+    }
+  }, [getWaChatNumber, selectedCliente, loggedUser, showToast, logAction])
+
+  const endCall = useCallback(() => {
+    if (activeCallRef.current) {
+      activeCallRef.current.disconnect()
+    }
+    setCallStatus('idle')
+    if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
+  }, [])
+
+  const toggleMute = useCallback(() => {
+    if (activeCallRef.current) {
+      const newMuted = !callMuted
+      activeCallRef.current.mute(newMuted)
+      setCallMuted(newMuted)
+    }
+  }, [callMuted])
+
+  const dismissCall = useCallback(() => {
+    setCallStatus('idle')
+    setCallError(null)
+    setCallRecordingUrl(null)
+    setCallDuration(0)
+  }, [])
+
+  // Cleanup Twilio device on unmount
+  useEffect(() => {
+    return () => {
+      if (activeCallRef.current) activeCallRef.current.disconnect()
+      if (twilioDeviceRef.current) { twilioDeviceRef.current.destroy(); twilioDeviceRef.current = null }
+      if (callTimerRef.current) clearInterval(callTimerRef.current)
+    }
+  }, [])
 
   // Pre-fill email when client selected
   useEffect(() => {
@@ -636,10 +783,117 @@ const Workspace: React.FC<WorkspaceProps> = ({
                   ) : (
                     <>
                       {/* Chat header */}
-                      <div className="px-3 py-2 bg-green-50 border-b border-green-200 flex-shrink-0">
-                        <p className="text-xs text-green-800 font-semibold truncate">{selectedCliente.razaoSocial}</p>
-                        <p className="text-[10px] text-green-600">{selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone}</p>
+                      <div className="px-3 py-2 bg-green-50 border-b border-green-200 flex-shrink-0 flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs text-green-800 font-semibold truncate">{selectedCliente.razaoSocial}</p>
+                          <p className="text-[10px] text-green-600">{selectedCliente.whatsapp || selectedCliente.contatoCelular || selectedCliente.contatoTelefone}</p>
+                        </div>
+                        <button
+                          onClick={startCall}
+                          disabled={callStatus !== 'idle' && callStatus !== 'ended' && callStatus !== 'error'}
+                          className="p-1.5 text-green-700 hover:bg-green-200 rounded-full transition-colors disabled:opacity-40 flex-shrink-0"
+                          title="Ligar via VOIP"
+                        >
+                          <PhoneIcon className="h-5 w-5" />
+                        </button>
                       </div>
+
+                      {/* In-call overlay */}
+                      {callStatus !== 'idle' && (
+                        <div className={`px-3 py-3 border-b flex-shrink-0 ${
+                          callStatus === 'in-progress' ? 'bg-green-100 border-green-300' :
+                          callStatus === 'error' ? 'bg-red-50 border-red-200' :
+                          callStatus === 'ended' ? 'bg-gray-50 border-gray-200' :
+                          'bg-blue-50 border-blue-200'
+                        }`}>
+                          <div className="flex items-center gap-3">
+                            {/* Status indicator */}
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              callStatus === 'in-progress' ? 'bg-green-500 animate-pulse' :
+                              callStatus === 'error' ? 'bg-red-500' :
+                              callStatus === 'ended' ? 'bg-gray-400' :
+                              'bg-blue-500 animate-pulse'
+                            }`}>
+                              <PhoneIcon className="h-4 w-4 text-white" />
+                            </div>
+
+                            {/* Call info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-900">
+                                {callStatus === 'connecting' ? 'Conectando...' :
+                                 callStatus === 'ringing' ? 'Chamando...' :
+                                 callStatus === 'in-progress' ? 'Em chamada' :
+                                 callStatus === 'ended' ? 'Chamada encerrada' :
+                                 'Erro na chamada'}
+                              </p>
+                              {callStatus === 'in-progress' && (
+                                <p className="text-[11px] font-mono text-green-700">
+                                  {Math.floor(callDuration / 60).toString().padStart(2, '0')}:{(callDuration % 60).toString().padStart(2, '0')}
+                                </p>
+                              )}
+                              {callStatus === 'ended' && callDuration > 0 && (
+                                <p className="text-[10px] text-gray-500">
+                                  Duração: {Math.floor(callDuration / 60)}m {callDuration % 60}s
+                                  {callRecordingUrl && ' • Gravação salva'}
+                                </p>
+                              )}
+                              {callStatus === 'error' && callError && (
+                                <p className="text-[10px] text-red-600 truncate">{callError}</p>
+                              )}
+                            </div>
+
+                            {/* Call actions */}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              {callStatus === 'in-progress' && (
+                                <>
+                                  <button
+                                    onClick={toggleMute}
+                                    className={`p-1.5 rounded-full transition-colors ${callMuted ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
+                                    title={callMuted ? 'Ativar microfone' : 'Silenciar'}
+                                  >
+                                    <MicrophoneIcon className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={endCall}
+                                    className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
+                                    title="Encerrar chamada"
+                                  >
+                                    <PhoneXMarkIcon className="h-4 w-4" />
+                                  </button>
+                                </>
+                              )}
+                              {(callStatus === 'connecting' || callStatus === 'ringing') && (
+                                <button
+                                  onClick={endCall}
+                                  className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
+                                  title="Cancelar"
+                                >
+                                  <PhoneXMarkIcon className="h-4 w-4" />
+                                </button>
+                              )}
+                              {callStatus === 'ended' && callRecordingUrl && (
+                                <a
+                                  href={callRecordingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 bg-blue-600 text-white text-[10px] rounded-full hover:bg-blue-700 transition-colors"
+                                >
+                                  Ouvir gravação
+                                </a>
+                              )}
+                              {(callStatus === 'ended' || callStatus === 'error') && (
+                                <button
+                                  onClick={dismissCall}
+                                  className="p-1 text-gray-400 hover:text-gray-600"
+                                  title="Fechar"
+                                >
+                                  <XMarkIcon className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Messages area */}
                       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 bg-[#e5ddd5] min-h-0" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'200\' height=\'200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cdefs%3E%3Cpattern id=\'a\' width=\'40\' height=\'40\' patternUnits=\'userSpaceOnUse\'%3E%3Cpath d=\'M0 20h40M20 0v40\' stroke=\'%23d4cfc4\' stroke-width=\'.3\'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'%23e5ddd5\'/%3E%3Crect width=\'100%25\' height=\'100%25\' fill=\'url(%23a)\'/%3E%3C/svg%3E")' }}>

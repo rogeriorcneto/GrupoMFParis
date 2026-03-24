@@ -36,6 +36,7 @@ describe('Omie Client', () => {
         omieAppKey: '', omieAppSecret: 'ENC:secret',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', whatsappNumero: '',
+        twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
       const creds = await getOmieCredentials()
       expect(creds).toBeNull()
@@ -47,6 +48,7 @@ describe('Omie Client', () => {
         omieAppKey: 'ENC:key', omieAppSecret: '',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', whatsappNumero: '',
+        twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
       const creds = await getOmieCredentials()
       expect(creds).toBeNull()
@@ -60,6 +62,7 @@ describe('Omie Client', () => {
         omieAppKey: '', omieAppSecret: '',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', whatsappNumero: '',
+        twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
       await expect(
         omieCall('/geral/clientes/', 'ListarClientes', [{}])
@@ -211,6 +214,7 @@ describe('Omie Client', () => {
         omieAppKey: '', omieAppSecret: '',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', whatsappNumero: '',
+        twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
 
       const result = await testOmieConnection()

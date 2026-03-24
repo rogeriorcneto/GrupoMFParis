@@ -20,6 +20,7 @@ import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
 import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter } from './routes/omie.js'
+import twilioRouter from './routes/twilio.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
@@ -919,6 +920,18 @@ app.post('/api/bulk/cancel/:batchId', requireAuth, (req, res) => {
   const ok = cancelBatch(req.params.batchId)
   res.json({ success: ok })
 })
+
+// ─── Twilio VOIP Routes ───
+// Config routes require gerente auth; token requires any auth; voice/callbacks are public (Twilio calls them)
+app.get('/api/twilio/config', requireAuth, requireGerente, (req, res, next) => twilioRouter(req, res, next))
+app.post('/api/twilio/config', requireAuth, requireGerente, (req, res, next) => twilioRouter(req, res, next))
+app.post('/api/twilio/auto-setup', requireAuth, requireGerente, (req, res, next) => twilioRouter(req, res, next))
+app.post('/api/twilio/token', requireAuth, (req, res, next) => twilioRouter(req, res, next))
+app.get('/api/twilio/recording/:callSid', requireAuth, (req, res, next) => twilioRouter(req, res, next))
+// Public endpoints (Twilio webhooks)
+app.post('/api/twilio/voice', (req, res, next) => twilioRouter(req, res, next))
+app.post('/api/twilio/recording-callback', (req, res, next) => twilioRouter(req, res, next))
+app.post('/api/twilio/status-callback', (req, res, next) => twilioRouter(req, res, next))
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
