@@ -469,7 +469,7 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     const session = getUserWhatsAppSession(vendedor.id)
     if (!session) { res.json([]); return }
 
-    // Build list of all JID variations to look up (including @lid)
+    // Build list of all JID variations to look up
     const jidsToCheck = new Set<string>()
     jidsToCheck.add(chatJid)
     if (numero) {
@@ -478,11 +478,28 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
       jidsToCheck.add(`55${raw}@s.whatsapp.net`)
       if (raw.startsWith('55')) jidsToCheck.add(`${raw.slice(2)}@s.whatsapp.net`)
     }
-    // Also include ALL @lid JIDs from the store (since we can't predict LID values)
+
+    // Find @lid JIDs that map to this phone number via session.lidMap
+    for (const [lid, phoneJid] of session.lidMap.entries()) {
+      if (jidsToCheck.has(phoneJid)) {
+        jidsToCheck.add(lid)
+      }
+    }
+    // Also include @lid JIDs from the store:
+    // 1. Mapped @lid JIDs that point to another phone → skip (belongs to another chat)
+    // 2. Mapped @lid JIDs that point to this phone → include
+    // 3. Unmapped @lid JIDs → include (likely from the current contact, LID not yet resolved)
     const allStoreKeys = Array.from(session.messageStore.keys())
     for (const key of allStoreKeys) {
-      if (key.endsWith('@lid')) {
-        jidsToCheck.add(key)
+      if (key.endsWith('@lid') && !jidsToCheck.has(key)) {
+        const mapped = session.lidMap.get(key)
+        if (mapped) {
+          // Include only if mapped to one of our phone JIDs
+          if (jidsToCheck.has(mapped)) jidsToCheck.add(key)
+        } else {
+          // Unmapped LID — include it (best effort, will be correct once mapped)
+          jidsToCheck.add(key)
+        }
       }
     }
 
@@ -503,7 +520,7 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     merged.sort((a, b) => a.timestamp - b.timestamp)
     const messages = merged.slice(-lim)
 
-    log.info(`🔍 [chat-messages] vendedor=${vendedor.id} chatJid=${chatJid} jidsChecked=${jidsToCheck.size} storeKeys=[${allStoreKeys.join(', ')}] merged=${merged.length} returned=${messages.length}`)
+    log.info(`🔍 [chat-messages] vendedor=${vendedor.id} chatJid=${chatJid} jidsChecked=${Array.from(jidsToCheck).join(',')} merged=${merged.length} returned=${messages.length} lidMapSize=${session.lidMap.size}`)
     res.json(messages)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Erro interno' })

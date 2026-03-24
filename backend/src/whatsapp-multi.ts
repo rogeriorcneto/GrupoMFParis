@@ -46,6 +46,8 @@ export interface UserWhatsAppSession {
   contacts: WAContact[]
   chats: { jid: string; lastMsgTimestamp?: number; unreadCount?: number }[]
   messageStore: Map<string, CachedMessage[]>
+  /** Maps @lid JIDs to @s.whatsapp.net JIDs */
+  lidMap: Map<string, string>
 }
 
 export interface UserWhatsAppStatus {
@@ -135,6 +137,7 @@ function createEmptySession(vendedorId: number): UserWhatsAppSession {
     contacts: [],
     chats: [],
     messageStore: new Map(),
+    lidMap: new Map(),
   }
 }
 
@@ -885,27 +888,35 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     })
 
     // Handle ALL messages — cache in memory + save new incoming to DB
-    // LID→JID resolver: WhatsApp now sends some messages with @lid JIDs instead of @s.whatsapp.net
-    const lidToJid = new Map<string, string>()
-
+    // LID→JID resolver: WhatsApp multi-device sends @lid JIDs instead of @s.whatsapp.net
     const resolveJid = (msg: any): string | null => {
       const raw = msg.key?.remoteJid
       if (!raw) return null
       // Standard WhatsApp JID
       if (raw.endsWith('@s.whatsapp.net')) return raw
-      // LID JID — try to resolve via participant or cached mapping
+      // LID JID — resolve to @s.whatsapp.net using session's persistent lidMap
       if (raw.endsWith('@lid')) {
-        // Check if we already mapped this LID
-        const cached = lidToJid.get(raw)
-        if (cached) return cached
-        // Try participant field (available in some message types)
+        // 1. Check session lidMap cache
+        const mapped = session.lidMap.get(raw)
+        if (mapped) return mapped
+        // 2. Try participant field
         const participant = msg.key?.participant || (msg as any).participant
         if (participant && participant.endsWith('@s.whatsapp.net')) {
-          lidToJid.set(raw, participant)
+          session.lidMap.set(raw, participant)
+          log.info(`🔗 LID mapped: ${raw} → ${participant}`)
           return participant
         }
-        // Try verifiedBizName or other hints in message
-        // As fallback, store under LID key directly (will be accessible)
+        // 3. Try to find matching contact by LID in contacts list
+        for (const c of session.contacts) {
+          if ((c as any).lid === raw) {
+            const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
+            session.lidMap.set(raw, phoneJid)
+            log.info(`🔗 LID mapped via contacts: ${raw} → ${phoneJid}`)
+            return phoneJid
+          }
+        }
+        // 4. Fallback: store under LID key itself (will be picked up by lidMap reverse lookup)
+        log.warn(`⚠️ Could not resolve LID: ${raw} — caching under LID key`)
         return raw
       }
       // Groups, broadcasts — skip
@@ -924,10 +935,6 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             const jid = resolveJid(msg)
             if (!jid) continue
             cacheMessage(session, jid, msg)
-            // Also cache under @s.whatsapp.net if it was @lid
-            if (msg.key?.remoteJid?.endsWith('@lid') && jid !== msg.key.remoteJid) {
-              cacheMessage(session, msg.key.remoteJid, msg)
-            }
           }
         })
         return
@@ -947,12 +954,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           continue
         }
 
-        // Cache in memory for chat display — under resolved JID
+        // Cache in memory for chat display — under resolved JID only
         cacheMessage(session, jid, msg)
-        // Also cache under raw LID JID if different (so lookups by either work)
-        if (rawJid && rawJid !== jid) {
-          cacheMessage(session, rawJid, msg)
-        }
         log.info(`📩 [msg] CACHED in session for jid=${jid}, store size=${session.messageStore.get(jid)?.length || 0}`)
 
         // Save incoming messages to DB
