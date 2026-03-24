@@ -8,7 +8,7 @@ import {
   connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
   startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
-  getUserWhatsAppContacts, getUserWhatsAppChats,
+  getUserWhatsAppContacts, getUserWhatsAppChats, getUserWhatsAppChatMessages,
   sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
   validateContactsOnWhatsApp,
 } from './whatsapp-multi.js'
@@ -294,6 +294,28 @@ app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
       })
       .sort((a, b) => (b.lastMsgTimestamp || 0) - (a.lastMsgTimestamp || 0))
     res.json(merged)
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
+// Buscar mensagens de um chat específico (cache in-memory do Baileys)
+app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
+  const userId = (req as any).userId
+  const { jid, numero, limit } = req.query
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    // Accept either jid or numero
+    let chatJid = jid ? String(jid) : ''
+    if (!chatJid && numero) {
+      const cleanNum = String(numero).replace(/\D/g, '')
+      chatJid = `${cleanNum}@s.whatsapp.net`
+    }
+    if (!chatJid) { res.status(400).json({ error: 'Informe jid ou numero' }); return }
+    const messages = getUserWhatsAppChatMessages(vendedor.id, chatJid, Number(limit) || 100)
+    res.json(messages)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Erro interno' })
   }

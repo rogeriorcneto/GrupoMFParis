@@ -4,7 +4,7 @@ import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
   connectUserWhatsApp, disconnectUserWhatsApp,
-  sendUserWhatsApp, fetchWhatsAppMessages,
+  sendUserWhatsApp, fetchWhatsAppMessages, fetchWhatsAppChatMessages,
   queryWhatsAppAI, getUserWhatsAppContacts,
   sendUserWhatsAppAudio, sendUserWhatsAppImage,
   validateWhatsAppContacts,
@@ -225,35 +225,48 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const hasChatTarget = !!(cliente || selectedContact)
 
   // Load chat history when connected + (cliente or selectedContact)
+  // Strategy: try in-memory Baileys cache first (has synced history), fall back to DB
   useEffect(() => {
     if (!waStatus.connected) return
     if (!cliente?.id && !selectedContact) return
     setChatLoading(true)
-    if (cliente?.id) {
-      fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
-        .then(msgs => {
-          setMessages(msgs.map((m: any) => ({
-            id: m.id || Date.now(),
-            text: m.mensagem,
-            from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
-            time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-          })))
-        })
-        .catch(() => {})
-        .finally(() => setChatLoading(false))
-    } else if (selectedContact) {
-      fetchWhatsAppMessages({ numero: selectedContact.number, limit: 100 })
-        .then(msgs => {
-          setMessages(msgs.map((m: any) => ({
-            id: m.id || Date.now(),
-            text: m.mensagem,
-            from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
-            time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-          })))
-        })
-        .catch(() => {})
-        .finally(() => setChatLoading(false))
-    }
+
+    const chatNumber = selectedContact?.number || (cliente?.whatsapp || cliente?.contatoCelular || cliente?.contatoTelefone || '').replace(/\D/g, '')
+
+    // 1. Try in-memory cache (Baileys synced messages)
+    const tryCache = chatNumber
+      ? fetchWhatsAppChatMessages({ numero: chatNumber, limit: 100 })
+      : Promise.resolve([])
+
+    tryCache.then(cachedMsgs => {
+      if (cachedMsgs && cachedMsgs.length > 0) {
+        setMessages(cachedMsgs.map((m: any) => ({
+          id: m.id || Date.now(),
+          text: m.text,
+          from: m.fromMe ? 'me' as const : 'them' as const,
+          time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        })))
+        setChatLoading(false)
+        return
+      }
+      // 2. Fall back to DB messages
+      const dbPromise = cliente?.id
+        ? fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
+        : chatNumber
+          ? fetchWhatsAppMessages({ numero: chatNumber, limit: 100 })
+          : Promise.resolve([])
+
+      dbPromise.then(dbMsgs => {
+        setMessages((dbMsgs || []).map((m: any) => ({
+          id: m.id || Date.now(),
+          text: m.mensagem,
+          from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+          time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+        })))
+      }).catch(() => {}).finally(() => setChatLoading(false))
+    }).catch(() => {
+      setChatLoading(false)
+    })
   }, [waStatus.connected, cliente?.id, selectedContact])
 
   useEffect(() => {

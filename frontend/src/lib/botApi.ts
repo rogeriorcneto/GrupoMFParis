@@ -53,6 +53,20 @@ export async function fetchWhatsAppMessages(params: { numero?: string; clienteId
   }
 }
 
+/** Fetch WhatsApp chat messages from in-memory Baileys cache (real-time + history) */
+export async function fetchWhatsAppChatMessages(params: { jid?: string; numero?: string; limit?: number }): Promise<any[]> {
+  try {
+    const query = new URLSearchParams()
+    if (params.jid) query.set('jid', params.jid)
+    else if (params.numero) query.set('numero', params.numero)
+    if (params.limit) query.set('limit', String(params.limit))
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/chat-messages?${query.toString()}`)
+    return await res.json()
+  } catch {
+    return []
+  }
+}
+
 /** Send an email via backend */
 export async function sendEmailViaBot(to: string, subject: string, body: string, clienteId?: number, vendedorNome?: string): Promise<{ success: boolean; error?: string }> {
   try {

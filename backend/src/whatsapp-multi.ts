@@ -23,6 +23,14 @@ export interface WAContact {
   imgUrl?: string
 }
 
+export interface CachedMessage {
+  id: string
+  fromMe: boolean
+  text: string
+  timestamp: number
+  type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'other'
+}
+
 export interface UserWhatsAppSession {
   sock: ReturnType<typeof makeWASocket> | null
   qrDataUrl: string | null
@@ -33,6 +41,7 @@ export interface UserWhatsAppSession {
   vendedorId: number
   contacts: WAContact[]
   chats: { jid: string; lastMsgTimestamp?: number; unreadCount?: number }[]
+  messageStore: Map<string, CachedMessage[]>
 }
 
 export interface UserWhatsAppStatus {
@@ -121,6 +130,7 @@ function createEmptySession(vendedorId: number): UserWhatsAppSession {
     vendedorId,
     contacts: [],
     chats: [],
+    messageStore: new Map(),
   }
 }
 
@@ -426,6 +436,65 @@ export function getUserWhatsAppChats(vendedorId: number): { jid: string; lastMsg
   return session.chats
 }
 
+/** Extrai texto de qualquer tipo de mensagem Baileys */
+function extractMessageContent(msg: any): { text: string; type: CachedMessage['type'] } {
+  if (!msg?.message) return { text: '', type: 'other' }
+  const m = msg.message
+  if (m.conversation) return { text: m.conversation, type: 'text' }
+  if (m.extendedTextMessage?.text) return { text: m.extendedTextMessage.text, type: 'text' }
+  if (m.imageMessage) return { text: m.imageMessage.caption || '📷 Imagem', type: 'image' }
+  if (m.videoMessage) return { text: m.videoMessage.caption || '🎥 Vídeo', type: 'video' }
+  if (m.audioMessage) return { text: '🎤 Áudio', type: 'audio' }
+  if (m.documentMessage) return { text: `📎 ${m.documentMessage.fileName || 'Documento'}`, type: 'document' }
+  if (m.stickerMessage) return { text: '🏷️ Sticker', type: 'sticker' }
+  if (m.contactMessage) return { text: `👤 ${m.contactMessage.displayName || 'Contato'}`, type: 'other' }
+  if (m.locationMessage) return { text: '📍 Localização', type: 'other' }
+  return { text: '', type: 'other' }
+}
+
+/** Armazena mensagem no cache in-memory da sessão */
+function cacheMessage(session: UserWhatsAppSession, jid: string, msg: any): void {
+  const { text, type } = extractMessageContent(msg)
+  if (!text) return
+
+  const ts = msg.messageTimestamp
+    ? (typeof msg.messageTimestamp === 'number' ? msg.messageTimestamp : (msg.messageTimestamp as any)?.low || 0)
+    : Math.floor(Date.now() / 1000)
+
+  const cached: CachedMessage = {
+    id: msg.key?.id || `${Date.now()}-${Math.random()}`,
+    fromMe: !!msg.key?.fromMe,
+    text,
+    timestamp: ts,
+    type,
+  }
+
+  const MAX_PER_CHAT = 200
+  let chatMsgs = session.messageStore.get(jid)
+  if (!chatMsgs) {
+    chatMsgs = []
+    session.messageStore.set(jid, chatMsgs)
+  }
+  // Avoid duplicates by id
+  if (!chatMsgs.find(m => m.id === cached.id)) {
+    chatMsgs.push(cached)
+    // Keep only last N messages per chat
+    if (chatMsgs.length > MAX_PER_CHAT) {
+      chatMsgs.splice(0, chatMsgs.length - MAX_PER_CHAT)
+    }
+  }
+}
+
+/** Busca mensagens de um chat específico do cache in-memory */
+export function getUserWhatsAppChatMessages(vendedorId: number, jid: string, limit = 100): CachedMessage[] {
+  const session = sessions.get(vendedorId)
+  if (!session) return []
+  const msgs = session.messageStore.get(jid) || []
+  // Sort by timestamp ascending
+  const sorted = [...msgs].sort((a, b) => a.timestamp - b.timestamp)
+  return sorted.slice(-limit)
+}
+
 /** Envia áudio via WhatsApp do vendedor (aceita Buffer base64) */
 export async function sendUserWhatsAppAudio(
   vendedorId: number,
@@ -714,7 +783,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     })
 
     // messaging-history.set fires when Baileys syncs history on reconnect
-    sock.ev.on('messaging-history.set', ({ contacts: syncContacts, chats: syncChats }) => {
+    sock.ev.on('messaging-history.set', ({ contacts: syncContacts, chats: syncChats, messages: syncMessages }: any) => {
       if (syncContacts) {
         log.info(`📇 Vendedor ${vendedorId}: history sync — ${syncContacts.length} contatos`)
         upsertContacts(syncContacts)
@@ -739,24 +808,39 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         }
         log.info(`💬 Vendedor ${vendedorId}: history sync — ${syncChats.length} chats (total: ${session.chats.length})`)
       }
+      // Cache messages from history sync
+      if (syncMessages && Array.isArray(syncMessages)) {
+        let msgCount = 0
+        for (const msg of syncMessages) {
+          const jid = msg.key?.remoteJid
+          if (!jid || !isValidContactJid(jid)) continue
+          cacheMessage(session, jid, msg)
+          msgCount++
+        }
+        if (msgCount > 0) {
+          log.info(`📨 Vendedor ${vendedorId}: history sync — ${msgCount} mensagens cacheadas`)
+        }
+      }
     })
 
-    // Handle incoming messages — save to DB linked to this vendedor
+    // Handle ALL messages — cache in memory + save new incoming to DB
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
-      if (type !== 'notify') return
-
       for (const msg of msgs) {
-        if (!msg.message || msg.key.fromMe) continue
-        const from = msg.key.remoteJid
-        if (!from || from.endsWith('@g.us')) continue
+        if (!msg.message) continue
+        const jid = msg.key.remoteJid
+        if (!jid || !isValidContactJid(jid)) continue
 
-        const text =
-          msg.message.conversation ||
-          msg.message.extendedTextMessage?.text ||
-          ''
+        // Always cache the message in memory (for chat display)
+        cacheMessage(session, jid, msg)
+
+        // Only save NEW incoming messages to DB (not history sync)
+        if (type !== 'notify') continue
+        if (msg.key.fromMe) continue
+
+        const { text } = extractMessageContent(msg)
         if (!text.trim()) continue
 
-        const senderNumber = from.replace('@s.whatsapp.net', '')
+        const senderNumber = jid.replace('@s.whatsapp.net', '')
 
         try {
           const { insertWhatsAppMessage, findClienteByPhone } = await import('./database.js')
