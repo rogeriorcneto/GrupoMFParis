@@ -513,6 +513,40 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
   }
 })
 
+// Diagnóstico da sessão WhatsApp (debug)
+app.get('/api/whatsapp/user/debug-session', requireAuth, async (req, res) => {
+  const userId = (req as any).userId
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    const session = getUserWhatsAppSession(vendedor.id)
+    if (!session) { res.json({ connected: false, message: 'No session' }); return }
+    const storeKeys = Array.from(session.messageStore.keys())
+    const storeDetails = storeKeys.map(k => ({
+      jid: k,
+      messageCount: session.messageStore.get(k)?.length || 0,
+      lastMsg: (() => {
+        const msgs = session.messageStore.get(k) || []
+        const last = msgs[msgs.length - 1]
+        return last ? { id: last.id, text: last.text?.substring(0, 50), fromMe: last.fromMe, type: last.type, ts: last.timestamp } : null
+      })(),
+    }))
+    res.json({
+      connected: session.status === 'connected',
+      status: session.status,
+      connectedNumber: session.connectedNumber,
+      vendedorId: session.vendedorId,
+      contactsCount: session.contacts.length,
+      chatsCount: session.chats.length,
+      storeKeysCount: storeKeys.length,
+      storeDetails,
+    })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro interno' })
+  }
+})
+
 // Verificar se número existe no WhatsApp
 app.post('/api/whatsapp/user/check-number', requireAuth, rateLimit(20, 60_000), async (req, res) => {
   const userId = (req as any).userId
