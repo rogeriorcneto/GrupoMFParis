@@ -2,6 +2,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  downloadMediaMessage,
 } from '@whiskeysockets/baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
@@ -29,6 +30,9 @@ export interface CachedMessage {
   text: string
   timestamp: number
   type: 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'other'
+  mediaUrl?: string
+  mimetype?: string
+  fileName?: string
 }
 
 export interface UserWhatsAppSession {
@@ -470,24 +474,24 @@ export function getUserWhatsAppChats(vendedorId: number): { jid: string; lastMsg
 }
 
 /** Extrai texto de qualquer tipo de mensagem Baileys */
-function extractMessageContent(msg: any): { text: string; type: CachedMessage['type'] } {
+function extractMessageContent(msg: any): { text: string; type: CachedMessage['type']; mimetype?: string; fileName?: string } {
   if (!msg?.message) return { text: '', type: 'other' }
   const m = msg.message
   if (m.conversation) return { text: m.conversation, type: 'text' }
   if (m.extendedTextMessage?.text) return { text: m.extendedTextMessage.text, type: 'text' }
-  if (m.imageMessage) return { text: m.imageMessage.caption || '📷 Imagem', type: 'image' }
-  if (m.videoMessage) return { text: m.videoMessage.caption || '🎥 Vídeo', type: 'video' }
-  if (m.audioMessage) return { text: '🎤 Áudio', type: 'audio' }
-  if (m.documentMessage) return { text: `📎 ${m.documentMessage.fileName || 'Documento'}`, type: 'document' }
-  if (m.stickerMessage) return { text: '🏷️ Sticker', type: 'sticker' }
+  if (m.imageMessage) return { text: m.imageMessage.caption || '📷 Imagem', type: 'image', mimetype: m.imageMessage.mimetype }
+  if (m.videoMessage) return { text: m.videoMessage.caption || '🎥 Vídeo', type: 'video', mimetype: m.videoMessage.mimetype }
+  if (m.audioMessage) return { text: '🎤 Áudio', type: 'audio', mimetype: m.audioMessage.mimetype }
+  if (m.documentMessage) return { text: `📎 ${m.documentMessage.fileName || 'Documento'}`, type: 'document', mimetype: m.documentMessage.mimetype, fileName: m.documentMessage.fileName }
+  if (m.stickerMessage) return { text: '🏷️ Sticker', type: 'sticker', mimetype: m.stickerMessage.mimetype }
   if (m.contactMessage) return { text: `👤 ${m.contactMessage.displayName || 'Contato'}`, type: 'other' }
   if (m.locationMessage) return { text: '📍 Localização', type: 'other' }
   return { text: '', type: 'other' }
 }
 
 /** Armazena mensagem no cache in-memory da sessão */
-function cacheMessage(session: UserWhatsAppSession, jid: string, msg: any): void {
-  const { text, type } = extractMessageContent(msg)
+export function cacheMessage(session: UserWhatsAppSession, jid: string, msg: any): void {
+  const { text, type, mimetype, fileName } = extractMessageContent(msg)
   if (!text) return
 
   const ts = msg.messageTimestamp
@@ -500,6 +504,8 @@ function cacheMessage(session: UserWhatsAppSession, jid: string, msg: any): void
     text,
     timestamp: ts,
     type,
+    mimetype,
+    fileName,
   }
 
   const MAX_PER_CHAT = 200
@@ -516,6 +522,29 @@ function cacheMessage(session: UserWhatsAppSession, jid: string, msg: any): void
       chatMsgs.splice(0, chatMsgs.length - MAX_PER_CHAT)
     }
   }
+
+  // Download media asynchronously and attach base64 data URL
+  if (type !== 'text' && type !== 'other' && msg.message) {
+    downloadMediaForCache(msg, cached).catch(() => {})
+  }
+}
+
+/** Downloads media from a Baileys message and attaches base64 data URL to cached message */
+async function downloadMediaForCache(msg: any, cached: CachedMessage): Promise<void> {
+  try {
+    const buffer = await downloadMediaMessage(msg, 'buffer', {})
+    if (buffer && buffer.length > 0 && buffer.length < 10_000_000) {
+      const mime = cached.mimetype || 'application/octet-stream'
+      cached.mediaUrl = `data:${mime};base64,${(buffer as Buffer).toString('base64')}`
+    }
+  } catch (err) {
+    // Media download can fail for old/expired messages — not critical
+  }
+}
+
+/** Retorna sessão WhatsApp de um vendedor (para cache externo) */
+export function getUserWhatsAppSession(vendedorId: number): UserWhatsAppSession | undefined {
+  return sessions.get(vendedorId)
 }
 
 /** Busca mensagens de um chat específico do cache in-memory */
@@ -878,7 +907,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
         // Save incoming messages to DB
         if (msg.key.fromMe) continue
-        const { text } = extractMessageContent(msg)
+        const { text, type: msgType } = extractMessageContent(msg)
         if (!text.trim()) continue
 
         const senderNumber = jid.replace('@s.whatsapp.net', '')
@@ -892,6 +921,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             vendedorId: vendedorId,
             direcao: 'recebida',
             mensagem: text.trim(),
+            tipo: msgType,
           })
         } catch (dbErr) {
           log.error({ err: dbErr }, `Erro ao salvar mensagem recebida (vendedor ${vendedorId})`)

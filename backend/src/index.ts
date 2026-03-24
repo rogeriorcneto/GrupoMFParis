@@ -10,7 +10,7 @@ import {
   startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
   getUserWhatsAppContacts, getUserWhatsAppChats, getUserWhatsAppChatMessages,
   sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
-  validateContactsOnWhatsApp,
+  validateContactsOnWhatsApp, cacheMessage, getUserWhatsAppSession,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -379,12 +379,25 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
     const result = await sendUserWhatsAppMessage(vendedor.id, number, text)
     if (result.success) {
       try {
+        // Cache sent message in session so it shows up in polling
+        const normalizedNum = formatBrazilianPhone(number)
+        const sentJid = `${normalizedNum}@s.whatsapp.net`
+        const session = getUserWhatsAppSession(vendedor.id)
+        if (session) {
+          cacheMessage(session, sentJid, {
+            key: { id: `sent-${Date.now()}-${Math.random().toString(36).slice(2)}`, fromMe: true, remoteJid: sentJid },
+            message: { conversation: text },
+            messageTimestamp: Math.floor(Date.now() / 1000),
+          })
+        }
+
         await db.insertWhatsAppMessage({
-          numero: formatBrazilianPhone(number),
+          numero: normalizedNum,
           clienteId: clienteId || undefined,
           vendedorId: vendedor.id,
           direcao: 'enviada',
           mensagem: text,
+          tipo: 'text',
         })
         if (clienteId) {
           await db.insertInteracao({
@@ -444,14 +457,29 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
-    // Accept either jid or numero
+    // Accept either jid or numero — normalize with formatBrazilianPhone to ensure 55 prefix
     let chatJid = jid ? String(jid) : ''
     if (!chatJid && numero) {
-      const cleanNum = String(numero).replace(/\D/g, '')
-      chatJid = `${cleanNum}@s.whatsapp.net`
+      const normalized = formatBrazilianPhone(String(numero))
+      chatJid = `${normalized}@s.whatsapp.net`
     }
     if (!chatJid) { res.status(400).json({ error: 'Informe jid ou numero' }); return }
-    const messages = getUserWhatsAppChatMessages(vendedor.id, chatJid, Number(limit) || 100)
+    const lim = Number(limit) || 100
+    let messages = getUserWhatsAppChatMessages(vendedor.id, chatJid, lim)
+    // Fallback: try without 55 prefix, or with raw digits (handle edge cases)
+    if (messages.length === 0 && numero) {
+      const raw = String(numero).replace(/\D/g, '')
+      const variations = [
+        `${raw}@s.whatsapp.net`,
+        `55${raw}@s.whatsapp.net`,
+        raw.startsWith('55') ? `${raw.slice(2)}@s.whatsapp.net` : '',
+      ].filter(Boolean)
+      for (const v of variations) {
+        if (v === chatJid) continue
+        messages = getUserWhatsAppChatMessages(vendedor.id, v, lim)
+        if (messages.length > 0) break
+      }
+    }
     res.json(messages)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Erro interno' })

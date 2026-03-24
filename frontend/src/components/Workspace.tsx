@@ -102,7 +102,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
   const [waText, setWaText] = useState('')
   const [waSending, setWaSending] = useState(false)
   const [waConnected, setWaConnected] = useState(false)
-  const [waMessages, setWaMessages] = useState<{ id: number; text: string; from: 'me' | 'them' | 'system'; time: string }[]>([])
+  const [waMessages, setWaMessages] = useState<{ id: number; text: string; from: 'me' | 'them' | 'system'; time: string; type?: string; mediaUrl?: string; mimetype?: string }[]>([])
   const [waChatLoading, setWaChatLoading] = useState(false)
   const waChatEndRef = useRef<HTMLDivElement>(null)
   // Voice recording
@@ -215,6 +215,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
           id: m.id || Date.now(), text: m.text,
           from: m.fromMe ? 'me' as const : 'them' as const,
           time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          type: m.type, mediaUrl: m.mediaUrl, mimetype: m.mimetype,
         })))
         setWaChatLoading(false)
         return
@@ -228,6 +229,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
           id: m.id || Date.now(), text: m.mensagem,
           from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
           time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          type: m.tipo,
         })))
       }).catch(() => {}).finally(() => setWaChatLoading(false))
     }).catch(() => setWaChatLoading(false))
@@ -250,6 +252,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
             id: m.id || Date.now(), text: m.text,
             from: m.fromMe ? 'me' as const : 'them' as const,
             time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+            type: m.type, mediaUrl: m.mediaUrl, mimetype: m.mimetype,
           })))
         }
       }).catch(() => {})
@@ -641,7 +644,56 @@ const Workspace: React.FC<WorkspaceProps> = ({
                                 <div className="bg-yellow-100 text-yellow-800 text-[10px] px-2 py-0.5 rounded-full max-w-[90%]">{m.text}</div>
                               ) : (
                                 <div className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs shadow-sm ${m.from === 'me' ? 'bg-[#dcf8c6] text-gray-900' : 'bg-white text-gray-900'}`}>
-                                  <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
+                                  {/* Image */}
+                                  {m.type === 'image' && m.mediaUrl ? (
+                                    <div>
+                                      <img src={m.mediaUrl} alt="Imagem" className="max-w-full rounded-md max-h-[240px] object-contain cursor-pointer" onClick={() => window.open(m.mediaUrl, '_blank')} />
+                                      {m.text && m.text !== '📷 Imagem' && <p className="whitespace-pre-wrap break-words leading-relaxed mt-1">{m.text}</p>}
+                                    </div>
+                                  ) : m.type === 'image' ? (
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '📷 Imagem'}</p>
+                                  ) : null}
+                                  {/* Audio */}
+                                  {m.type === 'audio' && m.mediaUrl ? (
+                                    <div>
+                                      <audio controls preload="none" className="max-w-full h-8" style={{ minWidth: '180px' }}>
+                                        <source src={m.mediaUrl} type={m.mimetype || 'audio/ogg'} />
+                                      </audio>
+                                    </div>
+                                  ) : m.type === 'audio' ? (
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '🎤 Áudio'}</p>
+                                  ) : null}
+                                  {/* Video */}
+                                  {m.type === 'video' && m.mediaUrl ? (
+                                    <div>
+                                      <video controls preload="none" className="max-w-full rounded-md max-h-[200px]">
+                                        <source src={m.mediaUrl} type={m.mimetype || 'video/mp4'} />
+                                      </video>
+                                      {m.text && m.text !== '🎥 Vídeo' && <p className="whitespace-pre-wrap break-words leading-relaxed mt-1">{m.text}</p>}
+                                    </div>
+                                  ) : m.type === 'video' ? (
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '🎥 Vídeo'}</p>
+                                  ) : null}
+                                  {/* Document */}
+                                  {m.type === 'document' ? (
+                                    m.mediaUrl ? (
+                                      <a href={m.mediaUrl} download className="flex items-center gap-1.5 text-blue-600 hover:underline">
+                                        <span>📎</span><span>{m.text}</span>
+                                      </a>
+                                    ) : (
+                                      <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text}</p>
+                                    )
+                                  ) : null}
+                                  {/* Sticker */}
+                                  {m.type === 'sticker' && m.mediaUrl ? (
+                                    <img src={m.mediaUrl} alt="Sticker" className="max-w-[120px] max-h-[120px]" />
+                                  ) : m.type === 'sticker' ? (
+                                    <p className="text-2xl">{m.text}</p>
+                                  ) : null}
+                                  {/* Text / other */}
+                                  {(!m.type || m.type === 'text' || m.type === 'other') && (
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
+                                  )}
                                   <p className={`text-[9px] mt-0.5 ${m.from === 'me' ? 'text-green-700' : 'text-gray-400'} text-right`}>{m.time}</p>
                                 </div>
                               )}
