@@ -465,7 +465,16 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     }
     if (!chatJid) { res.status(400).json({ error: 'Informe jid ou numero' }); return }
     const lim = Number(limit) || 100
+
+    // Debug: list all JIDs in the session store
+    const sessionDbg = getUserWhatsAppSession(vendedor.id)
+    if (sessionDbg) {
+      const storeKeys = Array.from(sessionDbg.messageStore.keys())
+      log.info(`🔍 [chat-messages] vendedor=${vendedor.id} requestedJid=${chatJid} numero=${numero} storeJids=[${storeKeys.join(', ')}]`)
+    }
+
     let messages = getUserWhatsAppChatMessages(vendedor.id, chatJid, lim)
+    log.info(`🔍 [chat-messages] primary lookup jid=${chatJid} found=${messages.length}`)
     // Fallback: try without 55 prefix, or with raw digits (handle edge cases)
     if (messages.length === 0 && numero) {
       const raw = String(numero).replace(/\D/g, '')
@@ -477,6 +486,7 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
       for (const v of variations) {
         if (v === chatJid) continue
         messages = getUserWhatsAppChatMessages(vendedor.id, v, lim)
+        log.info(`🔍 [chat-messages] fallback jid=${v} found=${messages.length}`)
         if (messages.length > 0) break
       }
     }

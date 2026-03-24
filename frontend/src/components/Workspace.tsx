@@ -240,7 +240,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
     waChatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [waMessages])
 
-  // Poll WA messages every 8s when chat is open
+  // Poll WA messages every 5s when chat is open
   useEffect(() => {
     if (!waConnected || !selectedCliente || activeTool !== 'whatsapp') return
     const num = getWaChatNumber()
@@ -254,9 +254,24 @@ const Workspace: React.FC<WorkspaceProps> = ({
             time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
             type: m.type, mediaUrl: m.mediaUrl, mimetype: m.mimetype,
           })))
+        } else {
+          // Fallback: try DB when cache is empty
+          const p = selectedCliente.id
+            ? fetchWhatsAppMessages({ clienteId: selectedCliente.id, limit: 100 })
+            : fetchWhatsAppMessages({ numero: num, limit: 100 })
+          p.then(dbMsgs => {
+            if (dbMsgs && dbMsgs.length > 0) {
+              setWaMessages(dbMsgs.map((m: any) => ({
+                id: m.id || Date.now(), text: m.mensagem,
+                from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+                time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+                type: m.tipo,
+              })))
+            }
+          }).catch(() => {})
         }
       }).catch(() => {})
-    }, 8_000)
+    }, 5_000)
     return () => clearInterval(iv)
   }, [waConnected, selectedCliente, activeTool, getWaChatNumber])
 

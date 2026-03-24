@@ -883,6 +883,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     // Handle ALL messages — cache in memory + save new incoming to DB
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
+      log.info(`📩 [messages.upsert] vendedor=${vendedorId} type=${type} count=${msgs.length}`)
+
       // History sync (append) — cache in background, don't block event loop
       if (type !== 'notify') {
         setImmediate(() => {
@@ -898,12 +900,20 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
       // Real-time messages (notify) — cache + save to DB
       for (const msg of msgs) {
-        if (!msg.message) continue
         const jid = msg.key.remoteJid
-        if (!jid || !isValidContactJid(jid)) continue
+        const fromMe = !!msg.key.fromMe
+        const hasMessage = !!msg.message
+        log.info(`📩 [msg] vendedor=${vendedorId} jid=${jid} fromMe=${fromMe} hasMessage=${hasMessage} msgKeys=${msg.message ? Object.keys(msg.message).join(',') : 'none'}`)
+
+        if (!msg.message) continue
+        if (!jid || !isValidContactJid(jid)) {
+          log.warn(`📩 [msg] SKIPPED — invalid jid: ${jid}`)
+          continue
+        }
 
         // Cache in memory for chat display
         cacheMessage(session, jid, msg)
+        log.info(`📩 [msg] CACHED in session for jid=${jid}, store size=${session.messageStore.get(jid)?.length || 0}`)
 
         // Save incoming messages to DB
         if (msg.key.fromMe) continue
@@ -911,6 +921,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         if (!text.trim()) continue
 
         const senderNumber = jid.replace('@s.whatsapp.net', '')
+        log.info(`📩 [msg] SAVING to DB: sender=${senderNumber} type=${msgType} text=${text.substring(0, 50)}`)
 
         try {
           const { insertWhatsAppMessage, findClienteByPhone } = await import('./database.js')
@@ -923,6 +934,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             mensagem: text.trim(),
             tipo: msgType,
           })
+          log.info(`📩 [msg] SAVED to DB OK: sender=${senderNumber} clienteId=${cliente?.id}`)
         } catch (dbErr) {
           log.error({ err: dbErr }, `Erro ao salvar mensagem recebida (vendedor ${vendedorId})`)
         }
