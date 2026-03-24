@@ -19,7 +19,6 @@ import {
 import { sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
-import { getTwilioToken, getCallRecording } from '../lib/twilioApi'
 import { loadConversation, saveConversation, clearConversation } from '../lib/aiConversations'
 
 // ── Types ──
@@ -118,15 +117,17 @@ const Workspace: React.FC<WorkspaceProps> = ({
   const voiceBlobRef = useRef<Blob | null>(null)
   const waImageInputRef = useRef<HTMLInputElement>(null)
 
-  // Twilio VOIP call
-  const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'ringing' | 'in-progress' | 'ended' | 'error'>('idle')
+  // Phone call + system audio recording
+  const [callStatus, setCallStatus] = useState<'idle' | 'recording' | 'ended' | 'error'>('idle')
   const [callDuration, setCallDuration] = useState(0)
-  const [callMuted, setCallMuted] = useState(false)
   const [callError, setCallError] = useState<string | null>(null)
   const [callRecordingUrl, setCallRecordingUrl] = useState<string | null>(null)
-  const twilioDeviceRef = useRef<any>(null)
-  const activeCallRef = useRef<any>(null)
+  const [callSaving, setCallSaving] = useState(false)
+  const callRecorderRef = useRef<MediaRecorder | null>(null)
+  const callStreamRef = useRef<MediaStream | null>(null)
+  const callChunksRef = useRef<Blob[]>([])
   const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const callStartRef = useRef<number>(0)
 
   // Email tool
   const [emailTo, setEmailTo] = useState('')
@@ -371,137 +372,177 @@ const Workspace: React.FC<WorkspaceProps> = ({
     setWaSending(false)
   }, [getWaChatNumber, selectedCliente, showToast, logAction])
 
-  // ── Twilio VOIP Call ──
+  // ── Phone Call + System Audio Recording ──
+  // Uses tel: link (Windows Phone Link) to make the call, then captures system audio for recording
 
   const startCall = useCallback(async () => {
     const num = getWaChatNumber()
     if (!num) { showToast?.('error', 'Sem número para ligar.'); return }
 
-    setCallStatus('connecting')
+    // Format number for tel: link
+    let formattedNum = num.replace(/\D/g, '')
+    if (!formattedNum.startsWith('55')) formattedNum = `55${formattedNum}`
+
     setCallError(null)
     setCallDuration(0)
     setCallRecordingUrl(null)
-    setCallMuted(false)
+    callChunksRef.current = []
 
     try {
-      // Get Twilio token
-      const { token } = await getTwilioToken()
+      // 1. Request system audio capture (screen share with audio)
+      // This prompts user to share a tab/window — they should pick "System audio" or the Phone Link window
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1, height: 1 }, // minimal video (required by API but we only want audio)
+        audio: true, // capture system audio
+      } as any)
 
-      // Dynamically import Twilio Voice SDK
-      const { Device } = await import('@twilio/voice-sdk')
-
-      // Create or reuse device
-      if (!twilioDeviceRef.current) {
-        const device = new Device(token, { edge: 'sao-paulo', closeProtection: true })
-        twilioDeviceRef.current = device
-        await device.register()
-      } else {
-        twilioDeviceRef.current.updateToken(token)
+      // Check if audio track was captured
+      const audioTracks = stream.getAudioTracks()
+      if (audioTracks.length === 0) {
+        stream.getTracks().forEach(t => t.stop())
+        showToast?.('error', 'Selecione "Compartilhar áudio do sistema" na janela de compartilhamento.')
+        return
       }
 
-      // Format number for Twilio (needs +55 prefix)
-      let formattedNum = num.replace(/\D/g, '')
-      if (!formattedNum.startsWith('55')) formattedNum = `55${formattedNum}`
-      formattedNum = `+${formattedNum}`
+      // Stop video tracks (we only need audio)
+      stream.getVideoTracks().forEach(t => t.stop())
 
-      // Make the call
-      const call = await twilioDeviceRef.current.connect({
-        params: { To: formattedNum },
-      })
-      activeCallRef.current = call
+      // Also capture microphone for the vendedor's voice
+      try {
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const audioCtx = new AudioContext()
+        const dest = audioCtx.createMediaStreamDestination()
+        // Mix system audio + microphone
+        const systemSource = audioCtx.createMediaStreamSource(new MediaStream(audioTracks))
+        const micSource = audioCtx.createMediaStreamSource(micStream)
+        systemSource.connect(dest)
+        micSource.connect(dest)
+        callStreamRef.current = dest.stream
+        // Keep refs to stop later
+        ;(callStreamRef.current as any)._extraStreams = [stream, micStream]
+        ;(callStreamRef.current as any)._audioCtx = audioCtx
+      } catch {
+        // If mic fails, just record system audio
+        callStreamRef.current = new MediaStream(audioTracks)
+        ;(callStreamRef.current as any)._extraStreams = [stream]
+      }
 
-      call.on('ringing', () => setCallStatus('ringing'))
-      call.on('accept', () => {
-        setCallStatus('in-progress')
-        // Start call timer
-        const startTs = Date.now()
-        callTimerRef.current = setInterval(() => {
-          setCallDuration(Math.floor((Date.now() - startTs) / 1000))
-        }, 1000)
+      // 2. Start recording
+      const recorder = new MediaRecorder(callStreamRef.current, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
       })
-      call.on('disconnect', async () => {
-        setCallStatus('ended')
-        if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
-        activeCallRef.current = null
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) callChunksRef.current.push(e.data)
+      }
+      recorder.start(1000) // collect data every second
+      callRecorderRef.current = recorder
 
-        // Try to get recording
-        const callSid = call.parameters?.CallSid
-        if (callSid) {
-          // Wait a bit for recording to be ready
-          setTimeout(async () => {
-            try {
-              const rec = await getCallRecording(callSid)
-              if (rec) setCallRecordingUrl(rec.recordingUrl)
-            } catch { /* recording may not be ready yet */ }
-          }, 3000)
-        }
+      // 3. Start timer
+      callStartRef.current = Date.now()
+      callTimerRef.current = setInterval(() => {
+        setCallDuration(Math.floor((Date.now() - callStartRef.current) / 1000))
+      }, 1000)
 
-        // Log the call activity
-        logAction('call', `Ligação para ${selectedCliente?.razaoSocial} (${selectedCliente?.whatsapp || selectedCliente?.contatoCelular || num})`, selectedCliente?.razaoSocial)
-        if (selectedCliente) {
-          try {
-            await db.insertAtividade({
-              tipo: 'ligacao',
-              descricao: `[Workspace] Ligação VOIP para ${selectedCliente.razaoSocial} (${formattedNum})`,
-              vendedorNome: loggedUser?.nome || 'Vendedor',
-              timestamp: new Date().toISOString(),
-            })
-            await db.insertInteracao({
-              clienteId: selectedCliente.id,
-              tipo: 'ligacao',
-              data: new Date().toISOString(),
-              assunto: 'Ligação VOIP via CRM',
-              descricao: `Ligação para ${formattedNum}`,
-              automatico: false,
-            })
-          } catch { /* non-critical */ }
-        }
-      })
-      call.on('error', (err: any) => {
-        setCallStatus('error')
-        setCallError(err?.message || 'Erro na chamada')
-        if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
-        activeCallRef.current = null
-      })
-      call.on('cancel', () => {
-        setCallStatus('idle')
-        if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
-        activeCallRef.current = null
-      })
+      setCallStatus('recording')
+
+      // 4. Open tel: link to initiate call via Phone Link
+      window.open(`tel:+${formattedNum}`, '_self')
+
+      showToast?.('success', 'Ligação iniciada! A gravação está ativa.')
     } catch (err: any) {
       setCallStatus('error')
-      setCallError(err?.message || 'Erro ao iniciar chamada. Verifique se o Twilio está configurado.')
+      if (err?.name === 'NotAllowedError') {
+        setCallError('Permissão negada. Clique em "Ligar" e selecione compartilhar áudio do sistema.')
+      } else {
+        setCallError(err?.message || 'Erro ao iniciar gravação.')
+      }
     }
-  }, [getWaChatNumber, selectedCliente, loggedUser, showToast, logAction])
+  }, [getWaChatNumber, showToast])
 
-  const endCall = useCallback(() => {
-    if (activeCallRef.current) {
-      activeCallRef.current.disconnect()
+  const endCall = useCallback(async () => {
+    // Stop recording
+    if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') {
+      callRecorderRef.current.stop()
     }
-    setCallStatus('idle')
     if (callTimerRef.current) { clearInterval(callTimerRef.current); callTimerRef.current = null }
-  }, [])
 
-  const toggleMute = useCallback(() => {
-    if (activeCallRef.current) {
-      const newMuted = !callMuted
-      activeCallRef.current.mute(newMuted)
-      setCallMuted(newMuted)
+    // Stop all streams
+    if (callStreamRef.current) {
+      callStreamRef.current.getTracks().forEach(t => t.stop())
+      const extras = (callStreamRef.current as any)?._extraStreams as MediaStream[] | undefined
+      extras?.forEach(s => s.getTracks().forEach(t => t.stop()))
+      const audioCtx = (callStreamRef.current as any)?._audioCtx as AudioContext | undefined
+      audioCtx?.close()
+      callStreamRef.current = null
     }
-  }, [callMuted])
+    callRecorderRef.current = null
+
+    // Build audio blob
+    if (callChunksRef.current.length > 0) {
+      const blob = new Blob(callChunksRef.current, { type: 'audio/webm' })
+      const url = URL.createObjectURL(blob)
+      setCallRecordingUrl(url)
+
+      // Save to Supabase Storage
+      setCallSaving(true)
+      try {
+        const { supabase } = await import('../lib/supabase')
+        const fileName = `call_${Date.now()}_${selectedCliente?.id || 'unknown'}.webm`
+        const { error: uploadErr } = await supabase.storage
+          .from('call-recordings')
+          .upload(fileName, blob, { contentType: 'audio/webm' })
+
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from('call-recordings').getPublicUrl(fileName)
+          if (urlData?.publicUrl) setCallRecordingUrl(urlData.publicUrl)
+        }
+      } catch { /* storage may not be configured, local URL still works */ }
+      setCallSaving(false)
+    }
+
+    // Log activity
+    const num = getWaChatNumber() || ''
+    logAction('call', `Ligação para ${selectedCliente?.razaoSocial} (${num}) — ${Math.floor(callDuration / 60)}m${callDuration % 60}s`, selectedCliente?.razaoSocial)
+    if (selectedCliente) {
+      try {
+        await db.insertAtividade({
+          tipo: 'ligacao',
+          descricao: `[Workspace] Ligação para ${selectedCliente.razaoSocial} (${num}) — Gravação: ${callDuration}s`,
+          vendedorNome: loggedUser?.nome || 'Vendedor',
+          timestamp: new Date().toISOString(),
+        })
+        await db.insertInteracao({
+          clienteId: selectedCliente.id,
+          tipo: 'ligacao',
+          data: new Date().toISOString(),
+          assunto: 'Ligação via CRM',
+          descricao: `Ligação para ${num} — Duração: ${Math.floor(callDuration / 60)}m${callDuration % 60}s`,
+          automatico: false,
+        })
+      } catch { /* non-critical */ }
+    }
+
+    setCallStatus('ended')
+    callChunksRef.current = []
+  }, [selectedCliente, loggedUser, callDuration, getWaChatNumber, logAction])
 
   const dismissCall = useCallback(() => {
+    if (callRecordingUrl?.startsWith('blob:')) URL.revokeObjectURL(callRecordingUrl)
     setCallStatus('idle')
     setCallError(null)
     setCallRecordingUrl(null)
     setCallDuration(0)
-  }, [])
+  }, [callRecordingUrl])
 
-  // Cleanup Twilio device on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (activeCallRef.current) activeCallRef.current.disconnect()
-      if (twilioDeviceRef.current) { twilioDeviceRef.current.destroy(); twilioDeviceRef.current = null }
+      if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') callRecorderRef.current.stop()
+      if (callStreamRef.current) {
+        callStreamRef.current.getTracks().forEach(t => t.stop())
+        const extras = (callStreamRef.current as any)?._extraStreams as MediaStream[] | undefined
+        extras?.forEach(s => s.getTracks().forEach(t => t.stop()))
+      }
       if (callTimerRef.current) clearInterval(callTimerRef.current)
     }
   }, [])
@@ -790,29 +831,27 @@ const Workspace: React.FC<WorkspaceProps> = ({
                         </div>
                         <button
                           onClick={startCall}
-                          disabled={callStatus !== 'idle' && callStatus !== 'ended' && callStatus !== 'error'}
+                          disabled={callStatus === 'recording'}
                           className="p-1.5 text-green-700 hover:bg-green-200 rounded-full transition-colors disabled:opacity-40 flex-shrink-0"
-                          title="Ligar via VOIP"
+                          title="Ligar (via Vincular Telefone) com gravação"
                         >
                           <PhoneIcon className="h-5 w-5" />
                         </button>
                       </div>
 
-                      {/* In-call overlay */}
+                      {/* In-call / recording overlay */}
                       {callStatus !== 'idle' && (
                         <div className={`px-3 py-3 border-b flex-shrink-0 ${
-                          callStatus === 'in-progress' ? 'bg-green-100 border-green-300' :
+                          callStatus === 'recording' ? 'bg-green-100 border-green-300' :
                           callStatus === 'error' ? 'bg-red-50 border-red-200' :
-                          callStatus === 'ended' ? 'bg-gray-50 border-gray-200' :
-                          'bg-blue-50 border-blue-200'
+                          'bg-gray-50 border-gray-200'
                         }`}>
                           <div className="flex items-center gap-3">
                             {/* Status indicator */}
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                              callStatus === 'in-progress' ? 'bg-green-500 animate-pulse' :
+                              callStatus === 'recording' ? 'bg-red-500 animate-pulse' :
                               callStatus === 'error' ? 'bg-red-500' :
-                              callStatus === 'ended' ? 'bg-gray-400' :
-                              'bg-blue-500 animate-pulse'
+                              'bg-gray-400'
                             }`}>
                               <PhoneIcon className="h-4 w-4 text-white" />
                             </div>
@@ -820,13 +859,11 @@ const Workspace: React.FC<WorkspaceProps> = ({
                             {/* Call info */}
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-gray-900">
-                                {callStatus === 'connecting' ? 'Conectando...' :
-                                 callStatus === 'ringing' ? 'Chamando...' :
-                                 callStatus === 'in-progress' ? 'Em chamada' :
-                                 callStatus === 'ended' ? 'Chamada encerrada' :
-                                 'Erro na chamada'}
+                                {callStatus === 'recording' ? '🔴 Gravando ligação...' :
+                                 callStatus === 'ended' ? 'Ligação encerrada' :
+                                 'Erro na gravação'}
                               </p>
-                              {callStatus === 'in-progress' && (
+                              {callStatus === 'recording' && (
                                 <p className="text-[11px] font-mono text-green-700">
                                   {Math.floor(callDuration / 60).toString().padStart(2, '0')}:{(callDuration % 60).toString().padStart(2, '0')}
                                 </p>
@@ -834,7 +871,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                               {callStatus === 'ended' && callDuration > 0 && (
                                 <p className="text-[10px] text-gray-500">
                                   Duração: {Math.floor(callDuration / 60)}m {callDuration % 60}s
-                                  {callRecordingUrl && ' • Gravação salva'}
+                                  {callSaving ? ' • Salvando...' : callRecordingUrl ? ' • Gravação salva ✅' : ''}
                                 </p>
                               )}
                               {callStatus === 'error' && callError && (
@@ -844,29 +881,11 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
                             {/* Call actions */}
                             <div className="flex items-center gap-1.5 flex-shrink-0">
-                              {callStatus === 'in-progress' && (
-                                <>
-                                  <button
-                                    onClick={toggleMute}
-                                    className={`p-1.5 rounded-full transition-colors ${callMuted ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}
-                                    title={callMuted ? 'Ativar microfone' : 'Silenciar'}
-                                  >
-                                    <MicrophoneIcon className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={endCall}
-                                    className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
-                                    title="Encerrar chamada"
-                                  >
-                                    <PhoneXMarkIcon className="h-4 w-4" />
-                                  </button>
-                                </>
-                              )}
-                              {(callStatus === 'connecting' || callStatus === 'ringing') && (
+                              {callStatus === 'recording' && (
                                 <button
                                   onClick={endCall}
                                   className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
-                                  title="Cancelar"
+                                  title="Encerrar e salvar gravação"
                                 >
                                   <PhoneXMarkIcon className="h-4 w-4" />
                                 </button>
