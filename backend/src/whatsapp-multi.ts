@@ -869,8 +869,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         setImmediate(() => {
           let msgCount = 0
           for (const msg of syncMessages) {
-            const jid = msg.key?.remoteJid
-            if (!jid || !isValidContactJid(jid)) continue
+            const rawJid = msg.key?.remoteJid
+            if (!rawJid) continue
+            // Accept both @s.whatsapp.net and @lid
+            if (rawJid.endsWith('@g.us') || rawJid.endsWith('@broadcast')) continue
+            const jid = rawJid.endsWith('@s.whatsapp.net') ? rawJid : rawJid
             cacheMessage(session, jid, msg)
             msgCount++
           }
@@ -882,6 +885,34 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     })
 
     // Handle ALL messages — cache in memory + save new incoming to DB
+    // LID→JID resolver: WhatsApp now sends some messages with @lid JIDs instead of @s.whatsapp.net
+    const lidToJid = new Map<string, string>()
+
+    const resolveJid = (msg: any): string | null => {
+      const raw = msg.key?.remoteJid
+      if (!raw) return null
+      // Standard WhatsApp JID
+      if (raw.endsWith('@s.whatsapp.net')) return raw
+      // LID JID — try to resolve via participant or cached mapping
+      if (raw.endsWith('@lid')) {
+        // Check if we already mapped this LID
+        const cached = lidToJid.get(raw)
+        if (cached) return cached
+        // Try participant field (available in some message types)
+        const participant = msg.key?.participant || (msg as any).participant
+        if (participant && participant.endsWith('@s.whatsapp.net')) {
+          lidToJid.set(raw, participant)
+          return participant
+        }
+        // Try verifiedBizName or other hints in message
+        // As fallback, store under LID key directly (will be accessible)
+        return raw
+      }
+      // Groups, broadcasts — skip
+      if (raw.endsWith('@g.us') || raw.endsWith('@broadcast')) return null
+      return raw
+    }
+
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
       log.info(`📩 [messages.upsert] vendedor=${vendedorId} type=${type} count=${msgs.length}`)
 
@@ -890,9 +921,13 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         setImmediate(() => {
           for (const msg of msgs) {
             if (!msg.message) continue
-            const jid = msg.key.remoteJid
-            if (!jid || !isValidContactJid(jid)) continue
+            const jid = resolveJid(msg)
+            if (!jid) continue
             cacheMessage(session, jid, msg)
+            // Also cache under @s.whatsapp.net if it was @lid
+            if (msg.key?.remoteJid?.endsWith('@lid') && jid !== msg.key.remoteJid) {
+              cacheMessage(session, msg.key.remoteJid, msg)
+            }
           }
         })
         return
@@ -900,19 +935,24 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
       // Real-time messages (notify) — cache + save to DB
       for (const msg of msgs) {
-        const jid = msg.key.remoteJid
-        const fromMe = !!msg.key.fromMe
+        const rawJid = msg.key?.remoteJid
+        const jid = resolveJid(msg)
+        const fromMe = !!msg.key?.fromMe
         const hasMessage = !!msg.message
-        log.info(`📩 [msg] vendedor=${vendedorId} jid=${jid} fromMe=${fromMe} hasMessage=${hasMessage} msgKeys=${msg.message ? Object.keys(msg.message).join(',') : 'none'}`)
+        log.info(`📩 [msg] vendedor=${vendedorId} rawJid=${rawJid} resolvedJid=${jid} fromMe=${fromMe} hasMessage=${hasMessage} participant=${msg.key?.participant || 'none'} msgKeys=${msg.message ? Object.keys(msg.message).join(',') : 'none'}`)
 
         if (!msg.message) continue
-        if (!jid || !isValidContactJid(jid)) {
-          log.warn(`📩 [msg] SKIPPED — invalid jid: ${jid}`)
+        if (!jid) {
+          log.warn(`📩 [msg] SKIPPED — could not resolve jid: ${rawJid}`)
           continue
         }
 
-        // Cache in memory for chat display
+        // Cache in memory for chat display — under resolved JID
         cacheMessage(session, jid, msg)
+        // Also cache under raw LID JID if different (so lookups by either work)
+        if (rawJid && rawJid !== jid) {
+          cacheMessage(session, rawJid, msg)
+        }
         log.info(`📩 [msg] CACHED in session for jid=${jid}, store size=${session.messageStore.get(jid)?.length || 0}`)
 
         // Save incoming messages to DB
@@ -920,7 +960,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         const { text, type: msgType } = extractMessageContent(msg)
         if (!text.trim()) continue
 
-        const senderNumber = jid.replace('@s.whatsapp.net', '')
+        const senderNumber = jid.replace('@s.whatsapp.net', '').replace('@lid', '')
         log.info(`📩 [msg] SAVING to DB: sender=${senderNumber} type=${msgType} text=${text.substring(0, 50)}`)
 
         try {

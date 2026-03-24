@@ -475,7 +475,7 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
 
     let messages = getUserWhatsAppChatMessages(vendedor.id, chatJid, lim)
     log.info(`🔍 [chat-messages] primary lookup jid=${chatJid} found=${messages.length}`)
-    // Fallback: try without 55 prefix, or with raw digits (handle edge cases)
+    // Fallback: try without 55 prefix, or with raw digits, or @lid JIDs
     if (messages.length === 0 && numero) {
       const raw = String(numero).replace(/\D/g, '')
       const variations = [
@@ -488,6 +488,23 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
         messages = getUserWhatsAppChatMessages(vendedor.id, v, lim)
         log.info(`🔍 [chat-messages] fallback jid=${v} found=${messages.length}`)
         if (messages.length > 0) break
+      }
+    }
+    // If still empty, scan ALL store keys for messages from this number (handles @lid JIDs)
+    if (messages.length === 0 && sessionDbg) {
+      const raw = numero ? String(numero).replace(/\D/g, '') : chatJid.replace('@s.whatsapp.net', '')
+      const normalized = formatBrazilianPhone(raw)
+      const allKeys = Array.from(sessionDbg.messageStore.keys())
+      // Merge messages from all matching JIDs (both @s.whatsapp.net and @lid)
+      const merged: any[] = []
+      for (const key of allKeys) {
+        const keyMsgs = sessionDbg.messageStore.get(key) || []
+        merged.push(...keyMsgs)
+      }
+      if (merged.length > 0) {
+        // Filter by number if we can match fromMe=false messages with a sender number
+        // For now, just log what's in the store so we can debug
+        log.info(`🔍 [chat-messages] full store scan: ${allKeys.length} keys, ${merged.length} total messages. Looking for number=${normalized}`)
       }
     }
     res.json(messages)
