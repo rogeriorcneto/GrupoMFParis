@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido } from '../types'
 import * as db from '../lib/database'
+import { sendEmailViaBot } from '../lib/botApi'
 import { logger } from '../utils/logger'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import CallRecorder from './CallRecorder'
@@ -61,6 +62,16 @@ export default function ClientePanel({
   // Collapsible sections
   const [showTimeline, setShowTimeline] = useState(false)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
+  const [showEmail, setShowEmail] = useState(false)
+
+  // Email inline state
+  const [emailSubject, setEmailSubject] = useState('')
+  const [emailBody, setEmailBody] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+
+  // Refs for scroll-to
+  const whatsAppRef = useRef<HTMLDivElement>(null)
+  const emailRef = useRef<HTMLDivElement>(null)
 
   const vendedor = vendedores.find(v => v.id === c.vendedorId)
   const diasNaEtapa = c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0
@@ -208,14 +219,14 @@ export default function ClientePanel({
                 </a>
               )}
               {c.contatoEmail && (
-                <a href={`mailto:${c.contatoEmail}?subject=Contato - ${c.razaoSocial}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-apple text-xs font-medium hover:bg-blue-700 transition-colors">
+                <button onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-apple text-xs font-medium hover:bg-blue-700 transition-colors">
                   📧 Email
-                </a>
+                </button>
               )}
               {phone && (
-                <a href={`https://wa.me/55${phone}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-apple text-xs font-medium hover:bg-emerald-700 transition-colors">
+                <button onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-apple text-xs font-medium hover:bg-emerald-700 transition-colors">
                   💬 WhatsApp
-                </a>
+                </button>
               )}
             </div>
           </div>
@@ -345,9 +356,8 @@ export default function ClientePanel({
               {([['ligacao', '📞', 'Ligação'], ['whatsapp', '💬', 'WhatsApp'], ['email', '📧', 'Email'], ['reuniao', '🤝', 'Reunião'], ['instagram', '📸', 'Instagram'], ['linkedin', '💼', 'LinkedIn']] as const).map(([tipo, icon, label]) => (
                 <button key={tipo} onClick={() => {
                   setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo)
-                  if (tipo === 'ligacao' && phone) window.open(`tel:+55${phone}`, '_self')
-                  if (tipo === 'email' && c.contatoEmail) window.open(`mailto:${c.contatoEmail}?subject=Contato - ${c.razaoSocial}`, '_self')
-                  if (tipo === 'whatsapp' && phone) window.open(`https://wa.me/55${phone}`, '_blank')
+                  if (tipo === 'email' && c.contatoEmail) { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
+                  if (tipo === 'whatsapp' && phone) { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
                 }} className={`flex flex-col items-center gap-1 p-2 rounded-apple text-xs font-medium transition-all ${panelAtividadeTipo === tipo ? 'bg-primary-100 border-2 border-primary-500 text-primary-700 shadow-sm' : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
                   <span className="text-lg">{icon}</span>
                   <span>{label}</span>
@@ -550,7 +560,7 @@ export default function ClientePanel({
           )}
 
           {/* === WHATSAPP (collapsible) === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200">
+          <div ref={whatsAppRef} className="bg-gray-50 rounded-apple border border-gray-200">
             <button onClick={() => setShowWhatsApp(!showWhatsApp)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
               <span>📱 WhatsApp Chat</span>
               <span>{showWhatsApp ? '▲' : '▼'}</span>
@@ -563,6 +573,60 @@ export default function ClientePanel({
                   showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'WhatsApp' : 'Erro WhatsApp', texto, c.id)}
                   compact
                 />
+              </div>
+            )}
+          </div>
+
+          {/* === EMAIL (collapsible) === */}
+          <div ref={emailRef} className="bg-gray-50 rounded-apple border border-gray-200">
+            <button onClick={() => setShowEmail(!showEmail)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
+              <span>📧 Email</span>
+              <span>{showEmail ? '▲' : '▼'}</span>
+            </button>
+            {showEmail && (
+              <div className="px-4 pb-4 space-y-3">
+                {!c.contatoEmail ? (
+                  <div className="text-center py-4">
+                    <p className="text-2xl mb-2">📭</p>
+                    <p className="text-sm text-gray-600">Sem email cadastrado</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-blue-50 border border-blue-200 rounded-apple p-2.5">
+                      <p className="text-xs text-blue-700">Email enviado via SMTP do CRM para <strong>{c.contatoEmail}</strong></p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Assunto *</label>
+                      <input type="text" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} placeholder={`Contato - ${c.razaoSocial}`} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Mensagem *</label>
+                      <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} rows={5} placeholder={`Olá ${c.contatoNome || ''},\n\n\n\nAtenciosamente,\n${loggedUser?.nome || ''}\nGrupo MF Paris`} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!emailSubject.trim() || !emailBody.trim()) return
+                        setEmailSending(true)
+                        try {
+                          const result = await sendEmailViaBot(c.contatoEmail!, emailSubject.trim(), emailBody.trim(), c.id, loggedUser?.nome)
+                          if (result.success) {
+                            addNotificacao('success', 'Email enviado', `Email enviado para ${c.contatoEmail}`, c.id)
+                            setEmailSubject(''); setEmailBody('')
+                          } else {
+                            addNotificacao('error', 'Erro Email', result.error || 'Falha ao enviar email', c.id)
+                          }
+                        } catch (err: any) {
+                          addNotificacao('error', 'Erro Email', err?.message || 'Erro desconhecido', c.id)
+                        }
+                        setEmailSending(false)
+                      }}
+                      disabled={emailSending || !emailSubject.trim() || !emailBody.trim()}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-apple transition-colors"
+                    >
+                      {emailSending ? '⏳ Enviando...' : '📧 Enviar Email'}
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

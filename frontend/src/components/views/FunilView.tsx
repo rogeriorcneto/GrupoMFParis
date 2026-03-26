@@ -631,7 +631,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                             <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="Abrir WhatsApp">� WA</button>
                           )}
                           {cliente.contatoEmail && (
-                            <a href={`mailto:${cliente.contatoEmail}?subject=Contato - ${encodeURIComponent(cliente.razaoSocial)}`} onClick={(e) => { e.stopPropagation(); onQuickAction(cliente, 'email', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium no-underline" title="Enviar Email">📧</a>
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium" title="Enviar Email">📧</button>
                           )}
                           {(cliente.contatoTelefone || cliente.contatoCelular) && (
                             <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Ligar com gravação">📞</button>
