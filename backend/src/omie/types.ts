@@ -86,6 +86,7 @@ export interface OmieCliente {
   cnae?: string
   observacao?: string
   tags?: OmieTag[]
+  contribuinte?: string
   recomendacoes?: OmieRecomendacoes
   enderecoEntrega?: OmieEnderecoEntrega
   inativo?: string

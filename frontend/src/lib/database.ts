@@ -187,6 +187,12 @@ function produtoFromDb(row: any): Produto {
     destaque: row.destaque,
     dataCadastro: row.created_at ? row.created_at.split('T')[0] : '',
     omieCodigo: row.omie_codigo || undefined,
+    marca: row.marca || undefined,
+    localEstoque: row.local_estoque || undefined,
+    especieVolume: row.especie_volume || undefined,
+    cfopInterno: row.cfop_interno || undefined,
+    cfopExterno: row.cfop_externo || undefined,
+    ncm: row.ncm || undefined,
   }
 }
 
@@ -259,6 +265,15 @@ export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
     omieNumero: row.omie_numero || undefined,
     omieStatus: row.omie_status || undefined,
     omieErro: row.omie_erro || undefined,
+    tipo: row.tipo || 'venda',
+    tipoFrete: row.tipo_frete || undefined,
+    enderecoDiferente: row.endereco_diferente || false,
+    enderecoEntregaRua: row.endereco_entrega_rua || undefined,
+    enderecoEntregaNumero: row.endereco_entrega_numero || undefined,
+    enderecoEntregaBairro: row.endereco_entrega_bairro || undefined,
+    enderecoEntregaCidade: row.endereco_entrega_cidade || undefined,
+    enderecoEntregaEstado: row.endereco_entrega_estado || undefined,
+    enderecoEntregaCep: row.endereco_entrega_cep || undefined,
   }
 }
 
@@ -846,6 +861,15 @@ export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
       total_valor: p.totalValor,
       data_criacao: p.dataCriacao,
       data_envio: p.dataEnvio || null,
+      tipo: p.tipo || 'venda',
+      tipo_frete: p.tipoFrete || null,
+      endereco_diferente: p.enderecoDiferente || false,
+      endereco_entrega_rua: p.enderecoEntregaRua || null,
+      endereco_entrega_numero: p.enderecoEntregaNumero || null,
+      endereco_entrega_bairro: p.enderecoEntregaBairro || null,
+      endereco_entrega_cidade: p.enderecoEntregaCidade || null,
+      endereco_entrega_estado: p.enderecoEntregaEstado || null,
+      endereco_entrega_cep: p.enderecoEntregaCep || null,
     })
     .select()
     .single()

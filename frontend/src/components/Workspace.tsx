@@ -9,8 +9,8 @@ import {
   PhoneIcon, PhoneXMarkIcon,
 } from '@heroicons/react/24/outline'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../types'
-import { callAI, buildCRMContext } from '../lib/gemini'
-import type { AIMessage } from '../lib/gemini'
+import { callAIFull, buildCRMContext } from '../lib/gemini'
+import type { AIMessage, AIUIAction } from '../lib/gemini'
 import {
   sendUserWhatsApp, getUserWhatsAppStatus,
   fetchWhatsAppChatMessages, fetchWhatsAppMessages,
@@ -35,6 +35,7 @@ interface WorkspaceProps {
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   onAddTarefa?: (t: Tarefa) => void
   onUpdateTarefa?: (t: Tarefa) => void
+  onRefreshData?: () => void
 }
 
 interface ChatMessage {
@@ -83,7 +84,7 @@ function renderInline(text: string): React.ReactNode {
 
 const Workspace: React.FC<WorkspaceProps> = ({
   loggedUser, clientes, vendedores, interacoes, pedidos, tarefas,
-  cliente: initialCliente, onClose, showToast, onAddTarefa, onUpdateTarefa,
+  cliente: initialCliente, onClose, showToast, onAddTarefa, onUpdateTarefa, onRefreshData,
 }) => {
   // ─── State ───
   const [activeTool, setActiveTool] = useState<SidebarTool>(null)
@@ -575,12 +576,31 @@ const Workspace: React.FC<WorkspaceProps> = ({
         .map(m => ({ role: m.role, content: m.text }))
       history.push({ role: 'user', content: text.trim() })
 
-      const response = await callAI(history, systemPrompt)
+      const result = await callAIFull(history, systemPrompt)
       setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(), role: 'assistant', text: response,
+        id: (Date.now() + 1).toString(), role: 'assistant', text: result.response,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       }])
       logAction('ia', `Pergunta IA: ${text.trim().substring(0, 80)}`)
+
+      // Handle UI actions from the AI agent
+      if (result.uiActions && result.uiActions.length > 0) {
+        for (const action of result.uiActions) {
+          switch (action.type) {
+            case 'refreshClientes':
+            case 'refreshTarefas':
+            case 'refreshPedidos':
+              onRefreshData?.()
+              break
+            case 'startCall':
+              if (action.payload?.phone) {
+                window.open(`tel:${action.payload.phone}`, '_self')
+                showToast?.('success', `📞 Ligação para ${action.payload.clienteNome || action.payload.phone}`)
+              }
+              break
+          }
+        }
+      }
     } catch (err: any) {
       setAiError(err?.message || 'Erro ao conectar com a IA')
     } finally {

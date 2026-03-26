@@ -29,6 +29,15 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   const [searchCliente, setSearchCliente] = React.useState('')
   const [showClienteDropdown, setShowClienteDropdown] = React.useState(false)
   const [enviandoOmie, setEnviandoOmie] = React.useState<number | null>(null)
+  const [tipoPedido, setTipoPedido] = React.useState<'venda' | 'bonificacao'>('venda')
+  const [tipoFrete, setTipoFrete] = React.useState<'CIF' | 'FOB' | ''>('')
+  const [enderecoDiferente, setEnderecoDiferente] = React.useState(false)
+  const [endEntregaRua, setEndEntregaRua] = React.useState('')
+  const [endEntregaNumero, setEndEntregaNumero] = React.useState('')
+  const [endEntregaBairro, setEndEntregaBairro] = React.useState('')
+  const [endEntregaCidade, setEndEntregaCidade] = React.useState('')
+  const [endEntregaEstado, setEndEntregaEstado] = React.useState('')
+  const [endEntregaCep, setEndEntregaCep] = React.useState('')
 
   // Reenviar ao Omie manualmente (para pedidos já confirmados que falharam o envio)
   const handleEnviarOmieManual = async (pedido: Pedido) => {
@@ -82,6 +91,10 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       showToast?.('error', 'O valor total do pedido deve ser maior que zero.')
       return
     }
+    if (!tipoFrete) {
+      showToast?.('error', 'Selecione o tipo de frete (CIF ou FOB).')
+      return
+    }
     setIsSaving(true)
     const numero = `PED-${Date.now().toString().slice(-6)}`
     const novoPedido: Omit<Pedido, 'id'> = {
@@ -89,12 +102,24 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       itens: itensPedido, observacoes: observacoes.trim(), status,
       dataCriacao: new Date().toISOString(),
       dataEnvio: status === 'enviado' ? new Date().toISOString() : undefined,
-      totalValor: totalPedido
+      totalValor: totalPedido,
+      tipo: tipoPedido,
+      tipoFrete: tipoFrete || undefined,
+      enderecoDiferente,
+      enderecoEntregaRua: enderecoDiferente ? endEntregaRua : undefined,
+      enderecoEntregaNumero: enderecoDiferente ? endEntregaNumero : undefined,
+      enderecoEntregaBairro: enderecoDiferente ? endEntregaBairro : undefined,
+      enderecoEntregaCidade: enderecoDiferente ? endEntregaCidade : undefined,
+      enderecoEntregaEstado: enderecoDiferente ? endEntregaEstado : undefined,
+      enderecoEntregaCep: enderecoDiferente ? endEntregaCep : undefined,
     }
     try {
       await onAddPedido(novoPedido)
       if (status === 'enviado') setPedidoEnviado({ ...novoPedido, id: 0 } as Pedido)
       setItensPedido([]); setObservacoes(''); setSelectedClienteId(clientesDisponiveis[0]?.id ?? '')
+      setTipoPedido('venda'); setTipoFrete(''); setEnderecoDiferente(false)
+      setEndEntregaRua(''); setEndEntregaNumero(''); setEndEntregaBairro('')
+      setEndEntregaCidade(''); setEndEntregaEstado(''); setEndEntregaCep('')
     } catch {
       // Erro já tratado no AppRouter (toast de erro) — não mostrar modal de sucesso
     } finally { setIsSaving(false) }
@@ -225,6 +250,50 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                   <span className="text-sm font-bold text-gray-900">R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
+            </div>
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">📋 Tipo do Pedido</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => setTipoPedido('venda')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${tipoPedido === 'venda' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                    💰 Venda
+                  </button>
+                  <button onClick={() => setTipoPedido('bonificacao')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${tipoPedido === 'bonificacao' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                    🎁 Bonificação
+                  </button>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">🚚 Tipo de Frete <span className="text-red-500">*</span></h3>
+                <div className="flex gap-2">
+                  <button onClick={() => setTipoFrete('CIF')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${tipoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                    📦 CIF (Entrega)
+                  </button>
+                  <button onClick={() => setTipoFrete('FOB')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${tipoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                    🏭 FOB (Retirada)
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={enderecoDiferente} onChange={(e) => setEnderecoDiferente(e.target.checked)} className="w-4 h-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500" />
+                  <span className="text-sm font-medium text-gray-700">📍 Endereço de entrega diferente do cadastro</span>
+                </label>
+                {enderecoDiferente && (
+                  <div className="mt-3 space-y-2 pl-6 border-l-2 border-primary-200">
+                    <div className="grid grid-cols-3 gap-2">
+                      <input type="text" placeholder="CEP" value={endEntregaCep} onChange={e => setEndEntregaCep(e.target.value)} className="col-span-1 px-2 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" placeholder="Estado (UF)" value={endEntregaEstado} onChange={e => setEndEntregaEstado(e.target.value.toUpperCase().slice(0, 2))} maxLength={2} className="col-span-1 px-2 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" placeholder="Cidade" value={endEntregaCidade} onChange={e => setEndEntregaCidade(e.target.value)} className="col-span-1 px-2 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <input type="text" placeholder="Rua / Endereço" value={endEntregaRua} onChange={e => setEndEntregaRua(e.target.value)} className="col-span-3 px-2 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      <input type="text" placeholder="Nº" value={endEntregaNumero} onChange={e => setEndEntregaNumero(e.target.value)} className="col-span-1 px-2 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    </div>
+                    <input type="text" placeholder="Bairro" value={endEntregaBairro} onChange={e => setEndEntregaBairro(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                )}
+              </div>
             </div>
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">📝 Observações</h3>

@@ -67,6 +67,18 @@ export default function AppRouter({
   handleDragStart, handleDragOver, handleDrop, handleQuickAction,
   setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao
 }: AppRouterProps) {
+  // Refresh data callback for AI agent actions
+  const refreshData = async () => {
+    try {
+      const [c, t, p] = await Promise.all([
+        db.fetchClientes(), db.fetchTarefas(), db.fetchPedidos(),
+      ])
+      setClientes(c)
+      setTarefas(t)
+      setPedidos(p)
+    } catch { /* non-critical */ }
+  }
+
   switch (activeView) {
     case 'dashboard':
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
@@ -451,6 +463,8 @@ export default function AppRouter({
         produtos={produtos}
         tarefas={tarefas}
         loggedUser={loggedUser}
+        onRefreshData={refreshData}
+        showToast={showToast}
       />
     default:
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />

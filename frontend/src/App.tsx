@@ -455,6 +455,11 @@ function App() {
           setClientes={setClientes}
           setTarefas={setTarefas}
           addNotificacao={addNotificacao}
+          produtos={produtos}
+          onAddPedido={async (p) => {
+            const saved = await db.insertPedido(p)
+            setPedidos(prev => [...prev, saved])
+          }}
         />
       )}
 

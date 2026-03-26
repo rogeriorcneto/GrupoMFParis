@@ -99,7 +99,7 @@ const ProdutosView: React.FC<{
               try {
                 const res = await omieSyncProdutos()
                 if (res.success && res.data) {
-                  showToast?.('success', `Sync concluído! ${res.data.inseridos} novos, ${res.data.atualizados} atualizados (${res.data.totalOmie} no Omie)`)
+                  showToast?.('success', `Sync concluído! ${res.data.inseridos} novos, ${res.data.atualizados} atualizados, ${res.data.removidos || 0} removidos (${res.data.totalOmie} no Omie)`)
                   onRefresh?.()
                 } else {
                   showToast?.('error', res.error || 'Erro ao sincronizar produtos do Omie')

@@ -206,6 +206,7 @@ export async function omieEnviarPedido(pedidoId: number): Promise<{ success: boo
 export interface SyncProdutosResult {
   inseridos: number
   atualizados: number
+  removidos: number
   totalOmie: number
   erros: { codigo: string; erro: string }[]
 }

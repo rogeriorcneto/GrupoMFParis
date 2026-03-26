@@ -7,10 +7,29 @@ export interface AIMessage {
   content: string
 }
 
+export interface AIUIAction {
+  type: 'startCall' | 'openWhatsApp' | 'refreshClientes' | 'refreshTarefas' | 'refreshPedidos' | 'navigateTo'
+  payload?: any
+}
+
+export interface AIResponse {
+  response: string
+  actions: string[]
+  uiActions: AIUIAction[]
+}
+
 export async function callAI(
   messages: AIMessage[],
   systemInstruction: string
 ): Promise<string> {
+  const result = await callAIFull(messages, systemInstruction)
+  return result.response
+}
+
+export async function callAIFull(
+  messages: AIMessage[],
+  systemInstruction: string
+): Promise<AIResponse> {
   const body = {
     messages,
     systemInstruction
@@ -38,7 +57,11 @@ export async function callAI(
   }
 
   const data = await res.json()
-  return data.response ?? 'Sem resposta da IA.'
+  return {
+    response: data.response ?? 'Sem resposta da IA.',
+    actions: data.actions || [],
+    uiActions: data.uiActions || [],
+  }
 }
 
 function fmt(c: any, vMap: Map<number, string>): string {
@@ -308,7 +331,52 @@ ${(() => {
     }).join('\n')
   })()}
 
-## INSTRUÇÕES
+## 🔧 AÇÕES QUE VOCÊ PODE EXECUTAR (Function Calling)
+Você tem acesso a funções que executam ações REAIS no CRM. Use-as quando o usuário pedir para fazer algo.
+
+### Busca
+- **searchClientes**: Buscar clientes por nome, CNPJ ou contato. USE SEMPRE que o usuário mencionar um cliente por nome e você precisar do ID para outras ações.
+- **getClienteDetalhes**: Buscar dados completos de um cliente por ID.
+
+### Comunicação
+- **sendWhatsApp**: Enviar mensagem de WhatsApp para um cliente. SEMPRE confirme a mensagem com o usuário antes de enviar.
+- **sendEmail**: Enviar email para um cliente. SEMPRE confirme assunto e conteúdo antes de enviar.
+- **startCall**: Iniciar ligação telefônica para um cliente.
+
+### Clientes
+- **createCliente**: Cadastrar novo cliente. Se faltar dado obrigatório (razaoSocial, contatoNome, contatoTelefone), PERGUNTE antes de criar.
+- **updateCliente**: Atualizar dados de um cliente existente.
+- **deleteCliente**: Deletar cliente (⚠️ SOMENTE GERENTE).
+
+### Funil
+- **moverClienteEtapa**: Mover cliente para outra etapa do funil (⚠️ SOMENTE GERENTE). Etapas: lead, prospecção, amostra, amostra_perdida, proposta, negociacao, follow_up, inativo, perdido.
+- **marcarClientePerdido**: Marcar cliente como perdido com motivo (⚠️ SOMENTE GERENTE).
+
+### Tarefas
+- **createTarefa**: Criar tarefa. Vendedor só pode criar para si mesmo.
+- **completeTarefa**: Marcar tarefa como concluída.
+
+### Pedidos
+- **createPedido**: Criar pedido para um cliente com lista de produtos.
+- **aprovarPedido**: Aprovar pedido pendente (⚠️ SOMENTE GERENTE).
+- **recusarPedido**: Recusar pedido com motivo (⚠️ SOMENTE GERENTE).
+
+### Interações
+- **addInteracao**: Registrar interação (reunião, ligação, nota, etc).
+- **addNota**: Adicionar nota/observação a um cliente.
+
+### Consultas
+- **listarTarefas**: Listar tarefas do vendedor.
+- **listarProdutos**: Listar catálogo de produtos ativos.
+
+## REGRAS IMPORTANTES PARA AÇÕES
+1. **CONFIRMAR antes de executar** ações destrutivas ou de envio (delete, send, mover etapa). Pergunte: "Posso enviar?" / "Confirma?"
+2. **Permissões**: O usuário atual é ${loggedUser?.cargo || 'vendedor'}. ${loggedUser?.cargo === 'gerente' ? 'Como GERENTE, você tem acesso a todas as funções.' : 'Como VENDEDOR, você NÃO pode: mover no funil, aprovar/recusar pedidos, deletar clientes. Se o usuário pedir, explique que precisa do gerente.'}
+3. **Buscar antes de agir**: Sempre use searchClientes para encontrar o ID do cliente antes de executar ações nele.
+4. **Dados faltantes**: Se o usuário pedir para cadastrar cliente mas faltar informação, PERGUNTE o que falta.
+5. **Respostas após ação**: Depois de executar uma ação, informe o resultado de forma natural e concisa.
+
+## INSTRUÇÕES GERAIS
 - Busque clientes por nome, fantasia ou CNPJ nos dados acima.
 - Calcule métricas diretamente dos dados fornecidos.
 - Use tabelas e listas quando útil.

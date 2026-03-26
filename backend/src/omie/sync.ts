@@ -25,6 +25,7 @@ export function crmToOmie(cliente: any): Partial<OmieCliente> {
     cep: cliente.endereco_cep || cliente.enderecoCep || '',
     cnae: cliente.cnae_primario || cliente.cnaePrimario || '',
     observacao: cliente.notas || '',
+    contribuinte: 'S',
   }
 }
 

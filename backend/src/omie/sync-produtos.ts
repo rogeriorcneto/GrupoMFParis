@@ -6,6 +6,7 @@ import type { OmieProduto } from './types.js'
 export interface SyncProdutosResult {
   inseridos: number
   atualizados: number
+  removidos: number
   totalOmie: number
   erros: { codigo: string; erro: string }[]
 }
@@ -14,6 +15,7 @@ export interface SyncProdutosResult {
  * Mapeia campos do produto Omie para o formato da tabela `produtos` do CRM.
  */
 function omieProdutoToDbRow(p: OmieProduto): Record<string, any> {
+  const recomFiscais = p.recomendacoes_fiscais || {}
   return {
     nome: p.descricao || '',
     descricao: p.descricao_detalhada || p.observacoes || p.descricao || '',
@@ -25,6 +27,12 @@ function omieProdutoToDbRow(p: OmieProduto): Record<string, any> {
     ativo: (p.inativo ?? 'N') !== 'S',
     destaque: false,
     omie_codigo: String(p.codigo_produto || ''),
+    marca: p.marca || null,
+    especie_volume: p.especie || null,
+    ncm: p.ncm || null,
+    cfop_interno: recomFiscais.cfop_dentro_estado || recomFiscais.cCFOPDentroEstado || null,
+    cfop_externo: recomFiscais.cfop_fora_estado || recomFiscais.cCFOPForaEstado || null,
+    local_estoque: p.local_estoque || null,
   }
 }
 
@@ -87,11 +95,18 @@ export async function syncPullProdutos(): Promise<SyncProdutosResult> {
         const { error } = await supabase.from('produtos').update({
           nome: dbRow.nome,
           descricao: dbRow.descricao,
+          categoria: dbRow.categoria,
           preco: dbRow.preco,
           unidade: dbRow.unidade,
           sku: dbRow.sku,
           peso_kg: dbRow.peso_kg,
           ativo: dbRow.ativo,
+          marca: dbRow.marca,
+          especie_volume: dbRow.especie_volume,
+          ncm: dbRow.ncm,
+          cfop_interno: dbRow.cfop_interno,
+          cfop_externo: dbRow.cfop_externo,
+          local_estoque: dbRow.local_estoque,
         }).eq('id', existingId)
         if (error) throw error
         atualizados++
@@ -107,7 +122,44 @@ export async function syncPullProdutos(): Promise<SyncProdutosResult> {
     }
   }
 
-  log.info({ inseridos, atualizados, erros: erros.length, totalOmie: omieProdutos.length }, 'Sync de produtos concluído')
+  // 4. Remover produtos que NÃO vieram do Omie (testes, seeds, manuais)
+  //    Também remover produtos cujo omie_codigo não está mais na lista do Omie
+  let removidos = 0
+  const omieCodigos = new Set(omieProdutos.map(p => String(p.codigo_produto || '')).filter(Boolean))
 
-  return { inseridos, atualizados, totalOmie: omieProdutos.length, erros }
+  // 4a. Deletar produtos sem omie_codigo (foram criados manualmente / seeds)
+  const { data: semOmie } = await supabase
+    .from('produtos')
+    .select('id')
+    .is('omie_codigo', null)
+  if (semOmie && semOmie.length > 0) {
+    const ids = semOmie.map(r => r.id)
+    const { error: delErr } = await supabase.from('produtos').delete().in('id', ids)
+    if (!delErr) {
+      removidos += ids.length
+      log.info({ count: ids.length }, '🗑️ Produtos sem omie_codigo removidos')
+    }
+  }
+
+  // 4b. Deletar produtos com omie_codigo que não existe mais no Omie
+  const { data: comOmie } = await supabase
+    .from('produtos')
+    .select('id, omie_codigo')
+    .not('omie_codigo', 'is', null)
+  if (comOmie) {
+    const idsParaRemover = comOmie
+      .filter(r => r.omie_codigo && !omieCodigos.has(r.omie_codigo))
+      .map(r => r.id)
+    if (idsParaRemover.length > 0) {
+      const { error: delErr } = await supabase.from('produtos').delete().in('id', idsParaRemover)
+      if (!delErr) {
+        removidos += idsParaRemover.length
+        log.info({ count: idsParaRemover.length }, '🗑️ Produtos obsoletos (não mais no Omie) removidos')
+      }
+    }
+  }
+
+  log.info({ inseridos, atualizados, removidos, erros: erros.length, totalOmie: omieProdutos.length }, 'Sync de produtos concluído')
+
+  return { inseridos, atualizados, removidos, totalOmie: omieProdutos.length, erros }
 }

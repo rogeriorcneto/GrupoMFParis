@@ -1,6 +1,16 @@
 import { omieCall, getOmieCredentials } from './client.js'
 import { supabase } from '../supabase.js'
 import { log } from '../logger.js'
+import {
+  calcularDataPrevisao,
+  garantirVendedorOmie,
+  getCenarioVendas,
+  getCenarioAmostra,
+  getDepartamentoComercial,
+  getCategoriaVendasMercadoria,
+  getContaBancoBrasil,
+  getLocalEstoqueVilaParis,
+} from './reference-data.js'
 
 // ============================================
 // Tipos do Pedido de Venda Omie
@@ -76,6 +86,7 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
     cidade: cliente.endereco_cidade || 'São Paulo',
     estado: cliente.endereco_estado || 'SP',
     cep: (cliente.endereco_cep || '01001000').replace(/\D/g, ''),
+    contribuinte: 'S',
   }
 
   const response = await omieCall<any>(
@@ -109,6 +120,11 @@ interface ProdutoOmieResult {
   descricao: string
   unidade: string
   ncm: string
+  marca: string
+  especieVolume: string
+  cfopInterno: string
+  cfopExterno: string
+  pesoKg: number
 }
 
 async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult> {
@@ -124,6 +140,11 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
     descricao: produto.nome || '',
     unidade: produto.unidade || 'UN',
     ncm: produto.ncm || '21069090',
+    marca: produto.marca || '',
+    especieVolume: produto.especie_volume || 'FARDO',
+    cfopInterno: produto.cfop_interno || '5101',
+    cfopExterno: produto.cfop_externo || '6101',
+    pesoKg: produto.peso_kg || 0,
   }
 
   // Se já tem código Omie vinculado, retornar
@@ -282,18 +303,68 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     throw new Error(`Pedido ${pedidoId} não tem itens`)
   }
 
-  log.info({ pedidoId, clienteId: pedido.cliente_id, qtdItens: itens.length }, '📦 Preparando pedido para Omie...')
+  // Buscar cliente para determinar estado (CFOP)
+  const { data: cliente } = await supabase
+    .from('clientes')
+    .select('endereco_estado')
+    .eq('id', pedido.cliente_id)
+    .single()
+
+  const estadoCliente = (cliente?.endereco_estado || '').toUpperCase()
+  // Se endereço de entrega diferente, usar estado da entrega para CFOP
+  const estadoEntrega = pedido.endereco_diferente && pedido.endereco_entrega_estado
+    ? pedido.endereco_entrega_estado.toUpperCase()
+    : estadoCliente
+  const isIntraEstado = estadoEntrega === 'MG'
+
+  // Tipo do pedido: 'venda' ou 'bonificacao'
+  const tipoPedido = pedido.tipo || 'venda'
+
+  log.info({ pedidoId, clienteId: pedido.cliente_id, qtdItens: itens.length, tipoPedido, estadoEntrega }, '📦 Preparando pedido para Omie...')
 
   // 1. Garantir cliente no Omie
   const codigoClienteOmie = await garantirClienteOmie(pedido.cliente_id)
 
-  // 2. Garantir produtos no Omie e montar itens
-  const det = []
+  // 2. Buscar dados de referência do Omie em paralelo
+  const [
+    codigoVendedorOmie,
+    cenarioVendas,
+    cenarioAmostra,
+    deptoComercial,
+    categoriaVendas,
+    contaBB,
+    localEstoque,
+  ] = await Promise.all([
+    pedido.vendedor_id ? garantirVendedorOmie(pedido.vendedor_id, creds) : Promise.resolve(0),
+    getCenarioVendas(creds),
+    getCenarioAmostra(creds),
+    getDepartamentoComercial(creds),
+    getCategoriaVendasMercadoria(creds),
+    getContaBancoBrasil(creds),
+    getLocalEstoqueVilaParis(creds),
+  ])
+
+  // Cenário fiscal: vendas ou amostra/bonificação (automático pelo tipo)
+  const cenarioFiscal = tipoPedido === 'bonificacao' ? cenarioAmostra : cenarioVendas
+
+  // 3. Garantir produtos no Omie e montar itens
+  const det: any[] = []
+  let totalVolumes = 0
+  let especieVolume = 'FARDO'
+  let marcaVolumes = ''
+
   for (let i = 0; i < itens.length; i++) {
     const item = itens[i]
     const prodOmie = await garantirProdutoOmie(item.produto_id)
 
-    det.push({
+    totalVolumes += item.quantidade || 0
+    if (prodOmie.especieVolume) especieVolume = prodOmie.especieVolume
+    if (prodOmie.marca) marcaVolumes = prodOmie.marca
+
+    const cfop = isIntraEstado ? prodOmie.cfopInterno : prodOmie.cfopExterno
+    const pesoTotal = (prodOmie.pesoKg || 0) * (item.quantidade || 1)
+
+    const detItem: any = {
       ide: {
         codigo_item_integracao: `CRM-${pedidoId}-${i}`,
       },
@@ -303,88 +374,125 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
         descricao: prodOmie.descricao,
         unidade: prodOmie.unidade,
         ncm: prodOmie.ncm,
+        cfop: cfop,
         quantidade: item.quantidade,
         valor_unitario: item.preco,
         tipo_desconto: 'V',
         valor_desconto: 0,
       },
-    })
+      inf_adic: {
+        peso_bruto: pesoTotal,
+        peso_liquido: pesoTotal,
+      },
+    }
+
+    // Cenário fiscal por item (se tiver)
+    if (cenarioFiscal) {
+      detItem.ide.codigo_cenario_impostos_item = cenarioFiscal
+    }
+
+    // Local de estoque (se tiver)
+    if (localEstoque) {
+      detItem.produto.codigo_local_estoque = localEstoque
+    }
+
+    det.push(detItem)
   }
 
-  // 3. Buscar categoria e conta corrente padrão do Omie
-  let codigoCategoria = '1.01.03' // Receita de Vendas (padrão comum)
-  let codigoContaCorrente: number | undefined
+  // 4. Data de previsão: 7 dias úteis
+  const dataPrevisao = calcularDataPrevisao(7)
 
-  try {
-    const catResult = await omieCall<any>(
-      '/geral/categorias/',
-      'ListarCategorias',
-      [{ pagina: 1, registros_por_pagina: 500 }],
-      { credentials: creds }
-    )
-    const cats = catResult?.categoria_cadastro || []
-    // Preferir '1.01.03' (Receita de Vendas), senão primeira categoria de receita
-    const catReceita = cats.find((c: any) => c.codigo === '1.01.03')
-      || cats.find((c: any) => String(c.codigo || '').startsWith('1.'))
-    if (catReceita?.codigo) codigoCategoria = catReceita.codigo
-    log.info({ codigoCategoria, totalCats: cats.length }, '📂 Categoria Omie selecionada')
-  } catch (err: any) {
-    log.warn({ err: err.message }, '⚠️ Não foi possível buscar categorias Omie, usando padrão 1.01.03')
+  // 5. Cabeçalho do pedido
+  const cabecalho: any = {
+    codigo_pedido_integracao: `CRM-PED-${pedidoId}`,
+    codigo_cliente: codigoClienteOmie,
+    data_previsao: dataPrevisao,
+    etapa: '10',
+    codigo_parcela: '000',
+    quantidade_itens: itens.length,
   }
 
-  try {
-    const ccResult = await omieCall<any>(
-      '/geral/contacorrente/',
-      'ListarContasCorrentes',
-      [{ pagina: 1, registros_por_pagina: 50 }],
-      { credentials: creds }
-    )
-    const contas = ccResult?.ListarContasCorrentes || ccResult?.conta_corrente_lista || []
-    // Usar a primeira conta corrente ativa
-    const contaPrincipal = contas.find((c: any) => c.tipo !== 'CI') || contas[0]
-    if (contaPrincipal?.nCodCC) codigoContaCorrente = contaPrincipal.nCodCC
-    log.info({ codigoContaCorrente, totalContas: contas.length }, '🏦 Conta corrente Omie selecionada')
-  } catch (err: any) {
-    log.warn({ err: err.message }, '⚠️ Não foi possível buscar contas correntes Omie')
+  // Cenário fiscal no cabeçalho
+  if (cenarioFiscal) {
+    cabecalho.codigo_cenario_impostos = cenarioFiscal
   }
 
-  // 4. Montar pedido Omie conforme documentação
-  const dataPrevisao = new Date()
-  dataPrevisao.setDate(dataPrevisao.getDate() + 7) // Previsão: 7 dias
+  // Vendedor (para aparecer o nome no Omie, não "lançado por API")
+  if (codigoVendedorOmie) {
+    cabecalho.codigo_vendedor = codigoVendedorOmie
+  }
 
+  // 6. Frete
+  // modalidade: 0 = CIF (remetente/entrega), 1 = FOB (destinatário/retirada), 9 = sem frete
+  const tipoFrete = (pedido.tipo_frete || '').toUpperCase()
+  let modalidadeFrete = '9'
+  if (tipoFrete === 'CIF') modalidadeFrete = '0'
+  else if (tipoFrete === 'FOB') modalidadeFrete = '1'
+
+  const frete: any = {
+    modalidade: modalidadeFrete,
+    quantidade_volumes: totalVolumes,
+    especie_volumes: especieVolume,
+    marca_volumes: marcaVolumes,
+  }
+
+  // 7. Departamentos: COMERCIAL
+  const departamentos: any[] = []
+  if (deptoComercial) {
+    departamentos.push({ cCodigoDepartamento: deptoComercial })
+  }
+
+  // 8. Informações adicionais
   const infAdic: any = {
-    codigo_categoria: codigoCategoria,
-    consumidor_final: 'N',
+    codigo_categoria: categoriaVendas || '1.01.03',
+    consumidor_final: 'S',
     enviar_email: 'N',
   }
-  if (codigoContaCorrente) infAdic.codigo_conta_corrente = codigoContaCorrente
+  if (contaBB) infAdic.codigo_conta_corrente = contaBB
 
+  // Endereço de entrega diferente
+  if (pedido.endereco_diferente) {
+    infAdic.cep_entrega = (pedido.endereco_entrega_cep || '').replace(/\D/g, '')
+    infAdic.endereco_entrega = pedido.endereco_entrega_rua || ''
+    infAdic.numero_entrega = pedido.endereco_entrega_numero || ''
+    infAdic.bairro_entrega = pedido.endereco_entrega_bairro || ''
+    infAdic.estado_entrega = pedido.endereco_entrega_estado || ''
+    infAdic.cidade_entrega = pedido.endereco_entrega_cidade || ''
+  }
+
+  // 9. Montar pedido Omie completo
   const omiePedido: any = {
-    cabecalho: {
-      codigo_pedido_integracao: `CRM-PED-${pedidoId}`,
-      codigo_cliente: codigoClienteOmie,
-      data_previsao: dataPrevisao.toLocaleDateString('pt-BR', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-      }),
-      etapa: '10', // 10 = Proposta/Orçamento (pode ser faturado depois)
-      codigo_parcela: '999', // À vista
-      quantidade_itens: itens.length,
-    },
+    cabecalho,
     det,
-    frete: {
-      modalidade: '9', // Sem frete
-    },
+    frete,
     informacoes_adicionais: infAdic,
   }
 
-  // Adicionar observações do CRM se houver
+  // Departamentos (se encontrado)
+  if (departamentos.length > 0) {
+    omiePedido.departamentos = departamentos
+  }
+
+  // Parcelas: à vista (1 parcela = 100% do total)
+  const totalPedido = itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
+  const dataVencimento = dataPrevisao // mesmo dia da previsão
+  omiePedido.lista_parcelas = {
+    parcela: [{
+      numero_parcela: 1,
+      data_vencimento: dataVencimento,
+      percentual: 100,
+      valor: totalPedido,
+    }],
+  }
+
+  // Observações do CRM
   if (pedido.observacoes) {
     omiePedido.observacoes = { obs_venda: pedido.observacoes }
   }
 
-  log.info({ pedidoId, omiePedido: JSON.stringify(omiePedido) }, '📤 Enviando pedido para Omie...')
+  log.info({ pedidoId, tipoPedido, cenarioFiscal, modalidadeFrete, codigoVendedorOmie, dataPrevisao }, '📤 Enviando pedido para Omie...')
 
-  // 5. Enviar ao Omie
+  // 10. Enviar ao Omie
   const response = await omieCall<OmiePedidoResponse>(
     '/produtos/pedido/',
     'IncluirPedido',
@@ -394,7 +502,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   log.info({ pedidoId, omieResponse: response }, '✅ Pedido criado no Omie')
 
-  // 6. Salvar código Omie no pedido do CRM
+  // 11. Salvar código Omie no pedido do CRM
   await supabase
     .from('pedidos')
     .update({

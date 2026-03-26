@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
 import type { Tarefa } from '../../types'
-import { callAI, buildCRMContext } from '../../lib/gemini'
-import type { AIMessage } from '../../lib/gemini'
+import { callAIFull, buildCRMContext } from '../../lib/gemini'
+import type { AIMessage, AIUIAction } from '../../lib/gemini'
 import { loadConversation, saveConversation, clearConversation } from '../../lib/aiConversations'
 import { fetchAIContextData, type AIContextData } from '../../lib/botApi'
 
@@ -22,6 +22,8 @@ interface AssistenteIAViewProps {
   produtos: Produto[]
   tarefas: Tarefa[]
   loggedUser: Vendedor
+  onRefreshData?: () => void
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
 }
 
 const PROMPT_CATEGORIES = [
@@ -92,7 +94,7 @@ function renderInline(text: string): React.ReactNode {
   })
 }
 
-export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, produtos, tarefas, loggedUser }: AssistenteIAViewProps) {
+export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, produtos, tarefas, loggedUser, onRefreshData, showToast }: AssistenteIAViewProps) {
   const welcomeMsg: ChatMessage = {
     id: '0',
     role: 'assistant',
@@ -146,6 +148,27 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     tarefas: extraData?.tarefas || tarefas,
   })
 
+  const handleUIActions = (actions: AIUIAction[]) => {
+    for (const action of actions) {
+      switch (action.type) {
+        case 'refreshClientes':
+        case 'refreshTarefas':
+        case 'refreshPedidos':
+          onRefreshData?.()
+          break
+        case 'startCall':
+          if (action.payload?.phone) {
+            window.open(`tel:${action.payload.phone}`, '_self')
+            showToast?.('success', `📞 Ligação iniciada para ${action.payload.clienteNome || action.payload.phone}`)
+          }
+          break
+        case 'navigateTo':
+          // Could dispatch navigation events in the future
+          break
+      }
+    }
+  }
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return
     setError(null)
@@ -166,15 +189,20 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
         .map(m => ({ role: m.role, content: m.text }))
       history.push({ role: 'user', content: text.trim() })
 
-      const response = await callAI(history, systemPrompt)
+      const result = await callAIFull(history, systemPrompt)
 
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        text: response,
+        text: result.response,
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       }
       setMessages(prev => [...prev, aiMsg])
+
+      // Handle UI actions from the AI agent
+      if (result.uiActions && result.uiActions.length > 0) {
+        handleUIActions(result.uiActions)
+      }
     } catch (err: any) {
       setError(err?.message || 'Erro ao conectar com a IA. Verifique sua conexão.')
     } finally {

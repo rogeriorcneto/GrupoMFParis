@@ -183,6 +183,12 @@ export interface Produto {
   destaque: boolean
   dataCadastro: string
   omieCodigo?: string
+  marca?: string
+  localEstoque?: string
+  especieVolume?: string
+  cfopInterno?: string
+  cfopExterno?: string
+  ncm?: string
 }
 
 export interface DashboardMetrics {
@@ -299,6 +305,15 @@ export interface Pedido {
   omieNumero?: string
   omieStatus?: string
   omieErro?: string
+  tipo?: 'venda' | 'bonificacao'
+  tipoFrete?: 'CIF' | 'FOB'
+  enderecoDiferente?: boolean
+  enderecoEntregaRua?: string
+  enderecoEntregaNumero?: string
+  enderecoEntregaBairro?: string
+  enderecoEntregaCidade?: string
+  enderecoEntregaEstado?: string
+  enderecoEntregaCep?: string
 }
 
 export interface FunilViewProps {
