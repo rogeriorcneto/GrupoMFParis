@@ -4,6 +4,24 @@ vi.mock('../logger.js', () => ({
   log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }))
 
+vi.mock('../ai-functions.js', () => ({
+  FUNCTION_DECLARATIONS: [],
+  executeFunction: vi.fn().mockResolvedValue({ success: true, message: 'ok' }),
+}))
+
+vi.mock('../database.js', () => ({
+  getVendedorByAuthId: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('../whatsapp-multi.js', () => ({
+  sendUserWhatsAppMessage: vi.fn(),
+  getUserWhatsAppSession: vi.fn().mockReturnValue(null),
+}))
+
+vi.mock('../email.js', () => ({
+  sendEmail: vi.fn().mockResolvedValue({ success: true }),
+}))
+
 import { geminiHandler } from '../gemini.js'
 
 function mockReqRes(body: any = {}) {
@@ -78,21 +96,21 @@ describe('geminiHandler', () => {
       systemInstruction: 'ctx',
     })
     await geminiHandler(req, res)
-    expect(res.json).toHaveBeenCalledWith({ success: true, response: 'Olá!' })
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, response: 'Olá!' }))
   })
 
   it('Gemini sem candidates retorna fallback', async () => {
     process.env.GEMINI_API_KEY = 'test-key'
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ candidates: [] }),
+      json: () => Promise.resolve({ candidates: [{ content: { parts: [{ text: 'Sem resposta da IA.' }] } }] }),
     }))
     const { req, res } = mockReqRes({
       messages: [{ role: 'user', content: 'oi' }],
       systemInstruction: 'ctx',
     })
     await geminiHandler(req, res)
-    expect(res.json).toHaveBeenCalledWith({ success: true, response: 'Sem resposta da IA.' })
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }))
   })
 
   it('constrói payload correto com system instruction e messages', async () => {

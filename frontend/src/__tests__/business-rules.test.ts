@@ -82,20 +82,20 @@ describe('calcScore', () => {
 // ─── autoMovePrazos ───
 
 describe('autoMovePrazos', () => {
-  it('amostra tem prazo 45d', () => {
-    expect(autoMovePrazos['amostra']).toBe(45)
+  it('amostra tem prazo 45d com destino perdido', () => {
+    expect(autoMovePrazos['amostra']).toEqual({ dias: 45, destino: 'perdido' })
   })
 
-  it('proposta tem prazo 30d', () => {
-    expect(autoMovePrazos['proposta']).toBe(30)
+  it('proposta tem prazo 60d com destino inativo', () => {
+    expect(autoMovePrazos['proposta']).toEqual({ dias: 60, destino: 'inativo' })
   })
 
-  it('negociacao tem prazo 45d', () => {
-    expect(autoMovePrazos['negociacao']).toBe(45)
+  it('negociacao tem prazo 45d com destino perdido', () => {
+    expect(autoMovePrazos['negociacao']).toEqual({ dias: 45, destino: 'perdido' })
   })
 
-  it('follow_up tem prazo 60d', () => {
-    expect(autoMovePrazos['follow_up']).toBe(60)
+  it('follow_up tem prazo 60d com destino perdido', () => {
+    expect(autoMovePrazos['follow_up']).toEqual({ dias: 60, destino: 'perdido' })
   })
 
   it('prospecção não tem prazo', () => {
@@ -119,8 +119,8 @@ describe('getClientsToAutoMove', () => {
     expect(getClientsToAutoMove(clientes, new Set())).toHaveLength(0)
   })
 
-  it('detecta proposta expirada (>30d)', () => {
-    const clientes = [makeCliente({ id: 1, etapa: 'proposta', dataEntradaEtapa: daysAgo(31) })]
+  it('detecta proposta expirada (>60d)', () => {
+    const clientes = [makeCliente({ id: 1, etapa: 'proposta', dataEntradaEtapa: daysAgo(61) })]
     const result = getClientsToAutoMove(clientes, new Set())
     expect(result).toHaveLength(1)
     expect(result[0].etapa).toBe('proposta')

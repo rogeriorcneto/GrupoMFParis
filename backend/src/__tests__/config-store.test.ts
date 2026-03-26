@@ -45,6 +45,7 @@ describe('config-store', () => {
   it('getEmailConfig retorna null se dados essenciais faltam', async () => {
     // Importar fresh (sem cache)
     const mod = await import('../config-store.js')
+    mod.invalidateConfigCache()
     // Forçar config sem host
     const result = await mod.getEmailConfig()
     // Como o mock retorna dados completos, não deve ser null

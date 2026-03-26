@@ -2,35 +2,37 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ── Mock modules BEFORE imports ──
 
+const defaultDbRow = {
+  id: 1,
+  email_host: 'smtp.test.com',
+  email_port: 587,
+  email_user: 'user@test.com',
+  email_pass: 'plainpass',
+  email_from: 'noreply@test.com',
+  whatsapp_numero: '',
+  omie_app_key: '',
+  omie_app_secret: '',
+}
+
+// Factory-based mock: creates fresh chain every call so vi.clearAllMocks() doesn't break it
+const mockSupabaseFrom = vi.fn().mockImplementation(() => {
+  const chain: any = {}
+  chain.select = vi.fn().mockReturnValue(chain)
+  chain.eq = vi.fn().mockReturnValue(chain)
+  chain.single = vi.fn().mockResolvedValue({ data: { ...defaultDbRow }, error: null })
+  chain.upsert = vi.fn().mockResolvedValue({ error: null })
+  chain.insert = vi.fn().mockReturnValue({
+    select: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({ data: { id: 1 }, error: null }),
+  })
+  chain.update = vi.fn().mockReturnValue({
+    eq: vi.fn().mockResolvedValue({ error: null }),
+  })
+  return chain
+})
+
 vi.mock('../supabase.js', () => ({
-  supabase: {
-    from: vi.fn().mockReturnValue({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({
-        data: {
-          id: 1,
-          email_host: 'smtp.test.com',
-          email_port: 587,
-          email_user: 'user@test.com',
-          email_pass: 'plainpass', // unencrypted for test
-          email_from: 'noreply@test.com',
-          whatsapp_numero: '',
-          omie_app_key: '',
-          omie_app_secret: '',
-        },
-        error: null,
-      }),
-      upsert: vi.fn().mockResolvedValue({ error: null }),
-      insert: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: { id: 1 }, error: null }),
-      }),
-      update: vi.fn().mockReturnValue({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      }),
-    }),
-  },
+  supabase: { from: (...args: any[]) => mockSupabaseFrom(...args) },
 }))
 
 vi.mock('../crypto.js', () => ({
@@ -69,6 +71,10 @@ vi.mock('../database.js', () => ({
   fetchClienteById: vi.fn().mockResolvedValue(null),
 }))
 
+vi.mock('../constants.js', () => ({
+  STAGE_LABELS: { 'prospecção': 'Prospecção', 'proposta': 'Proposta' },
+}))
+
 // ── Now import modules under test ──
 
 import { invalidateConfigCache, loadConfig, getEmailConfig, saveConfig } from '../config-store.js'
@@ -76,10 +82,14 @@ import { reloadEmail, sendEmail, isEmailConfigured, getEmailStatus, testEmailCon
 
 describe('Email Flow — Config to Send', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    invalidateConfigCache()
+    // Reset call counts without clearing implementations
+    mockSendMail.mockClear()
+    mockVerify.mockClear()
+    mockCreateTransport.mockClear()
+    mockSupabaseFrom.mockClear()
     mockSendMail.mockResolvedValue({ messageId: 'test-id-123' })
     mockVerify.mockResolvedValue(true)
+    invalidateConfigCache()
   })
 
   // ── Config Loading ──
@@ -106,16 +116,16 @@ describe('Email Flow — Config to Send', () => {
     })
 
     it('getEmailConfig returns null when host is empty', async () => {
-      // Override the mock for this test
-      const { supabase } = await import('../supabase.js')
-      vi.mocked(supabase.from).mockReturnValueOnce({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
+      mockSupabaseFrom.mockImplementationOnce(() => {
+        const c: any = {}
+        c.select = vi.fn().mockReturnValue(c)
+        c.eq = vi.fn().mockReturnValue(c)
+        c.single = vi.fn().mockResolvedValue({
           data: { id: 1, email_host: '', email_port: 587, email_user: '', email_pass: '', email_from: '' },
           error: null,
-        }),
-      } as any)
+        })
+        return c
+      })
 
       invalidateConfigCache()
       const emailCfg = await getEmailConfig()
@@ -209,16 +219,16 @@ describe('Email Flow — Config to Send', () => {
     })
 
     it('sendEmail returns error when transporter is null', async () => {
-      // Simulate no config
-      const { supabase } = await import('../supabase.js')
-      vi.mocked(supabase.from).mockReturnValueOnce({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
+      mockSupabaseFrom.mockImplementationOnce(() => {
+        const c: any = {}
+        c.select = vi.fn().mockReturnValue(c)
+        c.eq = vi.fn().mockReturnValue(c)
+        c.single = vi.fn().mockResolvedValue({
           data: { id: 1, email_host: '', email_port: 587, email_user: '', email_pass: '', email_from: '' },
           error: null,
-        }),
-      } as any)
+        })
+        return c
+      })
       invalidateConfigCache()
       await reloadEmail() // this will set transporter to null
 
@@ -316,15 +326,16 @@ describe('Email Flow — Config to Send', () => {
     })
 
     it('testEmailConnection returns error when not configured', async () => {
-      const { supabase } = await import('../supabase.js')
-      vi.mocked(supabase.from).mockReturnValueOnce({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
+      mockSupabaseFrom.mockImplementationOnce(() => {
+        const c: any = {}
+        c.select = vi.fn().mockReturnValue(c)
+        c.eq = vi.fn().mockReturnValue(c)
+        c.single = vi.fn().mockResolvedValue({
           data: { id: 1, email_host: '', email_port: 587, email_user: '', email_pass: '', email_from: '' },
           error: null,
-        }),
-      } as any)
+        })
+        return c
+      })
       invalidateConfigCache()
       await reloadEmail()
 
@@ -338,18 +349,19 @@ describe('Email Flow — Config to Send', () => {
 
   describe('Port and TLS handling', () => {
     it('uses secure=true for port 465', async () => {
-      const { supabase } = await import('../supabase.js')
-      vi.mocked(supabase.from).mockReturnValueOnce({
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
+      mockSupabaseFrom.mockImplementation(() => {
+        const c: any = {}
+        c.select = vi.fn().mockReturnValue(c)
+        c.eq = vi.fn().mockReturnValue(c)
+        c.single = vi.fn().mockResolvedValue({
           data: {
             id: 1, email_host: 'mail.test.com', email_port: 465,
             email_user: 'u@test.com', email_pass: 'pass', email_from: 'u@test.com',
           },
           error: null,
-        }),
-      } as any)
+        })
+        return c
+      })
       invalidateConfigCache()
       await reloadEmail()
 

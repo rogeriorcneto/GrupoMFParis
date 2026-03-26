@@ -17,6 +17,7 @@ vi.mock('../lib/supabase', () => ({
 // Mock gemini
 vi.mock('../lib/gemini', () => ({
   callAI: vi.fn().mockResolvedValue('Resposta da IA mock'),
+  callAIFull: vi.fn().mockResolvedValue({ response: 'Resposta da IA mock', actions: [], uiActions: [] }),
   buildCRMContext: vi.fn().mockReturnValue('System prompt mock'),
 }))
 
@@ -44,7 +45,7 @@ vi.mock('../lib/aiConversations', () => ({
 }))
 
 import Workspace from '../components/Workspace'
-import { callAI } from '../lib/gemini'
+import { callAI, callAIFull } from '../lib/gemini'
 import { sendUserWhatsApp, getUserWhatsAppStatus, sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
 
@@ -233,7 +234,7 @@ describe('Workspace Component', () => {
     if (sendBtn) fireEvent.click(sendBtn)
 
     await waitFor(() => {
-      expect(callAI).toHaveBeenCalled()
+      expect(callAIFull).toHaveBeenCalled()
     })
 
     await waitFor(() => {
@@ -246,7 +247,7 @@ describe('Workspace Component', () => {
     fireEvent.click(screen.getByText('Contatos urgentes'))
 
     await waitFor(() => {
-      expect(callAI).toHaveBeenCalled()
+      expect(callAIFull).toHaveBeenCalled()
     })
   })
 
@@ -260,7 +261,7 @@ describe('Workspace Component', () => {
     const sendBtn = sendBtns.find(b => b.querySelector('.h-5.w-5') && b.closest('.bg-gradient-to-r.from-purple-600'))
     if (sendBtn) fireEvent.click(sendBtn)
 
-    await waitFor(() => expect(callAI).toHaveBeenCalled())
+    await waitFor(() => expect(callAIFull).toHaveBeenCalled())
 
     // Clear chat
     fireEvent.click(screen.getByText('Limpar'))
@@ -435,7 +436,7 @@ describe('Workspace Activity Logging', () => {
     fireEvent.click(screen.getByText('Contatos urgentes'))
 
     await waitFor(() => {
-      expect(callAI).toHaveBeenCalled()
+      expect(callAIFull).toHaveBeenCalled()
     })
 
     await waitFor(() => {

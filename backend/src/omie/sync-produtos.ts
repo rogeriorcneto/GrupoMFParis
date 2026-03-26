@@ -22,7 +22,7 @@ function omieProdutoToDbRow(p: OmieProduto): Record<string, any> {
     categoria: inferCategoria(p),
     preco: p.valor_unitario || 0,
     unidade: (p.unidade || 'un').toLowerCase(),
-    sku: p.codigo || '',
+    sku: String(p.codigo_produto || p.codigo || ''),
     peso_kg: p.peso_liq || p.peso_bruto || null,
     ativo: (p.inativo ?? 'N') !== 'S',
     destaque: false,

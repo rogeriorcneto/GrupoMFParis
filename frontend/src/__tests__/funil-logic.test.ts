@@ -56,8 +56,8 @@ describe('prazosEtapa', () => {
     expect(prazosEtapa['amostra']).toBe(45)
   })
 
-  it('proposta tem prazo de 30 dias', () => {
-    expect(prazosEtapa['proposta']).toBe(30)
+  it('proposta tem prazo de 60 dias', () => {
+    expect(prazosEtapa['proposta']).toBe(60)
   })
 
   it('negociacao tem prazo de 45 dias', () => {
@@ -91,13 +91,13 @@ describe('getCardUrgencia', () => {
     expect(getCardUrgencia(c)).toBe('critico')
   })
 
-  it('retorna atencao em 83% do prazo de proposta (~25d)', () => {
-    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(25) })
+  it('retorna atencao em 83% do prazo de proposta (~50d)', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(50) })
     expect(getCardUrgencia(c)).toBe('atencao')
   })
 
-  it('retorna critico quando prazo de proposta vence (30d)', () => {
-    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(31) })
+  it('retorna critico quando prazo de proposta vence (60d)', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(61) })
     expect(getCardUrgencia(c)).toBe('critico')
   })
 
@@ -125,17 +125,18 @@ describe('getCardUrgencia', () => {
 // ─── getNextAction ───
 
 describe('getNextAction', () => {
-  it('prospecção inativo > 7d sugere ligar', () => {
-    const c = makeCliente({ etapa: 'prospecção', diasInativo: 10 })
+  it('prospecção inativo >= 5d sugere ligar', () => {
+    const c = makeCliente({ etapa: 'prospecção', diasInativo: 5 })
+    const action = getNextAction(c)
+    expect(action?.text).toContain('URGENTE')
+    expect(action?.color).toBe('text-red-600')
+  })
+
+  it('prospecção inativo > 3d sugere ligar', () => {
+    const c = makeCliente({ etapa: 'prospecção', diasInativo: 4 })
     const action = getNextAction(c)
     expect(action?.text).toContain('Ligar agora')
     expect(action?.color).toBe('text-orange-600')
-  })
-
-  it('prospecção inativo > 3d sugere WhatsApp', () => {
-    const c = makeCliente({ etapa: 'prospecção', diasInativo: 5 })
-    const action = getNextAction(c)
-    expect(action?.text).toContain('WhatsApp')
   })
 
   it('prospecção ativa sugere apresentação', () => {
@@ -176,14 +177,14 @@ describe('getNextAction', () => {
     expect(action?.text).toContain('Aguardar')
   })
 
-  it('proposta >= 25d sugere enviar URGENTE', () => {
-    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(26) })
+  it('proposta >= 50d sugere enviar URGENTE', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(51) })
     const action = getNextAction(c)
     expect(action?.text).toContain('URGENTE')
   })
 
-  it('proposta >= 10d sugere follow-up', () => {
-    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(11) })
+  it('proposta >= 30d sugere follow-up', () => {
+    const c = makeCliente({ etapa: 'proposta', dataEntradaEtapa: daysAgo(31) })
     const action = getNextAction(c)
     expect(action?.text).toContain('Follow-up')
   })

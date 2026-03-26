@@ -45,20 +45,20 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['amostra_perdida']).toEqual(['amostra', 'perdido'])
   })
 
-  it('proposta pode ir para negociacao ou perdido', () => {
-    expect(transicoesPermitidas['proposta']).toEqual(['negociacao', 'perdido'])
+  it('proposta pode ir para negociacao, inativo ou perdido', () => {
+    expect(transicoesPermitidas['proposta']).toEqual(['negociacao', 'inativo', 'perdido'])
   })
 
   it('negociacao pode ir para follow_up, proposta ou perdido', () => {
     expect(transicoesPermitidas['negociacao']).toEqual(['follow_up', 'proposta', 'perdido'])
   })
 
-  it('follow_up pode ir para negociacao ou perdido', () => {
-    expect(transicoesPermitidas['follow_up']).toEqual(['negociacao', 'perdido'])
+  it('follow_up pode ir para proposta, negociacao ou perdido', () => {
+    expect(transicoesPermitidas['follow_up']).toEqual(['proposta', 'negociacao', 'perdido'])
   })
 
-  it('inativo pode ir para prospecção ou perdido', () => {
-    expect(transicoesPermitidas['inativo']).toEqual(['prospecção', 'perdido'])
+  it('inativo pode ir para prospecção, proposta ou perdido', () => {
+    expect(transicoesPermitidas['inativo']).toEqual(['prospecção', 'proposta', 'perdido'])
   })
 
   it('perdido pode voltar para prospecção ou proposta', () => {

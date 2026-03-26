@@ -266,6 +266,7 @@ describe('Config Store — Full Coverage', () => {
       })
 
       const mod = await import('../config-store.js')
+      mod.invalidateConfigCache()
       await mod.loadConfig()
       const result = await mod.saveConfig({ emailUser: 'newuser' })
 
@@ -286,6 +287,7 @@ describe('Config Store — Full Coverage', () => {
       })
 
       const mod = await import('../config-store.js')
+      mod.invalidateConfigCache()
       const emailCfg = await mod.getEmailConfig()
 
       expect(emailCfg).not.toBeNull()
@@ -331,6 +333,7 @@ describe('Config Store — Full Coverage', () => {
       })
 
       const mod = await import('../config-store.js')
+      mod.invalidateConfigCache()
       const emailCfg = await mod.getEmailConfig()
       expect(emailCfg!.from).toBe('user@test.com')
     })
