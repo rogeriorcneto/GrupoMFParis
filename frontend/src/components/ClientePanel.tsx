@@ -164,7 +164,7 @@ export default function ClientePanel({
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black bg-opacity-30" onClick={onClose} />
-      <div className="relative w-full sm:max-w-xl bg-white shadow-2xl overflow-y-auto animate-slide-in-right">
+      <div className="relative w-full sm:max-w-2xl bg-white shadow-2xl overflow-y-auto animate-slide-in-right">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex-1 min-w-0">
