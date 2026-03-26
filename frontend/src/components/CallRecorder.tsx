@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { PhoneIcon, StopIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/solid'
 import { supabase } from '../lib/supabase'
+import { transcribeCallRecording } from '../lib/botApi'
 import { formatBrazilianPhone } from '../utils/validators'
 import type { Cliente } from '../types'
 
@@ -37,6 +38,9 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
   const [error, setError] = useState<string | null>(null)
   const [notas, setNotas] = useState('')
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [savedId, setSavedId] = useState<number | null>(null)
+  const [transcribing, setTranscribing] = useState(false)
+  const [transcription, setTranscription] = useState<string | null>(null)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -183,6 +187,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
       if (dbError) throw dbError
 
       setState('saved')
+      setSavedId(data.id)
 
       if (onSaved && data) {
         onSaved({
@@ -199,8 +204,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
         })
       }
 
-      // Auto-close after 2s
-      setTimeout(() => onClose(), 2000)
+      // Don't auto-close — user may want to transcribe
 
     } catch (err: any) {
       setError(`Erro ao salvar: ${err?.message || 'Desconhecido'}. Verifique se a tabela gravacoes_chamada existe.`)
@@ -363,6 +367,41 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
             <div className="text-4xl mb-2">✅</div>
             <p className="text-sm font-semibold text-green-700">Gravação salva com sucesso!</p>
             <p className="text-xs text-gray-500 mt-1">{formatTime(seconds)} — {contactName || cliente?.razaoSocial || phoneNumber}</p>
+
+            {/* Transcription */}
+            {transcription ? (
+              <div className="mt-3 text-left bg-gray-50 border border-gray-200 rounded-xl p-3 max-h-40 overflow-y-auto">
+                <p className="text-xs font-semibold text-gray-700 mb-1">📝 Transcrição:</p>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">{transcription}</p>
+              </div>
+            ) : savedId ? (
+              <button
+                onClick={async () => {
+                  setTranscribing(true)
+                  try {
+                    const result = await transcribeCallRecording(savedId)
+                    if (result.success && result.transcription) {
+                      setTranscription(result.transcription)
+                    } else {
+                      setError(result.error || 'Não foi possível transcrever')
+                    }
+                  } catch (err: any) {
+                    setError(err?.message || 'Erro ao transcrever')
+                  }
+                  setTranscribing(false)
+                }}
+                disabled={transcribing}
+                className="mt-3 flex items-center gap-1.5 mx-auto px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:bg-gray-300 transition-colors"
+              >
+                {transcribing ? (
+                  <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Transcrevendo...</>
+                ) : (
+                  <>🤖 Transcrever com IA</>
+                )}
+              </button>
+            ) : null}
+
+            <button onClick={onClose} className="mt-3 px-4 py-1.5 text-gray-500 text-xs hover:text-gray-700">Fechar</button>
           </div>
         )}
 
