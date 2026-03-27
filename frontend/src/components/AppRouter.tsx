@@ -371,6 +371,7 @@ export default function AppRouter({
       />
     case 'pedidos':
       return <PedidosView pedidos={pedidos} clientes={clientes} produtos={produtos} vendedores={vendedores} showToast={showToast} loggedUser={loggedUser || { id: 0, nome: 'Sistema', email: '', cargo: 'vendedor', ativo: true, metaVendas: 0, metaLeads: 0, metaConversao: 0 } as Vendedor}
+        onMoverCliente={moverCliente}
         onAddPedido={async (p) => {
           try {
             const saved = await db.insertPedido(p)
@@ -386,10 +387,10 @@ export default function AppRouter({
               try {
                 const omieResult = await aprovarPedidoComOmie(saved.id)
                 setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
-                // Auto-move client to follow_up when sale is approved
+                // Auto-move client to negociacao when sale is approved
                 const cli = clientes.find(c => c.id === p.clienteId)
-                if (cli && cli.etapa !== 'follow_up' && cli.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'follow_up') } catch { /* non-critical */ }
+                if (cli && cli.etapa !== 'negociacao' && cli.etapa !== 'perdido') {
+                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
                 }
                 if (omieResult.omie?.success) {
                   showToast('success', `Pedido ${saved.numero} aprovado e enviado ao Omie! ✅`)
@@ -399,18 +400,18 @@ export default function AppRouter({
               } catch {
                 await db.aprovarPedido(saved.id, loggedUser?.id || 0)
                 setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
-                // Auto-move client to follow_up when sale is approved
+                // Auto-move client to negociacao when sale is approved
                 const cli2 = clientes.find(c => c.id === p.clienteId)
-                if (cli2 && cli2.etapa !== 'follow_up' && cli2.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'follow_up') } catch { /* non-critical */ }
+                if (cli2 && cli2.etapa !== 'negociacao' && cli2.etapa !== 'perdido') {
+                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
                 }
                 showToast('success', `Pedido ${saved.numero} aprovado automaticamente! ✅ (Omie offline)`)
               }
             } else {
               setPedidos(prev => [...prev, saved])
-              // Move client to negociacao when pedido is sent for approval (if in earlier stage)
+              // Move client to negociacao when pedido is sent for approval
               const cliSent = clientes.find(c => c.id === p.clienteId)
-              if (cliSent && !['negociacao', 'follow_up', 'perdido'].includes(cliSent.etapa)) {
+              if (cliSent && cliSent.etapa !== 'negociacao' && cliSent.etapa !== 'perdido') {
                 try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
               }
               showToast('success', `Pedido ${p.numero} enviado para aprovação!`)
@@ -424,10 +425,10 @@ export default function AppRouter({
               try {
                 const result = await aprovarPedidoComOmie(p.id)
                 setPedidos(prev => prev.map(x => x.id === p.id ? { ...p, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id } : x))
-                // Auto-move client to follow_up when sale is approved
+                // Auto-move client to negociacao when sale is approved
                 const cliApproved = clientes.find(c => c.id === p.clienteId)
-                if (cliApproved && cliApproved.etapa !== 'follow_up' && cliApproved.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'follow_up') } catch { /* non-critical */ }
+                if (cliApproved && cliApproved.etapa !== 'negociacao' && cliApproved.etapa !== 'perdido') {
+                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
                 }
                 if (result.omie?.success) {
                   showToast('success', `Pedido ${p.numero} aprovado e enviado ao Omie! ✅`)
@@ -437,10 +438,10 @@ export default function AppRouter({
               } catch {
                 await db.aprovarPedido(p.id, loggedUser?.id || 0)
                 setPedidos(prev => prev.map(x => x.id === p.id ? { ...p, status: 'confirmado' } : x))
-                // Auto-move client to follow_up when sale is approved
+                // Auto-move client to negociacao when sale is approved
                 const cliApproved2 = clientes.find(c => c.id === p.clienteId)
-                if (cliApproved2 && cliApproved2.etapa !== 'follow_up' && cliApproved2.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'follow_up') } catch { /* non-critical */ }
+                if (cliApproved2 && cliApproved2.etapa !== 'negociacao' && cliApproved2.etapa !== 'perdido') {
+                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
                 }
                 showToast('success', `Pedido ${p.numero} aprovado! (Omie offline)`)
               }

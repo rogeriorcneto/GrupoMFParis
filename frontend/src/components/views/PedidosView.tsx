@@ -1,9 +1,10 @@
 import React from 'react'
-import { PaperAirplaneIcon, ShoppingCartIcon, PhotoIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ShoppingCartIcon, PhotoIcon, CloudArrowUpIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 import type { Pedido, Cliente, Produto, Vendedor, ItemPedido } from '../../types'
 import { enviarPedidoOmie } from '../../lib/botApi'
+import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 
-function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, showToast }: {
+function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, onMoverCliente, showToast }: {
   pedidos: Pedido[]
   clientes: Cliente[]
   produtos: Produto[]
@@ -11,6 +12,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   loggedUser: Vendedor
   onAddPedido: (p: Omit<Pedido, 'id'>) => Promise<void>
   onUpdatePedido: (p: Pedido) => void
+  onMoverCliente?: (id: number, toStage: string, extras?: Partial<Cliente>) => void
   showToast?: (tipo: 'success' | 'error', texto: string) => void
 }) {
   const isGerente = loggedUser.cargo === 'gerente'
@@ -73,6 +75,41 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
         if (existe) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
         return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', unidade: produto.unidade, preco: produto.preco, quantidade: qtd }]
       })
+    }
+  }
+
+  const handleGerarProposta = () => {
+    if (!selectedClienteId || itensPedido.length === 0) {
+      showToast?.('error', 'Selecione um cliente e adicione produtos antes de gerar a proposta.')
+      return
+    }
+    
+    const clienteAlvo = clientes.find(c => c.id === Number(selectedClienteId))
+    if (!clienteAlvo) return
+    
+    const numeroProposta = `PROP-${Date.now().toString().slice(-6)}`
+    
+    try {
+      // Gerar PDF
+      gerarPropostaPDF(
+        clienteAlvo,
+        itensPedido,
+        observacoes,
+        loggedUser.nome,
+        numeroProposta
+      )
+      
+      // Mover cliente para etapa "proposta" no funil
+      if (onMoverCliente && clienteAlvo.etapa !== 'proposta') {
+        onMoverCliente(clienteAlvo.id, 'proposta', {
+          valorProposta: totalPedido,
+          dataProposta: new Date().toISOString().split('T')[0]
+        })
+      }
+      
+      showToast?.('success', `Proposta ${numeroProposta} gerada com sucesso! Cliente movido para "Proposta" no funil.`)
+    } catch (err) {
+      showToast?.('error', 'Erro ao gerar proposta em PDF.')
     }
   }
 
@@ -300,6 +337,9 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
               <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={3} placeholder="Condições de entrega, prazo, forma de pagamento..." className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none" />
             </div>
             <div className="space-y-2">
+              <button onClick={handleGerarProposta} disabled={!selectedClienteId || itensPedido.length === 0} className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 text-white font-semibold rounded-apple shadow-apple-sm transition-colors flex items-center justify-center gap-2">
+                <DocumentTextIcon className="h-5 w-5" /> Gerar Proposta em PDF — R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </button>
               <button onClick={() => handleEnviarPedido('enviado')} disabled={!selectedClienteId || itensPedido.length === 0 || isSaving} className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-apple shadow-apple-sm transition-colors flex items-center justify-center gap-2">
                 {isSaving ? <><svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando...</> : <><PaperAirplaneIcon className="h-5 w-5" /> Enviar para Aprovação — R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</>}
               </button>
