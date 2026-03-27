@@ -19,10 +19,21 @@ exports.handler = async (event, context) => {
         contents: [
           { role: 'user', parts: [{ text: systemInstruction }] },
           { role: 'model', parts: [{ text: 'Entendido, tenho acesso a todos os dados do CRM. Vou responder de forma direta e natural.' }] },
-          ...messages.map(m => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: m.content }]
-          }))
+          ...messages.map(m => {
+            const parts = []
+            if (m.attachments && m.attachments.length > 0) {
+              for (const att of m.attachments) {
+                parts.push({ inline_data: { mime_type: att.mimeType, data: att.data } })
+              }
+            }
+            if (m.content) {
+              parts.push({ text: m.content })
+            }
+            return {
+              role: m.role === 'assistant' ? 'model' : 'user',
+              parts,
+            }
+          })
         ],
         generationConfig: {
           temperature: 0.7,

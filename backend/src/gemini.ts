@@ -5,8 +5,13 @@ import { getVendedorByAuthId } from './database.js'
 import { sendUserWhatsAppMessage, getUserWhatsAppSession } from './whatsapp-multi.js'
 import { sendEmail } from './email.js'
 
+interface Attachment {
+  mimeType: string  // e.g. 'image/jpeg', 'audio/webm', 'audio/mp4'
+  data: string      // base64-encoded
+}
+
 interface GeminiRequest {
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  messages: Array<{ role: 'user' | 'assistant'; content: string; attachments?: Attachment[] }>
   systemInstruction: string
 }
 
@@ -89,10 +94,23 @@ export async function geminiHandler(req: Request, res: Response): Promise<void> 
     const contents: any[] = [
       { role: 'user', parts: [{ text: systemInstruction }] },
       { role: 'model', parts: [{ text: 'Entendido, tenho acesso a todos os dados do CRM e posso executar ações. Vou responder de forma direta e natural.' }] },
-      ...messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      })),
+      ...messages.map(m => {
+        const parts: any[] = []
+        // Add any attachments (images/audio) as inline_data
+        if (m.attachments && m.attachments.length > 0) {
+          for (const att of m.attachments) {
+            parts.push({ inline_data: { mime_type: att.mimeType, data: att.data } })
+          }
+        }
+        // Add text part
+        if (m.content) {
+          parts.push({ text: m.content })
+        }
+        return {
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts,
+        }
+      }),
     ]
 
     // Collect UI actions from function calls to send back to frontend

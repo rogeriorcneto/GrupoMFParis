@@ -2,9 +2,16 @@ const GEMINI_URL = import.meta.env.MODE === 'production'
   ? '/.netlify/functions/gemini'  // Netlify Functions
   : `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api/gemini`  // Backend local
 
+export interface AIAttachment {
+  mimeType: string  // e.g. 'image/jpeg', 'audio/webm'
+  data: string      // base64-encoded (no data: prefix)
+  name?: string     // optional filename for display
+}
+
 export interface AIMessage {
   role: 'user' | 'assistant'
   content: string
+  attachments?: AIAttachment[]
 }
 
 export interface AIUIAction {
@@ -31,7 +38,11 @@ export async function callAIFull(
   systemInstruction: string
 ): Promise<AIResponse> {
   const body = {
-    messages,
+    messages: messages.map(m => ({
+      role: m.role,
+      content: m.content,
+      ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments.map(a => ({ mimeType: a.mimeType, data: a.data })) } : {}),
+    })),
     systemInstruction
   }
 

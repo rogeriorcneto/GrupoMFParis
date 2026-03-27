@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
 import type { Tarefa } from '../../types'
 import { callAIFull, buildCRMContext } from '../../lib/gemini'
-import type { AIMessage, AIUIAction } from '../../lib/gemini'
+import type { AIMessage, AIUIAction, AIAttachment } from '../../lib/gemini'
 import { loadConversation, saveConversation, clearConversation } from '../../lib/aiConversations'
 import { fetchAIContextData, type AIContextData } from '../../lib/botApi'
 
@@ -12,6 +12,7 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
   timestamp: string
+  attachments?: AIAttachment[]
 }
 
 interface AssistenteIAViewProps {
@@ -109,8 +110,16 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   const [copied, setCopied] = useState<string | null>(null)
   const [conversationLoaded, setConversationLoaded] = useState(false)
   const [extraData, setExtraData] = useState<AIContextData | null>(null)
+  const [pendingAttachments, setPendingAttachments] = useState<AIAttachment[]>([])
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false)
+  const [audioSeconds, setAudioSeconds] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const audioInputRef = useRef<HTMLInputElement>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Fetch extra AI context data (WhatsApp msgs, calls, etc.) on mount
   useEffect(() => {
@@ -169,25 +178,104 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     }
   }
 
+  // File handling helpers
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) { setError('Imagem muito grande (máx 8MB)'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      const mimeType = file.type || 'image/jpeg'
+      setPendingAttachments(prev => [...prev, { mimeType, data: base64, name: file.name }])
+    }
+    reader.readAsDataURL(file)
+    e.target.value = '' // reset input
+  }, [])
+
+  const handleAudioSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) { setError('Áudio muito grande (máx 8MB)'); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      const mimeType = file.type || 'audio/webm'
+      setPendingAttachments(prev => [...prev, { mimeType, data: base64, name: file.name }])
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }, [])
+
+  const startAudioRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
+      const recorder = new MediaRecorder(stream, { mimeType })
+      audioChunksRef.current = []
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(audioChunksRef.current, { type: mimeType })
+        const reader = new FileReader()
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1]
+          setPendingAttachments(prev => [...prev, { mimeType: blob.type, data: base64, name: `gravacao_${Date.now()}.webm` }])
+        }
+        reader.readAsDataURL(blob)
+      }
+      mediaRecorderRef.current = recorder
+      recorder.start(1000)
+      setIsRecordingAudio(true)
+      setAudioSeconds(0)
+      audioTimerRef.current = setInterval(() => setAudioSeconds(s => s + 1), 1000)
+    } catch {
+      setError('Permissão do microfone negada')
+    }
+  }, [])
+
+  const stopAudioRecording = useCallback(() => {
+    if (audioTimerRef.current) { clearInterval(audioTimerRef.current); audioTimerRef.current = null }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    setIsRecordingAudio(false)
+    setAudioSeconds(0)
+  }, [])
+
+  const removeAttachment = useCallback((index: number) => {
+    setPendingAttachments(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
   const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return
+    if ((!text.trim() && pendingAttachments.length === 0) || loading) return
     setError(null)
+
+    const attachments = [...pendingAttachments]
+    const displayText = text.trim() || (attachments.length > 0 ? attachments.map(a => a.mimeType.startsWith('image') ? '📷 Imagem' : '🎤 Áudio').join(' + ') : '')
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
-      text: text.trim(),
+      text: displayText,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      attachments,
     }
     setMessages(prev => [...prev, userMsg])
     setInput('')
+    setPendingAttachments([])
     setLoading(true)
 
     try {
+      // Build history without attachments for older messages (to keep payload small)
       const history: AIMessage[] = messages
         .filter(m => m.id !== '0')
         .map(m => ({ role: m.role, content: m.text }))
-      history.push({ role: 'user', content: text.trim() })
+      // Current message with attachments
+      const userContent = text.trim() || (attachments.some(a => a.mimeType.startsWith('image')) ? 'Analise esta imagem.' : 'Transcreva e analise este áudio.')
+      history.push({ role: 'user', content: userContent, attachments })
 
       const result = await callAIFull(history, systemPrompt)
 
@@ -324,6 +412,20 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
               )}
               <div className={`max-w-[75%] group relative ${msg.role === 'user' ? 'order-last' : ''}`}>
                 <div className={`px-4 py-3 rounded-apple shadow-sm ${msg.role === 'user' ? 'bg-primary-600 text-white rounded-br-none' : 'bg-gray-50 border border-gray-200 rounded-bl-none'}`}>
+                  {/* Attachment previews */}
+                  {msg.attachments && msg.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {msg.attachments.map((att, ai) => (
+                        att.mimeType.startsWith('image') ? (
+                          <img key={ai} src={`data:${att.mimeType};base64,${att.data}`} alt="" className="max-w-[200px] max-h-[150px] rounded-lg object-cover border border-white/20" />
+                        ) : att.mimeType.startsWith('audio') ? (
+                          <div key={ai} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${msg.role === 'user' ? 'bg-white/20 text-white' : 'bg-purple-50 text-purple-700 border border-purple-200'}`}>
+                            🎤 {att.name || 'Áudio'}
+                          </div>
+                        ) : null
+                      ))}
+                    </div>
+                  )}
                   {msg.role === 'user' ? (
                     <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                   ) : (
@@ -393,7 +495,67 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
 
         {/* Input */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex gap-3 items-end">
+          {/* Hidden file inputs */}
+          <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+          <input ref={audioInputRef} type="file" accept="audio/*" className="hidden" onChange={handleAudioSelect} />
+
+          {/* Pending attachments preview */}
+          {pendingAttachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {pendingAttachments.map((att, i) => (
+                <div key={i} className="relative group">
+                  {att.mimeType.startsWith('image') ? (
+                    <img src={`data:${att.mimeType};base64,${att.data}`} alt="" className="h-16 w-16 rounded-lg object-cover border border-gray-300" />
+                  ) : (
+                    <div className="h-16 px-3 flex items-center gap-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium">
+                      🎤 {att.name || 'Áudio'}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => removeAttachment(i)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                  >
+                    <XMarkIcon className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Audio recording indicator */}
+          {isRecordingAudio && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-apple">
+              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm text-red-700 font-medium">Gravando... {Math.floor(audioSeconds / 60).toString().padStart(2, '0')}:{(audioSeconds % 60).toString().padStart(2, '0')}</span>
+              <button onClick={stopAudioRecording} className="ml-auto px-3 py-1 bg-red-500 text-white text-xs font-semibold rounded-apple hover:bg-red-600 transition-colors">⏹ Parar</button>
+            </div>
+          )}
+
+          <div className="flex gap-2 items-end">
+            {/* Attachment buttons */}
+            <div className="flex gap-1 flex-shrink-0">
+              <button
+                onClick={() => imageInputRef.current?.click()}
+                disabled={loading || isRecordingAudio}
+                className="w-9 h-9 flex items-center justify-center rounded-apple border border-gray-300 bg-white text-gray-500 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300 disabled:opacity-40 transition-colors"
+                title="Enviar imagem"
+              >
+                <PhotoIcon className="h-4.5 w-4.5" />
+              </button>
+              <button
+                onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
+                disabled={loading}
+                className={`w-9 h-9 flex items-center justify-center rounded-apple border transition-colors ${
+                  isRecordingAudio
+                    ? 'bg-red-500 border-red-500 text-white animate-pulse'
+                    : 'border-gray-300 bg-white text-gray-500 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300 disabled:opacity-40'
+                }`}
+                title={isRecordingAudio ? 'Parar gravação' : 'Gravar áudio'}
+              >
+                <MicrophoneIcon className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
             <textarea
               ref={inputRef}
               value={input}
@@ -412,7 +574,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
             />
             <button
               onClick={() => sendMessage(input)}
-              disabled={!input.trim() || loading}
+              disabled={(!input.trim() && pendingAttachments.length === 0) || loading}
               className="flex-shrink-0 w-11 h-11 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
             >
               <PaperAirplaneIcon className="h-5 w-5" />
