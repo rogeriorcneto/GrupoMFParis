@@ -9,6 +9,7 @@ import { supabase } from './lib/supabase'
 import * as db from './lib/database'
 import { useNotificacoes } from './hooks/useNotificacoes'
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription'
+import { useVersionCheck } from './hooks/useVersionCheck'
 import ClientePanel from './components/ClientePanel'
 import { useAutoRules } from './hooks/useAutoRules'
 import { useClienteForm } from './hooks/useClienteForm'
@@ -26,6 +27,7 @@ import AppRouter, { PersistentViews } from './components/AppRouter'
 import GlobalSearch from './components/GlobalSearch'
 
 function App() {
+  const { newVersionAvailable, reloadApp } = useVersionCheck()
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
   const [loginUsuario, setLoginUsuario] = useState('')
   const [loginSenha, setLoginSenha] = useState('')
@@ -499,6 +501,25 @@ function App() {
 
       {/* Toast global de feedback */}
       <Toast toastMsg={toastMsg} />
+
+      {/* Banner de nova versão disponível */}
+      {newVersionAvailable && (
+        <div className="fixed bottom-4 right-4 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-apple shadow-2xl max-w-md animate-slide-in-right">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 text-2xl">🎉</div>
+            <div className="flex-1">
+              <p className="font-semibold text-sm mb-1">Nova versão disponível!</p>
+              <p className="text-xs text-white/90 mb-3">Uma atualização do CRM está pronta. Recarregue a página para obter as últimas melhorias.</p>
+              <button
+                onClick={reloadApp}
+                className="w-full px-4 py-2 bg-white text-blue-600 rounded-apple text-sm font-semibold hover:bg-blue-50 transition-colors"
+              >
+                🔄 Recarregar Agora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
