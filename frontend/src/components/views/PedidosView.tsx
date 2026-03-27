@@ -71,7 +71,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       setItensPedido(prev => {
         const existe = prev.find(i => i.produtoId === produto.id)
         if (existe) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
-        return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.sku, unidade: produto.unidade, preco: produto.preco, quantidade: qtd }]
+        return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', unidade: produto.unidade, preco: produto.preco, quantidade: qtd }]
       })
     }
   }

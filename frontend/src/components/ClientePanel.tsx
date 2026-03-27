@@ -157,7 +157,7 @@ export default function ClientePanel({
     setPedidoItens(prev => {
       const exists = prev.find(i => i.produtoId === produto.id)
       if (exists) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
-      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.sku, preco: produto.preco, unidade: produto.unidade, quantidade: qtd }]
+      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: produto.preco, unidade: produto.unidade, quantidade: qtd }]
     })
   }
 
