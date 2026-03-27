@@ -40,6 +40,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   const [endEntregaCidade, setEndEntregaCidade] = React.useState('')
   const [endEntregaEstado, setEndEntregaEstado] = React.useState('')
   const [endEntregaCep, setEndEntregaCep] = React.useState('')
+  const [formaPagamento, setFormaPagamento] = React.useState('À vista')
 
   // Reenviar ao Omie manualmente (para pedidos já confirmados que falharam o envio)
   const handleEnviarOmieManual = async (pedido: Pedido) => {
@@ -263,7 +264,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     <div key={item.produtoId} className="flex items-center justify-between p-2 bg-gray-50 rounded-apple border border-gray-200">
                       <div className="flex-1 min-w-0 mr-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{item.nomeProduto}</p>
-                        <p className="text-xs text-gray-500">R$ {item.preco.toFixed(2).replace('.', ',')} / {item.unidade}</p>
+                        <p className="text-xs text-gray-500">R$ {item.preco.toFixed(2).replace('.', ',')} / KG</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button onClick={() => setItemQtd(produtos.find(p => p.id === item.produtoId)!, item.quantidade - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-sm">−</button>
@@ -310,6 +311,24 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     🏭 FOB (Retirada)
                   </button>
                 </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">💳 Forma de Pagamento</h3>
+                <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  <option value="À vista">À vista</option>
+                  <option value="7 dias">7 dias</option>
+                  <option value="14 dias">14 dias</option>
+                  <option value="21 dias">21 dias</option>
+                  <option value="28 dias">28 dias</option>
+                  <option value="30 dias">30 dias</option>
+                  <option value="45 dias">45 dias</option>
+                  <option value="60 dias">60 dias</option>
+                  <option value="2x sem juros">2x sem juros</option>
+                  <option value="3x sem juros">3x sem juros</option>
+                  <option value="4x sem juros">4x sem juros</option>
+                  <option value="5x sem juros">5x sem juros</option>
+                  <option value="6x sem juros">6x sem juros</option>
+                </select>
               </div>
               <div>
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -381,18 +400,21 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {noCarrinho ? (
-                          <>
-                            <button onClick={() => setItemQtd(produto, qtd - 1)} className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold">−</button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={qtd}
-                              onChange={e => setItemQtd(produto, Math.max(1, parseInt(e.target.value) || 1))}
-                              onFocus={e => e.target.select()}
-                              className="w-12 text-center font-bold text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-400 py-1"
-                            />
-                            <button onClick={() => setItemQtd(produto, qtd + 1)} className="w-8 h-8 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white font-bold">+</button>
-                          </>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setItemQtd(produto, qtd - 1)} className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold">−</button>
+                              <input
+                                type="number"
+                                min={1}
+                                value={qtd}
+                                onChange={e => setItemQtd(produto, Math.max(1, parseInt(e.target.value) || 1))}
+                                onFocus={e => e.target.select()}
+                                className="w-12 text-center font-bold text-gray-900 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-400 py-1"
+                              />
+                              <button onClick={() => setItemQtd(produto, qtd + 1)} className="w-8 h-8 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white font-bold">+</button>
+                            </div>
+                            <span className="text-[10px] text-gray-500">(Quilo(s))</span>
+                          </div>
                         ) : (
                           <button onClick={() => setItemQtd(produto, 1)} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-apple transition-colors">+ Adicionar</button>
                         )}
