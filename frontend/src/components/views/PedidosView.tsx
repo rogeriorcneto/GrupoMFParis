@@ -284,7 +284,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
               )}
               {itensPedido.length > 0 && (
                 <div className="mt-4 pt-3 border-t border-gray-200 flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Total ({itensPedido.reduce((s, i) => s + i.quantidade, 0)} unid.)</span>
+                  <span className="text-sm text-gray-600">Total ({itensPedido.reduce((s, i) => s + i.quantidade, 0)} kg)</span>
                   <span className="text-sm font-bold text-gray-900">R$ {totalPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                 </div>
               )}
