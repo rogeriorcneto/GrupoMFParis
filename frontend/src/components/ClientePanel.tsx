@@ -58,6 +58,7 @@ export default function ClientePanel({
   const [pedidoObs, setPedidoObs] = useState('')
   const [pedidoSaving, setPedidoSaving] = useState(false)
   const [pedidoSearch, setPedidoSearch] = useState('')
+  const [pedidoFormaPagamento, setPedidoFormaPagamento] = useState('À vista')
 
   // Collapsible sections
   const [showTimeline, setShowTimeline] = useState(false)
@@ -147,7 +148,7 @@ export default function ClientePanel({
         totalValor: pedidoTotal, tipo: pedidoTipo, tipoFrete: pedidoFrete || undefined,
       })
       addNotificacao('success', 'Pedido enviado', `Pedido ${numero} — R$ ${pedidoTotal.toFixed(2)}`, c.id)
-      setPedidoItens([]); setPedidoObs(''); setPedidoFrete(''); setPedidoTipo('venda'); setShowPedido(false)
+      setPedidoItens([]); setPedidoObs(''); setPedidoFrete(''); setPedidoTipo('venda'); setPedidoFormaPagamento('À vista'); setShowPedido(false)
     } catch { addNotificacao('error', 'Erro', 'Falha ao enviar pedido', c.id) }
     setPedidoSaving(false)
   }
@@ -473,6 +474,24 @@ export default function ClientePanel({
                     <button onClick={() => setPedidoFrete('CIF')} className={`flex-1 py-2 px-3 rounded-apple text-xs font-medium border-2 transition-colors ${pedidoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>📦 CIF (Entrega)</button>
                     <button onClick={() => setPedidoFrete('FOB')} className={`flex-1 py-2 px-3 rounded-apple text-xs font-medium border-2 transition-colors ${pedidoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>🏭 FOB (Retirada)</button>
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">💳 Forma de Pagamento</label>
+                    <select value={pedidoFormaPagamento} onChange={(e) => setPedidoFormaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500">
+                      <option value="À vista">À vista</option>
+                      <option value="7 dias">7 dias</option>
+                      <option value="14 dias">14 dias</option>
+                      <option value="21 dias">21 dias</option>
+                      <option value="28 dias">28 dias</option>
+                      <option value="30 dias">30 dias</option>
+                      <option value="45 dias">45 dias</option>
+                      <option value="60 dias">60 dias</option>
+                      <option value="2x sem juros">2x sem juros</option>
+                      <option value="3x sem juros">3x sem juros</option>
+                      <option value="4x sem juros">4x sem juros</option>
+                      <option value="5x sem juros">5x sem juros</option>
+                      <option value="6x sem juros">6x sem juros</option>
+                    </select>
+                  </div>
                   <input type="text" placeholder="Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   <div className="max-h-48 overflow-y-auto space-y-1">
                     {filteredProdutos.slice(0, 20).map(p => {
@@ -481,13 +500,14 @@ export default function ClientePanel({
                         <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100'}`}>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
-                            <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / {p.unidade}</p>
+                            <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / KG</p>
                           </div>
                           {qtd > 0 ? (
                             <div className="flex items-center gap-1">
                               <button onClick={() => setPedidoItemQtd(p, qtd - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-xs font-bold">−</button>
                               <span className="w-8 text-center text-xs font-bold">{qtd}</span>
                               <button onClick={() => setPedidoItemQtd(p, qtd + 1)} className="w-6 h-6 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white text-xs font-bold">+</button>
+                              <span className="text-[9px] text-gray-400">(Quilo(s))</span>
                             </div>
                           ) : (
                             <button onClick={() => setPedidoItemQtd(p, 1)} className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-medium rounded-apple">+ Add</button>
@@ -499,7 +519,7 @@ export default function ClientePanel({
                   <textarea value={pedidoObs} onChange={e => setPedidoObs(e.target.value)} placeholder="Observações..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none" />
                   {pedidoItens.length > 0 && (
                     <div className="flex items-center justify-between text-sm font-bold text-gray-900 pt-2 border-t">
-                      <span>{pedidoItens.reduce((s, i) => s + i.quantidade, 0)} itens</span>
+                      <span>{pedidoItens.reduce((s, i) => s + i.quantidade, 0)} kg</span>
                       <span>R$ {pedidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </div>
                   )}
