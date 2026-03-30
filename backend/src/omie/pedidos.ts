@@ -535,10 +535,10 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     marca_volumes: marcaVolumes,
   }
 
-  // 7. Departamentos: COMERCIAL
+  // 7. Departamentos: COMERCIAL (Omie WSDL: cCodDepto, nPerc, nValor, nValorFixo)
   const departamentos: any[] = []
   if (deptoComercial) {
-    departamentos.push({ cCodigoDepartamento: deptoComercial })
+    departamentos.push({ cCodDepto: deptoComercial, nPerc: 100, nValor: 0, nValorFixo: 'N' })
   }
 
   // 8. Informações adicionais
