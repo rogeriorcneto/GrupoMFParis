@@ -142,6 +142,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       dataEnvio: status === 'enviado' ? new Date().toISOString() : undefined,
       totalValor: totalPedido,
       tipo: tipoPedido,
+      formaPagamento,
       tipoFrete: tipoFrete || undefined,
       enderecoDiferente,
       enderecoEntregaRua: enderecoDiferente ? endEntregaRua : undefined,
@@ -155,7 +156,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       await onAddPedido(novoPedido)
       if (status === 'enviado') setPedidoEnviado({ ...novoPedido, id: 0 } as Pedido)
       setItensPedido([]); setObservacoes(''); setSelectedClienteId(clientesDisponiveis[0]?.id ?? '')
-      setTipoPedido('venda'); setTipoFrete(''); setEnderecoDiferente(false)
+      setTipoPedido('venda'); setTipoFrete(''); setFormaPagamento('À vista'); setEnderecoDiferente(false)
       setEndEntregaRua(''); setEndEntregaNumero(''); setEndEntregaBairro('')
       setEndEntregaCidade(''); setEndEntregaEstado(''); setEndEntregaCep('')
     } catch {

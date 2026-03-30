@@ -306,6 +306,7 @@ export interface Pedido {
   omieStatus?: string
   omieErro?: string
   tipo?: 'venda' | 'bonificacao'
+  formaPagamento?: string
   tipoFrete?: 'CIF' | 'FOB'
   enderecoDiferente?: boolean
   enderecoEntregaRua?: string

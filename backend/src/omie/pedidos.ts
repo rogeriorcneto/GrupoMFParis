@@ -267,6 +267,104 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
 }
 
 // ============================================
+// Helpers: Forma de pagamento → Omie parcelas
+// ============================================
+
+/**
+ * Mapeia a forma de pagamento do CRM para o código de parcela do Omie.
+ * - "000" = À vista
+ * - "999" = Parcelas customizadas (nós especificamos em lista_parcelas)
+ */
+function mapFormaPagamentoToCodigoParcela(formaPagamento: string): string {
+  const fp = formaPagamento.toLowerCase().trim()
+  if (fp === 'à vista' || fp === 'a vista') return '000'
+  // Qualquer prazo ou parcelamento → parcelas customizadas
+  return '999'
+}
+
+/**
+ * Gera array de parcelas Omie com base na forma de pagamento.
+ * - "À vista" → 1 parcela, 100%, vencimento = data_previsao
+ * - "N dias" → 1 parcela, 100%, vencimento = data_previsao + N dias
+ * - "Nx sem juros" → N parcelas iguais, 30 dias entre cada
+ */
+function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisaoStr: string): any[] {
+  const fp = formaPagamento.toLowerCase().trim()
+
+  // Helper: parsear dd/mm/yyyy e somar dias
+  function parseDataOmie(d: string): Date {
+    const parts = d.split('/')
+    return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]))
+  }
+  function formatDataOmie(d: Date): string {
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+  }
+  function addDays(d: Date, days: number): Date {
+    const r = new Date(d)
+    r.setDate(r.getDate() + days)
+    return r
+  }
+
+  const baseDate = parseDataOmie(dataPrevisaoStr)
+
+  // À vista → 1 parcela, vencimento = data_previsao
+  if (fp === 'à vista' || fp === 'a vista') {
+    return [{
+      numero_parcela: 1,
+      data_vencimento: dataPrevisaoStr,
+      percentual: 100,
+      valor: Math.round(totalPedido * 100) / 100,
+    }]
+  }
+
+  // "N dias" → 1 parcela com prazo
+  const matchDias = fp.match(/^(\d+)\s*dias?$/)
+  if (matchDias) {
+    const dias = parseInt(matchDias[1], 10)
+    return [{
+      numero_parcela: 1,
+      data_vencimento: formatDataOmie(addDays(baseDate, dias)),
+      percentual: 100,
+      valor: Math.round(totalPedido * 100) / 100,
+    }]
+  }
+
+  // "Nx sem juros" → N parcelas iguais, 30 dias entre cada
+  const matchParcelas = fp.match(/^(\d+)x/)
+  if (matchParcelas) {
+    const numParcelas = parseInt(matchParcelas[1], 10)
+    const valorParcela = Math.floor(totalPedido * 100 / numParcelas) / 100
+    const parcelas: any[] = []
+    let somaValores = 0
+
+    for (let i = 1; i <= numParcelas; i++) {
+      const isLast = i === numParcelas
+      const valor = isLast ? Math.round((totalPedido - somaValores) * 100) / 100 : valorParcela
+      somaValores += valor
+      const percentual = isLast
+        ? Math.round((100 - (numParcelas - 1) * Math.floor(10000 / numParcelas) / 100) * 100) / 100
+        : Math.floor(10000 / numParcelas) / 100
+
+      parcelas.push({
+        numero_parcela: i,
+        data_vencimento: formatDataOmie(addDays(baseDate, 30 * i)),
+        percentual: isLast ? Math.round((totalPedido > 0 ? valor / totalPedido * 100 : 0) * 100) / 100 : Math.round((valorParcela / totalPedido * 100) * 100) / 100,
+        valor,
+      })
+    }
+    return parcelas
+  }
+
+  // Fallback: à vista
+  return [{
+    numero_parcela: 1,
+    data_vencimento: dataPrevisaoStr,
+    percentual: 100,
+    valor: Math.round(totalPedido * 100) / 100,
+  }]
+}
+
+// ============================================
 // Criar pedido de venda no Omie
 // ============================================
 
@@ -402,13 +500,17 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   // 4. Data de previsão: 7 dias úteis
   const dataPrevisao = calcularDataPrevisao(7)
 
+  // 5. Forma de pagamento → parcelas Omie
+  const formaPagamento = (pedido.forma_pagamento || 'À vista').trim()
+  const codigoParcela = mapFormaPagamentoToCodigoParcela(formaPagamento)
+
   // 5. Cabeçalho do pedido
   const cabecalho: any = {
     codigo_pedido_integracao: `CRM-PED-${pedidoId}`,
     codigo_cliente: codigoClienteOmie,
     data_previsao: dataPrevisao,
     etapa: '10',
-    codigo_parcela: '000',
+    codigo_parcela: codigoParcela,
     quantidade_itens: itens.length,
   }
 
@@ -473,16 +575,10 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     omiePedido.departamentos = departamentos
   }
 
-  // Parcelas: à vista (1 parcela = 100% do total)
+  // Parcelas baseadas na forma de pagamento
   const totalPedido = itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
-  const dataVencimento = dataPrevisao // mesmo dia da previsão
   omiePedido.lista_parcelas = {
-    parcela: [{
-      numero_parcela: 1,
-      data_vencimento: dataVencimento,
-      percentual: 100,
-      valor: totalPedido,
-    }],
+    parcela: gerarParcelas(formaPagamento, totalPedido, dataPrevisao),
   }
 
   // Observações do CRM

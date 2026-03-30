@@ -9,6 +9,7 @@ import { log } from './logger.js'
 import * as db from './database.js'
 import { supabase } from './supabase.js'
 import type { Vendedor, Cliente } from './database.js'
+import { onPedidoAprovado } from './omie/pedidos.js'
 
 // ============================================
 // Types
@@ -678,11 +679,27 @@ export async function executeFunction(
         const { data: pedRow } = await supabase.from('pedidos').select('*').eq('id', args.pedidoId).single()
         if (!pedRow) return { success: false, message: `Pedido ID ${args.pedidoId} não encontrado.` }
         if (pedRow.status !== 'enviado') return { success: false, message: `Pedido ${pedRow.numero} não está pendente de aprovação (status: ${pedRow.status}).` }
+        // 1. Aprovar no CRM
         await supabase.from('pedidos').update({ status: 'confirmado', data_aprovacao: new Date().toISOString(), aprovado_por: user.id }).eq('id', args.pedidoId)
         await db.insertAtividade({ tipo: 'aprovacao', descricao: `[IA] Aprovou pedido ${pedRow.numero}`, vendedorNome: user.nome })
+        // 2. Enviar automaticamente ao Omie
+        let omieMsg = ''
+        try {
+          const omieResult = await onPedidoAprovado(args.pedidoId)
+          if (omieResult.success) {
+            await supabase.from('pedidos').update({ omie_erro: null }).eq('id', args.pedidoId)
+            omieMsg = ` Enviado ao Omie (código: ${omieResult.omie_codigo}).`
+          } else {
+            await supabase.from('pedidos').update({ omie_erro: omieResult.error || 'Erro desconhecido' }).eq('id', args.pedidoId)
+            omieMsg = ` ⚠️ Omie rejeitou: ${omieResult.error}`
+          }
+        } catch (omieErr: any) {
+          try { await supabase.from('pedidos').update({ omie_erro: omieErr.message || 'Erro ao enviar' }).eq('id', args.pedidoId) } catch { /* */ }
+          omieMsg = ` ⚠️ Erro Omie: ${omieErr.message}`
+        }
         return {
           success: true,
-          message: `✅ Pedido ${pedRow.numero} aprovado.`,
+          message: `✅ Pedido ${pedRow.numero} aprovado.${omieMsg}`,
           uiAction: { type: 'refreshPedidos' },
         }
       }

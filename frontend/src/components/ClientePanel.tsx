@@ -145,7 +145,7 @@ export default function ClientePanel({
         numero, clienteId: c.id, vendedorId: loggedUser?.id || 0,
         itens: pedidoItens, observacoes: pedidoObs.trim(), status: 'enviado',
         dataCriacao: new Date().toISOString(), dataEnvio: new Date().toISOString(),
-        totalValor: pedidoTotal, tipo: pedidoTipo, tipoFrete: pedidoFrete || undefined,
+        totalValor: pedidoTotal, tipo: pedidoTipo, formaPagamento: pedidoFormaPagamento, tipoFrete: pedidoFrete || undefined,
       })
       addNotificacao('success', 'Pedido enviado', `Pedido ${numero} — R$ ${pedidoTotal.toFixed(2)}`, c.id)
       setPedidoItens([]); setPedidoObs(''); setPedidoFrete(''); setPedidoTipo('venda'); setPedidoFormaPagamento('À vista'); setShowPedido(false)
