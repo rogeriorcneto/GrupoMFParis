@@ -486,6 +486,12 @@ function App() {
         confirmProposta={confirmProposta}
         draggedItem={draggedItem} setDraggedItem={setDraggedItem} setPendingDrop={setPendingDrop}
         loggedUser={loggedUser}
+        produtos={produtos}
+        onAddPedido={async (p) => {
+          const saved = await db.insertPedido(p)
+          setPedidos(prev => [...prev, saved])
+        }}
+        showToast={showToast}
       />
 
       {/* Busca Global */}

@@ -325,7 +325,7 @@ const OmieIntegration: React.FC<Props> = ({ botOnline }) => {
         </div>
       )}
 
-      {/* ═══ SYNC SECTION ═══ */}
+      {/* ═══ SYNC CLIENTES SECTION ═══ */}
       {config?.configured && status?.success && (
         <div className="border-t border-gray-200 pt-4 mb-4">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">Sincronização de Clientes</h4>

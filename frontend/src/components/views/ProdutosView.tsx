@@ -9,9 +9,10 @@ const ProdutosView: React.FC<{
   onUpdate: (p: Produto) => void
   onDelete: (id: number) => void
   isGerente: boolean
+  canEditPrice?: boolean
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   onRefresh?: () => void
-}> = ({ produtos, onAdd, onUpdate, onDelete, isGerente, showToast, onRefresh }) => {
+}> = ({ produtos, onAdd, onUpdate, onDelete, isGerente, canEditPrice = false, showToast, onRefresh }) => {
   const [search, setSearch] = React.useState('')
   const [syncing, setSyncing] = React.useState(false)
   const [filterCategoria, setFilterCategoria] = React.useState('')
@@ -32,6 +33,7 @@ const ProdutosView: React.FC<{
   const [fMargemLucro, setFMargemLucro] = React.useState('')
   const [fAtivo, setFAtivo] = React.useState(true)
   const [fDestaque, setFDestaque] = React.useState(false)
+  const podeEditarPreco = isGerente || canEditPrice
 
   const filtered = produtos.filter(p => {
     const matchSearch = p.nome.toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase()) || (p.omieCodigo || '').toLowerCase().includes(search.toLowerCase())
@@ -73,7 +75,11 @@ const ProdutosView: React.FC<{
       ativo: fAtivo, destaque: fDestaque,
     }
     if (editing) {
-      onUpdate({ ...base, id: editing.id, dataCadastro: editing.dataCadastro })
+      if (isGerente) {
+        onUpdate({ ...base, id: editing.id, dataCadastro: editing.dataCadastro })
+      } else {
+        onUpdate({ ...editing, preco: parseFloat(fPreco) })
+      }
     } else {
       onAdd(base)
     }
@@ -162,10 +168,12 @@ const ProdutosView: React.FC<{
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                 <button onClick={() => setPreviewId(p.id)} className="text-xs text-primary-600 hover:text-primary-800 font-medium flex-1">Ver detalhes</button>
-                {isGerente && (
+                {podeEditarPreco && (
                   <>
-                    <button onClick={() => openEdit(p)} className="text-xs text-gray-600 hover:text-gray-800 font-medium">Editar</button>
-                    <button onClick={() => onUpdate({ ...p, ativo: !p.ativo })} className="text-xs text-gray-600 hover:text-gray-800 font-medium">{p.ativo ? 'Desativar' : 'Ativar'}</button>
+                    <button onClick={() => openEdit(p)} className="text-xs text-gray-600 hover:text-gray-800 font-medium">{isGerente ? 'Editar' : 'Editar preço'}</button>
+                    {isGerente && (
+                      <button onClick={() => onUpdate({ ...p, ativo: !p.ativo })} className="text-xs text-gray-600 hover:text-gray-800 font-medium">{p.ativo ? 'Desativar' : 'Ativar'}</button>
+                    )}
                   </>
                 )}
               </div>
@@ -210,7 +218,7 @@ const ProdutosView: React.FC<{
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-apple shadow-apple-lg max-w-xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-start justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">{editing ? 'Editar Produto' : 'Novo Produto'}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{editing ? (isGerente ? 'Editar Produto' : 'Editar Preço') : 'Novo Produto'}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-6 w-6" /></button>
             </div>
             <div className="space-y-4">

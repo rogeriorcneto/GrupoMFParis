@@ -366,6 +366,7 @@ export default function AppRouter({
           } catch (err) { logger.error('Erro ao deletar produto:', err) }
         }}
         isGerente={loggedUser?.cargo === 'gerente'}
+        canEditPrice={loggedUser?.cargo === 'vendedor'}
         showToast={showToast}
         onRefresh={async () => { try { const p = await db.fetchProdutos(); setProdutos(p) } catch {} }}
       />

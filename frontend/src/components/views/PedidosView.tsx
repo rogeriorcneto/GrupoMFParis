@@ -79,6 +79,11 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     }
   }
 
+  const setItemPreco = (produtoId: number, preco: number) => {
+    const precoSeguro = Number.isFinite(preco) ? Math.max(0, preco) : 0
+    setItensPedido(prev => prev.map(i => i.produtoId === produtoId ? { ...i, preco: precoSeguro } : i))
+  }
+
   const handleGerarProposta = () => {
     if (!selectedClienteId || itensPedido.length === 0) {
       showToast?.('error', 'Selecione um cliente e adicione produtos antes de gerar a proposta.')
@@ -175,6 +180,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 
   const statusBadge = (s: Pedido['status']) => ({ rascunho: 'bg-gray-100 text-gray-700', enviado: 'bg-amber-100 text-amber-800', confirmado: 'bg-green-100 text-green-800', cancelado: 'bg-red-100 text-red-800' }[s])
   const statusLabel = (s: Pedido['status']) => ({ rascunho: '📝 Rascunho', enviado: '⏳ Ag. aprovação', confirmado: '✅ Aprovado', cancelado: '❌ Recusado' }[s])
+  const tipoBadge = (t?: Pedido['tipo']) => (t === 'bonificacao' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800')
+  const tipoLabel = (t?: Pedido['tipo']) => (t === 'bonificacao' ? '🧪 Amostra' : '💰 Venda')
   const catLabel: Record<string, string> = { sacaria: 'Sacaria 25kg', okey_lac: 'Okey Lac 25kg', varejo_lacteo: 'Varejo Lácteo', cafe: 'Café', outros: 'Outros' }
   const clienteSelecionado = clientes.find(c => c.id === Number(selectedClienteId))
 
@@ -265,7 +272,19 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     <div key={item.produtoId} className="flex items-center justify-between p-2 bg-gray-50 rounded-apple border border-gray-200">
                       <div className="flex-1 min-w-0 mr-2">
                         <p className="text-xs font-medium text-gray-900 truncate">{item.nomeProduto}</p>
-                        <p className="text-xs text-gray-500">R$ {item.preco.toFixed(2).replace('.', ',')} / KG</p>
+                        <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                          <span>R$</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={item.preco}
+                            onChange={e => setItemPreco(item.produtoId, parseFloat(e.target.value))}
+                            onFocus={e => e.target.select()}
+                            className="w-20 px-1.5 py-0.5 border border-gray-300 rounded text-xs text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+                          />
+                          <span>/ {item.unidade.toUpperCase()}</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button onClick={() => setItemQtd(produtos.find(p => p.id === item.produtoId)!, item.quantidade - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-sm">−</button>
@@ -298,7 +317,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     💰 Venda
                   </button>
                   <button onClick={() => setTipoPedido('bonificacao')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${tipoPedido === 'bonificacao' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
-                    🎁 Bonificação
+                    🧪 Amostra
                   </button>
                 </div>
               </div>
@@ -459,6 +478,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         <div className="flex items-center gap-3">
                           <span className="text-lg font-bold text-gray-900">{pedido.numero}</span>
                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${statusBadge(pedido.status)}`}>{statusLabel(pedido.status)}</span>
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${tipoBadge(pedido.tipo)}`}>{tipoLabel(pedido.tipo)}</span>
                         </div>
                         <p className="text-sm text-gray-600 mt-1"><span className="font-medium">{cliente?.razaoSocial || '—'}</span>{isGerente && vendedor && <span className="text-gray-400"> • {vendedor.nome}</span>}</p>
                         <p className="text-xs text-gray-400 mt-0.5">{new Date(pedido.dataCriacao).toLocaleString('pt-BR')}</p>

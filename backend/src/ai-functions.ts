@@ -312,6 +312,18 @@ export const FUNCTION_DECLARATIONS = [
     },
   },
 
+  {
+    name: 'enviarPedidoOmie',
+    description: 'Envia um pedido do CRM para o Omie ERP. SOMENTE gerentes podem usar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoId: { type: 'INTEGER', description: 'ID do pedido a enviar' },
+      },
+      required: ['pedidoId'],
+    },
+  },
+
   // ── INTERAÇÕES E NOTAS ──
   {
     name: 'addInteracao',
@@ -714,6 +726,33 @@ export async function executeFunction(
           success: true,
           message: `❌ Pedido ${pedRow.numero} recusado. Motivo: ${args.motivo}.`,
           uiAction: { type: 'refreshPedidos' },
+        }
+      }
+
+      case 'enviarPedidoOmie': {
+        const { data: pedRow } = await supabase.from('pedidos').select('*').eq('id', args.pedidoId).single()
+        if (!pedRow) return { success: false, message: `Pedido ID ${args.pedidoId} não encontrado.` }
+        if (pedRow.omie_codigo) return { success: false, message: `Pedido ${pedRow.numero} já foi enviado ao Omie (código: ${pedRow.omie_codigo}).` }
+        
+        // Importar criarPedidoOmie
+        const { criarPedidoOmie } = await import('./omie/pedidos.js')
+        
+        try {
+          const omieResult = await criarPedidoOmie(args.pedidoId)
+          await db.insertAtividade({ tipo: 'omie', descricao: `[IA] Enviou pedido ${pedRow.numero} ao Omie (código: ${omieResult.codigo_pedido})`, vendedorNome: user.nome })
+          return {
+            success: true,
+            message: `✅ Pedido ${pedRow.numero} enviado ao Omie com sucesso! Código: ${omieResult.codigo_pedido}`,
+            data: { omieCodigo: omieResult.codigo_pedido, numeroPedido: omieResult.numero_pedido },
+            uiAction: { type: 'refreshPedidos' },
+          }
+        } catch (omieErr: any) {
+          await supabase.from('pedidos').update({ omie_erro: omieErr.message || 'Erro ao enviar' }).eq('id', args.pedidoId)
+          await db.insertAtividade({ tipo: 'omie', descricao: `[IA] Erro ao enviar pedido ${pedRow.numero} ao Omie: ${omieErr.message}`, vendedorNome: user.nome })
+          return {
+            success: false,
+            message: `❌ Erro ao enviar pedido ${pedRow.numero} ao Omie: ${omieErr.message}`,
+          }
         }
       }
 

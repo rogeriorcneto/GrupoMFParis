@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Cliente, Vendedor } from '../types'
+import type { Cliente, Vendedor, Produto, Pedido, ItemPedido } from '../types'
 
 interface DragItem {
   cliente: Cliente
@@ -32,6 +32,9 @@ interface FunilModalsProps {
   draggedItem: DragItem | null
   setDraggedItem: (v: DragItem | null) => void
   setPendingDrop: (v: any) => void
+  produtos?: Produto[]
+  onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
 }
 
 const perdaCategorias: { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[] = [
@@ -48,10 +51,76 @@ export default function FunilModals({
   categoriaPerdaSel, setCategoriaPerdaSel, confirmPerda, loggedUser,
   showModalAmostra, setShowModalAmostra, modalAmostraData, setModalAmostraData, confirmAmostra,
   showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
-  draggedItem, setDraggedItem, setPendingDrop
+  draggedItem, setDraggedItem, setPendingDrop,
+  produtos = [], onAddPedido, showToast
 }: FunilModalsProps) {
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  const [pedidoTipo, setPedidoTipo] = React.useState<'venda' | 'bonificacao'>('bonificacao')
+  const [pedidoFrete, setPedidoFrete] = React.useState<'CIF' | 'FOB' | ''>('')
+  const [pedidoItens, setPedidoItens] = React.useState<ItemPedido[]>([])
+  const [pedidoObs, setPedidoObs] = React.useState('')
+  const [pedidoSaving, setPedidoSaving] = React.useState(false)
+  const [pedidoSearch, setPedidoSearch] = React.useState('')
+  const [pedidoFormaPagamento, setPedidoFormaPagamento] = React.useState('À vista')
+
+  React.useEffect(() => {
+    if (!showModalAmostra) return
+    setPedidoTipo('bonificacao')
+    setPedidoFrete('')
+    setPedidoItens([])
+    setPedidoObs('')
+    setPedidoSearch('')
+    setPedidoFormaPagamento('À vista')
+  }, [showModalAmostra])
+
+  const pedidoTotal = pedidoItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+  const filteredProdutos = produtos.filter(p => {
+    if (!pedidoSearch.trim()) return p.ativo
+    const q = pedidoSearch.toLowerCase()
+    return p.ativo && (p.nome.toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q))
+  })
+
+  const setPedidoItemQtd = (produto: Produto, qtd: number) => {
+    if (qtd <= 0) {
+      setPedidoItens(prev => prev.filter(i => i.produtoId !== produto.id))
+      return
+    }
+    setPedidoItens(prev => {
+      const exists = prev.find(i => i.produtoId === produto.id)
+      if (exists) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
+      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: produto.preco, unidade: produto.unidade, quantidade: qtd }]
+    })
+  }
+
+  const handleEnviarAmostraPedido = async () => {
+    if (!draggedItem || !onAddPedido || pedidoItens.length === 0 || !pedidoFrete || pedidoSaving) return
+    setPedidoSaving(true)
+    try {
+      const numero = `PED-${Date.now().toString().slice(-6)}`
+      await onAddPedido({
+        numero,
+        clienteId: draggedItem.cliente.id,
+        vendedorId: draggedItem.cliente.vendedorId || loggedUser?.id || 0,
+        itens: pedidoItens,
+        observacoes: pedidoObs.trim(),
+        status: 'enviado',
+        dataCriacao: new Date().toISOString(),
+        dataEnvio: new Date().toISOString(),
+        totalValor: pedidoTotal,
+        tipo: pedidoTipo,
+        formaPagamento: pedidoFormaPagamento,
+        tipoFrete: pedidoFrete,
+      })
+      confirmAmostra()
+      showToast?.('success', `Pedido ${numero} enviado com sucesso (${pedidoTipo === 'bonificacao' ? 'Amostra' : 'Venda'})`)
+    } catch {
+      showToast?.('error', 'Falha ao enviar pedido desta amostra.')
+    } finally {
+      setPedidoSaving(false)
+    }
+  }
+
   const cancelPerda = () => { setShowMotivoPerda(false); setDraggedItem(null); setPendingDrop(null); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro') }
   const cancelAmostra = () => { setShowModalAmostra(false); setDraggedItem(null); setPendingDrop(null) }
   const cancelProposta = () => { setShowModalProposta(false); setDraggedItem(null); setPendingDrop(null); setModalPropostaValor('') }
@@ -92,9 +161,9 @@ export default function FunilModals({
       {/* Modal Envio de Amostra */}
       {showModalAmostra && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelAmostra}>
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">
-              {draggedItem?.fromStage === 'amostra_perdida' ? '� 2ª Tentativa de Amostra' : '�📦 Enviar Amostra'}
+              {draggedItem?.fromStage === 'amostra_perdida' ? '🔄 2ª Tentativa de Amostra' : '📦 Enviar Amostra'}
             </h2>
             <p className="text-sm text-gray-600 mb-2">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
             {draggedItem?.fromStage === 'amostra_perdida' && (
@@ -107,11 +176,78 @@ export default function FunilModals({
               </div>
             )}
             <label className="block text-sm font-medium text-gray-700 mb-1">Data de envio da amostra</label>
-            <input type="date" value={modalAmostraData} onChange={(e) => setModalAmostraData(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 mb-2 text-sm" />
-            <p className="text-xs text-gray-500 mb-4">O prazo de 30 dias para resposta começará a contar a partir desta data.</p>
+            <input type="date" value={modalAmostraData} onChange={(e) => setModalAmostraData(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 mb-3 text-sm" />
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-gray-900 mb-2">📋 Tipo do Pedido</p>
+              <div className="flex gap-2">
+                <button onClick={() => setPedidoTipo('venda')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoTipo === 'venda' ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                  💰 Venda
+                </button>
+                <button onClick={() => setPedidoTipo('bonificacao')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoTipo === 'bonificacao' ? 'border-amber-500 bg-amber-50 text-amber-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                  🧪 Amostra
+                </button>
+              </div>
+            </div>
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-gray-900 mb-2">🚚 Tipo de Frete</p>
+              <div className="flex gap-2">
+                <button onClick={() => setPedidoFrete('CIF')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                  📦 CIF (Entrega)
+                </button>
+                <button onClick={() => setPedidoFrete('FOB')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                  🏭 FOB (Retirada)
+                </button>
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">💳 Forma de Pagamento</label>
+              <select value={pedidoFormaPagamento} onChange={(e) => setPedidoFormaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="À vista">À vista</option>
+                <option value="7 dias">7 dias</option>
+                <option value="14 dias">14 dias</option>
+                <option value="21 dias">21 dias</option>
+                <option value="28 dias">28 dias</option>
+                <option value="30 dias">30 dias</option>
+                <option value="45 dias">45 dias</option>
+                <option value="60 dias">60 dias</option>
+              </select>
+            </div>
+            <input type="text" placeholder="Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 mb-3" />
+            <div className="max-h-44 overflow-y-auto space-y-1 mb-3">
+              {filteredProdutos.slice(0, 20).map(p => {
+                const qtd = pedidoItens.find(i => i.produtoId === p.id)?.quantidade || 0
+                return (
+                  <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
+                      <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / {p.unidade.toUpperCase()}</p>
+                    </div>
+                    {qtd > 0 ? (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setPedidoItemQtd(p, qtd - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-xs font-bold">−</button>
+                        <span className="w-8 text-center text-xs font-bold">{qtd}</span>
+                        <button onClick={() => setPedidoItemQtd(p, qtd + 1)} className="w-6 h-6 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white text-xs font-bold">+</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setPedidoItemQtd(p, 1)} className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-medium rounded-apple">+ Add</button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <textarea value={pedidoObs} onChange={e => setPedidoObs(e.target.value)} placeholder="Observações..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none mb-3" />
+            {pedidoItens.length > 0 && (
+              <div className="mb-3 flex items-center justify-between text-sm font-bold text-gray-900 pt-2 border-t border-gray-200">
+                <span>{pedidoItens.reduce((s, i) => s + i.quantidade, 0)} item(ns)</span>
+                <span>R$ {pedidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mb-4">Após enviar, o cliente será movido para a etapa Amostra automaticamente.</p>
             <div className="flex justify-end gap-3">
               <button onClick={cancelAmostra} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
-              <button onClick={confirmAmostra} className="px-4 py-2 bg-yellow-600 text-white rounded-apple hover:bg-yellow-700 text-sm font-medium">Confirmar Envio</button>
+              <button onClick={handleEnviarAmostraPedido} disabled={pedidoItens.length === 0 || !pedidoFrete || pedidoSaving} className="px-4 py-2 bg-yellow-600 text-white rounded-apple hover:bg-yellow-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                {pedidoSaving ? 'Enviando...' : 'Enviar Pedido e Amostra'}
+              </button>
             </div>
           </div>
         </div>

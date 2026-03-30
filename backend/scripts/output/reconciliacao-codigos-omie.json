@@ -1,0 +1,1009 @@
+{
+  "summary": {
+    "ok": 8,
+    "resolved": 0,
+    "missing": 103,
+    "total": 111
+  },
+  "results": [
+    {
+      "id": 1,
+      "nome": "Leite em Pó Integral 25kg",
+      "omie_codigo_atual": "9620021373",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9620021373",
+      "codigo_ui": "SAC-001",
+      "descricao_omie": "Leite em Pó Integral 25kg"
+    },
+    {
+      "id": 2,
+      "nome": "Leite em Pó Desnatado 25kg",
+      "omie_codigo_atual": "9620029272",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9620029272",
+      "codigo_ui": "SAC-002",
+      "descricao_omie": "Leite em Pó Desnatado 25kg"
+    },
+    {
+      "id": 7,
+      "nome": "Okey Lac Pro 25kg",
+      "omie_codigo_atual": "9624149052",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9624149052",
+      "codigo_ui": "CRM-TESTE-001",
+      "descricao_omie": "PRODUTO TESTE CRM"
+    },
+    {
+      "id": 8,
+      "nome": "Okey Lac Gourmet 25kg",
+      "omie_codigo_atual": "1210001",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 9,
+      "nome": "Okey Lac Açaí 25kg",
+      "omie_codigo_atual": "9618417709",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9618417709",
+      "codigo_ui": "OKL-004",
+      "descricao_omie": "Okey Lac Açaí 25kg"
+    },
+    {
+      "id": 10,
+      "nome": "Okey Lac Panificação e Culinária 1kg",
+      "omie_codigo_atual": "9624071866",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9624071866",
+      "codigo_ui": "VAR-001",
+      "descricao_omie": "Okey Lac Panificação e Culinária 1kg"
+    },
+    {
+      "id": 11,
+      "nome": "Leite em Pó e Composto Lácteo 1kg",
+      "omie_codigo_atual": "9624072986",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9624072986",
+      "codigo_ui": "VAR-002",
+      "descricao_omie": "Leite em Pó e Composto Lácteo 1kg"
+    },
+    {
+      "id": 12,
+      "nome": "Okey Lac 1kg",
+      "omie_codigo_atual": "9624079328",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9624079328",
+      "codigo_ui": "VAR-003",
+      "descricao_omie": "Okey Lac 1kg"
+    },
+    {
+      "id": 13,
+      "nome": "Chocominas 400g",
+      "omie_codigo_atual": "9624083116",
+      "status": "ok_codigo_produto",
+      "codigo_produto_api": "9624083116",
+      "codigo_ui": "VAR-004",
+      "descricao_omie": "Chocominas 400g"
+    },
+    {
+      "id": 134,
+      "nome": "ACHOCOLATADO CHOCOMINAS CESTA 1KG",
+      "omie_codigo_atual": "1230005",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 135,
+      "nome": "ACHOCOLATADO CHOCOMINAS CESTA 200G",
+      "omie_codigo_atual": "1230011",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 136,
+      "nome": "ACHOCOLATADO CHOCOMINAS CESTA 400G",
+      "omie_codigo_atual": "1230010",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 137,
+      "nome": "ACHOCOLATADO CHOCOMINAS PREMIUM 1KG",
+      "omie_codigo_atual": "1230028",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 138,
+      "nome": "ACHOCOLATADO CHOCOMINAS PREMIUM 200G",
+      "omie_codigo_atual": "1230007",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 139,
+      "nome": "ACHOCOLATADO CHOCOMINAS PREMIUM 400G",
+      "omie_codigo_atual": "1230003",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 140,
+      "nome": "ACHOCOLATADO CHOCOMINAS SUPER 1KG",
+      "omie_codigo_atual": "1230009",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 141,
+      "nome": "ACHOCOLATADO CHOCOMINAS SUPER 200G",
+      "omie_codigo_atual": "1230004",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 142,
+      "nome": "ACHOCOLATADO CHOCOMINAS SUPER 400G",
+      "omie_codigo_atual": "1230049",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 143,
+      "nome": "ACHOCOLATADO MILKSHOW CESTA 400G",
+      "omie_codigo_atual": "1230032",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 144,
+      "nome": "ACHOCOLATADO MILKSHOW PREMIUM 1KG",
+      "omie_codigo_atual": "1230067",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 145,
+      "nome": "ACHOCOLATADO MILKSHOW PREMIUM 200G",
+      "omie_codigo_atual": "123004",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 146,
+      "nome": "ACHOCOLATADO MILKSHOW PREMIUM 400G",
+      "omie_codigo_atual": "123003",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 147,
+      "nome": "ACHOCOLATADO MILKSHOW SUPER 400g",
+      "omie_codigo_atual": "12300052",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 148,
+      "nome": "CACAU MILKSHOW 50% 200G",
+      "omie_codigo_atual": "123080",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 149,
+      "nome": "CACAU MILKSHOW 50% 500G",
+      "omie_codigo_atual": "123081",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 150,
+      "nome": "CACAU MILKSHOW 70% 400g",
+      "omie_codigo_atual": "123079",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 151,
+      "nome": "CACAU MILKSHOW PREMIUM 400G",
+      "omie_codigo_atual": "123078",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 152,
+      "nome": "CACAU NATURAL EM PÓ 25 KG - MARCA HORIZONTE",
+      "omie_codigo_atual": "1230060",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 153,
+      "nome": "CACAU NATURAL EM PÓ 25 KG ALCALINO - MARCA HORIZONTE",
+      "omie_codigo_atual": "1230061",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 154,
+      "nome": "CAFE ALMOFADA GM EXTRAFORTE 250G",
+      "omie_codigo_atual": "1110031",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 155,
+      "nome": "CAFE ALMOFADA GM EXTRAFORTE 500G",
+      "omie_codigo_atual": "1110032",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 156,
+      "nome": "CAFE ALMOFADA GM TRADICIONAL 250G",
+      "omie_codigo_atual": "1110055",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 157,
+      "nome": "CAFE ALMOFADA GM TRADICIONAL 500G",
+      "omie_codigo_atual": "1110030",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 158,
+      "nome": "CAFE ALMOFADA MOINHOS 250G",
+      "omie_codigo_atual": "1110026",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 159,
+      "nome": "CAFE ALMOFADA MOINHOS 500G",
+      "omie_codigo_atual": "1110028",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 160,
+      "nome": "CAFE ALMOFADA MOLITO 250G L1325",
+      "omie_codigo_atual": "123073",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 161,
+      "nome": "CAFE ALMOFADA MOLITO 250G L2002-10",
+      "omie_codigo_atual": "1110078",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 162,
+      "nome": "CAFE ALMOFADA MOLITO 500G L0924-24",
+      "omie_codigo_atual": "1110034",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 163,
+      "nome": "CAFE ALMOFADA MOLITO 500G L1325",
+      "omie_codigo_atual": "123071",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 164,
+      "nome": "CAFE ALMOFADA SEU CAFE EXTRAFORTE 250G",
+      "omie_codigo_atual": "1110061",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 165,
+      "nome": "CAFE ALMOFADA SEU CAFE TRADICIONAL 250G",
+      "omie_codigo_atual": "1110049",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 166,
+      "nome": "CAFE ALMOFADA SEU CAFE TRADICIONAL 500G",
+      "omie_codigo_atual": "1110060",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 167,
+      "nome": "CAFE VACUO BELVEDER 250G L0426",
+      "omie_codigo_atual": "1120426",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 168,
+      "nome": "CAFE VACUO BELVEDER 250G L2002",
+      "omie_codigo_atual": "1120016",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 169,
+      "nome": "CAFE VACUO BELVEDER 250G L2035",
+      "omie_codigo_atual": "1120074",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 170,
+      "nome": "CAFE VACUO BELVEDER 500G L 1225",
+      "omie_codigo_atual": "123058",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 171,
+      "nome": "CAFE VACUO BELVEDER 500G L 2225",
+      "omie_codigo_atual": "123059",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 172,
+      "nome": "CAFE VACUO BELVEDER 500G L 3225",
+      "omie_codigo_atual": "123060",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 173,
+      "nome": "CAFE VACUO BELVEDER 500G L1925",
+      "omie_codigo_atual": "123074",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 174,
+      "nome": "CAFE VACUO BELVEDER 500G L2925",
+      "omie_codigo_atual": "123075",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 175,
+      "nome": "CAFE VACUO BELVEDER 500G L3925",
+      "omie_codigo_atual": "123076",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 176,
+      "nome": "CAFE VACUO MOLITO 250G L 1325",
+      "omie_codigo_atual": "123064",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 177,
+      "nome": "CAFE VACUO MOLITO 250G L 2325",
+      "omie_codigo_atual": "123069",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 178,
+      "nome": "CAFE VACUO MOLITO 250G L 3325",
+      "omie_codigo_atual": "123072",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 179,
+      "nome": "CAFE VACUO MOLITO 250G L0924-24",
+      "omie_codigo_atual": "123053",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 180,
+      "nome": "CAFE VACUO MOLITO 250G L2002-10",
+      "omie_codigo_atual": "1120073",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 181,
+      "nome": "CAFE VACUO MOLITO 500G L 1325",
+      "omie_codigo_atual": "123068",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 182,
+      "nome": "CAFE VACUO MOLITO 500G L 2325",
+      "omie_codigo_atual": "123070",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 183,
+      "nome": "CAFE VACUO MOLITO 500G L 3325",
+      "omie_codigo_atual": "123063",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 184,
+      "nome": "CAFE VACUO VILLA RICA EXTRAFORTE 250G",
+      "omie_codigo_atual": "1120001",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 185,
+      "nome": "CAFE VACUO VILLA RICA EXTRAFORTE 500G",
+      "omie_codigo_atual": "1120033",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 186,
+      "nome": "CAFE VACUO VILLA RICA GOURMET 500G",
+      "omie_codigo_atual": "123051",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 187,
+      "nome": "CAFE VACUO VILLA RICA SUPERIOR 250G",
+      "omie_codigo_atual": "1120072",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 188,
+      "nome": "CAFE VACUO VILLA RICA SUPERIOR 500G",
+      "omie_codigo_atual": "1120056",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 189,
+      "nome": "CAFE VACUO VILLA RICA TRADICIONAL 500G",
+      "omie_codigo_atual": "1110033",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 190,
+      "nome": "COMPOSTO LACTEO COM LEITE HORIZONTE CREMOSO",
+      "omie_codigo_atual": "1230034",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 191,
+      "nome": "COMPOSTO LACTEO COM MALTODEXTRINA SABOR CHOCOLATE 25KG",
+      "omie_codigo_atual": "1210055",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 192,
+      "nome": "COMPOSTO LACTEO COM SORO DE LEITE OKEY LAC 25KG",
+      "omie_codigo_atual": "12100030",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 193,
+      "nome": "COMPOSTO LACTEO COM SORO DE LEITE OKEY LAC 25KG - SABOR CHOCOLATE",
+      "omie_codigo_atual": "1210003",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 194,
+      "nome": "COMPOSTO LACTEO HORIZONTE 1KG",
+      "omie_codigo_atual": "1230014",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 195,
+      "nome": "COMPOSTO LACTEO HORIZONTE 1kg PRO",
+      "omie_codigo_atual": "1230089",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 196,
+      "nome": "COMPOSTO LACTEO HORIZONTE 200G PRO",
+      "omie_codigo_atual": "121003",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 197,
+      "nome": "COMPOSTO LACTEO HORIZONTE 400g PRO",
+      "omie_codigo_atual": "1230015",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 198,
+      "nome": "COMPOSTO LACTEO HORIZONTE ALIMLAC",
+      "omie_codigo_atual": "123083",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 199,
+      "nome": "COMPOSTO LACTEO HORIZONTE ALIMLAC BAUNILHA 1KG",
+      "omie_codigo_atual": "1230099",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 200,
+      "nome": "COMPOSTO LACTEO HORIZONTE ALIMLAC CHOCOLATE 1KG",
+      "omie_codigo_atual": "1230100",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 201,
+      "nome": "COMPOSTO LACTEO HORIZONTE ALIMLAC COCO 1KG",
+      "omie_codigo_atual": "1230102",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 202,
+      "nome": "COMPOSTO LACTEO HORIZONTE ALIMLAC MORANGO 1KG",
+      "omie_codigo_atual": "123077",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 203,
+      "nome": "COMPOSTO LACTEO HORIZONTE COM MALTODEXTRINA 25KG",
+      "omie_codigo_atual": "1230071",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 204,
+      "nome": "COMPOSTO LACTEO HORIZONTE OKEY LAC 100 - 25KG",
+      "omie_codigo_atual": "1230029",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 205,
+      "nome": "COMPOSTO LACTEO HORIZONTE OKEY LAC 200 - 25KG",
+      "omie_codigo_atual": "1230030",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 206,
+      "nome": "COMPOSTO LACTEO HORIZONTE OKEY LAC 2010 - 25KG",
+      "omie_codigo_atual": "1230039",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 207,
+      "nome": "COMPOSTO LACTEO HORIZONTE OKEY LAC 300 - 25KG",
+      "omie_codigo_atual": "1230031",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 208,
+      "nome": "GLUCOSE EM PÓ - 25KG",
+      "omie_codigo_atual": "1230048",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 209,
+      "nome": "GLUCOSE EM PÓ NINOLAC - 25KG",
+      "omie_codigo_atual": "123049",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 210,
+      "nome": "LEITE EM PÓ DESNATADO HORIZONTE 200g",
+      "omie_codigo_atual": "1230103",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 211,
+      "nome": "LEITE EM PÓ DESNATADO HORIZONTE 400g",
+      "omie_codigo_atual": "1230101",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 212,
+      "nome": "LEITE EM PÓ DESNATADO HORIZONTE SACARIA 25Kg",
+      "omie_codigo_atual": "1230064",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 213,
+      "nome": "LEITE EM PÓ DESNATADO IMPORTADO 25Kg",
+      "omie_codigo_atual": "1230091",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 214,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 1Kg",
+      "omie_codigo_atual": "1230017",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 215,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 1kg VITAMINADO",
+      "omie_codigo_atual": "1230051",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 216,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 200g",
+      "omie_codigo_atual": "1230019",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 217,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 200g VITAMINADO",
+      "omie_codigo_atual": "1230062",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 218,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 400g",
+      "omie_codigo_atual": "1230027",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 219,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 400g VITAMINADO",
+      "omie_codigo_atual": "1230052",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 220,
+      "nome": "LEITE EM PÓ INTEGRAL HORIZONTE 800g",
+      "omie_codigo_atual": "1230018",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 221,
+      "nome": "OKEY LAC GOURMET 25KG",
+      "omie_codigo_atual": "1210001",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 222,
+      "nome": "OKEY LAC HAGE 200 COMPOSTO LACTEO COM SORO 25KG",
+      "omie_codigo_atual": "1210004",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 223,
+      "nome": "OKEY LAC HAGE COMPOSTO LACTEO COM SORO DE LEITE 25KG",
+      "omie_codigo_atual": "1210003",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 224,
+      "nome": "OKEY LAC PANIFICACAO 1KG",
+      "omie_codigo_atual": "1210020",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 225,
+      "nome": "OKEY LAC PANIFICACAO 20 25KG",
+      "omie_codigo_atual": "12100019",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 226,
+      "nome": "OKEY LAC PANIFICACAO 25KG",
+      "omie_codigo_atual": "12100019",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 227,
+      "nome": "OKEY LAC PRO 200g",
+      "omie_codigo_atual": "1110095",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 228,
+      "nome": "OKEY LAC PRO 25KG",
+      "omie_codigo_atual": "1230013",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 229,
+      "nome": "PO PARA BEBIDA LACTEA HORIZONTE 1 KG",
+      "omie_codigo_atual": "1210015",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 230,
+      "nome": "PO PARA BEBIDA LACTEA HORIZONTE 25kg",
+      "omie_codigo_atual": "1210010",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 231,
+      "nome": "PO PARA BEBIDA LACTEA HORIZONTE CESTA 200g",
+      "omie_codigo_atual": "1210013",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 232,
+      "nome": "PO PARA BEBIDA LACTEA HORIZONTE CESTA 400G",
+      "omie_codigo_atual": "1210008",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 233,
+      "nome": "PO PARA BEBIDA LACTEA HORIZONTE CESTA 800G",
+      "omie_codigo_atual": "1230059",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 234,
+      "nome": "CONCENTRADO PROTEICO DE SORO DE LEITE EM PÓ 25KG",
+      "omie_codigo_atual": "1230045",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    },
+    {
+      "id": 235,
+      "nome": "DINUTRI COMPOSTO LACTEO SABOR BAUNILHA - 25KG",
+      "omie_codigo_atual": "1230078",
+      "status": "nao_encontrado",
+      "codigo_produto_api": null,
+      "codigo_ui": null,
+      "descricao_omie": null
+    }
+  ]
+}
