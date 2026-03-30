@@ -152,22 +152,68 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
 
   // Se já tem código Omie vinculado, validar e retornar
   if (produto.omie_codigo) {
-    const codigoOmie = parseInt(produto.omie_codigo, 10)
-    // Validar se o produto realmente existe no Omie
+    const codigoRef = String(produto.omie_codigo).trim()
+    const codigoOmie = parseInt(codigoRef, 10)
+
+    // 1) Tentar como código interno (codigo_produto)
+    if (!Number.isNaN(codigoOmie)) {
+      try {
+        const consulta = await omieCall<any>(
+          '/geral/produtos/',
+          'ConsultarProduto',
+          [{ codigo_produto: codigoOmie }],
+          { skipCache: true, credentials: creds }
+        )
+        if (consulta?.codigo_produto) {
+          return { codigoOmie: Number(consulta.codigo_produto), ...meta }
+        }
+      } catch {
+        // fallback abaixo
+      }
+    }
+
+    // 2) Fallback: omie_codigo pode ser o "Código" comercial exibido na UI do Omie
+    //    Nesse caso, buscamos por descrição e/ou código comercial e resolvemos para codigo_produto interno.
     try {
-      const consulta = await omieCall<any>(
+      const buscaFallback = await omieCall<any>(
         '/geral/produtos/',
-        'ConsultarProduto',
-        [{ codigo_produto: codigoOmie }],
+        'ListarProdutos',
+        [{ pagina: 1, registros_por_pagina: 50, filtrar_apenas_descricao: produto.nome || '' }],
         { skipCache: true, credentials: creds }
       )
-      if (consulta?.codigo_produto) {
-        return { codigoOmie, ...meta }
-      } else {
-        throw new Error(`Produto com código Omie ${produto.omie_codigo} não encontrado no Omie`)
+
+      const encontrados = buscaFallback?.produto_servico_cadastro || []
+      const nomeProduto = String(produto.nome || '').toLowerCase().trim()
+
+      const match = encontrados.find((p: any) => {
+        const codigoInterno = String(p?.codigo_produto || '').trim()
+        const codigoComercial = String(p?.codigo || '').trim()
+        const codigoIntegracao = String(p?.codigo_produto_integracao || '').trim()
+        const descricao = String(p?.descricao || '').toLowerCase().trim()
+
+        return (
+          codigoInterno === codigoRef ||
+          codigoComercial === codigoRef ||
+          codigoIntegracao === codigoRef ||
+          (descricao.length > 0 && descricao === nomeProduto)
+        )
+      })
+
+      if (match?.codigo_produto) {
+        const codigoInterno = Number(match.codigo_produto)
+        if (String(produto.omie_codigo) !== String(codigoInterno)) {
+          await supabase.from('produtos').update({ omie_codigo: String(codigoInterno) }).eq('id', produtoId)
+          log.info(
+            { produtoId, codigoOriginal: produto.omie_codigo, codigoInterno, nome: produto.nome },
+            '🔄 Produto Omie resolvido de código comercial para código interno'
+          )
+        }
+        return { codigoOmie: codigoInterno, ...meta }
       }
+
+      throw new Error(`Produto com referência ${codigoRef} não encontrado no Omie`) 
     } catch (err: any) {
-      throw new Error(`Erro ao validar produto ${produto.nome} (código Omie: ${produto.omie_codigo}): ${err.message}`)
+      throw new Error(`Erro ao validar produto ${produto.nome} (referência Omie: ${produto.omie_codigo}): ${err.message}`)
     }
   }
 
