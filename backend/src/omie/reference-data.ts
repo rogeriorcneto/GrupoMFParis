@@ -39,7 +39,7 @@ export async function fetchCenariosFiscais(creds?: OmieCredentials): Promise<Omi
   const response = await omieCall<any>(
     '/geral/cenarios/',
     'ListarCenarios',
-    [{ pagina: 1, registros_por_pagina: 200 }],
+    [{ nPagina: 1, nRegPorPagina: 200 }],
     { credentials }
   )
 

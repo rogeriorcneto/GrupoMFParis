@@ -83,6 +83,9 @@ async function main() {
       total_valor: produto.preco * 2,
       data_criacao: agora,
       data_envio: agora,
+      tipo: 'venda',
+      forma_pagamento: '30 dias',
+      tipo_frete: 'CIF',
     })
     .select('id')
     .single()
@@ -141,7 +144,7 @@ async function main() {
   console.log('\n7. Verificando status final do pedido no banco...')
   const { data: pedidoFinal } = await supabase
     .from('pedidos')
-    .select('id, numero, status, omie_codigo, omie_numero, omie_status')
+    .select('id, numero, status, omie_codigo, omie_numero, omie_status, omie_erro, forma_pagamento, tipo_frete, tipo')
     .eq('id', pedidoId)
     .single()
   if (pedidoFinal) {
