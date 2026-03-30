@@ -8,6 +8,7 @@ import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
 import { log } from '../logger.js'
 import { rateLimit } from '../middleware/rate-limit.js'
+import { createClient } from '@supabase/supabase-js'
 
 export const omieRouter = Router()
 
@@ -278,5 +279,104 @@ omieRouter.post('/sync/logistics', rateLimit(3, 60_000), async (_req, res) => {
   } catch (err: any) {
     log.error({ err }, 'Erro no sync logístico Omie')
     res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Teste Fluxo Omie ───
+omieRouter.post('/test-flow', async (req, res) => {
+  try {
+    console.log('=== INICIANDO TESTE FLUXO OMIE ===')
+    
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL!,
+      process.env.VITE_SUPABASE_ANON_KEY!
+    )
+    
+    // 1. Buscar credenciais Omie
+    const creds = await getOmieCredentials()
+    if (!creds) {
+      return res.json({ 
+        success: false, 
+        error: 'Credenciais Omie não configuradas' 
+      })
+    }
+    
+    console.log('✅ Credenciais Omie encontradas')
+    
+    // 2. Testar conexão com Omie
+    try {
+      const testResult = await testOmieConnection(creds)
+      console.log('✅ Conexão Omie OK:', testResult)
+    } catch (err: any) {
+      console.log('❌ Erro conexão Omie:', err.message)
+      return res.json({ 
+        success: false, 
+        error: 'Erro na conexão Omie: ' + err.message 
+      })
+    }
+    
+    // 3. Buscar produto com código Omie
+    const { data: produtos } = await supabase
+      .from('produtos')
+      .select('id, nome, omie_codigo')
+      .not('omie_codigo', 'is', null)
+      .limit(1)
+    
+    if (!produtos || produtos.length === 0) {
+      return res.json({ 
+        success: false, 
+        error: 'Nenhum produto com código Omie encontrado' 
+      })
+    }
+    
+    const produto = produtos[0]
+    console.log(`✅ Produto encontrado: ${produto.nome} (código: ${produto.omie_codigo})`)
+    
+    // 4. Verificar se produto existe no Omie
+    try {
+      const consulta = await omieCall(
+        '/geral/produtos/',
+        'ConsultarProduto',
+        [{ codigo_produto: parseInt(produto.omie_codigo!) }],
+        { credentials: creds, skipCache: true }
+      )
+      
+      if (consulta?.codigo_produto) {
+        console.log('✅ Produto encontrado no Omie:', consulta.codigo_produto)
+        console.log('   Nome:', consulta.descricao)
+        
+        res.json({ 
+          success: true, 
+          message: 'Teste concluído com sucesso!',
+          data: {
+            produto: produto,
+            omie: {
+              codigo: consulta.codigo_produto,
+              nome: consulta.descricao,
+              preco: consulta.preco_venda
+            }
+          }
+        })
+      } else {
+        console.log('❌ Produto não encontrado no Omie')
+        res.json({ 
+          success: false, 
+          error: `Produto ${produto.omie_codigo} não encontrado no Omie` 
+        })
+      }
+    } catch (err: any) {
+      console.log('❌ Erro ao consultar produto Omie:', err.message)
+      res.json({ 
+        success: false, 
+        error: 'Erro ao consultar produto Omie: ' + err.message 
+      })
+    }
+    
+  } catch (err: any) {
+    console.error('❌ Erro geral no teste:', err)
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    })
   }
 })

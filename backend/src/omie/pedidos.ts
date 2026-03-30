@@ -147,13 +147,29 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
     pesoKg: produto.peso_kg || 0,
   }
 
-  // Se já tem código Omie vinculado, retornar
-  if (produto.omie_codigo) {
-    return { codigoOmie: parseInt(produto.omie_codigo, 10), ...meta }
-  }
-
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  // Se já tem código Omie vinculado, validar e retornar
+  if (produto.omie_codigo) {
+    const codigoOmie = parseInt(produto.omie_codigo, 10)
+    // Validar se o produto realmente existe no Omie
+    try {
+      const consulta = await omieCall<any>(
+        '/geral/produtos/',
+        'ConsultarProduto',
+        [{ codigo_produto: codigoOmie }],
+        { skipCache: true, credentials: creds }
+      )
+      if (consulta?.codigo_produto) {
+        return { codigoOmie, ...meta }
+      } else {
+        throw new Error(`Produto com código Omie ${produto.omie_codigo} não encontrado no Omie`)
+      }
+    } catch (err: any) {
+      throw new Error(`Erro ao validar produto ${produto.nome} (código Omie: ${produto.omie_codigo}): ${err.message}`)
+    }
+  }
 
   const codigoIntegracao = `CRM-PROD-${produtoId}`
   const skuBusca = produto.sku || codigoIntegracao
@@ -183,87 +199,8 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
     log.info({ produtoId, nome: produto.nome }, '⚠️ Busca prévia de produto no Omie falhou, tentando criar...')
   }
 
-  // 2. Produto não existe no Omie — criar
-  log.info({ produtoId, nome: produto.nome }, '🔄 Criando produto no Omie...')
-
-  const omieData = {
-    codigo_produto_integracao: codigoIntegracao,
-    descricao: produto.nome || '',
-    unidade: produto.unidade || 'UN',
-    valor_unitario: produto.preco || 0,
-    ncm: '21069090',
-    peso_bruto: produto.peso_kg || 0,
-    peso_liq: produto.peso_kg || 0,
-    codigo: skuBusca,
-  }
-
-  try {
-    const response = await omieCall<any>(
-      '/geral/produtos/',
-      'IncluirProduto',
-      [omieData],
-      { skipCache: true, credentials: creds }
-    )
-
-    const codigoOmie = response.codigo_produto
-    if (!codigoOmie) {
-      throw new Error(`Omie não retornou codigo_produto para produto ${produto.nome}`)
-    }
-
-    // Salvar código Omie no CRM
-    await supabase
-      .from('produtos')
-      .update({ omie_codigo: String(codigoOmie) })
-      .eq('id', produtoId)
-
-    log.info({ produtoId, codigoOmie }, '✅ Produto criado no Omie')
-    return { codigoOmie, ...meta }
-  } catch (createErr: any) {
-    // Se o erro indica que o produto já existe, extrair o código e validar
-    const errMsg = createErr?.message || String(createErr)
-    const codigoMatch = errMsg.match(/c[oó]digo\s+(\d+)/i)
-    if (codigoMatch) {
-      const codigoExistente = parseInt(codigoMatch[1], 10)
-      // Validar se o produto realmente existe no Omie consultando-o
-      try {
-        const consulta = await omieCall<any>(
-          '/geral/produtos/',
-          'ConsultarProduto',
-          [{ codigo_produto: codigoExistente }],
-          { skipCache: true, credentials: creds }
-        )
-        if (consulta?.codigo_produto) {
-          log.info({ produtoId, codigoExistente, nome: produto.nome }, '🔗 Produto validado no Omie — vinculando')
-          await supabase.from('produtos').update({ omie_codigo: String(consulta.codigo_produto) }).eq('id', produtoId)
-          return { codigoOmie: consulta.codigo_produto, ...meta }
-        }
-      } catch {
-        log.warn({ produtoId, codigoExistente }, '⚠️ Código extraído do erro não é válido, buscando por descrição...')
-      }
-      // Fallback: buscar todas as páginas por descrição
-      try {
-        const buscaAll = await omieCall<any>(
-          '/geral/produtos/',
-          'ListarProdutos',
-          [{ pagina: 1, registros_por_pagina: 50, filtrar_apenas_descricao: produto.nome || '' }],
-          { skipCache: true, credentials: creds }
-        )
-        const encontrados = buscaAll?.produto_servico_cadastro || []
-        const matchProd = encontrados.find((p: any) =>
-          p.descricao && p.descricao.toLowerCase().trim() === (produto.nome || '').toLowerCase().trim()
-        )
-        if (matchProd?.codigo_produto) {
-          log.info({ produtoId, codigoOmie: matchProd.codigo_produto, nome: produto.nome }, '🔗 Produto encontrado por descrição no Omie')
-          await supabase.from('produtos').update({ omie_codigo: String(matchProd.codigo_produto) }).eq('id', produtoId)
-          return { codigoOmie: matchProd.codigo_produto, ...meta }
-        }
-      } catch {
-        log.warn({ produtoId }, '⚠️ Busca por descrição também falhou')
-      }
-    }
-    // Rethrow se não conseguimos resolver
-    throw createErr
-  }
+  // 2. Produto não existe no Omie — ERRO! Não criar produtos automaticamente
+  throw new Error(`Produto "${produto.nome}" (ID: ${produtoId}) não encontrado no Omie ERP. Cadastre o produto no Omie primeiro ou vincule o código manualmente.`)
 }
 
 // ============================================

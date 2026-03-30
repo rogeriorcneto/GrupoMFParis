@@ -55,18 +55,19 @@ async function main() {
   const cliente = clientes[0]
   console.log(`✅ Cliente: ${cliente.razao_social} (id=${cliente.id}, CNPJ=${cliente.cnpj})\n`)
 
-  // 4. Buscar um produto existente
+  // 4. Buscar um produto existente COM CÓDIGO OMIE
   console.log('4. Buscando produto para teste...')
   const { data: produtos } = await supabase
     .from('produtos')
-    .select('id, nome, preco, unidade, sku')
+    .select('id, nome, preco, unidade, sku, omie_codigo')
+    .not('omie_codigo', 'is', null)
     .limit(5)
   if (!produtos || produtos.length === 0) {
-    console.error('❌ Nenhum produto encontrado')
+    console.error('❌ Nenhum produto com código Omie encontrado')
     process.exit(1)
   }
   const produto = produtos[0]
-  console.log(`✅ Produto: ${produto.nome} (id=${produto.id}, preço=${produto.preco}, unidade=${produto.unidade})\n`)
+  console.log(`✅ Produto: ${produto.nome} (id=${produto.id}, omie_codigo=${produto.omie_codigo}, preço=${produto.preco}, unidade=${produto.unidade})\n`)
 
   // 5. Criar pedido de teste (insert direto para evitar problemas de cast no RPC)
   console.log('5. Criando pedido de teste...')
