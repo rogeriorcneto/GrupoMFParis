@@ -117,6 +117,7 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
 
 interface ProdutoOmieResult {
   codigoOmie: number
+  codigoReferencia?: string
   descricao: string
   unidade: string
   ncm: string
@@ -125,6 +126,43 @@ interface ProdutoOmieResult {
   cfopInterno: string
   cfopExterno: string
   pesoKg: number
+}
+
+function toNumberSafe(value: any): number {
+  if (value === null || value === undefined || value === '') return 0
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  const normalized = String(value).replace(',', '.').trim()
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function pesoFromNomeProduto(nome: string): number {
+  const normalized = String(nome || '').toLowerCase()
+  const match = normalized.match(/(\d+(?:[\.,]\d+)?)\s*kg\b/)
+  if (!match) return 0
+  return toNumberSafe(match[1])
+}
+
+function buildMetaProduto(produto: any, consultaOmie?: any) {
+  const pesoCrm = toNumberSafe(produto?.peso_kg)
+  const pesoNome = pesoFromNomeProduto(produto?.nome || '')
+  const pesoOmie = Math.max(toNumberSafe(consultaOmie?.peso_liq), toNumberSafe(consultaOmie?.peso_bruto))
+
+  let pesoFinal = pesoOmie || pesoCrm || pesoNome || 0
+  if (pesoNome > 0 && pesoCrm > 0 && pesoCrm > pesoNome * 1.5 && pesoOmie <= 0) {
+    pesoFinal = pesoNome
+  }
+
+  return {
+    descricao: consultaOmie?.descricao || produto?.nome || '',
+    unidade: consultaOmie?.unidade || produto?.unidade || 'UN',
+    ncm: consultaOmie?.ncm || produto?.ncm || '21069090',
+    marca: consultaOmie?.marca || produto?.marca || '',
+    especieVolume: produto?.especie_volume || 'FARDO',
+    cfopInterno: produto?.cfop_interno || '5101',
+    cfopExterno: produto?.cfop_externo || '6101',
+    pesoKg: pesoFinal,
+  }
 }
 
 async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult> {
@@ -136,16 +174,7 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
 
   if (error || !produto) throw new Error(`Produto ${produtoId} não encontrado no CRM`)
 
-  const meta = {
-    descricao: produto.nome || '',
-    unidade: produto.unidade || 'UN',
-    ncm: produto.ncm || '21069090',
-    marca: produto.marca || '',
-    especieVolume: produto.especie_volume || 'FARDO',
-    cfopInterno: produto.cfop_interno || '5101',
-    cfopExterno: produto.cfop_externo || '6101',
-    pesoKg: produto.peso_kg || 0,
-  }
+  const meta = buildMetaProduto(produto)
 
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
@@ -165,11 +194,36 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
           { skipCache: true, credentials: creds }
         )
         if (consulta?.codigo_produto) {
-          return { codigoOmie: Number(consulta.codigo_produto), ...meta }
+          const metaOmie = buildMetaProduto(produto, consulta)
+          return { codigoOmie: Number(consulta.codigo_produto), ...metaOmie }
         }
       } catch {
         // fallback abaixo
       }
+    }
+
+    // 1.1) Tentar referência como código comercial da listagem Omie (campo "codigo")
+    try {
+      const consultaPorCodigo = await omieCall<any>(
+        '/geral/produtos/',
+        'ConsultarProduto',
+        [{ codigo: codigoRef }],
+        { skipCache: true, credentials: creds }
+      )
+      if (consultaPorCodigo?.codigo_produto) {
+        const codigoInterno = Number(consultaPorCodigo.codigo_produto)
+        if (String(produto.omie_codigo) !== String(codigoInterno)) {
+          await supabase.from('produtos').update({ omie_codigo: String(codigoInterno) }).eq('id', produtoId)
+          log.info(
+            { produtoId, codigoOriginal: produto.omie_codigo, codigoInterno, nome: produto.nome },
+            '🔄 Produto Omie resolvido via código comercial para código interno'
+          )
+        }
+        const metaOmie = buildMetaProduto(produto, consultaPorCodigo)
+        return { codigoOmie: codigoInterno, ...metaOmie }
+      }
+    } catch {
+      // fallback abaixo
     }
 
     // 2) Fallback: omie_codigo pode ser o "Código" comercial exibido na UI do Omie
@@ -208,12 +262,21 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
             '🔄 Produto Omie resolvido de código comercial para código interno'
           )
         }
-        return { codigoOmie: codigoInterno, ...meta }
+        const metaOmie = buildMetaProduto(produto, match)
+        return { codigoOmie: codigoInterno, ...metaOmie }
       }
 
-      throw new Error(`Produto com referência ${codigoRef} não encontrado no Omie`) 
+      log.warn(
+        { produtoId, codigoRef, nome: produto.nome },
+        '⚠️ Produto não confirmado por consulta Omie; enviando pedido com código de referência da listagem'
+      )
+      return { codigoOmie: Number.isNaN(codigoOmie) ? 0 : codigoOmie, codigoReferencia: codigoRef, ...meta }
     } catch (err: any) {
-      throw new Error(`Erro ao validar produto ${produto.nome} (referência Omie: ${produto.omie_codigo}): ${err.message}`)
+      log.warn(
+        { produtoId, codigoRef, nome: produto.nome, erro: err?.message },
+        '⚠️ Falha na validação Omie; enviando pedido com código de referência da listagem'
+      )
+      return { codigoOmie: Number.isNaN(codigoOmie) ? 0 : codigoOmie, codigoReferencia: codigoRef, ...meta }
     }
   }
 
@@ -451,6 +514,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
       },
       produto: {
         codigo_produto: prodOmie.codigoOmie,
+        codigo: prodOmie.codigoReferencia,
         codigo_produto_integracao: `CRM-PROD-${item.produto_id}`,
         descricao: prodOmie.descricao,
         unidade: prodOmie.unidade,
