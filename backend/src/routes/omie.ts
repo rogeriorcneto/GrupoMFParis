@@ -288,8 +288,8 @@ omieRouter.post('/test-flow', async (req, res) => {
     console.log('=== INICIANDO TESTE FLUXO OMIE ===')
     
     const supabase = createClient(
-      process.env.VITE_SUPABASE_URL!,
-      process.env.VITE_SUPABASE_ANON_KEY!
+      process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL!,
+      process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY!
     )
     
     // 1. Buscar credenciais Omie
