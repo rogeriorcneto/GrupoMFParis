@@ -57,6 +57,13 @@ interface AppRouterProps {
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
 }
 
+export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
+  const isAmostraFlow = pedido.tipo === 'bonificacao' || cliente?.etapa === 'amostra' || cliente?.etapa === 'amostra_perdida'
+  if (isAmostraFlow) return false
+  if (!cliente) return false
+  return cliente.etapa !== 'follow_up' && cliente.etapa !== 'perdido'
+}
+
 export default function AppRouter({
   activeView, loggedUser,
   clientes, interacoes, vendedores, tarefas, atividades, templates,
@@ -106,9 +113,9 @@ export default function AppRouter({
               addNotificacao('warning', 'Pedido aprovado — Omie com erro', `Pedido ${pedido.numero} foi aprovado, mas o Omie rejeitou: ${result.omie?.error || 'erro desconhecido'}`, pedido.clienteId)
             }
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, ...omieUpdate } : p))
-            // Auto-move client to follow_up only for sales orders
+            // Auto-move client to follow_up only for clear sales orders
             const cliAprov = clientes.find(c => c.id === pedido.clienteId)
-            if (pedido.tipo !== 'bonificacao' && cliAprov && cliAprov.etapa !== 'follow_up' && cliAprov.etapa !== 'perdido') {
+            if (shouldMoveToFollowUpOnApproval(pedido, cliAprov)) {
               try { moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' }) } catch { /* non-critical */ }
             }
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
