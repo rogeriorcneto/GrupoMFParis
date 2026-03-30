@@ -500,13 +500,21 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   for (let i = 0; i < itens.length; i++) {
     const item = itens[i]
     const prodOmie = await garantirProdutoOmie(item.produto_id)
+    const quantidade = toNumberSafe(item.quantidade)
+    const unidadeItem = String(prodOmie.unidade || item.unidade || '').toUpperCase().trim()
 
-    totalVolumes += item.quantidade || 0
+    totalVolumes += quantidade
     if (prodOmie.especieVolume) especieVolume = prodOmie.especieVolume
     if (prodOmie.marca) marcaVolumes = prodOmie.marca
 
     const cfop = isIntraEstado ? prodOmie.cfopInterno : prodOmie.cfopExterno
-    const pesoTotal = (prodOmie.pesoKg || 0) * (item.quantidade || 1)
+    let pesoTotal = (prodOmie.pesoKg || 0) * (quantidade || 1)
+
+    // Quando a unidade do item no Omie é KG, a quantidade já representa o peso total em quilos.
+    // Evita dobrar/multiplicar peso por peso unitário de embalagem.
+    if (unidadeItem === 'KG') {
+      pesoTotal = quantidade
+    }
 
     const detItem: any = {
       ide: {
@@ -520,7 +528,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
         unidade: prodOmie.unidade,
         ncm: prodOmie.ncm,
         cfop: cfop,
-        quantidade: item.quantidade,
+        quantidade: quantidade,
         valor_unitario: item.preco,
         tipo_desconto: 'V',
         valor_desconto: 0,
