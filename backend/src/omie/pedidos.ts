@@ -519,10 +519,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     cabecalho.codigo_cenario_impostos = cenarioFiscal
   }
 
-  // Vendedor (para aparecer o nome no Omie, não "lançado por API")
-  if (codigoVendedorOmie) {
-    cabecalho.codigo_vendedor = codigoVendedorOmie
-  }
+  // Vendedor: vai em informacoes_adicionais como 'codVend' (não no cabecalho)
 
   // 6. Frete
   // modalidade: 0 = CIF (remetente/entrega), 1 = FOB (destinatário/retirada), 9 = sem frete
@@ -551,6 +548,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     enviar_email: 'N',
   }
   if (contaBB) infAdic.codigo_conta_corrente = contaBB
+  if (codigoVendedorOmie) infAdic.codVend = codigoVendedorOmie
 
   // Endereço de entrega diferente
   if (pedido.endereco_diferente) {
