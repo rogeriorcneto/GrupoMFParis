@@ -84,7 +84,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     setItensPedido(prev => prev.map(i => i.produtoId === produtoId ? { ...i, preco: precoSeguro } : i))
   }
 
-  const handleGerarProposta = () => {
+  const handleGerarProposta = async () => {
     if (!selectedClienteId || itensPedido.length === 0) {
       showToast?.('error', 'Selecione um cliente e adicione produtos antes de gerar a proposta.')
       return
@@ -97,12 +97,16 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     
     try {
       // Gerar PDF
-      gerarPropostaPDF(
+      await gerarPropostaPDF(
         clienteAlvo,
         itensPedido,
         observacoes,
         loggedUser.nome,
-        numeroProposta
+        numeroProposta,
+        {
+          formaPagamento,
+          tipoFrete,
+        }
       )
       
       // Mover cliente para etapa "proposta" no funil

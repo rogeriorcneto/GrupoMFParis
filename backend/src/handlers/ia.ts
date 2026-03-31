@@ -2,6 +2,9 @@ import { updateSession } from '../session.js'
 import type { UserSession } from '../session.js'
 import { log } from '../logger.js'
 import * as db from '../database.js'
+import { FUNCTION_DECLARATIONS, executeFunction, type AIFunctionResult } from '../ai-functions.js'
+import { sendUserWhatsAppMessage, getUserWhatsAppSession } from '../whatsapp-multi.js'
+import { sendEmail } from '../email.js'
 
 const MAX_AI_HISTORY = 20
 
@@ -138,6 +141,21 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('- Nunca invente dados - use apenas os dados reais acima.')
   lines.push('- SE PERGUNTAREM quem te criou: "Fui criada pelo Rogerio Reis, especialista em IA."')
   lines.push('- Se nao souber a resposta: seja honesta, diga que nao tem essa informacao nos dados disponiveis.')
+  lines.push('')
+  lines.push('## FUNCOES DISPONIVEIS (Function Calling)')
+  lines.push('Voce tem acesso a funcoes para EXECUTAR acoes no CRM. Use-as quando o usuario pedir para fazer algo, nao apenas consultar.')
+  lines.push('Funcoes disponiveis: searchClientes, getClienteDetalhes, sendWhatsApp, sendEmail, startCall, createCliente, updateCliente, deleteCliente (gerente), moverClienteEtapa (gerente), marcarClientePerdido (gerente), createTarefa, completeTarefa, createPedido, aprovarPedido (gerente), recusarPedido (gerente), enviarPedidoOmie (gerente), addInteracao, addNota, listarTarefas, listarProdutos.')
+  lines.push('')
+  lines.push('REGRAS DE EXECUCAO:')
+  lines.push('- Para CADASTRAR CLIENTE: pergunte razaoSocial, contatoNome, contatoTelefone. Se tiver cnpj e email, melhor. Use createCliente.')
+  lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte quais produtos e quantidades. Use createPedido.')
+  lines.push('- Para ENVIAR WHATSAPP/EMAIL: primeiro busque o cliente com searchClientes, depois use sendWhatsApp ou sendEmail. SEMPRE confirme a mensagem com o usuario antes de enviar.')
+  lines.push('- Para MOVER CLIENTE NO FUNIL: use moverClienteEtapa (somente gerente).')
+  lines.push('- Para CRIAR TAREFA: use createTarefa com titulo, data (YYYY-MM-DD), tipo e prioridade.')
+  lines.push('- Para GERAR PROPOSTA: crie um pedido via createPedido e informe que o vendedor pode gerar o PDF pelo CRM web.')
+  lines.push('- SEMPRE busque o cliente por nome antes de executar acoes que precisam de ID.')
+  lines.push('- Se faltar informacao obrigatoria, PERGUNTE ao usuario antes de executar.')
+  lines.push('- Apos executar uma acao, confirme o resultado ao usuario de forma clara.')
 
   return lines.join('\n')
 }
@@ -163,6 +181,35 @@ export async function startAIChat(senderNumber: string, session: UserSession): P
   ].join('\n')
 }
 
+const MAX_FUNCTION_CALLS_WA = 5
+
+async function callGeminiWA(
+  apiKey: string,
+  contents: any[],
+  tools?: any[],
+): Promise<any> {
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+  const body: any = {
+    contents,
+    generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+  }
+  if (tools && tools.length > 0) {
+    body.tools = tools
+    body.tool_config = { function_calling_config: { mode: 'AUTO' } }
+  }
+  const resp = await fetch(geminiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!resp.ok) {
+    const errorText = await resp.text()
+    log.error({ error: errorText }, 'Erro na Gemini API (WhatsApp)')
+    throw new Error(`Gemini API error ${resp.status}`)
+  }
+  return resp.json()
+}
+
 export async function handleAIChat(senderNumber: string, session: UserSession, text: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
@@ -172,6 +219,7 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
 
   try {
     const systemInstruction = await buildWhatsAppContext(session)
+    const vendedor = session.vendedor
 
     const history = session.aiHistory || []
     history.push({ role: 'user', content: text })
@@ -180,42 +228,97 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
       history.splice(0, history.length - MAX_AI_HISTORY)
     }
 
-    const contents = [
+    const contents: any[] = [
       { role: 'user', parts: [{ text: systemInstruction }] },
-      { role: 'model', parts: [{ text: 'Entendido, tenho os dados do CRM. Vou responder de forma direta via WhatsApp.' }] },
+      { role: 'model', parts: [{ text: 'Entendido, tenho acesso completo ao CRM e posso executar ações. Vou responder de forma direta via WhatsApp.' }] },
       ...history.map(m => ({
         role: m.role === 'assistant' ? 'model' as const : 'user' as const,
         parts: [{ text: m.content }],
       })),
     ]
 
-    const geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey
+    // Build tools with all CRM function declarations
+    const tools = [{ functionDeclarations: FUNCTION_DECLARATIONS }]
 
-    const geminiResponse = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 2048,
-        },
-      }),
-    })
-
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text()
-      log.error({ error: errorText }, 'Erro na Gemini API (WhatsApp)')
-      return 'Erro ao consultar a IA. Tente novamente.'
+    // Build WhatsApp send function for this vendedor's session
+    const sendWhatsAppFn = async (number: string, msgText: string, clienteId?: number) => {
+      const waSession = getUserWhatsAppSession(vendedor.id)
+      if (!waSession?.sock) return { success: false, error: 'WhatsApp não conectado' }
+      try {
+        await sendUserWhatsAppMessage(vendedor.id, number, msgText)
+        return { success: true }
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Erro ao enviar' }
+      }
     }
 
-    const geminiData = await geminiResponse.json() as any
-    const response = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta da IA.'
+    // Build email send function
+    const sendEmailFn = async (to: string, subject: string, body: string, clienteId?: number, vendedorNome?: string) => {
+      try {
+        const result = await sendEmail({ to, subject, body, clienteId, vendedorNome })
+        return result
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Erro ao enviar email' }
+      }
+    }
 
-    history.push({ role: 'assistant', content: response })
+    // Function calling loop
+    const executedActions: string[] = []
+    let callCount = 0
+
+    while (callCount < MAX_FUNCTION_CALLS_WA) {
+      const geminiData = await callGeminiWA(apiKey, contents, tools)
+      const candidate = geminiData.candidates?.[0]
+      if (!candidate?.content?.parts) break
+
+      const parts = candidate.content.parts
+      const functionCallPart = parts.find((p: any) => p.functionCall)
+
+      if (!functionCallPart?.functionCall) {
+        // Final text response
+        const textResponse = parts.find((p: any) => p.text)?.text || 'Sem resposta da IA.'
+        history.push({ role: 'assistant', content: textResponse })
+        updateSession(senderNumber, { aiHistory: history })
+        return textResponse
+      }
+
+      // Execute the function
+      const { name, args } = functionCallPart.functionCall
+      log.info({ functionName: name, args, vendedor: vendedor.nome, via: 'whatsapp' }, 'IA WhatsApp chamou função')
+
+      const result = await executeFunction({ name, args }, vendedor, sendWhatsAppFn, sendEmailFn)
+      executedActions.push(`${name}: ${result.message}`)
+      log.info({ functionName: name, success: result.success, message: result.message, via: 'whatsapp' }, 'Resultado função IA WhatsApp')
+
+      // Feed result back to Gemini
+      contents.push({
+        role: 'model',
+        parts: [{ functionCall: { name, args } }],
+      })
+      contents.push({
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name,
+            response: {
+              success: result.success,
+              message: result.message,
+              data: result.data || null,
+            },
+          },
+        }],
+      })
+
+      callCount++
+    }
+
+    // Safety: if loop limit hit, get final text
+    const geminiData = await callGeminiWA(apiKey, contents)
+    const textResponse = geminiData.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text || 'Ações executadas.'
+    history.push({ role: 'assistant', content: textResponse })
     updateSession(senderNumber, { aiHistory: history })
+    return textResponse
 
-    return response
   } catch (err) {
     log.error({ err }, 'Erro no handler IA WhatsApp')
     return 'Erro interno da IA. Tente novamente.'
