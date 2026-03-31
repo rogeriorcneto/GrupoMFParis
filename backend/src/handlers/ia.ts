@@ -148,7 +148,7 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('')
   lines.push('REGRAS DE EXECUCAO:')
   lines.push('- Para CADASTRAR CLIENTE: pergunte razaoSocial, contatoNome, contatoTelefone. Se tiver cnpj e email, melhor. Use createCliente.')
-  lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte quais produtos e quantidades. Use createPedido.')
+  lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte: (1) tipo do pedido (venda ou bonificacao/amostra), (2) forma de pagamento (A vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias, 60 dias, 2x sem juros, etc), (3) tipo de frete (CIF ou FOB), (4) quais produtos e quantidades em KG. Use createPedido com TODOS esses campos.')
   lines.push('- Para ENVIAR WHATSAPP/EMAIL: primeiro busque o cliente com searchClientes, depois use sendWhatsApp ou sendEmail. SEMPRE confirme a mensagem com o usuario antes de enviar.')
   lines.push('- Para MOVER CLIENTE NO FUNIL: use moverClienteEtapa (somente gerente).')
   lines.push('- Para CRIAR TAREFA: use createTarefa com titulo, data (YYYY-MM-DD), tipo e prioridade.')

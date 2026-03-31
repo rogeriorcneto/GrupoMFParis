@@ -91,6 +91,9 @@ export interface Pedido {
   dataCriacao: string
   dataEnvio?: string
   totalValor: number
+  tipo?: 'venda' | 'bonificacao'
+  formaPagamento?: string
+  tipoFrete?: 'CIF' | 'FOB' | ''
 }
 
 export interface ItemPedido {
@@ -444,6 +447,15 @@ export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
     p_itens: itensJson,
   })
   if (error) throw error
+
+  // Update extra commercial fields not handled by the RPC
+  const extras: Record<string, any> = {}
+  if (p.tipo) extras.tipo = p.tipo
+  if (p.formaPagamento) extras.forma_pagamento = p.formaPagamento
+  if (p.tipoFrete) extras.tipo_frete = p.tipoFrete
+  if (Object.keys(extras).length > 0 && data?.id) {
+    await supabase.from('pedidos').update(extras).eq('id', data.id)
+  }
 
   return pedidoFromDb(data, itensJson)
 }

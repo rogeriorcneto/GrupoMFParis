@@ -266,11 +266,25 @@ export const FUNCTION_DECLARATIONS = [
   // ── PEDIDOS ──
   {
     name: 'createPedido',
-    description: 'Cria um novo pedido para um cliente. Requer lista de itens com produtoId e quantidade. O vendedor só pode criar pedidos para seus clientes.',
+    description: 'Cria um novo pedido para um cliente. Requer lista de itens com produtoId e quantidade, tipo do pedido (venda ou bonificacao/amostra), forma de pagamento e tipo de frete (CIF ou FOB). SEMPRE pergunte esses campos ao usuário antes de criar.',
     parameters: {
       type: 'OBJECT',
       properties: {
         clienteId: { type: 'INTEGER', description: 'ID do cliente' },
+        tipo: {
+          type: 'STRING',
+          description: 'Tipo do pedido: venda (pedido normal) ou bonificacao (amostra/brinde)',
+          enum: ['venda', 'bonificacao'],
+        },
+        formaPagamento: {
+          type: 'STRING',
+          description: 'Forma de pagamento. Ex: À vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias, 60 dias, 2x sem juros, 3x sem juros, etc.',
+        },
+        tipoFrete: {
+          type: 'STRING',
+          description: 'Tipo de frete: CIF (frete por conta do vendedor) ou FOB (frete por conta do cliente)',
+          enum: ['CIF', 'FOB'],
+        },
         itens: {
           type: 'ARRAY',
           description: 'Lista de itens do pedido',
@@ -278,14 +292,14 @@ export const FUNCTION_DECLARATIONS = [
             type: 'OBJECT',
             properties: {
               produtoId: { type: 'INTEGER', description: 'ID do produto' },
-              quantidade: { type: 'NUMBER', description: 'Quantidade' },
+              quantidade: { type: 'NUMBER', description: 'Quantidade em KG' },
             },
             required: ['produtoId', 'quantidade'],
           },
         },
         observacoes: { type: 'STRING', description: 'Observações do pedido (opcional)' },
       },
-      required: ['clienteId', 'itens'],
+      required: ['clienteId', 'itens', 'tipo', 'formaPagamento', 'tipoFrete'],
     },
   },
   {
@@ -667,6 +681,9 @@ export async function executeFunction(
         }
         const now = new Date()
         const numero = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
+        const tipoPedido = args.tipo || 'venda'
+        const formaPag = args.formaPagamento || 'À vista'
+        const frete = args.tipoFrete || ''
         const pedido = await db.insertPedido({
           numero,
           clienteId: args.clienteId,
@@ -676,12 +693,15 @@ export async function executeFunction(
           status: 'rascunho',
           dataCriacao: now.toISOString(),
           totalValor,
+          tipo: tipoPedido,
+          formaPagamento: formaPag,
+          tipoFrete: frete as 'CIF' | 'FOB' | '',
         })
-        await db.insertAtividade({ tipo: 'pedido', descricao: `[IA] Criou pedido ${numero} para ${access.cliente!.razaoSocial} — R$${totalValor.toFixed(2)}`, vendedorNome: user.nome })
+        await db.insertAtividade({ tipo: 'pedido', descricao: `[IA] Criou pedido ${numero} (${tipoPedido === 'bonificacao' ? 'Amostra' : 'Venda'}) para ${access.cliente!.razaoSocial} — R$${totalValor.toFixed(2)} | ${frete} | ${formaPag}`, vendedorNome: user.nome })
         const resumo = itens.map(i => `${i.nomeProduto} x${i.quantidade}`).join(', ')
         return {
           success: true,
-          message: `✅ Pedido ${numero} criado para ${access.cliente!.razaoSocial}.\nItens: ${resumo}\nTotal: R$ ${totalValor.toFixed(2)}\nStatus: rascunho (precisa ser enviado para aprovação).`,
+          message: `✅ Pedido ${numero} criado para ${access.cliente!.razaoSocial}.\nTipo: ${tipoPedido === 'bonificacao' ? 'Amostra/Bonificação' : 'Venda'}\nFrete: ${frete || 'N/A'}\nPagamento: ${formaPag}\nItens: ${resumo}\nTotal: R$ ${totalValor.toFixed(2)}\nStatus: rascunho (precisa ser enviado para aprovação).`,
           data: { id: pedido.id, numero },
           uiAction: { type: 'refreshPedidos' },
         }
