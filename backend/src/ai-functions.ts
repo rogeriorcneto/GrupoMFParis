@@ -42,6 +42,9 @@ const GERENTE_ONLY_FUNCTIONS = new Set([
   'recusarPedido',
   'deleteCliente',
   'enviarPedidoOmie',
+  'createProduto',
+  'updateProduto',
+  'deleteProduto',
 ])
 
 export function canExecuteFunction(
@@ -335,6 +338,99 @@ export const FUNCTION_DECLARATIONS = [
         pedidoId: { type: 'INTEGER', description: 'ID do pedido a enviar' },
       },
       required: ['pedidoId'],
+    },
+  },
+  {
+    name: 'listarPedidos',
+    description: 'Lista pedidos do CRM. Vendedor vê apenas seus próprios pedidos; gerente vê todos. Permite filtros opcionais.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        status: {
+          type: 'STRING',
+          description: 'Filtrar por status (opcional)',
+          enum: ['rascunho', 'enviado', 'confirmado', 'cancelado'],
+        },
+        clienteId: { type: 'INTEGER', description: 'Filtrar por cliente (opcional)' },
+        limite: { type: 'INTEGER', description: 'Quantidade máxima de resultados (opcional, padrão 20, máximo 100)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'atualizarStatusPedido',
+    description: 'Atualiza status de pedido. Vendedor pode enviar/cancelar pedidos próprios; gerente pode ajustar status operacionais. Para aprovar/recusar formalmente use aprovarPedido/recusarPedido.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoId: { type: 'INTEGER', description: 'ID do pedido' },
+        novoStatus: {
+          type: 'STRING',
+          description: 'Novo status do pedido',
+          enum: ['rascunho', 'enviado', 'cancelado'],
+        },
+      },
+      required: ['pedidoId', 'novoStatus'],
+    },
+  },
+
+  // ── PRODUTOS ──
+  {
+    name: 'searchProdutos',
+    description: 'Busca produtos por nome, SKU ou categoria. Gerente pode incluir inativos na busca.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        termo: { type: 'STRING', description: 'Termo de busca por nome, SKU ou categoria' },
+        incluirInativos: { type: 'BOOLEAN', description: 'Se true, inclui produtos inativos (somente gerente)' },
+      },
+      required: ['termo'],
+    },
+  },
+  {
+    name: 'createProduto',
+    description: 'Cria um novo produto no catálogo. SOMENTE gerentes podem usar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        nome: { type: 'STRING', description: 'Nome do produto' },
+        categoria: { type: 'STRING', description: 'Categoria do produto' },
+        unidade: { type: 'STRING', description: 'Unidade de venda (ex: kg, un)' },
+        preco: { type: 'NUMBER', description: 'Preço base de referência (opcional)' },
+        sku: { type: 'STRING', description: 'SKU/código interno (opcional)' },
+        descricao: { type: 'STRING', description: 'Descrição do produto (opcional)' },
+        ativo: { type: 'BOOLEAN', description: 'Produto ativo (opcional, padrão true)' },
+      },
+      required: ['nome', 'categoria', 'unidade'],
+    },
+  },
+  {
+    name: 'updateProduto',
+    description: 'Atualiza dados de um produto (incluindo preço). SOMENTE gerentes podem usar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        produtoId: { type: 'INTEGER', description: 'ID do produto a atualizar' },
+        nome: { type: 'STRING', description: 'Novo nome (opcional)' },
+        categoria: { type: 'STRING', description: 'Nova categoria (opcional)' },
+        unidade: { type: 'STRING', description: 'Nova unidade (opcional)' },
+        preco: { type: 'NUMBER', description: 'Novo preço (opcional)' },
+        sku: { type: 'STRING', description: 'Novo SKU (opcional)' },
+        descricao: { type: 'STRING', description: 'Nova descrição (opcional)' },
+        ativo: { type: 'BOOLEAN', description: 'Ativar/desativar produto (opcional)' },
+      },
+      required: ['produtoId'],
+    },
+  },
+  {
+    name: 'deleteProduto',
+    description: 'Exclui um produto do catálogo. SOMENTE gerentes podem usar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        produtoId: { type: 'INTEGER', description: 'ID do produto a excluir' },
+      },
+      required: ['produtoId'],
     },
   },
 
@@ -773,6 +869,166 @@ export async function executeFunction(
             success: false,
             message: `❌ Erro ao enviar pedido ${pedRow.numero} ao Omie: ${omieErr.message}`,
           }
+        }
+      }
+
+      case 'listarPedidos': {
+        let query = supabase.from('pedidos').select('*').order('data_criacao', { ascending: false })
+        if (args.status) query = query.eq('status', args.status)
+        if (args.clienteId) query = query.eq('cliente_id', args.clienteId)
+        if (user.cargo !== 'gerente') query = query.eq('vendedor_id', user.id)
+        const limite = Math.max(1, Math.min(100, Number(args.limite) || 20))
+        query = query.limit(limite)
+
+        const { data, error } = await query
+        if (error) return { success: false, message: `Erro ao listar pedidos: ${error.message}` }
+        const lista = (data || []).map((p: any) => ({
+          id: p.id,
+          numero: p.numero,
+          clienteId: p.cliente_id,
+          vendedorId: p.vendedor_id,
+          status: p.status,
+          tipo: p.tipo || 'venda',
+          formaPagamento: p.forma_pagamento || 'À vista',
+          tipoFrete: p.tipo_frete || '',
+          totalValor: p.total_valor || 0,
+          dataCriacao: p.data_criacao,
+          dataEnvio: p.data_envio,
+          omieCodigo: p.omie_codigo,
+          omieStatus: p.omie_status,
+        }))
+        return {
+          success: true,
+          message: `${lista.length} pedido(s) encontrado(s).`,
+          data: lista,
+        }
+      }
+
+      case 'atualizarStatusPedido': {
+        const { data: pedRow, error: pedErr } = await supabase.from('pedidos').select('*').eq('id', args.pedidoId).single()
+        if (pedErr || !pedRow) return { success: false, message: `Pedido ID ${args.pedidoId} não encontrado.` }
+
+        if (user.cargo !== 'gerente' && pedRow.vendedor_id !== user.id) {
+          return { success: false, message: 'Você não pode alterar pedido de outro vendedor.' }
+        }
+
+        const novoStatus = String(args.novoStatus || '').toLowerCase()
+        if (!['rascunho', 'enviado', 'cancelado'].includes(novoStatus)) {
+          return { success: false, message: 'Status inválido. Use: rascunho, enviado ou cancelado.' }
+        }
+
+        if (novoStatus === 'enviado' && pedRow.status !== 'rascunho' && user.cargo !== 'gerente') {
+          return { success: false, message: 'Vendedor só pode enviar pedidos em rascunho.' }
+        }
+
+        const updates: Record<string, any> = { status: novoStatus }
+        if (novoStatus === 'enviado') updates.data_envio = new Date().toISOString()
+
+        const { error: updErr } = await supabase.from('pedidos').update(updates).eq('id', args.pedidoId)
+        if (updErr) return { success: false, message: `Erro ao atualizar pedido: ${updErr.message}` }
+
+        await db.insertAtividade({ tipo: 'pedido', descricao: `[IA] Alterou status do pedido ${pedRow.numero} para ${novoStatus}`, vendedorNome: user.nome })
+        return {
+          success: true,
+          message: `✅ Pedido ${pedRow.numero} atualizado para status "${novoStatus}".`,
+          uiAction: { type: 'refreshPedidos' },
+        }
+      }
+
+      // ── PRODUTOS ──
+      case 'searchProdutos': {
+        const termo = String(args.termo || '').trim()
+        if (!termo) return { success: false, message: 'Informe um termo para buscar produtos.' }
+        const safeTerm = termo.replace(/[%_\\]/g, c => `\\${c}`)
+        let query = supabase
+          .from('produtos')
+          .select('*')
+          .or(`nome.ilike.%${safeTerm}%,sku.ilike.%${safeTerm}%,categoria.ilike.%${safeTerm}%`)
+          .order('categoria, nome')
+          .limit(30)
+
+        const incluirInativos = !!args.incluirInativos && user.cargo === 'gerente'
+        if (!incluirInativos) query = query.eq('ativo', true)
+
+        const { data, error } = await query
+        if (error) return { success: false, message: `Erro ao buscar produtos: ${error.message}` }
+        const lista = (data || []).map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          categoria: p.categoria,
+          preco: p.preco,
+          unidade: p.unidade,
+          sku: p.sku || '',
+          ativo: !!p.ativo,
+        }))
+        return { success: true, message: `${lista.length} produto(s) encontrado(s).`, data: lista }
+      }
+
+      case 'createProduto': {
+        const preco = args.preco !== undefined ? Math.max(0, Number(args.preco) || 0) : 0
+        const payload = {
+          nome: String(args.nome || '').trim(),
+          categoria: String(args.categoria || '').trim(),
+          unidade: String(args.unidade || '').trim(),
+          preco,
+          sku: args.sku ? String(args.sku).trim() : '',
+          descricao: args.descricao ? String(args.descricao).trim() : '',
+          ativo: args.ativo === undefined ? true : !!args.ativo,
+        }
+        if (!payload.nome || !payload.categoria || !payload.unidade) {
+          return { success: false, message: 'Campos obrigatórios: nome, categoria e unidade.' }
+        }
+
+        const { data, error } = await supabase.from('produtos').insert(payload).select('*').single()
+        if (error || !data) return { success: false, message: `Erro ao criar produto: ${error?.message || 'falha desconhecida'}` }
+
+        await db.insertAtividade({ tipo: 'produto', descricao: `[IA] Cadastrou produto ${data.nome} (R$ ${Number(data.preco || 0).toFixed(2)})`, vendedorNome: user.nome })
+        return {
+          success: true,
+          message: `✅ Produto "${data.nome}" criado com sucesso (ID: ${data.id}).`,
+          data: { id: data.id, nome: data.nome },
+        }
+      }
+
+      case 'updateProduto': {
+        const { data: existing, error: fetchErr } = await supabase.from('produtos').select('*').eq('id', args.produtoId).single()
+        if (fetchErr || !existing) return { success: false, message: `Produto ID ${args.produtoId} não encontrado.` }
+
+        const updates: Record<string, any> = {}
+        if (args.nome !== undefined) updates.nome = String(args.nome).trim()
+        if (args.categoria !== undefined) updates.categoria = String(args.categoria).trim()
+        if (args.unidade !== undefined) updates.unidade = String(args.unidade).trim()
+        if (args.preco !== undefined) updates.preco = Math.max(0, Number(args.preco) || 0)
+        if (args.sku !== undefined) updates.sku = String(args.sku || '').trim()
+        if (args.descricao !== undefined) updates.descricao = String(args.descricao || '').trim()
+        if (args.ativo !== undefined) updates.ativo = !!args.ativo
+
+        if (Object.keys(updates).length === 0) {
+          return { success: false, message: 'Nenhum campo para atualizar foi informado.' }
+        }
+
+        const { error: updErr } = await supabase.from('produtos').update(updates).eq('id', args.produtoId)
+        if (updErr) return { success: false, message: `Erro ao atualizar produto: ${updErr.message}` }
+
+        const fields = Object.keys(updates).join(', ')
+        await db.insertAtividade({ tipo: 'produto', descricao: `[IA] Atualizou produto ${existing.nome} (ID ${args.produtoId}) — campos: ${fields}`, vendedorNome: user.nome })
+        return {
+          success: true,
+          message: `✅ Produto "${existing.nome}" atualizado. Campos: ${fields}.`,
+        }
+      }
+
+      case 'deleteProduto': {
+        const { data: existing, error: fetchErr } = await supabase.from('produtos').select('*').eq('id', args.produtoId).single()
+        if (fetchErr || !existing) return { success: false, message: `Produto ID ${args.produtoId} não encontrado.` }
+
+        const { error: delErr } = await supabase.from('produtos').delete().eq('id', args.produtoId)
+        if (delErr) return { success: false, message: `Erro ao excluir produto: ${delErr.message}` }
+
+        await db.insertAtividade({ tipo: 'produto', descricao: `[IA] Excluiu produto ${existing.nome} (ID ${args.produtoId})`, vendedorNome: user.nome })
+        return {
+          success: true,
+          message: `✅ Produto "${existing.nome}" excluído com sucesso.`,
         }
       }
 
