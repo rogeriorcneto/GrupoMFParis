@@ -115,6 +115,11 @@ export default function AppRouter({
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, ...omieUpdate } : p))
             // Auto-move client to follow_up only for clear sales orders
             const cliAprov = clientes.find(c => c.id === pedido.clienteId)
+            const isAmostraFlow = pedido.tipo === 'bonificacao' || cliAprov?.etapa === 'amostra' || cliAprov?.etapa === 'amostra_perdida'
+            if (isAmostraFlow && cliAprov && cliAprov.statusAmostra !== 'liberada') {
+              setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusAmostra: 'liberada' } : c))
+              try { await db.updateCliente(pedido.clienteId, { statusAmostra: 'liberada' }) } catch { /* non-critical */ }
+            }
             if (shouldMoveToFollowUpOnApproval(pedido, cliAprov)) {
               try { moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' }) } catch { /* non-critical */ }
             }

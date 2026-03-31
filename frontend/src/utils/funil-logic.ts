@@ -31,7 +31,7 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       const sub = cliente.statusAmostra
       if (sub === 'solicitada') return { text: '⏳ Aguardando aprovação gerente', color: 'text-yellow-600' }
       if (sub === 'aguardando_gerente') return { text: '👤 Gerente precisa aprovar', color: 'text-orange-600' }
-      if (sub === 'liberada') return { text: '📦 Providenciar coleta da amostra', color: 'text-blue-600' }
+      if (sub === 'liberada') return { text: '� Aguardando faturamento', color: 'text-blue-600' }
       if (sub === 'coletada') return { text: '🚚 Amostra em trânsito', color: 'text-blue-600' }
       if (sub === 'entregue') return { text: '🔬 Aguardar teste do cliente', color: 'text-gray-500' }
       if (sub === 'em_teste') {
