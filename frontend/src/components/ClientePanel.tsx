@@ -165,7 +165,7 @@ export default function ClientePanel({
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black bg-opacity-30" onClick={onClose} />
-      <div className="relative w-full sm:max-w-2xl bg-white shadow-2xl overflow-y-auto animate-slide-in-right">
+      <div className="relative w-full sm:max-w-[95vw] lg:max-w-[96vw] xl:max-w-[92vw] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden animate-slide-in-right sm:my-2 sm:mr-2">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex-1 min-w-0">
@@ -179,7 +179,9 @@ export default function ClientePanel({
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-apple ml-2"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
         </div>
 
-        <div className="px-4 sm:px-6 py-5 space-y-5">
+        <div className="px-4 sm:px-6 py-4 h-[calc(100dvh-84px)] sm:h-[calc(100%-84px)] overflow-y-auto lg:overflow-hidden">
+          <div className="lg:h-full grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div className="space-y-4 lg:col-span-5 xl:col-span-4 lg:overflow-y-auto lg:pr-1">
 
           {/* === CONTATO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
@@ -231,6 +233,10 @@ export default function ClientePanel({
               )}
             </div>
           </div>
+
+          </div>
+
+          <div className="space-y-4 lg:col-span-7 xl:col-span-8 lg:overflow-y-auto lg:pl-1">
 
           {/* === DADOS COMERCIAIS === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
@@ -650,6 +656,9 @@ export default function ClientePanel({
               </div>
             )}
           </div>
+
+          </div>
+        </div>
 
         </div>
       </div>
