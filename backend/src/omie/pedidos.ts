@@ -332,7 +332,6 @@ function mapFormaPagamentoToCodigoParcela(formaPagamento: string): string {
  * Gera array de parcelas Omie com base na forma de pagamento.
  * - "À vista" → 1 parcela, 100%, vencimento = data_previsao
  * - "N dias" → 1 parcela, 100%, vencimento = data_previsao + N dias
- * - "Nx sem juros" → N parcelas iguais, 30 dias entre cada
  */
 function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisaoStr: string): any[] {
   const fp = formaPagamento.toLowerCase().trim()
@@ -373,32 +372,6 @@ function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisao
       percentual: 100,
       valor: Math.round(totalPedido * 100) / 100,
     }]
-  }
-
-  // "Nx sem juros" → N parcelas iguais, 30 dias entre cada
-  const matchParcelas = fp.match(/^(\d+)x/)
-  if (matchParcelas) {
-    const numParcelas = parseInt(matchParcelas[1], 10)
-    const valorParcela = Math.floor(totalPedido * 100 / numParcelas) / 100
-    const parcelas: any[] = []
-    let somaValores = 0
-
-    for (let i = 1; i <= numParcelas; i++) {
-      const isLast = i === numParcelas
-      const valor = isLast ? Math.round((totalPedido - somaValores) * 100) / 100 : valorParcela
-      somaValores += valor
-      const percentual = isLast
-        ? Math.round((100 - (numParcelas - 1) * Math.floor(10000 / numParcelas) / 100) * 100) / 100
-        : Math.floor(10000 / numParcelas) / 100
-
-      parcelas.push({
-        numero_parcela: i,
-        data_vencimento: formatDataOmie(addDays(baseDate, 30 * i)),
-        percentual: isLast ? Math.round((totalPedido > 0 ? valor / totalPedido * 100 : 0) * 100) / 100 : Math.round((valorParcela / totalPedido * 100) * 100) / 100,
-        valor,
-      })
-    }
-    return parcelas
   }
 
   // Fallback: à vista

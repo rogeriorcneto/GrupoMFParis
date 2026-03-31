@@ -278,7 +278,7 @@ export const FUNCTION_DECLARATIONS = [
         },
         formaPagamento: {
           type: 'STRING',
-          description: 'Forma de pagamento. Ex: À vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias, 60 dias, 2x sem juros, 3x sem juros, etc.',
+          description: 'Forma de pagamento. Ex: À vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias.',
         },
         tipoFrete: {
           type: 'STRING',

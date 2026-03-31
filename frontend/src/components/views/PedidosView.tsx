@@ -276,11 +276,6 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     <option value="30 dias">30 dias</option>
                     <option value="45 dias">45 dias</option>
                     <option value="60 dias">60 dias</option>
-                    <option value="2x sem juros">2x sem juros</option>
-                    <option value="3x sem juros">3x sem juros</option>
-                    <option value="4x sem juros">4x sem juros</option>
-                    <option value="5x sem juros">5x sem juros</option>
-                    <option value="6x sem juros">6x sem juros</option>
                   </select>
                 </div>
               </div>

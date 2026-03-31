@@ -368,7 +368,7 @@ Você tem acesso a funções que executam ações REAIS no CRM. Use-as quando o 
 - **completeTarefa**: Marcar tarefa como concluída.
 
 ### Pedidos
-- **createPedido**: Criar pedido para um cliente. OBRIGATÓRIO: tipo (venda ou bonificacao), formaPagamento (À vista, 7 dias, 14 dias, 28 dias, 30 dias, 45 dias, 60 dias, etc), tipoFrete (CIF ou FOB), e lista de produtos com quantidade em KG. Pergunte TODOS esses campos antes de criar.
+- **createPedido**: Criar pedido para um cliente. OBRIGATÓRIO: tipo (venda ou bonificacao), formaPagamento (À vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias), tipoFrete (CIF ou FOB), e lista de produtos com quantidade em KG. Pergunte TODOS esses campos antes de criar.
 - **aprovarPedido**: Aprovar pedido pendente (⚠️ SOMENTE GERENTE).
 - **recusarPedido**: Recusar pedido com motivo (⚠️ SOMENTE GERENTE).
 
