@@ -138,6 +138,14 @@ export default function ClientePanel({
 
   const handleEnviarPedido = async () => {
     if (!onAddPedido || pedidoItens.length === 0 || !pedidoFrete) return
+    if (pedidoTipo === 'venda' && pedidoItens.some(i => i.preco <= 0)) {
+      addNotificacao('warning', 'Preço obrigatório', 'Defina o preço unitário de todos os itens para venda.', c.id)
+      return
+    }
+    if (pedidoTipo === 'venda' && pedidoTotal <= 0) {
+      addNotificacao('warning', 'Valor inválido', 'O total da venda deve ser maior que zero.', c.id)
+      return
+    }
     setPedidoSaving(true)
     try {
       const numero = `PED-${Date.now().toString().slice(-6)}`
@@ -147,7 +155,7 @@ export default function ClientePanel({
         dataCriacao: new Date().toISOString(), dataEnvio: new Date().toISOString(),
         totalValor: pedidoTotal, tipo: pedidoTipo, formaPagamento: pedidoFormaPagamento, tipoFrete: pedidoFrete || undefined,
       })
-      addNotificacao('success', 'Pedido enviado', `Pedido ${numero} — R$ ${pedidoTotal.toFixed(2)}`, c.id)
+      addNotificacao('success', 'Pedido enviado', `Pedido ${numero} — ${pedidoTipo === 'venda' ? `R$ ${pedidoTotal.toFixed(2)}` : 'Amostra sem valor'}`, c.id)
       setPedidoItens([]); setPedidoObs(''); setPedidoFrete(''); setPedidoTipo('venda'); setPedidoFormaPagamento('À vista'); setShowPedido(false)
     } catch { addNotificacao('error', 'Erro', 'Falha ao enviar pedido', c.id) }
     setPedidoSaving(false)
@@ -158,9 +166,20 @@ export default function ClientePanel({
     setPedidoItens(prev => {
       const exists = prev.find(i => i.produtoId === produto.id)
       if (exists) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
-      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: produto.preco, unidade: produto.unidade, quantidade: qtd }]
+      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: 0, unidade: produto.unidade, quantidade: qtd }]
     })
   }
+
+  const setPedidoItemPreco = (produtoId: number, preco: number) => {
+    const precoSeguro = Number.isFinite(preco) ? Math.max(0, preco) : 0
+    setPedidoItens(prev => prev.map(i => i.produtoId === produtoId ? { ...i, preco: precoSeguro } : i))
+  }
+
+  React.useEffect(() => {
+    if (pedidoTipo === 'bonificacao') {
+      setPedidoItens(prev => prev.map(i => ({ ...i, preco: 0 })))
+    }
+  }, [pedidoTipo])
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
@@ -501,14 +520,31 @@ export default function ClientePanel({
                         <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100'}`}>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
-                            <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / KG</p>
+                            <p className="text-[10px] text-gray-500">Unidade: {p.unidade.toUpperCase()}</p>
                           </div>
                           {qtd > 0 ? (
-                            <div className="flex items-center gap-1">
+                            <div className="flex flex-col items-end gap-1">
+                              {pedidoTipo === 'venda' && (
+                                <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                                  <span>R$</span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    value={pedidoItens.find(i => i.produtoId === p.id)?.preco || 0}
+                                    onChange={e => setPedidoItemPreco(p.id, parseFloat(e.target.value))}
+                                    onFocus={e => e.target.select()}
+                                    className="w-16 px-1 py-0.5 border border-gray-300 rounded text-[10px] text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                                  />
+                                  <span>/{p.unidade.toUpperCase()}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1">
                               <button onClick={() => setPedidoItemQtd(p, qtd - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-xs font-bold">−</button>
                               <span className="w-8 text-center text-xs font-bold">{qtd}</span>
                               <button onClick={() => setPedidoItemQtd(p, qtd + 1)} className="w-6 h-6 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white text-xs font-bold">+</button>
                               <span className="text-[9px] text-gray-400">(Quilo(s))</span>
+                              </div>
                             </div>
                           ) : (
                             <button onClick={() => setPedidoItemQtd(p, 1)} className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-medium rounded-apple">+ Add</button>
@@ -521,11 +557,11 @@ export default function ClientePanel({
                   {pedidoItens.length > 0 && (
                     <div className="flex items-center justify-between text-sm font-bold text-gray-900 pt-2 border-t">
                       <span>{pedidoItens.reduce((s, i) => s + i.quantidade, 0)} kg</span>
-                      <span>R$ {pedidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      <span>{pedidoTipo === 'venda' ? `R$ ${pedidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Amostra sem valor'}</span>
                     </div>
                   )}
                   <button onClick={handleEnviarPedido} disabled={pedidoItens.length === 0 || !pedidoFrete || pedidoSaving} className="w-full py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-apple text-sm transition-colors">
-                    {pedidoSaving ? '⏳ Enviando...' : `📤 Enviar Pedido — R$ ${pedidoTotal.toFixed(2)}`}
+                    {pedidoSaving ? '⏳ Enviando...' : (pedidoTipo === 'venda' ? `📤 Enviar Pedido — R$ ${pedidoTotal.toFixed(2)}` : '📤 Enviar Amostra')}
                   </button>
                 </div>
               )}

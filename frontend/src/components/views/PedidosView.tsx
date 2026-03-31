@@ -71,7 +71,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       setItensPedido(prev => {
         const existe = prev.find(i => i.produtoId === produto.id)
         if (existe) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
-        return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', unidade: produto.unidade, preco: produto.preco, quantidade: qtd }]
+        return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', unidade: produto.unidade, preco: 0, quantidade: qtd }]
       })
     }
   }
@@ -80,6 +80,12 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     const precoSeguro = Number.isFinite(preco) ? Math.max(0, preco) : 0
     setItensPedido(prev => prev.map(i => i.produtoId === produtoId ? { ...i, preco: precoSeguro } : i))
   }
+
+  React.useEffect(() => {
+    if (tipoPedido === 'bonificacao') {
+      setItensPedido(prev => prev.map(i => ({ ...i, preco: 0 })))
+    }
+  }, [tipoPedido])
 
   const handleGerarProposta = async () => {
     if (!selectedClienteId || itensPedido.length === 0) {
@@ -116,7 +122,11 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
       return
     }
     if (itensPedido.length === 0) { showToast?.('error', 'Adicione pelo menos um produto.'); return }
-    if (totalPedido <= 0) { showToast?.('error', 'Valor total deve ser > zero.'); return }
+    if (tipoPedido === 'venda' && itensPedido.some(i => i.preco <= 0)) {
+      showToast?.('error', 'Defina o preço unitário de todos os itens para venda.')
+      return
+    }
+    if (tipoPedido === 'venda' && totalPedido <= 0) { showToast?.('error', 'Valor total deve ser > zero para venda.'); return }
     if (!tipoFrete) { showToast?.('error', 'Selecione o frete (CIF ou FOB).'); return }
     setIsSaving(true)
     const numero = `PED-${Date.now().toString().slice(-6)}`
@@ -367,7 +377,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                       </div>
                       <p className="text-[10px] text-gray-400">{catLabel[produto.categoria]}{produto.sku ? ` | ${produto.sku}` : ''}</p>
                     </div>
-                    <p className="text-xs font-bold text-primary-600 flex-shrink-0 w-20 text-right">R$ {produto.preco.toFixed(2).replace('.', ',')} <span className="text-[10px] font-normal text-gray-400">/{produto.unidade}</span></p>
+                    <p className="text-xs font-medium text-gray-400 flex-shrink-0 w-20 text-right">/{produto.unidade}</p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 w-28 justify-end">
                       {noCarrinho ? (
                         <>
@@ -413,8 +423,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         <p className="text-xs font-semibold text-gray-900 truncate">{item.nomeProduto}</p>
                         <div className="flex items-center gap-1 mt-0.5">
                           <span className="text-[10px] text-gray-400">R$</span>
-                          <input type="number" min={0} step="0.01" value={item.preco} onChange={e => setItemPreco(item.produtoId, parseFloat(e.target.value))} onFocus={e => e.target.select()}
-                            className="w-16 px-1 py-0.5 border border-gray-200 rounded text-[10px] text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400" />
+                          <input type="number" min={0} step="0.01" value={item.preco} onChange={e => setItemPreco(item.produtoId, parseFloat(e.target.value))} onFocus={e => e.target.select()} disabled={tipoPedido !== 'venda'}
+                            className={`w-16 px-1 py-0.5 border border-gray-200 rounded text-[10px] ${tipoPedido === 'venda' ? 'text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400' : 'text-gray-400 bg-gray-100 cursor-not-allowed'}`} />
                           <span className="text-[10px] text-gray-400">/ {item.unidade}</span>
                         </div>
                       </div>
