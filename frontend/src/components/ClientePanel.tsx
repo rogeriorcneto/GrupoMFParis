@@ -165,7 +165,7 @@ export default function ClientePanel({
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black bg-opacity-30" onClick={onClose} />
-      <div className="relative w-full sm:max-w-[95vw] lg:max-w-[96vw] xl:max-w-[92vw] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden animate-slide-in-right sm:my-2 sm:mr-2">
+      <div className="relative w-full sm:max-w-[95vw] lg:max-w-[80vw] xl:max-w-[75vw] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden animate-slide-in-right sm:my-2 sm:mr-2">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex-1 min-w-0">
@@ -233,10 +233,6 @@ export default function ClientePanel({
               )}
             </div>
           </div>
-
-          </div>
-
-          <div className="space-y-4 lg:col-span-7 xl:col-span-8 lg:overflow-y-auto lg:pl-1">
 
           {/* === DADOS COMERCIAIS === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
@@ -322,7 +318,7 @@ export default function ClientePanel({
           {/* === AÇÕES RÁPIDAS === */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {c.etapa !== 'perdido' && (
                 <button onClick={() => { onEditCliente(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-apple hover:bg-gray-50">✏️ Editar</button>
               )}
@@ -355,6 +351,10 @@ export default function ClientePanel({
               )}
             </div>
           </div>
+
+          </div>
+
+          <div className="space-y-4 lg:col-span-7 xl:col-span-8 lg:overflow-y-auto lg:pl-1">
 
           {/* === REGISTRAR ATIVIDADE === */}
           <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
