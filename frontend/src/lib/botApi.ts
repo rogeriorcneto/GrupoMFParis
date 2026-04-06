@@ -108,6 +108,28 @@ export async function sendEmailViaBot(to: string, subject: string, body: string,
   }
 }
 
+export interface InboxEmailItem {
+  id: string
+  subject: string
+  from: string
+  to: string
+  date: string
+  snippet: string
+  bodyText: string
+  unread: boolean
+}
+
+/** Fetch inbox emails related to a client email */
+export async function fetchEmailInbox(clienteEmail: string, limit = 30): Promise<{ success: boolean; data?: InboxEmailItem[]; error?: string }> {
+  try {
+    const query = new URLSearchParams({ clienteEmail, limit: String(limit) })
+    const res = await authFetch(`${BOT_URL}/api/email/inbox?${query.toString()}`)
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão com inbox de email' }
+  }
+}
+
 // ─── Per-User WhatsApp (cada vendedor conecta seu próprio WA) ───
 
 export interface UserWAStatus {

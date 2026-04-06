@@ -35,7 +35,7 @@ describe('Omie Client', () => {
       vi.mocked(loadConfig).mockResolvedValueOnce({
         omieAppKey: '', omieAppSecret: 'ENC:secret',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
-        emailFrom: '', whatsappNumero: '',
+        emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
       const creds = await getOmieCredentials()
@@ -47,7 +47,7 @@ describe('Omie Client', () => {
       vi.mocked(loadConfig).mockResolvedValueOnce({
         omieAppKey: 'ENC:key', omieAppSecret: '',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
-        emailFrom: '', whatsappNumero: '',
+        emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
       const creds = await getOmieCredentials()
@@ -61,7 +61,7 @@ describe('Omie Client', () => {
       vi.mocked(loadConfig).mockResolvedValueOnce({
         omieAppKey: '', omieAppSecret: '',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
-        emailFrom: '', whatsappNumero: '',
+        emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
       await expect(
@@ -213,7 +213,7 @@ describe('Omie Client', () => {
       vi.mocked(loadConfig).mockResolvedValueOnce({
         omieAppKey: '', omieAppSecret: '',
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
-        emailFrom: '', whatsappNumero: '',
+        emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
       })
 

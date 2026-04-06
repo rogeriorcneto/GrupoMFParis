@@ -12,7 +12,7 @@ import {
   sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
   validateContactsOnWhatsApp, cacheMessage, getUserWhatsAppSession,
 } from './whatsapp-multi.js'
-import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection } from './email.js'
+import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection, fetchInboxEmails } from './email.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
@@ -797,6 +797,11 @@ app.get('/api/config', requireAuth, requireGerente, async (req, res) => {
       emailUser: cfg.emailUser,
       emailPass: cfg.emailPass ? '••••••••' : '',
       emailFrom: cfg.emailFrom,
+      emailImapHost: cfg.emailImapHost,
+      emailImapPort: cfg.emailImapPort,
+      emailImapUser: cfg.emailImapUser,
+      emailImapPass: cfg.emailImapPass ? '••••••••' : '',
+      emailImapSecure: cfg.emailImapSecure,
       whatsappNumero: waStatus.connected ? waStatus.number : (cfg.whatsappNumero || ''),
       whatsappConnected: waStatus.connected,
     })
@@ -807,7 +812,18 @@ app.get('/api/config', requireAuth, requireGerente, async (req, res) => {
 })
 
 app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), async (req, res) => {
-  const { emailHost, emailPort, emailUser, emailPass, emailFrom } = req.body
+  const {
+    emailHost,
+    emailPort,
+    emailUser,
+    emailPass,
+    emailFrom,
+    emailImapHost,
+    emailImapPort,
+    emailImapUser,
+    emailImapPass,
+    emailImapSecure,
+  } = req.body
 
   try {
     const updates: any = {}
@@ -817,6 +833,11 @@ app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), asyn
     // Só atualiza a senha se não for o placeholder
     if (emailPass !== undefined && emailPass !== '••••••••') updates.emailPass = emailPass
     if (emailFrom !== undefined) updates.emailFrom = emailFrom
+    if (emailImapHost !== undefined) updates.emailImapHost = emailImapHost
+    if (emailImapPort !== undefined) updates.emailImapPort = parseInt(emailImapPort, 10) || 993
+    if (emailImapUser !== undefined) updates.emailImapUser = emailImapUser
+    if (emailImapPass !== undefined && emailImapPass !== '••••••••') updates.emailImapPass = emailImapPass
+    if (emailImapSecure !== undefined) updates.emailImapSecure = !!emailImapSecure
 
     const saved = await saveConfig(updates)
 
@@ -832,6 +853,11 @@ app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), asyn
         emailUser: saved.emailUser,
         emailPass: saved.emailPass ? '••••••••' : '',
         emailFrom: saved.emailFrom,
+        emailImapHost: saved.emailImapHost,
+        emailImapPort: saved.emailImapPort,
+        emailImapUser: saved.emailImapUser,
+        emailImapPass: saved.emailImapPass ? '••••••••' : '',
+        emailImapSecure: saved.emailImapSecure,
       }
     })
   } catch (err: any) {
@@ -873,6 +899,17 @@ app.post('/api/email/send-template', requireAuth, rateLimit(15, 60_000), async (
   }
 
   const result = await sendTemplateEmail({ templateId, to, clienteId, vendedorNome })
+  res.json(result)
+})
+
+app.get('/api/email/inbox', requireAuth, rateLimit(30, 60_000), async (req, res) => {
+  const clienteEmail = String(req.query.clienteEmail || '').trim()
+  const limit = Number(req.query.limit || 30)
+  if (!clienteEmail) {
+    res.status(400).json({ success: false, error: 'Parâmetro obrigatório: clienteEmail' })
+    return
+  }
+  const result = await fetchInboxEmails({ clienteEmail, limit })
   res.json(result)
 })
 

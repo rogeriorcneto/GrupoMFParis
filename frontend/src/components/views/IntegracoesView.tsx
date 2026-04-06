@@ -26,6 +26,11 @@ interface EmailFormData {
   emailUser: string
   emailPass: string
   emailFrom: string
+  emailImapHost: string
+  emailImapPort: string
+  emailImapUser: string
+  emailImapPass: string
+  emailImapSecure: boolean
 }
 
 const IntegracoesView: React.FC = () => {
@@ -39,7 +44,18 @@ const IntegracoesView: React.FC = () => {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Email config form
-  const [emailForm, setEmailForm] = useState<EmailFormData>({ emailHost: '', emailPort: '587', emailUser: '', emailPass: '', emailFrom: '' })
+  const [emailForm, setEmailForm] = useState<EmailFormData>({
+    emailHost: '',
+    emailPort: '587',
+    emailUser: '',
+    emailPass: '',
+    emailFrom: '',
+    emailImapHost: '',
+    emailImapPort: '993',
+    emailImapUser: '',
+    emailImapPass: '',
+    emailImapSecure: true,
+  })
   const [showEmailForm, setShowEmailForm] = useState(false)
   const [emailSaving, setEmailSaving] = useState(false)
   const [emailMsg, setEmailMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -59,6 +75,11 @@ const IntegracoesView: React.FC = () => {
         emailUser: cfg.emailUser || '',
         emailPass: cfg.emailPass || '',
         emailFrom: cfg.emailFrom || '',
+        emailImapHost: cfg.emailImapHost || '',
+        emailImapPort: String(cfg.emailImapPort || 993),
+        emailImapUser: cfg.emailImapUser || '',
+        emailImapPass: cfg.emailImapPass || '',
+        emailImapSecure: cfg.emailImapSecure !== undefined ? !!cfg.emailImapSecure : true,
       })
       configLoadedRef.current = true
     } catch { /* bot offline */ }
@@ -151,13 +172,22 @@ const IntegracoesView: React.FC = () => {
           emailUser: emailForm.emailUser,
           emailPass: emailForm.emailPass,
           emailFrom: emailForm.emailFrom,
+          emailImapHost: emailForm.emailImapHost,
+          emailImapPort: emailForm.emailImapPort,
+          emailImapUser: emailForm.emailImapUser,
+          emailImapPass: emailForm.emailImapPass,
+          emailImapSecure: emailForm.emailImapSecure,
         }),
       })
       const data = await res.json()
       if (data.success) {
         setEmailMsg({ type: 'success', text: data.emailConfigured ? 'Configurado e ativo!' : 'Salvo (verifique os dados).' })
         if (data.config) {
-          setEmailForm(prev => ({ ...prev, emailPass: data.config.emailPass || '' }))
+          setEmailForm(prev => ({
+            ...prev,
+            emailPass: data.config.emailPass || prev.emailPass,
+            emailImapPass: data.config.emailImapPass || prev.emailImapPass,
+          }))
         }
       } else {
         setEmailMsg({ type: 'error', text: data.error || 'Erro ao salvar.' })
@@ -379,7 +409,7 @@ const IntegracoesView: React.FC = () => {
         <div className="flex items-center gap-3 mb-4">
           <div className="text-4xl">📧</div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">Email (SMTP)</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Email (SMTP + IMAP)</h3>
             <div className="flex items-center gap-2 mt-1">
               <span className={`inline-block w-2.5 h-2.5 rounded-full ${emailStatus.configured ? 'bg-green-500' : 'bg-gray-300'}`} />
               <span className="text-sm text-gray-600">
@@ -397,7 +427,7 @@ const IntegracoesView: React.FC = () => {
         </div>
 
         <p className="text-sm text-gray-600 mb-4">
-          Configure o email SMTP para enviar emails automatizados para clientes. Cada envio e registrado como interacao no CRM.
+          Configure SMTP para envio e IMAP para sincronizar emails recebidos no CRM (Funil e Tarefas).
         </p>
 
         {/* Email Config Form */}
@@ -437,6 +467,64 @@ const IntegracoesView: React.FC = () => {
                 placeholder="vendas@suaempresa.com"
                 className={inputClass}
               />
+            </div>
+
+            <div className="pt-2 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-800 mb-2">Configuração IMAP (Inbox)</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Servidor IMAP</label>
+                  <input
+                    type="text"
+                    value={emailForm.emailImapHost}
+                    onChange={e => setEmailForm(prev => ({ ...prev, emailImapHost: e.target.value }))}
+                    placeholder="imap.gmail.com"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Porta IMAP</label>
+                  <input
+                    type="text"
+                    value={emailForm.emailImapPort}
+                    onChange={e => setEmailForm(prev => ({ ...prev, emailImapPort: e.target.value }))}
+                    placeholder="993"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <label className={labelClass}>Email (usuario IMAP)</label>
+                <input
+                  type="email"
+                  value={emailForm.emailImapUser}
+                  onChange={e => setEmailForm(prev => ({ ...prev, emailImapUser: e.target.value }))}
+                  placeholder="vendas@suaempresa.com"
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="mt-3">
+                <label className={labelClass}>Senha IMAP</label>
+                <input
+                  type="password"
+                  value={emailForm.emailImapPass}
+                  onChange={e => setEmailForm(prev => ({ ...prev, emailImapPass: e.target.value }))}
+                  placeholder="Senha de app / senha da caixa"
+                  className={inputClass}
+                />
+              </div>
+
+              <label className="mt-3 inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={emailForm.emailImapSecure}
+                  onChange={e => setEmailForm(prev => ({ ...prev, emailImapSecure: e.target.checked }))}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-300"
+                />
+                Usar conexão segura (SSL/TLS)
+              </label>
             </div>
 
             <div>

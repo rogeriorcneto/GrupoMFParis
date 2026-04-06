@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { XMarkIcon, PaperAirplaneIcon, PhoneIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor, Interacao } from '../types'
-import { sendWhatsApp, sendEmailViaBot, fetchWhatsAppMessages } from '../lib/botApi'
+import { sendWhatsApp, fetchWhatsAppMessages } from '../lib/botApi'
 import { fetchInteracoesByCliente, insertInteracao, insertAtividade } from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
+import EmailCenterPanel from './EmailCenterPanel'
 
 interface Message {
   id: number
@@ -38,12 +39,6 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
   const [waSending, setWaSending] = useState(false)
   const [waLoading, setWaLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
-
-  // Email state
-  const [emailTo, setEmailTo] = useState(cliente.contatoEmail || '')
-  const [emailSubject, setEmailSubject] = useState('')
-  const [emailBody, setEmailBody] = useState('')
-  const [emailSending, setEmailSending] = useState(false)
 
   // Histórico state
   const [historico, setHistorico] = useState<HistoricoItem[]>([])
@@ -177,32 +172,6 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
     }
 
     setWaSending(false)
-  }
-
-  const handleSendEmail = async () => {
-    if (!emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) {
-      showToast?.('error', 'Preencha todos os campos do email.')
-      return
-    }
-    setEmailSending(true)
-
-    const result = await sendEmailViaBot(
-      emailTo.trim(),
-      emailSubject.trim(),
-      emailBody.trim(),
-      cliente.id,
-      loggedUser?.nome
-    )
-
-    if (result.success) {
-      showToast?.('success', 'Email enviado com sucesso!')
-      setEmailSubject('')
-      setEmailBody('')
-    } else {
-      showToast?.('error', 'Falha ao enviar email: ' + (result.error || ''))
-    }
-
-    setEmailSending(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -357,71 +326,12 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
 
           {/* ─── Email Tab ─── */}
           {activeTab === 'email' && (
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {!cliente.contatoEmail ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <p className="text-4xl mb-3">📭</p>
-                    <p className="text-gray-600 font-medium">Sem email cadastrado</p>
-                    <p className="text-sm text-gray-400 mt-1">Este cliente não possui email cadastrado.</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-blue-50 border border-blue-200 rounded-apple p-3">
-                    <p className="text-xs text-blue-700">
-                      Email enviado via SMTP do CRM. O cliente receberá do endereço configurado nas integrações.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Para</label>
-                    <input
-                      type="email"
-                      value={emailTo}
-                      onChange={e => setEmailTo(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Assunto *</label>
-                    <input
-                      type="text"
-                      value={emailSubject}
-                      onChange={e => setEmailSubject(e.target.value)}
-                      placeholder="Ex: Proposta comercial - Grupo MF Paris"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Mensagem *</label>
-                    <textarea
-                      value={emailBody}
-                      onChange={e => setEmailBody(e.target.value)}
-                      rows={8}
-                      placeholder={`Olá ${cliente.contatoNome || ''},\n\nSegue nossa proposta...\n\nAtenciosamente,\n${loggedUser?.nome || ''}\nGrupo MF Paris`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-                    />
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={handleSendEmail}
-                      disabled={emailSending || !emailSubject.trim() || !emailBody.trim()}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-apple transition-colors"
-                    >
-                      {emailSending ? (
-                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                      ) : (
-                        <PaperAirplaneIcon className="h-4 w-4" />
-                      )}
-                      {emailSending ? 'Enviando...' : 'Enviar Email'}
-                    </button>
-                  </div>
-                </>
-              )}
+            <div className="flex-1 overflow-y-auto p-5">
+              <EmailCenterPanel
+                cliente={cliente}
+                vendedorNome={loggedUser?.nome}
+                showToast={showToast}
+              />
             </div>
           )}
 

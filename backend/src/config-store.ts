@@ -9,6 +9,11 @@ export interface BotConfigData {
   emailUser: string
   emailPass: string
   emailFrom: string
+  emailImapHost: string
+  emailImapPort: number
+  emailImapUser: string
+  emailImapPass: string
+  emailImapSecure: boolean
   whatsappNumero: string
   omieAppKey: string
   omieAppSecret: string
@@ -26,6 +31,11 @@ const DEFAULT_CONFIG: BotConfigData = {
   emailUser: '',
   emailPass: '',
   emailFrom: '',
+  emailImapHost: '',
+  emailImapPort: 993,
+  emailImapUser: '',
+  emailImapPass: '',
+  emailImapSecure: true,
   whatsappNumero: '',
   omieAppKey: '',
   omieAppSecret: '',
@@ -70,6 +80,13 @@ export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData
       emailUser: data.email_user || process.env.EMAIL_USER || '',
       emailPass: decrypt(data.email_pass) || process.env.EMAIL_PASS || '',
       emailFrom: data.email_from || process.env.EMAIL_FROM || '',
+      emailImapHost: data.email_imap_host || process.env.EMAIL_IMAP_HOST || '',
+      emailImapPort: data.email_imap_port || parseInt(process.env.EMAIL_IMAP_PORT || '993', 10),
+      emailImapUser: data.email_imap_user || process.env.EMAIL_IMAP_USER || '',
+      emailImapPass: decrypt(data.email_imap_pass) || process.env.EMAIL_IMAP_PASS || '',
+      emailImapSecure: data.email_imap_secure !== undefined && data.email_imap_secure !== null
+        ? !!data.email_imap_secure
+        : (String(process.env.EMAIL_IMAP_SECURE || 'true').toLowerCase() === 'true'),
       whatsappNumero: data.whatsapp_numero || '',
       omieAppKey: data.omie_app_key || '',
       omieAppSecret: data.omie_app_secret || '',
@@ -87,6 +104,21 @@ export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData
     cachedConfig = configFromEnv()
     cacheLoaded = true
     return { ...cachedConfig }
+  }
+}
+
+export async function getImapConfig(): Promise<{ host: string; port: number; user: string; pass: string; secure: boolean } | null> {
+  const cfg = await loadConfig()
+  const host = cfg.emailImapHost || ''
+  const user = cfg.emailImapUser || ''
+  const pass = cfg.emailImapPass || ''
+  if (!host || !user || !pass) return null
+  return {
+    host,
+    port: cfg.emailImapPort || 993,
+    user,
+    pass,
+    secure: cfg.emailImapSecure !== undefined ? !!cfg.emailImapSecure : true,
   }
 }
 
@@ -110,6 +142,11 @@ export async function saveConfig(data: Partial<BotConfigData>, client?: Supabase
         email_user: updated.emailUser,
         email_pass: updated.emailPass ? encrypt(updated.emailPass) : '',
         email_from: updated.emailFrom,
+        email_imap_host: updated.emailImapHost || '',
+        email_imap_port: updated.emailImapPort || 993,
+        email_imap_user: updated.emailImapUser || '',
+        email_imap_pass: updated.emailImapPass ? encrypt(updated.emailImapPass) : '',
+        email_imap_secure: updated.emailImapSecure !== undefined ? !!updated.emailImapSecure : true,
         whatsapp_numero: updated.whatsappNumero,
         omie_app_key: updated.omieAppKey ? encrypt(updated.omieAppKey) : '',
         omie_app_secret: updated.omieAppSecret ? encrypt(updated.omieAppSecret) : '',
@@ -161,6 +198,11 @@ function configFromEnv(): BotConfigData {
     emailUser: process.env.EMAIL_USER || '',
     emailPass: process.env.EMAIL_PASS || '',
     emailFrom: process.env.EMAIL_FROM || '',
+    emailImapHost: process.env.EMAIL_IMAP_HOST || '',
+    emailImapPort: parseInt(process.env.EMAIL_IMAP_PORT || '993', 10),
+    emailImapUser: process.env.EMAIL_IMAP_USER || '',
+    emailImapPass: process.env.EMAIL_IMAP_PASS || '',
+    emailImapSecure: String(process.env.EMAIL_IMAP_SECURE || 'true').toLowerCase() === 'true',
     whatsappNumero: '',
     omieAppKey: process.env.OMIE_APP_KEY || '',
     omieAppSecret: process.env.OMIE_APP_SECRET || '',

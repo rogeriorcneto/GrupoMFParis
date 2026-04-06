@@ -2,11 +2,11 @@ import React, { useState, useRef } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido } from '../types'
 import * as db from '../lib/database'
-import { sendEmailViaBot } from '../lib/botApi'
 import { logger } from '../utils/logger'
 import { formatCNPJ } from '../utils/validators'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import CallRecorder from './CallRecorder'
+import EmailCenterPanel from './EmailCenterPanel'
 
 interface ClientePanelProps {
   cliente: Cliente
@@ -95,11 +95,6 @@ export default function ClientePanel({
   const [showTimeline, setShowTimeline] = useState(false)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
-
-  // Email inline state
-  const [emailSubject, setEmailSubject] = useState('')
-  const [emailBody, setEmailBody] = useState('')
-  const [emailSending, setEmailSending] = useState(false)
 
   // Refs for scroll-to
   const whatsAppRef = useRef<HTMLDivElement>(null)
@@ -818,49 +813,12 @@ export default function ClientePanel({
               <span>{showEmail ? '▲' : '▼'}</span>
             </button>
             {showEmail && (
-              <div className="px-4 pb-4 space-y-3">
-                {!c.contatoEmail ? (
-                  <div className="text-center py-4">
-                    <p className="text-2xl mb-2">📭</p>
-                    <p className="text-sm text-gray-600">Sem email cadastrado</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-blue-50 border border-blue-200 rounded-apple p-2.5">
-                      <p className="text-xs text-blue-700">Email enviado via SMTP do CRM para <strong>{c.contatoEmail}</strong></p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Assunto *</label>
-                      <input type="text" value={emailSubject} onChange={e => setEmailSubject(e.target.value)} placeholder={`Contato - ${c.razaoSocial}`} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Mensagem *</label>
-                      <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} rows={5} placeholder={`Olá ${c.contatoNome || ''},\n\n\n\nAtenciosamente,\n${loggedUser?.nome || ''}\nGrupo MF Paris`} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!emailSubject.trim() || !emailBody.trim()) return
-                        setEmailSending(true)
-                        try {
-                          const result = await sendEmailViaBot(c.contatoEmail!, emailSubject.trim(), emailBody.trim(), c.id, loggedUser?.nome)
-                          if (result.success) {
-                            addNotificacao('success', 'Email enviado', `Email enviado para ${c.contatoEmail}`, c.id)
-                            setEmailSubject(''); setEmailBody('')
-                          } else {
-                            addNotificacao('error', 'Erro Email', result.error || 'Falha ao enviar email', c.id)
-                          }
-                        } catch (err: any) {
-                          addNotificacao('error', 'Erro Email', err?.message || 'Erro desconhecido', c.id)
-                        }
-                        setEmailSending(false)
-                      }}
-                      disabled={emailSending || !emailSubject.trim() || !emailBody.trim()}
-                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white text-sm font-semibold rounded-apple transition-colors"
-                    >
-                      {emailSending ? '⏳ Enviando...' : '📧 Enviar Email'}
-                    </button>
-                  </>
-                )}
+              <div className="px-4 pb-4">
+                <EmailCenterPanel
+                  cliente={c}
+                  vendedorNome={loggedUser?.nome}
+                  showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'Email' : 'Erro Email', texto, c.id)}
+                />
               </div>
             )}
           </div>
