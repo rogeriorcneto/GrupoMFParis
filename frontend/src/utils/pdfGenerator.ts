@@ -36,6 +36,13 @@ function formatDateLong(date: Date): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
+function safePdfText(value: string): string {
+  return (value || '')
+    .replace(/[✉☎▣•●▪◦]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function getClienteEndereco(cliente: Cliente): string {
   const parts = [
     cliente.enderecoRua,
@@ -122,11 +129,11 @@ export async function gerarPropostaPDF(
   const col2X = margin + colWidth + colGap
   const col3X = margin + (colWidth + colGap) * 2
 
-  const drawInfoCol = (title: string, lines: string[], x: number) => {
+  const drawInfoCol = (title: string, lines: string[], x: number, width: number): number => {
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.3)
     doc.setTextColor(31, 41, 55)
-    doc.text(title, x, y)
+    doc.text(safePdfText(title), x, y)
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
@@ -134,37 +141,44 @@ export async function gerarPropostaPDF(
     let lineY = y + 5
     for (const line of lines) {
       if (!line.trim()) continue
-      doc.text(line, x, lineY)
-      lineY += 4.5
+      const wrapped = doc.splitTextToSize(safePdfText(line), Math.max(10, width - 1))
+      for (const textLine of wrapped) {
+        doc.text(textLine, x, lineY)
+        lineY += 4.5
+      }
     }
+    return lineY
   }
 
-  drawInfoCol(
+  const col1Bottom = drawInfoCol(
     `Proposta enviada por ${vendedorNome}`,
-    ['✉ vendas@mfparis.com.br'],
-    col1X
+    ['Email: vendas@mfparis.com.br'],
+    col1X,
+    colWidth
   )
 
-  drawInfoCol(
+  const col2Bottom = drawInfoCol(
     `Para: ${(cliente.contatoNome || cliente.razaoSocial || '').toUpperCase()}`,
     [
-      cliente.contatoEmail ? `✉ ${cliente.contatoEmail}` : '',
-      cliente.contatoCelular || cliente.contatoTelefone ? `☎ ${cliente.contatoCelular || cliente.contatoTelefone}` : '',
+      cliente.contatoEmail ? `Email: ${cliente.contatoEmail}` : '',
+      cliente.contatoCelular || cliente.contatoTelefone ? `Telefone: ${cliente.contatoCelular || cliente.contatoTelefone}` : '',
     ],
-    col2X
+    col2X,
+    colWidth
   )
 
-  drawInfoCol(
+  const col3Bottom = drawInfoCol(
     'Dados da empresa',
     [
-      `▣ ${(cliente.nomeFantasia || cliente.razaoSocial || '').toUpperCase()}`,
-      cliente.cnpj ? `▣ ${cliente.cnpj}` : '',
-      getClienteEndereco(cliente) ? `▣ ${getClienteEndereco(cliente)}` : '',
+      `Empresa: ${(cliente.nomeFantasia || cliente.razaoSocial || '').toUpperCase()}`,
+      cliente.cnpj ? `CNPJ: ${cliente.cnpj}` : '',
+      getClienteEndereco(cliente) ? `Endereço: ${getClienteEndereco(cliente)}` : '',
     ],
-    col3X
+    col3X,
+    colWidth
   )
 
-  y += 18
+  y = Math.max(col1Bottom, col2Bottom, col3Bottom) + 2
   doc.setDrawColor(217, 220, 232)
   doc.setLineWidth(0.25)
   doc.line(margin, y, pageWidth - margin, y)
@@ -183,8 +197,8 @@ export async function gerarPropostaPDF(
   const colUnit = margin + 92
   const colQtd = margin + 120
   const colTotal = margin + 138
-  const colDesc = margin + 165
-  const colTotalDesc = pageWidth - margin - 2
+  const colDesc = margin + 154
+  const colTotalDesc = pageWidth - margin - 1
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
@@ -194,7 +208,7 @@ export async function gerarPropostaPDF(
   doc.text('Quantidade', colQtd, y + 5)
   doc.text('Total', colTotal, y + 5)
   doc.text('Desconto', colDesc, y + 5)
-  doc.text('Total com desconto', colTotalDesc, y + 5, { align: 'right' })
+  doc.text('Total c/ desc.', colTotalDesc, y + 5, { align: 'right' })
 
   y += 12
   let subtotal = 0

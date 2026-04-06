@@ -4,6 +4,7 @@ import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido 
 import * as db from '../lib/database'
 import { sendEmailViaBot } from '../lib/botApi'
 import { logger } from '../utils/logger'
+import { formatCNPJ } from '../utils/validators'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import CallRecorder from './CallRecorder'
 
@@ -33,6 +34,29 @@ const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qua
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
 const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação' }
 
+function currentTimeHHMM(): string {
+  const now = new Date()
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+}
+
+function parseNotasEmpresa(notas?: string): { setor: string; info: string } {
+  const raw = (notas || '').trim()
+  if (!raw) return { setor: '', info: '' }
+  const setorMatch = raw.match(/^Setor\s*respons[aá]vel:\s*(.+)$/im)
+  const setor = setorMatch?.[1]?.trim() || ''
+  const info = raw
+    .replace(/^Setor\s*respons[aá]vel:\s*.+$/gim, '')
+    .replace(/^Informa[cç][oõ]es\s+adicionais:\s*/gim, '')
+    .trim()
+  return { setor, info }
+}
+
+function composeNotasEmpresa(setor: string, info: string): string {
+  const setorLine = setor.trim() ? `Setor responsável: ${setor.trim()}` : ''
+  const infoBlock = info.trim() ? `Informações adicionais:\n${info.trim()}` : ''
+  return [setorLine, infoBlock].filter(Boolean).join('\n\n').trim()
+}
+
 export default function ClientePanel({
   cliente: c, interacoes, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
@@ -40,12 +64,19 @@ export default function ClientePanel({
   setInteracoes, setClientes, setTarefas, addNotificacao,
   produtos, onAddPedido
 }: ClientePanelProps) {
+  const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
-  const [panelNota, setPanelNota] = useState('')
+  const [panelAtividadePrazo, setPanelAtividadePrazo] = useState(new Date().toISOString().split('T')[0])
+  const [panelAtividadeHora, setPanelAtividadeHora] = useState(currentTimeHHMM())
+  const [panelContatoSetor, setPanelContatoSetor] = useState(notasEmpresa.setor)
+  const [panelInfoAdicional, setPanelInfoAdicional] = useState(notasEmpresa.info)
+  const [panelRedesSociais, setPanelRedesSociais] = useState(c.redesSociais || '')
+  const [pinnedInteracoes, setPinnedInteracoes] = useState<number[]>([])
   const [panelNovaTarefa, setPanelNovaTarefa] = useState(false)
   const [panelTarefaTitulo, setPanelTarefaTitulo] = useState('')
   const [panelTarefaData, setPanelTarefaData] = useState(new Date().toISOString().split('T')[0])
+  const [panelTarefaHora, setPanelTarefaHora] = useState('')
   const [panelTarefaTipo, setPanelTarefaTipo] = useState<Tarefa['tipo']>('follow-up')
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
   const [showCallRecorder, setShowCallRecorder] = useState(false)
@@ -77,7 +108,34 @@ export default function ClientePanel({
   const vendedor = vendedores.find(v => v.id === c.vendedorId)
   const diasNaEtapa = c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0
   const clienteInteracoes = interacoes.filter(i => i.clienteId === c.id).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  const clienteInteracoesOrdenadas = [...clienteInteracoes].sort((a, b) => {
+    const aPinned = pinnedInteracoes.includes(a.id)
+    const bPinned = pinnedInteracoes.includes(b.id)
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+    return new Date(b.data).getTime() - new Date(a.data).getTime()
+  })
   const clienteTarefas = tarefas.filter(t => t.clienteId === c.id).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  const enderecoPrincipal = [
+    c.enderecoRua,
+    c.enderecoNumero,
+    c.enderecoComplemento,
+    c.enderecoBairro,
+    c.enderecoCidade,
+    c.enderecoEstado,
+    c.enderecoCep ? `CEP ${c.enderecoCep}` : '',
+  ].filter(Boolean).join(', ')
+  const mapQuery = encodeURIComponent(enderecoPrincipal || c.localizacao || c.endereco || '')
+
+  React.useEffect(() => {
+    const raw = localStorage.getItem(`cliente_panel_pins_${c.id}`)
+    if (!raw) { setPinnedInteracoes([]); return }
+    try {
+      const parsed = JSON.parse(raw)
+      setPinnedInteracoes(Array.isArray(parsed) ? parsed.filter((v: unknown) => typeof v === 'number') : [])
+    } catch {
+      setPinnedInteracoes([])
+    }
+  }, [c.id])
 
   // Pedido helpers
   const phone = (c.contatoCelular || c.contatoTelefone || '').replace(/\D/g, '')
@@ -89,7 +147,7 @@ export default function ClientePanel({
   })
 
   const handleRegistrarAtividade = async () => {
-    if (!panelAtividadeTipo || !panelAtividadeDesc.trim()) return
+    if (!panelAtividadeTipo || !panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora) return
     try {
       const savedI = await db.insertInteracao({
         clienteId: c.id, tipo: panelAtividadeTipo, data: new Date().toISOString(),
@@ -97,36 +155,66 @@ export default function ClientePanel({
         descricao: panelAtividadeDesc.trim(), automatico: false
       })
       setInteracoes(prev => [savedI, ...prev])
+
+      const tarefaTipo: Tarefa['tipo'] =
+        panelAtividadeTipo === 'email' || panelAtividadeTipo === 'whatsapp' || panelAtividadeTipo === 'ligacao' || panelAtividadeTipo === 'reuniao'
+          ? panelAtividadeTipo
+          : panelAtividadeTipo === 'linkedin'
+            ? 'follow-up'
+            : 'outro'
+
+      const savedT = await db.insertTarefa({
+        titulo: `Retorno: ${tipoInteracaoLabel[panelAtividadeTipo]} - ${c.razaoSocial}`,
+        descricao: panelAtividadeDesc.trim(),
+        data: panelAtividadePrazo,
+        hora: panelAtividadeHora,
+        tipo: tarefaTipo,
+        status: 'pendente',
+        prioridade: 'media',
+        clienteId: c.id,
+        vendedorId: c.vendedorId || loggedUser?.id,
+      })
+      setTarefas(prev => [savedT, ...prev])
+
       const hoje = new Date().toISOString().split('T')[0]
       await db.updateCliente(c.id, { ultimaInteracao: hoje })
       setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
     } catch (err) { logger.error('Erro ao registrar atividade:', err) }
     setPanelAtividadeTipo('')
     setPanelAtividadeDesc('')
-    addNotificacao('success', 'Atividade registrada', `${tipoInteracaoLabel[panelAtividadeTipo]}: ${c.razaoSocial}`, c.id)
+    addNotificacao('success', 'Atividade registrada', `${tipoInteracaoLabel[panelAtividadeTipo]}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`, c.id)
   }
 
-  const handleSalvarNota = async () => {
-    if (!panelNota.trim()) return
+  const handleSalvarDadosEmpresa = async () => {
+    const notas = composeNotasEmpresa(panelContatoSetor, panelInfoAdicional)
     try {
-      const savedI = await db.insertInteracao({
-        clienteId: c.id, tipo: 'nota', data: new Date().toISOString(),
-        assunto: `📝 Observação - ${c.razaoSocial}`, descricao: panelNota.trim(), automatico: false
+      await db.updateCliente(c.id, {
+        redesSociais: panelRedesSociais.trim() || undefined,
+        notas: notas || undefined,
       })
-      setInteracoes(prev => [savedI, ...prev])
-      const hoje = new Date().toISOString().split('T')[0]
-      await db.updateCliente(c.id, { ultimaInteracao: hoje })
-      setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
+      setClientes(prev => prev.map(cl => cl.id === c.id ? {
+        ...cl,
+        redesSociais: panelRedesSociais.trim() || undefined,
+        notas: notas || undefined,
+      } : cl))
+      addNotificacao('success', 'Dados atualizados', `Informações de ${c.razaoSocial} atualizadas.`, c.id)
     } catch (err) { logger.error('Erro ao salvar nota:', err) }
-    setPanelNota('')
-    addNotificacao('success', 'Observação salva', c.razaoSocial, c.id)
+  }
+
+  const handleTogglePinInteracao = (interacaoId: number) => {
+    setPinnedInteracoes(prev => {
+      const next = prev.includes(interacaoId) ? prev.filter(id => id !== interacaoId) : [interacaoId, ...prev]
+      localStorage.setItem(`cliente_panel_pins_${c.id}`, JSON.stringify(next))
+      return next
+    })
   }
 
   const handleCriarTarefa = async () => {
-    if (!panelTarefaTitulo.trim()) return
+    if (!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora) return
     try {
       const saved = await db.insertTarefa({
         titulo: panelTarefaTitulo.trim(), data: panelTarefaData,
+        hora: panelTarefaHora,
         tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id
       })
       setTarefas(prev => [saved, ...prev])
@@ -204,10 +292,32 @@ export default function ClientePanel({
 
           {/* === CONTATO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">📇 Contato</h3>
+            <h3 className="text-sm font-semibold text-gray-900">🏢 Dados básicos da empresa</h3>
             <div className="grid grid-cols-2 gap-2 text-sm">
-              <div><p className="text-xs text-gray-500">Nome</p><p className="font-medium text-gray-900">{c.contatoNome}</p></div>
-              <div><p className="text-xs text-gray-500">CNPJ</p><p className="font-medium text-gray-900">{c.cnpj}</p></div>
+              <div><p className="text-xs text-gray-500">Razão social</p><p className="font-medium text-gray-900">{c.razaoSocial}</p></div>
+              <div><p className="text-xs text-gray-500">CNPJ</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">Nome fantasia</p><p className="font-medium text-gray-900">{c.nomeFantasia || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">Segmento</p><p className="font-medium text-gray-900">{c.segmento || '-'}</p></div>
+            </div>
+          </div>
+
+          {/* === CONTATO E LOCALIZAÇÃO === */}
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-900">📇 Informações para contato</h3>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div><p className="text-xs text-gray-500">Pessoa responsável</p><p className="font-medium text-gray-900">{c.contatoNome || '-'}</p></div>
+              <div>
+                <p className="text-xs text-gray-500">Setor</p>
+                <select value={panelContatoSetor} onChange={(e) => setPanelContatoSetor(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+                  <option value="">Selecionar...</option>
+                  <option value="compras">Compras</option>
+                  <option value="financeiro">Financeiro</option>
+                  <option value="diretoria">Diretoria</option>
+                  <option value="marketing">Marketing</option>
+                  <option value="qualidade">Qualidade</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
               <div><p className="text-xs text-gray-500">Telefone</p>
                 {(c.contatoTelefone || c.contatoCelular) ? (
                   <button onClick={() => setShowCallRecorder(true)} className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer flex items-center gap-1" title="Ligar com gravação">
@@ -218,10 +328,26 @@ export default function ClientePanel({
                 )}
               </div>
               <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail}</p></div>
+              <div><p className="text-xs text-gray-500">WhatsApp</p><p className="font-medium text-gray-900">{c.whatsapp || c.contatoCelular || c.contatoTelefone || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">Site</p><p className="font-medium text-gray-900 truncate">{c.localizacao || '-'}</p></div>
             </div>
-            {c.endereco && <div><p className="text-xs text-gray-500">Endereço</p><p className="text-sm text-gray-900">{c.endereco}</p></div>}
+            <div>
+              <p className="text-xs text-gray-500">Endereço</p>
+              <p className="text-sm text-gray-900">{enderecoPrincipal || c.endereco || c.localizacao || 'Não informado'}</p>
+            </div>
+            {mapQuery && (
+              <div className="rounded-apple border border-gray-200 overflow-hidden">
+                <iframe
+                  title={`Mapa ${c.razaoSocial}`}
+                  src={`https://www.google.com/maps?q=${mapQuery}&output=embed`}
+                  className="w-full h-44"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+            )}
             {c.cnpj2 && (
-              <div><p className="text-xs text-gray-500">CNPJ 2</p><p className="font-medium text-gray-900">{c.cnpj2}</p></div>
+              <div><p className="text-xs text-gray-500">CNPJ 2</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj2)}</p></div>
             )}
             {c.enderecoRua2 && (
               <div>
@@ -253,6 +379,46 @@ export default function ClientePanel({
             </div>
           </div>
 
+          {/* === PRODUTOS DE INTERESSE === */}
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-gray-900">📦 Produtos de interesse</h3>
+            {c.produtosInteresse && c.produtosInteresse.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {c.produtosInteresse.map(p => <span key={p} className="px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full border border-primary-100">{p}</span>)}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Nenhum produto de interesse registrado.</p>
+            )}
+          </div>
+
+          {/* === REDES E INFO ADICIONAIS === */}
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900">🌐 Redes sociais e informações adicionais</h3>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Redes sociais</label>
+              <input
+                type="text"
+                value={panelRedesSociais}
+                onChange={(e) => setPanelRedesSociais(e.target.value)}
+                placeholder="Instagram, LinkedIn, site, etc"
+                className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Informações adicionais</label>
+              <textarea
+                value={panelInfoAdicional}
+                onChange={(e) => setPanelInfoAdicional(e.target.value)}
+                placeholder="Observações internas sobre responsável, processo de compra, exigências, etc."
+                className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                rows={3}
+              />
+            </div>
+            <button onClick={handleSalvarDadosEmpresa} className="px-4 py-1.5 bg-gray-800 text-white rounded-apple text-xs font-medium hover:bg-gray-900 transition-colors">
+              💾 Salvar informações
+            </button>
+          </div>
+
           {/* === DADOS COMERCIAIS === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">💼 Dados Comerciais</h3>
@@ -262,9 +428,6 @@ export default function ClientePanel({
               {c.valorProposta && <div><p className="text-xs text-gray-500">Valor proposta</p><p className="font-bold text-purple-700">R$ {c.valorProposta.toLocaleString('pt-BR')}</p></div>}
               {c.dataProposta && <div><p className="text-xs text-gray-500">Data proposta</p><p className="text-gray-900">{new Date(c.dataProposta).toLocaleDateString('pt-BR')}</p></div>}
             </div>
-            {c.produtosInteresse && c.produtosInteresse.length > 0 && (
-              <div><p className="text-xs text-gray-500 mb-1">Produtos de interesse</p><div className="flex flex-wrap gap-1">{c.produtosInteresse.map(p => <span key={p} className="px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full border border-primary-100">{p}</span>)}</div></div>
-            )}
           </div>
 
           {/* === INFO DA ETAPA === */}
@@ -379,7 +542,7 @@ export default function ClientePanel({
           <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">📞 Registrar Atividade</h3>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {([['ligacao', '📞', 'Ligação'], ['whatsapp', '💬', 'WhatsApp'], ['email', '📧', 'Email'], ['reuniao', '🤝', 'Reunião'], ['instagram', '📸', 'Instagram'], ['linkedin', '💼', 'LinkedIn']] as const).map(([tipo, icon, label]) => (
+              {([['ligacao', '📞', 'Ligação'], ['whatsapp', '💬', 'WhatsApp'], ['email', '📧', 'Email'], ['reuniao', '🤝', 'Reunião'], ['linkedin', '💼', 'LinkedIn']] as const).map(([tipo, icon, label]) => (
                 <button key={tipo} onClick={() => {
                   setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo)
                   if (tipo === 'email' && c.contatoEmail) { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
@@ -399,26 +562,31 @@ export default function ClientePanel({
                   className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                   rows={3}
                 />
-                <button onClick={handleRegistrarAtividade} disabled={!panelAtividadeDesc.trim()} className="w-full px-4 py-2 bg-primary-600 text-white rounded-apple text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Prazo da tarefa *</label>
+                    <input
+                      type="date"
+                      value={panelAtividadePrazo}
+                      onChange={(e) => setPanelAtividadePrazo(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Horário *</label>
+                    <input
+                      type="time"
+                      value={panelAtividadeHora}
+                      onChange={(e) => setPanelAtividadeHora(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+                <button onClick={handleRegistrarAtividade} disabled={!panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora} className="w-full px-4 py-2 bg-primary-600 text-white rounded-apple text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                   ✅ Registrar {tipoInteracaoLabel[panelAtividadeTipo]}
                 </button>
               </div>
             )}
-          </div>
-
-          {/* === OBSERVAÇÃO RÁPIDA === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">📝 Observação Rápida</h3>
-            <textarea
-              value={panelNota}
-              onChange={(e) => setPanelNota(e.target.value)}
-              placeholder="Escreva uma nota ou observação sobre este cliente..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none bg-white"
-              rows={2}
-            />
-            <button onClick={handleSalvarNota} disabled={!panelNota.trim()} className="px-4 py-1.5 bg-gray-800 text-white rounded-apple text-xs font-medium hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              💾 Salvar Observação
-            </button>
           </div>
 
           {/* === TAREFAS === */}
@@ -434,10 +602,14 @@ export default function ClientePanel({
             {panelNovaTarefa && (
               <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
                 <input type="text" value={panelTarefaTitulo} onChange={(e) => setPanelTarefaTitulo(e.target.value)} placeholder="Título da tarefa... ex: Ligar para confirmar pedido" className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Data</label>
                     <input type="date" value={panelTarefaData} onChange={(e) => setPanelTarefaData(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Horário</label>
+                    <input type="time" value={panelTarefaHora} onChange={(e) => setPanelTarefaHora(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Tipo</label>
@@ -453,7 +625,7 @@ export default function ClientePanel({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleCriarTarefa} disabled={!panelTarefaTitulo.trim()} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-apple text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">✅ Criar Tarefa</button>
+                  <button onClick={handleCriarTarefa} disabled={!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-apple text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">✅ Criar Tarefa</button>
                   <button onClick={() => setPanelNovaTarefa(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-apple text-sm font-medium hover:bg-gray-200">Cancelar</button>
                 </div>
               </div>
@@ -469,7 +641,7 @@ export default function ClientePanel({
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium ${t.status === 'concluida' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{t.titulo}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className="text-[10px] text-gray-400">{new Date(t.data).toLocaleDateString('pt-BR')}</span>
+                          <span className="text-[10px] text-gray-400">{new Date(t.data).toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
                           <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${t.prioridade === 'alta' ? 'bg-red-100 text-red-700' : t.prioridade === 'media' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>{t.prioridade}</span>
                           <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 rounded-full">{t.tipo}</span>
                         </div>
@@ -573,13 +745,18 @@ export default function ClientePanel({
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-gray-900">🕐 Histórico ({clienteInteracoes.length})</h3>
               <div className="relative pl-4 border-l-2 border-gray-200 space-y-3">
-                {clienteInteracoes.slice(0, 10).map((inter) => (
+                {clienteInteracoesOrdenadas.slice(0, 10).map((inter) => (
                   <div key={inter.id} className="relative">
                     <div className={`absolute -left-[1.3rem] w-3 h-3 rounded-full ${inter.automatico ? 'bg-gray-400' : 'bg-primary-500'}`} />
                     <div className="ml-2 bg-white rounded-apple border border-gray-200 p-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-900">{tipoInteracaoIcon[inter.tipo] || '📋'} {inter.assunto}</span>
-                        {inter.automatico && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded-full">Auto</span>}
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleTogglePinInteracao(inter.id)} className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full border ${pinnedInteracoes.includes(inter.id) ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                            {pinnedInteracoes.includes(inter.id) ? '📌 Fixado' : '📍 Fixar'}
+                          </button>
+                          {inter.automatico && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded-full">Auto</span>}
+                        </div>
                       </div>
                       <p className="text-xs text-gray-600 mt-1">{inter.descricao}</p>
                       <p className="text-[10px] text-gray-400 mt-1">{new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
