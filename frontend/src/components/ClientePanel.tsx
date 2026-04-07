@@ -7,6 +7,7 @@ import { formatCNPJ } from '../utils/validators'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
+import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
 
 interface ClientePanelProps {
   cliente: Cliente
@@ -89,7 +90,7 @@ export default function ClientePanel({
   const [pedidoObs, setPedidoObs] = useState('')
   const [pedidoSaving, setPedidoSaving] = useState(false)
   const [pedidoSearch, setPedidoSearch] = useState('')
-  const [pedidoFormaPagamento, setPedidoFormaPagamento] = useState('À vista')
+  const [pedidoFormaPagamento, setPedidoFormaPagamento] = useState(DEFAULT_PAYMENT_TERM)
 
   // Collapsible sections
   const [showTimeline, setShowTimeline] = useState(false)
@@ -239,7 +240,7 @@ export default function ClientePanel({
         totalValor: pedidoTotal, tipo: pedidoTipo, formaPagamento: pedidoFormaPagamento, tipoFrete: pedidoFrete || undefined,
       })
       addNotificacao('success', 'Pedido enviado', `Pedido ${numero} — ${pedidoTipo === 'venda' ? `R$ ${pedidoTotal.toFixed(2)}` : 'Amostra sem valor'}`, c.id)
-      setPedidoItens([]); setPedidoObs(''); setPedidoFrete(''); setPedidoTipo('venda'); setPedidoFormaPagamento('À vista'); setShowPedido(false)
+      setPedidoItens([]); setPedidoObs(''); setPedidoFrete(''); setPedidoTipo('venda'); setPedidoFormaPagamento(DEFAULT_PAYMENT_TERM); setShowPedido(false)
     } catch { addNotificacao('error', 'Erro', 'Falha ao enviar pedido', c.id) }
     setPedidoSaving(false)
   }
@@ -669,14 +670,13 @@ export default function ClientePanel({
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">💳 Forma de Pagamento</label>
                     <select value={pedidoFormaPagamento} onChange={(e) => setPedidoFormaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500">
-                      <option value="À vista">À vista</option>
-                      <option value="7 dias">7 dias</option>
-                      <option value="14 dias">14 dias</option>
-                      <option value="21 dias">21 dias</option>
-                      <option value="28 dias">28 dias</option>
-                      <option value="30 dias">30 dias</option>
-                      <option value="45 dias">45 dias</option>
-                      <option value="60 dias">60 dias</option>
+                      {PAYMENT_TERM_GROUPS.map((group) => (
+                        <optgroup key={group.label} label={group.label}>
+                          {group.options.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </optgroup>
+                      ))}
                     </select>
                   </div>
                   <input type="text" placeholder="Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />

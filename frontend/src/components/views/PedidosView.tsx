@@ -3,6 +3,7 @@ import { PaperAirplaneIcon, ShoppingCartIcon, PhotoIcon, CloudArrowUpIcon, Docum
 import type { Pedido, Cliente, Produto, Vendedor, ItemPedido } from '../../types'
 import { enviarPedidoOmie } from '../../lib/botApi'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
+import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../../constants/paymentTerms'
 
 function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, onMoverCliente, showToast }: {
   pedidos: Pedido[]
@@ -40,7 +41,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   const [endEntregaCidade, setEndEntregaCidade] = React.useState('')
   const [endEntregaEstado, setEndEntregaEstado] = React.useState('')
   const [endEntregaCep, setEndEntregaCep] = React.useState('')
-  const [formaPagamento, setFormaPagamento] = React.useState('À vista')
+  const [formaPagamento, setFormaPagamento] = React.useState(DEFAULT_PAYMENT_TERM)
 
   const handleEnviarOmieManual = async (pedido: Pedido) => {
     setEnviandoOmie(pedido.id)
@@ -108,7 +109,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 
   const resetForm = () => {
     setItensPedido([]); setObservacoes(''); setSelectedClienteId(clientesDisponiveis[0]?.id ?? '')
-    setTipoPedido('venda'); setTipoFrete(''); setFormaPagamento('À vista'); setEnderecoDiferente(false)
+    setTipoPedido('venda'); setTipoFrete(''); setFormaPagamento(DEFAULT_PAYMENT_TERM); setEnderecoDiferente(false)
     setEndEntregaRua(''); setEndEntregaNumero(''); setEndEntregaBairro('')
     setEndEntregaCidade(''); setEndEntregaEstado(''); setEndEntregaCep('')
     setSearchCliente('')
@@ -278,63 +279,13 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pagamento</p>
                   <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50">
-                    <optgroup label="Pagamento Direto (Único)">
-                      <option value="À vista">À vista</option>
-                      <option value="7 dias">7 dias</option>
-                      <option value="14 dias">14 dias</option>
-                      <option value="21 dias">21 dias</option>
-                      <option value="28 dias">28 dias</option>
-                      <option value="30 dias">30 dias</option>
-                      <option value="45 dias">45 dias</option>
-                      <option value="60 dias">60 dias</option>
-                      <option value="90 dias">90 dias</option>
-                    </optgroup>
-                    <optgroup label="Intervalos Progressivos (7 em 7 dias)">
-                      <option value="7/14">7/14</option>
-                      <option value="7/14/21">7/14/21</option>
-                      <option value="7/14/21/28">7/14/21/28</option>
-                      <option value="7/14/21/28/35">7/14/21/28/35</option>
-                      <option value="7/14/21/28/35/42">7/14/21/28/35/42</option>
-                      <option value="7/14/21/28/35/42/49">7/14/21/28/35/42/49</option>
-                      <option value="7/14/21/28/35/42/49/56">7/14/21/28/35/42/49/56</option>
-                      <option value="7/14/21/28/35/42/49/56/63">7/14/21/28/35/42/49/56/63</option>
-                      <option value="7/14/21/28/35/42/49/56/63/70">7/14/21/28/35/42/49/56/63/70</option>
-                    </optgroup>
-                    <optgroup label="Série começando em 14">
-                      <option value="14/21">14/21</option>
-                      <option value="14/21/28">14/21/28</option>
-                      <option value="14/21/28/35">14/21/28/35</option>
-                      <option value="14/21/28/35/42">14/21/28/35/42</option>
-                      <option value="14/21/28/35/42/49">14/21/28/35/42/49</option>
-                      <option value="14/21/28/35/42/49/56">14/21/28/35/42/49/56</option>
-                    </optgroup>
-                    <optgroup label="Série começando em 28">
-                      <option value="28/35">28/35</option>
-                      <option value="28/35/42">28/35/42</option>
-                      <option value="28/42/56">28/42/56</option>
-                      <option value="28/35/42/49">28/35/42/49</option>
-                      <option value="28/35/42/49/56">28/35/42/49/56</option>
-                    </optgroup>
-                    <optgroup label="Com Entrada">
-                      <option value="À vista/30">À vista/30</option>
-                      <option value="À vista/30/60/90">À vista/30/60/90</option>
-                      <option value="À vista/30/60/90/120">À vista/30/60/90/120</option>
-                      <option value="À vista/30/60/90/120/150">À vista/30/60/90/120/150</option>
-                    </optgroup>
-                    <optgroup label="Mensais">
-                      <option value="30/60/90">30/60/90</option>
-                      <option value="30/60/90/120">30/60/90/120</option>
-                      <option value="30/60/90/120/150">30/60/90/120/150</option>
-                      <option value="30/60/90/120/150/180">30/60/90/120/150/180</option>
-                    </optgroup>
-                    <optgroup label="Parcelas">
-                      <option value="4 parcelas">4 parcelas</option>
-                      <option value="5 parcelas">5 parcelas</option>
-                      <option value="6 parcelas">6 parcelas</option>
-                      <option value="8 parcelas">8 parcelas</option>
-                      <option value="36 parcelas">36 parcelas</option>
-                      <option value="48 parcelas">48 parcelas</option>
-                    </optgroup>
+                    {PAYMENT_TERM_GROUPS.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.options.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                 </div>
               </div>
