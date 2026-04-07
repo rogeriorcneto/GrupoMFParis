@@ -25,7 +25,7 @@ const ProdutosView: React.FC<{
   const [fDescricao, setFDescricao] = React.useState('')
   const [fCategoria, setFCategoria] = React.useState<Produto['categoria']>('sacaria')
   const [fPreco, setFPreco] = React.useState('')
-  const [fUnidade, setFUnidade] = React.useState('un')
+  const [fUnidade, setFUnidade] = React.useState('kg')
   const [fFoto, setFFoto] = React.useState('')
   const [fSku, setFSku] = React.useState('')
   const [fEstoque, setFEstoque] = React.useState('')
@@ -44,14 +44,14 @@ const ProdutosView: React.FC<{
 
   const openNew = () => {
     setEditing(null)
-    setFNome(''); setFDescricao(''); setFCategoria('sacaria'); setFPreco(''); setFUnidade('sc')
+    setFNome(''); setFDescricao(''); setFCategoria('sacaria'); setFPreco(''); setFUnidade('kg')
     setFFoto(''); setFSku(''); setFEstoque(''); setFPesoKg(''); setFMargemLucro('')
     setFAtivo(true); setFDestaque(false); setShowModal(true)
   }
 
   const openEdit = (p: Produto) => {
     setEditing(p)
-    setFNome(p.nome); setFDescricao(p.descricao); setFCategoria(p.categoria); setFPreco(String(p.preco)); setFUnidade(p.unidade)
+    setFNome(p.nome); setFDescricao(p.descricao); setFCategoria(p.categoria); setFPreco(String(p.preco)); setFUnidade('kg')
     setFFoto(p.foto); setFSku(p.sku || ''); setFEstoque(p.estoque !== undefined ? String(p.estoque) : ''); setFPesoKg(p.pesoKg !== undefined ? String(p.pesoKg) : ''); setFMargemLucro(p.margemLucro !== undefined ? String(p.margemLucro) : '')
     setFAtivo(p.ativo); setFDestaque(p.destaque); setShowModal(true)
   }
@@ -69,7 +69,7 @@ const ProdutosView: React.FC<{
     if (!fNome.trim() || !fDescricao.trim() || !fPreco) return
     const base = {
       nome: fNome.trim(), descricao: fDescricao.trim(), categoria: fCategoria,
-      preco: parseFloat(fPreco), unidade: fUnidade, foto: fFoto,
+      preco: parseFloat(fPreco), unidade: 'kg', foto: fFoto,
       sku: fSku.trim() || undefined, estoque: fEstoque ? parseInt(fEstoque) : undefined,
       pesoKg: fPesoKg ? parseFloat(fPesoKg) : undefined, margemLucro: fMargemLucro ? parseFloat(fMargemLucro) : undefined,
       ativo: fAtivo, destaque: fDestaque,
@@ -158,7 +158,7 @@ const ProdutosView: React.FC<{
               <div className="flex items-end justify-between mt-3">
                 <div>
                   <p className="text-lg font-bold text-primary-600">R$ {p.preco.toFixed(2).replace('.', ',')}</p>
-                  <p className="text-xs text-gray-400">/{p.unidade}</p>
+                  <p className="text-xs text-gray-400">/kg</p>
                 </div>
                 {p.estoque !== undefined && (
                   <p className={`text-xs font-medium ${p.estoque > 100 ? 'text-green-600' : p.estoque > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
@@ -202,9 +202,9 @@ const ProdutosView: React.FC<{
               </div>
               <p className="text-sm text-gray-600 mt-3">{previewProd.descricao}</p>
               <div className="grid grid-cols-2 gap-4 mt-4">
-                <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Preço</p><p className="text-lg font-bold text-primary-600">R$ {previewProd.preco.toFixed(2).replace('.', ',')}/{previewProd.unidade}</p></div>
+                <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Preço</p><p className="text-lg font-bold text-primary-600">R$ {previewProd.preco.toFixed(2).replace('.', ',')}/kg</p></div>
                 {previewProd.omieCodigo && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Código (Omie)</p><p className="text-sm font-mono font-semibold text-gray-900">{previewProd.omieCodigo}</p></div>}
-                {previewProd.estoque !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Estoque</p><p className="text-sm font-semibold text-gray-900">{previewProd.estoque} {previewProd.unidade}</p></div>}
+                {previewProd.estoque !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Estoque</p><p className="text-sm font-semibold text-gray-900">{previewProd.estoque} kg</p></div>}
                 {previewProd.pesoKg !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Peso</p><p className="text-sm font-semibold text-gray-900">{previewProd.pesoKg} kg</p></div>}
                 {previewProd.margemLucro !== undefined && <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Margem</p><p className="text-sm font-semibold text-gray-900">{previewProd.margemLucro}%</p></div>}
                 <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Cadastrado em</p><p className="text-sm font-semibold text-gray-900">{new Date(previewProd.dataCadastro).toLocaleDateString('pt-BR')}</p></div>
@@ -244,7 +244,7 @@ const ProdutosView: React.FC<{
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label><select value={fCategoria} onChange={(e) => setFCategoria(e.target.value as Produto['categoria'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="sacaria">Sacaria 25kg</option><option value="okey_lac">Okey Lac 25kg</option><option value="varejo_lacteo">Varejo Lácteo</option><option value="cafe">Café</option><option value="outros">Outros</option></select></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">SKU</label><input value={fSku} onChange={(e) => setFSku(e.target.value)} placeholder="CONG-001" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Preço (R$) *</label><input type="number" step="0.01" value={fPreco} onChange={(e) => setFPreco(e.target.value)} placeholder="0,00" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Unidade *</label><select value={fUnidade} onChange={(e) => setFUnidade(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="sc">Saco (sc)</option><option value="un">Unidade (un)</option><option value="kg">Quilograma (kg)</option><option value="cx">Caixa (cx)</option><option value="lt">Litro (lt)</option><option value="pct">Pacote (pct)</option><option value="fd">Fardo (fd)</option></select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Unidade *</label><input value="kg" disabled className="w-full px-3 py-2 border border-gray-300 rounded-apple bg-gray-100 text-gray-600 cursor-not-allowed" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Estoque</label><input type="number" value={fEstoque} onChange={(e) => setFEstoque(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Peso (kg)</label><input type="number" step="0.1" value={fPesoKg} onChange={(e) => setFPesoKg(e.target.value)} placeholder="0.0" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Margem Lucro (%)</label><input type="number" step="0.1" value={fMargemLucro} onChange={(e) => setFMargemLucro(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>

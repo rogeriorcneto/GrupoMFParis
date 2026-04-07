@@ -200,7 +200,7 @@ async function buildProductCatalog(clienteNome: string, senderNumber: string): P
   for (const [cat, prods] of byCategory) {
     msg += `*${CAT_LABELS[cat] || cat}*\n`
     for (const p of prods) {
-      msg += `${idx}. ${p.nome} — ${formatCurrency(p.preco)}/${p.unidade}\n`
+      msg += `${idx}. ${p.nome} — ${formatCurrency(p.preco)}/kg\n`
       indexMap.push(p.id)
       idx++
     }
@@ -215,7 +215,7 @@ async function buildProductCatalog(clienteNome: string, senderNumber: string): P
     updateSession(senderNumber, { createSaleData: session.createSaleData })
   }
 
-  msg += `Envie: *[número] [quantidade]*\nEx: _1 50_ = 50 unidades do item 1\n\n❌ Envie *cancelar* para sair`
+  msg += `Envie: *[número] [quantidade]*\nEx: _1 50_ = 50 kg do item 1\n\n❌ Envie *cancelar* para sair`
 
   return msg
 }
@@ -250,11 +250,12 @@ async function handleSelectProduct(senderNumber: string, session: UserSession, t
   const existing = data.itens.find(i => i.produtoId === produto.id)
   if (existing) {
     existing.quantidade = qty
+    existing.unidade = 'kg'
   } else {
     data.itens.push({
       produtoId: produto.id,
       nomeProduto: produto.nome,
-      unidade: produto.unidade,
+      unidade: 'kg',
       sku: produto.sku,
       preco: produto.preco,
       quantidade: qty,
@@ -265,11 +266,11 @@ async function handleSelectProduct(senderNumber: string, session: UserSession, t
   updateSession(senderNumber, { createSaleData: data })
 
   const total = data.itens.reduce((sum, i) => sum + i.preco * i.quantidade, 0)
-  const itemLine = `✅ ${qty}x ${produto.nome} = ${formatCurrency(produto.preco * qty)}`
+  const itemLine = `✅ ${qty} kg ${produto.nome} = ${formatCurrency(produto.preco * qty)}`
 
   let msg = `${itemLine}\n\n📋 *Itens do pedido:*\n`
   data.itens.forEach(i => {
-    msg += `├ ${i.quantidade}x ${i.nomeProduto} — ${formatCurrency(i.preco * i.quantidade)}\n`
+    msg += `├ ${i.quantidade} kg ${i.nomeProduto} — ${formatCurrency(i.preco * i.quantidade)}\n`
   })
   msg += `└ *Total: ${formatCurrency(total)}*\n\n`
   msg += `Adicionar mais? Envie *[número] [qtd]* ou *finalizar*`
@@ -282,7 +283,7 @@ function buildSaleConfirmation(data: CreateSaleData): string {
   let msg = `📋 *Confirme o pedido:*\n\n`
   msg += `├ Cliente: *${data.clienteNome}*\n`
   data.itens.forEach(i => {
-    msg += `├ ${i.quantidade}x ${i.nomeProduto} — ${formatCurrency(i.preco * i.quantidade)}\n`
+    msg += `├ ${i.quantidade} kg ${i.nomeProduto} — ${formatCurrency(i.preco * i.quantidade)}\n`
   })
   msg += `├ *Total: ${formatCurrency(total)}*\n`
   if (data.observacoes) msg += `└ Obs: ${data.observacoes}\n`

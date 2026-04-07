@@ -70,8 +70,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     } else {
       setItensPedido(prev => {
         const existe = prev.find(i => i.produtoId === produto.id)
-        if (existe) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
-        return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', unidade: produto.unidade, preco: 0, quantidade: qtd }]
+        if (existe) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd, unidade: 'kg' } : i)
+        return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', unidade: 'kg', preco: 0, quantidade: qtd }]
       })
     }
   }
@@ -278,14 +278,63 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pagamento</p>
                   <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50">
-                    <option value="À vista">A vista</option>
-                    <option value="7 dias">7 dias</option>
-                    <option value="14 dias">14 dias</option>
-                    <option value="21 dias">21 dias</option>
-                    <option value="28 dias">28 dias</option>
-                    <option value="30 dias">30 dias</option>
-                    <option value="45 dias">45 dias</option>
-                    <option value="60 dias">60 dias</option>
+                    <optgroup label="Pagamento Direto (Único)">
+                      <option value="À vista">À vista</option>
+                      <option value="7 dias">7 dias</option>
+                      <option value="14 dias">14 dias</option>
+                      <option value="21 dias">21 dias</option>
+                      <option value="28 dias">28 dias</option>
+                      <option value="30 dias">30 dias</option>
+                      <option value="45 dias">45 dias</option>
+                      <option value="60 dias">60 dias</option>
+                      <option value="90 dias">90 dias</option>
+                    </optgroup>
+                    <optgroup label="Intervalos Progressivos (7 em 7 dias)">
+                      <option value="7/14">7/14</option>
+                      <option value="7/14/21">7/14/21</option>
+                      <option value="7/14/21/28">7/14/21/28</option>
+                      <option value="7/14/21/28/35">7/14/21/28/35</option>
+                      <option value="7/14/21/28/35/42">7/14/21/28/35/42</option>
+                      <option value="7/14/21/28/35/42/49">7/14/21/28/35/42/49</option>
+                      <option value="7/14/21/28/35/42/49/56">7/14/21/28/35/42/49/56</option>
+                      <option value="7/14/21/28/35/42/49/56/63">7/14/21/28/35/42/49/56/63</option>
+                      <option value="7/14/21/28/35/42/49/56/63/70">7/14/21/28/35/42/49/56/63/70</option>
+                    </optgroup>
+                    <optgroup label="Série começando em 14">
+                      <option value="14/21">14/21</option>
+                      <option value="14/21/28">14/21/28</option>
+                      <option value="14/21/28/35">14/21/28/35</option>
+                      <option value="14/21/28/35/42">14/21/28/35/42</option>
+                      <option value="14/21/28/35/42/49">14/21/28/35/42/49</option>
+                      <option value="14/21/28/35/42/49/56">14/21/28/35/42/49/56</option>
+                    </optgroup>
+                    <optgroup label="Série começando em 28">
+                      <option value="28/35">28/35</option>
+                      <option value="28/35/42">28/35/42</option>
+                      <option value="28/42/56">28/42/56</option>
+                      <option value="28/35/42/49">28/35/42/49</option>
+                      <option value="28/35/42/49/56">28/35/42/49/56</option>
+                    </optgroup>
+                    <optgroup label="Com Entrada">
+                      <option value="À vista/30">À vista/30</option>
+                      <option value="À vista/30/60/90">À vista/30/60/90</option>
+                      <option value="À vista/30/60/90/120">À vista/30/60/90/120</option>
+                      <option value="À vista/30/60/90/120/150">À vista/30/60/90/120/150</option>
+                    </optgroup>
+                    <optgroup label="Mensais">
+                      <option value="30/60/90">30/60/90</option>
+                      <option value="30/60/90/120">30/60/90/120</option>
+                      <option value="30/60/90/120/150">30/60/90/120/150</option>
+                      <option value="30/60/90/120/150/180">30/60/90/120/150/180</option>
+                    </optgroup>
+                    <optgroup label="Parcelas">
+                      <option value="4 parcelas">4 parcelas</option>
+                      <option value="5 parcelas">5 parcelas</option>
+                      <option value="6 parcelas">6 parcelas</option>
+                      <option value="8 parcelas">8 parcelas</option>
+                      <option value="36 parcelas">36 parcelas</option>
+                      <option value="48 parcelas">48 parcelas</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -377,7 +426,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                       </div>
                       <p className="text-[10px] text-gray-400">{catLabel[produto.categoria]}{produto.sku ? ` | ${produto.sku}` : ''}</p>
                     </div>
-                    <p className="text-xs font-medium text-gray-400 flex-shrink-0 w-20 text-right">/{produto.unidade}</p>
+                    <p className="text-xs font-medium text-gray-400 flex-shrink-0 w-20 text-right">/kg</p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 w-28 justify-end">
                       {noCarrinho ? (
                         <>
@@ -425,7 +474,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                           <span className="text-[10px] text-gray-400">R$</span>
                           <input type="number" min={0} step="0.01" value={item.preco} onChange={e => setItemPreco(item.produtoId, parseFloat(e.target.value))} onFocus={e => e.target.select()} disabled={tipoPedido !== 'venda'}
                             className={`w-16 px-1 py-0.5 border border-gray-200 rounded text-[10px] ${tipoPedido === 'venda' ? 'text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400' : 'text-gray-400 bg-gray-100 cursor-not-allowed'}`} />
-                          <span className="text-[10px] text-gray-400">/ {item.unidade}</span>
+                          <span className="text-[10px] text-gray-400">/ kg</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">

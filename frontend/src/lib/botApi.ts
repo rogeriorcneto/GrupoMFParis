@@ -286,6 +286,26 @@ export async function queryWhatsAppAI(
   }
 }
 
+export async function suggestSalesMessage(params: {
+  canal: 'email' | 'whatsapp' | 'texto'
+  text?: string
+  instruction?: string
+  clienteNome?: string
+  empresaNome?: string
+  vendedorNome?: string
+}): Promise<{ success: boolean; suggestion?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/ai/suggest-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao gerar sugestão da IA' }
+  }
+}
+
 /** Get all user WhatsApp sessions (gerente only) */
 export async function getAllUserWhatsAppSessions(): Promise<UserWAStatus[]> {
   try {

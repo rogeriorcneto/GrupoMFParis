@@ -1,7 +1,7 @@
 import React from 'react'
 import type { Cliente } from '../types'
 import type { InboxEmailItem } from '../lib/botApi'
-import { fetchEmailInbox, sendEmailViaBot } from '../lib/botApi'
+import { fetchEmailInbox, sendEmailViaBot, suggestSalesMessage } from '../lib/botApi'
 
 interface EmailCenterPanelProps {
   cliente: Cliente
@@ -19,6 +19,8 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
   const [emailSubject, setEmailSubject] = React.useState('')
   const [emailBody, setEmailBody] = React.useState('')
   const [emailSending, setEmailSending] = React.useState(false)
+  const [aiSubjectLoading, setAiSubjectLoading] = React.useState(false)
+  const [aiBodyLoading, setAiBodyLoading] = React.useState(false)
 
   const selectedEmail = React.useMemo(
     () => inboxItems.find((item) => item.id === selectedEmailId) || inboxItems[0],
@@ -83,6 +85,47 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
     }
 
     setEmailSending(false)
+  }
+
+  const handleSuggestSubject = async () => {
+    setAiSubjectLoading(true)
+    const result = await suggestSalesMessage({
+      canal: 'email',
+      text: emailSubject,
+      instruction: 'Sugira um assunto executivo de vendas B2B em até 12 palavras.',
+      clienteNome: cliente.contatoNome || cliente.razaoSocial,
+      empresaNome: cliente.razaoSocial,
+      vendedorNome,
+    })
+    if (result.success && result.suggestion) {
+      setEmailSubject(result.suggestion.replace(/\s+/g, ' ').trim())
+      showToast?.('success', 'Assunto sugerido pela IA aplicado.')
+    } else {
+      showToast?.('error', result.error || 'Não foi possível gerar assunto com IA.')
+    }
+    setAiSubjectLoading(false)
+  }
+
+  const handleSuggestBody = async () => {
+    setAiBodyLoading(true)
+    const base = emailBody.trim()
+      ? emailBody
+      : `Olá ${cliente.contatoNome || ''},\n\n\n\nAtenciosamente,\n${vendedorNome || ''}\nGrupo MF Paris`
+    const result = await suggestSalesMessage({
+      canal: 'email',
+      text: base,
+      instruction: 'Reescreva como email comercial executivo, objetivo e persuasivo, com abertura, proposta de valor e próximo passo claro.',
+      clienteNome: cliente.contatoNome || cliente.razaoSocial,
+      empresaNome: cliente.razaoSocial,
+      vendedorNome,
+    })
+    if (result.success && result.suggestion) {
+      setEmailBody(result.suggestion.trim())
+      showToast?.('success', 'Mensagem de email sugerida pela IA aplicada.')
+    } else {
+      showToast?.('error', result.error || 'Não foi possível gerar mensagem com IA.')
+    }
+    setAiBodyLoading(false)
   }
 
   return (
@@ -174,7 +217,16 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Assunto *</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="block text-xs text-gray-500">Assunto *</label>
+                <button
+                  onClick={handleSuggestSubject}
+                  disabled={aiSubjectLoading}
+                  className="text-[11px] px-2 py-1 rounded-apple border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                >
+                  {aiSubjectLoading ? '✨ IA...' : '✨ Sugerir assunto'}
+                </button>
+              </div>
               <input
                 type="text"
                 value={emailSubject}
@@ -183,7 +235,16 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Mensagem *</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="block text-xs text-gray-500">Mensagem *</label>
+                <button
+                  onClick={handleSuggestBody}
+                  disabled={aiBodyLoading}
+                  className="text-[11px] px-2 py-1 rounded-apple border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                >
+                  {aiBodyLoading ? '✨ IA...' : '✨ Sugerir mensagem'}
+                </button>
+              </div>
               <textarea
                 value={emailBody}
                 onChange={(e) => setEmailBody(e.target.value)}

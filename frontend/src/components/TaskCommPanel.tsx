@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { XMarkIcon, PaperAirplaneIcon, PhoneIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor, Interacao } from '../types'
-import { sendWhatsApp, fetchWhatsAppMessages } from '../lib/botApi'
+import { sendWhatsApp, fetchWhatsAppMessages, suggestSalesMessage } from '../lib/botApi'
 import { fetchInteracoesByCliente, insertInteracao, insertAtividade } from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
 import EmailCenterPanel from './EmailCenterPanel'
@@ -38,6 +38,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
   const [waText, setWaText] = useState('')
   const [waSending, setWaSending] = useState(false)
   const [waLoading, setWaLoading] = useState(false)
+  const [waSuggesting, setWaSuggesting] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   // Histórico state
@@ -181,6 +182,25 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
     }
   }
 
+  const handleSuggestWhatsApp = async () => {
+    setWaSuggesting(true)
+    const result = await suggestSalesMessage({
+      canal: 'whatsapp',
+      text: waText,
+      instruction: 'Reescreva para WhatsApp comercial com tom executivo, objetivo e persuasivo, finalizando com próximo passo claro.',
+      clienteNome: cliente.contatoNome || cliente.razaoSocial,
+      empresaNome: cliente.razaoSocial,
+      vendedorNome: loggedUser?.nome,
+    })
+    if (result.success && result.suggestion) {
+      setWaText(result.suggestion.trim())
+      showToast?.('success', 'Sugestão de WhatsApp aplicada pela IA.')
+    } else {
+      showToast?.('error', result.error || 'Não foi possível gerar sugestão com IA.')
+    }
+    setWaSuggesting(false)
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-end z-50">
       <div className="bg-white h-full w-full max-w-lg flex flex-col shadow-2xl animate-slide-in-right">
@@ -298,6 +318,13 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                   {/* Input area */}
                   <div className="p-3 bg-gray-100 border-t border-gray-200">
                     <div className="flex gap-2">
+                      <button
+                        onClick={handleSuggestWhatsApp}
+                        disabled={waSuggesting || waSending}
+                        className="px-3 h-10 text-xs font-semibold bg-white border border-green-200 text-green-700 hover:bg-green-50 disabled:opacity-50 rounded-full"
+                      >
+                        {waSuggesting ? '✨ IA...' : '✨ IA'}
+                      </button>
                       <textarea
                         value={waText}
                         onChange={e => setWaText(e.target.value)}

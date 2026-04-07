@@ -110,6 +110,77 @@ app.get('/api/ai/data', requireAuth, async (req, res) => {
   }
 })
 
+// ─── AI: Sugestão de texto comercial para envio (email/whatsapp) ───
+app.post('/api/ai/suggest-message', requireAuth, rateLimit(30, 60_000), async (req, res) => {
+  const { canal, text, instruction, clienteNome, empresaNome, vendedorNome } = req.body || {}
+
+  if (!canal) {
+    res.status(400).json({ success: false, error: 'Campo obrigatório: canal' })
+    return
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    res.status(500).json({ success: false, error: 'GEMINI_API_KEY não configurada no servidor' })
+    return
+  }
+
+  try {
+    const baseText = String(text || '').trim()
+    const userInstruction = String(instruction || '').trim()
+    const canalLabel = String(canal || 'texto').toLowerCase()
+
+    const prompt = [
+      'Você é especialista em comunicação comercial B2B para vendas no Brasil.',
+      'Tarefa: sugerir um texto executivo, objetivo e persuasivo para comunicação com cliente.',
+      'Regras obrigatórias:',
+      '- Escreva em português brasileiro.',
+      '- Tom profissional, claro e confiante.',
+      '- Use linguagem comercial de alto nível, sem exageros.',
+      '- Evite gírias, emojis e promessas não verificáveis.',
+      '- Não use markdown, não use aspas extras, não explique; retorne apenas o texto final.',
+      '- Mantenha o texto pronto para copiar e enviar.',
+      `Canal: ${canalLabel}.`,
+      clienteNome ? `Cliente: ${clienteNome}.` : '',
+      empresaNome ? `Empresa: ${empresaNome}.` : '',
+      vendedorNome ? `Vendedor responsável: ${vendedorNome}.` : '',
+      userInstruction ? `Objetivo adicional: ${userInstruction}` : '',
+      baseText
+        ? `Texto base para melhorar:\n${baseText}`
+        : 'Não há texto base. Gere uma sugestão inicial adequada ao canal e contexto.',
+    ].filter(Boolean).join('\n')
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const geminiRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.6, maxOutputTokens: 900 },
+      }),
+    })
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text()
+      log.error({ error: errText }, 'Erro na Gemini API (suggest-message)')
+      res.status(500).json({ success: false, error: 'Erro ao gerar sugestão da IA' })
+      return
+    }
+
+    const geminiData = await geminiRes.json() as any
+    const suggestion = String(geminiData?.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text || '').trim()
+    if (!suggestion) {
+      res.status(500).json({ success: false, error: 'IA não retornou sugestão.' })
+      return
+    }
+
+    res.json({ success: true, suggestion })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao gerar sugestão de mensagem IA')
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
 // ─── AI: Transcrever áudio de ligação via Gemini ───
 app.post('/api/ai/transcribe/:id', requireAuth, rateLimit(10, 60_000), async (req, res) => {
   const userId = (req as any).userId

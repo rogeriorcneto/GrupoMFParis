@@ -7,7 +7,7 @@ import {
   sendUserWhatsApp, fetchWhatsAppMessages, fetchWhatsAppChatMessages,
   queryWhatsAppAI, getUserWhatsAppContacts,
   sendUserWhatsAppAudio, sendUserWhatsAppImage,
-  validateWhatsAppContacts,
+  validateWhatsAppContacts, suggestSalesMessage,
   type UserWAStatus, type WAContactItem,
 } from '../lib/botApi'
 import CallRecorder, { type CallMode } from './CallRecorder'
@@ -43,6 +43,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const [messages, setMessages] = useState<Message[]>([])
   const [chatText, setChatText] = useState('')
   const [sending, setSending] = useState(false)
+  const [suggestingText, setSuggestingText] = useState(false)
   const [chatLoading, setChatLoading] = useState(false)
   const [aiMode, setAiMode] = useState(false)
   const [aiHistory, setAiHistory] = useState<{ role: string; content: string }[]>([])
@@ -394,6 +395,27 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  const handleSuggestText = async () => {
+    const targetName = getChatName()
+    setSuggestingText(true)
+    const result = await suggestSalesMessage({
+      canal: 'whatsapp',
+      text: chatText,
+      instruction: 'Reescreva para WhatsApp comercial com linguagem executiva de vendas, mantendo objetividade e CTA claro.',
+      clienteNome: targetName,
+      empresaNome: cliente?.razaoSocial,
+      vendedorNome: loggedUser?.nome,
+    })
+
+    if (result.success && result.suggestion) {
+      setChatText(result.suggestion.trim())
+      showToast?.('success', 'Sugestão de texto aplicada pela IA.')
+    } else {
+      showToast?.('error', result.error || 'Não foi possível gerar sugestão com IA.')
+    }
+    setSuggestingText(false)
   }
 
   // ── Voice message recorder ──
@@ -907,6 +929,14 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             {/* Text input row */}
             {!isRecordingVoice && (
               <div className="flex gap-1.5">
+                <button
+                  onClick={handleSuggestText}
+                  disabled={sending || suggestingText || !hasChatTarget}
+                  title="Sugerir texto comercial com IA"
+                  className="w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-gray-200 text-gray-600 hover:bg-amber-100 hover:text-amber-700 disabled:opacity-40 text-xs font-bold"
+                >
+                  {suggestingText ? '…' : '✨'}
+                </button>
                 <button
                   onClick={() => { setAiMode(!aiMode); if (!aiMode) setAiHistory([]) }}
                   title={aiMode ? 'Modo IA ativo — clique para desativar' : 'Ativar Assistente IA'}

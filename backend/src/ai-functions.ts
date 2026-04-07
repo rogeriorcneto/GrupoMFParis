@@ -281,7 +281,7 @@ export const FUNCTION_DECLARATIONS = [
         },
         formaPagamento: {
           type: 'STRING',
-          description: 'Forma de pagamento. Ex: À vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias.',
+          description: 'Forma de pagamento. Opções disponíveis:\nPagamento Direto: À vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias, 60 dias, 90 dias\nIntervalos Progressivos: 7/14, 7/14/21, 7/14/21/28, 7/14/21/28/35, 7/14/21/28/35/42, 7/14/21/28/35/42/49, 7/14/21/28/35/42/49/56, 7/14/21/28/35/42/49/56/63, 7/14/21/28/35/42/49/56/63/70\nSérie 14: 14/21, 14/21/28, 14/21/28/35, 14/21/28/35/42, 14/21/28/35/42/49, 14/21/28/35/42/49/56\nSérie 28: 28/35, 28/35/42, 28/42/56, 28/35/42/49, 28/35/42/49/56\nCom Entrada: À vista/30, À vista/30/60/90, À vista/30/60/90/120, À vista/30/60/90/120/150\nMensais: 30/60/90, 30/60/90/120, 30/60/90/120/150, 30/60/90/120/150/180\nParcelas: 4 parcelas, 5 parcelas, 6 parcelas, 8 parcelas, 36 parcelas, 48 parcelas',
         },
         tipoFrete: {
           type: 'STRING',
@@ -769,7 +769,7 @@ export async function executeFunction(
             produtoId: prod.id,
             nomeProduto: prod.nome,
             sku: prod.sku || '',
-            unidade: prod.unidade,
+            unidade: 'kg',
             preco: prod.preco,
             quantidade: item.quantidade,
           })
