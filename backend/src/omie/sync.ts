@@ -309,22 +309,15 @@ export async function associarClientesPorCnpj(): Promise<AssociacaoResult> {
     .select('id, razao_social, cnpj, omie_codigo')
   if (crmErr) throw new Error(`Erro ao buscar clientes CRM: ${crmErr.message}`)
 
-  // 2. Buscar todos os clientes do Omie (paginação)
-  const omieClientes: any[] = []
-  let page = 1
-  const PER_PAGE = 200
-  while (true) {
-    const result = await omieCall<any>(
-      '/geral/clientes/',
-      'ListarClientesResumido',
-      [{ pagina: page, registros_por_pagina: PER_PAGE, apenas_importado_api: 'N' }],
-      { credentials: creds, skipCache: true }
-    )
-    const items = result?.clientes_cadastro_resumido || result?.clientes_cadastro || []
-    omieClientes.push(...items)
-    if (items.length < PER_PAGE) break
-    page++
-  }
+  // 2. Buscar todos os clientes do Omie com dados completos (inclui cnpj_cpf)
+  const omieClientes = await omieCallAllPages<OmieCliente>(
+    '/geral/clientes/',
+    'ListarClientes',
+    {},
+    'clientes_cadastro',
+    100,
+    { credentials: creds }
+  )
 
   log.info({ total: omieClientes.length }, 'Clientes Omie carregados para associação por CNPJ')
 
@@ -332,9 +325,10 @@ export async function associarClientesPorCnpj(): Promise<AssociacaoResult> {
   const omiePorCnpj = new Map<string, number>()
   for (const oc of omieClientes) {
     const cnpj = (oc.cnpj_cpf || '').replace(/\D/g, '')
-    const codigo = oc.codigo_cliente || oc.codigo_cliente_omie || 0
+    const codigo = oc.codigo_cliente_omie || 0
     if (cnpj && codigo) omiePorCnpj.set(cnpj, codigo)
   }
+  log.info({ mapeados: omiePorCnpj.size }, 'Clientes Omie mapeados por CNPJ')
 
   const result: AssociacaoResult = {
     associados: 0, jaVinculados: 0, semCnpj: 0,
