@@ -690,17 +690,25 @@ export async function consultarEntregaOmie(pedidoId: number): Promise<EntregaOmi
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
+  // Tentar resolver pelo CRM primeiro (pedidoId = id interno)
+  let codigoPedido = 0
   const { data: pedido } = await supabase
     .from('pedidos')
     .select('omie_codigo')
     .eq('id', pedidoId)
-    .single()
+    .maybeSingle()
 
-  if (!pedido?.omie_codigo) {
-    throw new Error(`Pedido ${pedidoId} não tem código Omie`)
+  if (pedido?.omie_codigo) {
+    // Encontrou no CRM — usar o omie_codigo armazenado
+    codigoPedido = parseInt(pedido.omie_codigo, 10)
+  } else {
+    // Não encontrou no CRM (pedido veio direto do Omie) — tratar pedidoId como codigo_pedido Omie
+    codigoPedido = pedidoId
   }
 
-  const codigoPedido = parseInt(pedido.omie_codigo, 10)
+  if (!codigoPedido) {
+    throw new Error(`Pedido ${pedidoId} não tem código Omie`)
+  }
 
   // Consultar pedido completo para extrair dados logísticos
   const result = await omieCall<any>(
