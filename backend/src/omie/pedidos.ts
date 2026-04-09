@@ -4,6 +4,7 @@ import { log } from '../logger.js'
 import {
   calcularDataPrevisao,
   garantirVendedorOmie,
+  fetchVendedoresOmie,
   getCenarioVendas,
   getCenarioAmostra,
   getDepartamentoComercial,
@@ -762,7 +763,7 @@ function mapEtapaToStatus(etapa: string): string {
 }
 
 // Extrair dados de um pedido bruto do Omie para formato padronizado
-function mapPedidoOmie(p: any): PedidoAcompanhamento {
+function mapPedidoOmie(p: any, vendedorMap?: Map<number, string>): PedidoAcompanhamento {
   const cab = p.cabecalho || {}
   const infoCad = p.infoCadastro || {}
   const totalPedido = p.total_pedido || {}
@@ -784,12 +785,21 @@ function mapPedidoOmie(p: any): PedidoAcompanhamento {
   // Rastreio: pode estar no frete
   const rastreio = frete.codigo_rastreio || frete.outras_informacoes || ''
 
+  // Vendedor: resolver nome a partir do código usando o mapa de vendedores Omie
+  const codVendedor = cab.codigo_vendedor || 0
+  let vendedorNome = ''
+  if (codVendedor && vendedorMap) {
+    vendedorNome = vendedorMap.get(codVendedor) || `Vendedor ${codVendedor}`
+  } else if (codVendedor) {
+    vendedorNome = `Vendedor ${codVendedor}`
+  }
+
   return {
     pedidoId: cab.codigo_pedido || 0,
     numero: cab.numero_pedido ? String(cab.numero_pedido) : String(cab.codigo_pedido || ''),
     clienteNome: cab.razao_social || cab.nome_fantasia || String(cab.codigo_cliente || ''),
     clienteId: cab.codigo_cliente || 0,
-    vendedorNome: cab.codigo_vendedor ? `Vendedor ${cab.codigo_vendedor}` : '',
+    vendedorNome,
     valor: Number(totalPedido.valor_total_pedido || cab.valor_total || 0),
     dataCriacao: dataISO || dataRaw,
     statusCrm: '',
@@ -889,8 +899,23 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  const pedidosOmie = await fetchAllPedidosOmie(creds)
+  // Buscar pedidos e vendedores em paralelo
+  const [pedidosOmie, vendedoresOmie] = await Promise.all([
+    fetchAllPedidosOmie(creds),
+    fetchVendedoresOmie(creds).catch(err => {
+      log.warn({ err: err?.message }, 'Não foi possível carregar vendedores Omie — nomes não serão resolvidos')
+      return []
+    }),
+  ])
+
   if (pedidosOmie.length === 0) return []
+
+  // Montar mapa codigo_vendedor → nome
+  const vendedorMap = new Map<number, string>()
+  for (const v of vendedoresOmie) {
+    if (v.codigo && v.nome) vendedorMap.set(v.codigo, v.nome)
+  }
+  log.info({ vendedoresCount: vendedorMap.size }, 'Mapa de vendedores Omie carregado')
 
   // Debug: logar todas as etapas únicas encontradas
   const etapasMap = new Map<string, number>()
@@ -909,7 +934,7 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     log.info({ primeiroPedido: JSON.stringify(pedidosOmie[0]).slice(0, 2000) }, 'Omie — primeiro pedido RAW (debug)')
   }
 
-  const resultado = pedidosOmie.map(mapPedidoOmie)
+  const resultado = pedidosOmie.map(p => mapPedidoOmie(p, vendedorMap))
 
   // Ordenar mais recentes primeiro
   resultado.sort((a, b) => Number(b.omieCodigo) - Number(a.omieCodigo))
@@ -921,6 +946,13 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
 export async function buscarPedidoOmie(termo: string): Promise<PedidoAcompanhamento[]> {
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  // Carregar vendedores para resolver nomes
+  const vendedoresOmie = await fetchVendedoresOmie(creds).catch(() => [])
+  const vendedorMap = new Map<number, string>()
+  for (const v of vendedoresOmie) {
+    if (v.codigo && v.nome) vendedorMap.set(v.codigo, v.nome)
+  }
 
   // Tentar buscar por número do pedido
   const numeroPedido = parseInt(termo, 10)
@@ -935,7 +967,7 @@ export async function buscarPedidoOmie(termo: string): Promise<PedidoAcompanhame
         { credentials: creds }
       )
       if (result?.cabecalho) {
-        return [mapPedidoOmie(result)]
+        return [mapPedidoOmie(result, vendedorMap)]
       }
     } catch {
       // Tentar como número_pedido
@@ -947,7 +979,7 @@ export async function buscarPedidoOmie(termo: string): Promise<PedidoAcompanhame
           { credentials: creds }
         )
         if (result?.cabecalho) {
-          return [mapPedidoOmie(result)]
+          return [mapPedidoOmie(result, vendedorMap)]
         }
       } catch { /* continua para busca geral */ }
     }
@@ -966,7 +998,7 @@ export async function buscarPedidoOmie(termo: string): Promise<PedidoAcompanhame
     )
   })
 
-  const resultado = filtered.map(mapPedidoOmie)
+  const resultado = filtered.map(p => mapPedidoOmie(p, vendedorMap))
   resultado.sort((a, b) => Number(b.omieCodigo) - Number(a.omieCodigo))
   return resultado
 }
