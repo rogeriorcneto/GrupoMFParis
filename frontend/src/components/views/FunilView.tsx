@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import type { Cliente, Vendedor, Interacao, FunilViewProps } from '../../types'
+import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import CallRecorder from '../CallRecorder'
 
-function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
+function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
@@ -317,6 +317,27 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     }
   }, [clientesFiltrados, displayedStages])
 
+  // Map pedidos by clienteId for logistics info on cards
+  const pedidosByCliente = useMemo(() => {
+    const map = new Map<number, Pedido[]>()
+    for (const p of pedidos) {
+      const arr = map.get(p.clienteId) || []
+      arr.push(p)
+      map.set(p.clienteId, arr)
+    }
+    return map
+  }, [pedidos])
+
+  const getClientePedidoInfo = (clienteId: number) => {
+    const ps = pedidosByCliente.get(clienteId) || []
+    if (ps.length === 0) return null
+    const sorted = [...ps].sort((a, b) => new Date(b.dataCriacao).getTime() - new Date(a.dataCriacao).getTime())
+    const latest = sorted[0]
+    const amostras = ps.filter(p => p.tipo === 'bonificacao')
+    const vendas = ps.filter(p => p.tipo === 'venda' || !p.tipo)
+    return { latest, total: ps.length, amostras: amostras.length, vendas: vendas.length, all: sorted }
+  }
+
   const urgenciaBorder = (u: string) => {
     if (u === 'critico') return 'border-l-4 border-l-red-500 bg-red-50'
     if (u === 'atencao') return 'border-l-4 border-l-yellow-500 bg-yellow-50'
@@ -568,27 +589,27 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
 
       {/* Kanban columns — scroll horizontal com colunas de largura fixa igual */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <div className="flex gap-2 h-full px-1 pb-2" style={{ minWidth: `${displayedStages.length * 220}px` }}>
+        <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 290}px` }}>
           {displayedStages.map((stage) => {
             const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
             const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             return (
-              <div key={stage.key} className="flex-1 min-w-[200px] max-w-[320px] flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
-                {/* Column header — compacto e colorido */}
-                <div className="px-2.5 py-2 bg-white border-b border-gray-200 flex-shrink-0">
+              <div key={stage.key} className="flex-1 min-w-[260px] max-w-[380px] flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
+                {/* Column header */}
+                <div className="px-3 py-2.5 bg-white border-b border-gray-200 flex-shrink-0">
                   <div className="flex items-center justify-between gap-1">
-                    <h3 className="font-semibold text-gray-800 text-[11px] truncate leading-none">{stage.icon} {stage.title}</h3>
-                    <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
+                    <h3 className="font-bold text-gray-800 text-xs truncate leading-none">{stage.icon} {stage.title}</h3>
+                    <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
                   </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] text-gray-500 font-medium">R$ {stageValor.toLocaleString('pt-BR')}</span>
-                    {stage.prob > 0 && <span className="text-[9px] text-gray-400">{Math.round(stage.prob * 100)}%</span>}
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-[11px] text-gray-500 font-medium">R$ {stageValor.toLocaleString('pt-BR')}</span>
+                    {stage.prob > 0 && <span className="text-[10px] text-gray-400">{Math.round(stage.prob * 100)}%</span>}
                   </div>
                 </div>
 
                 {/* Cards area — scroll vertical */}
-                <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {stageClientes.map((cliente) => {
                     const urgencia = getCardUrgencia(cliente)
                     const nextAction = getNextAction(cliente)
@@ -596,33 +617,56 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                     return (
                       <div
                         key={cliente.id}
-                        className={`p-2 rounded-md bg-white ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-md transition-all duration-150 group ${
+                        className={`p-3 rounded-lg bg-white ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-md transition-all duration-150 group ${
                           urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-red-100' :
                           urgencia === 'atencao' ? 'border-l-[3px] border-l-yellow-400 border border-yellow-100' :
-                          'border border-gray-150 hover:border-gray-300'
+                          'border border-gray-200 hover:border-gray-300'
                         }`}
                         draggable={isGerente}
                         onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
                         onClick={() => onClickCliente?.(cliente)}
                       >
-                        <div className="flex items-start justify-between gap-1">
-                          <h4 className="font-semibold text-[11px] text-gray-900 leading-tight line-clamp-2">{cliente.razaoSocial}</h4>
-                          <div className="flex items-center gap-0.5 flex-shrink-0">
-                            {urgencia !== 'normal' && <span className="text-[10px]">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
-                            {cliente.score !== undefined && <span className="text-[9px] font-bold text-gray-400">{cliente.score}</span>}
+                        <div className="flex items-start justify-between gap-1.5">
+                          <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {urgencia !== 'normal' && <span className="text-xs">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
+                            {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400">{cliente.score}</span>}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between mt-0.5">
-                          <span className="text-[10px] text-gray-500 truncate">{cliente.contatoNome}</span>
-                          {vendedor && <span className="text-[9px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                          {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
-                        {cliente.valorEstimado ? <p className="text-[10px] font-bold text-primary-600 mt-0.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
+                        {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                         {renderCardInfo(cliente)}
-                        {nextAction && <p className={`text-[9px] font-medium mt-1 leading-snug ${nextAction.color}`}>{nextAction.text}</p>}
+                        {/* Logistics mini-info from pedidos */}
+                        {(() => {
+                          const info = getClientePedidoInfo(cliente.id)
+                          if (!info) return null
+                          const p = info.latest
+                          const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Enviado', confirmado: 'Confirmado', cancelado: 'Cancelado' }
+                          return (
+                            <div className="mt-1.5 p-2 bg-gray-50 rounded-md border border-gray-100 space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                  {p.tipo === 'bonificacao' ? '🧪 Amostra' : '🛒 Venda'}
+                                </span>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 text-green-700' : p.status === 'enviado' ? 'bg-blue-100 text-blue-700' : p.status === 'cancelado' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                  {statusLabel[p.status] || p.status}
+                                </span>
+                                {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}
+                              </div>
+                              {p.numero && <p className="text-[10px] text-gray-500">📋 #{p.numero}</p>}
+                              {p.totalValor > 0 && <p className="text-[10px] font-semibold text-gray-700">💰 R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>}
+                              {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
+                            </div>
+                          )
+                        })()}
+                        {nextAction && <p className={`text-[10px] font-medium mt-1.5 leading-snug ${nextAction.color}`}>{nextAction.text}</p>}
                         {cliente.produtosInteresse && cliente.produtosInteresse.length > 0 && (
-                          <div className="flex flex-wrap gap-0.5 mt-1">
-                            {cliente.produtosInteresse.slice(0, 2).map(p => (<span key={p} className="px-1 py-0 text-[8px] bg-primary-50 text-primary-700 rounded-full border border-primary-100 truncate max-w-[80px]">{p}</span>))}
-                            {cliente.produtosInteresse.length > 2 && <span className="text-[8px] text-gray-400">+{cliente.produtosInteresse.length - 2}</span>}
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {cliente.produtosInteresse.slice(0, 3).map(p => (<span key={p} className="px-1.5 py-0.5 text-[9px] bg-primary-50 text-primary-700 rounded-full border border-primary-100 truncate max-w-[100px]">{p}</span>))}
+                            {cliente.produtosInteresse.length > 3 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 3}</span>}
                           </div>
                         )}
                         {cliente.redesSociais && (() => {
@@ -655,21 +699,21 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                             </div>
                           ) : null
                         })()}
-                        <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
+                        <div className="flex gap-1.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
                           {cliente.etapa === 'amostra' && moverCliente && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-1 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
                           )}
                           {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-1.5 py-0.5 text-[8px] bg-red-50 text-red-700 rounded hover:bg-red-100 font-medium" title="Cancelar envio de amostra e voltar para Prospecção">❌ Cancelar</button>
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-1 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium" title="Cancelar envio de amostra e voltar para Prospecção">❌ Cancelar</button>
                           )}
                           {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="Abrir WhatsApp">📱 WA</button>
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-1 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium" title="Abrir WhatsApp">📱 WA</button>
                           )}
                           {cliente.contatoEmail && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium" title="Enviar Email">📧</button>
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-1 text-[9px] bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 font-medium" title="Enviar Email">📧</button>
                           )}
                           {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Ligar com gravação">📞</button>
+                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-2 py-1 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium" title="Ligar com gravação">📞</button>
                           )}
                         </div>
                       </div>

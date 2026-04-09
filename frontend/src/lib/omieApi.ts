@@ -136,6 +136,7 @@ export interface PedidoAcompanhamento {
   codigoRastreio: string
   dataFaturamento: string
   omieCodigo: string
+  tipo?: 'venda' | 'bonificacao'
 }
 
 export async function omieGetPedidosAcompanhamento(): Promise<{ success: boolean; data?: PedidoAcompanhamento[]; error?: string }> {

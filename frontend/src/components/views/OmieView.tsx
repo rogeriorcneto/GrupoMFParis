@@ -40,11 +40,18 @@ const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> 
   pendente: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Pendente' },
 }
 
-const LOGISTICA_STEPS = [
-  { key: 'enviado', label: 'Aprovado', icon: '✅' },
-  { key: 'em_producao', label: 'Em Produção', icon: '🏭' },
+const LOGISTICA_STEPS_AMOSTRA = [
+  { key: 'enviado', label: 'Aprov. Gerência', icon: '✅' },
   { key: 'faturado', label: 'Faturado', icon: '📄' },
-  { key: 'expedido', label: 'Expedido', icon: '📦' },
+  { key: 'expedido', label: 'Coletado', icon: '📦' },
+  { key: 'entregue', label: 'Entregue', icon: '✔️' },
+]
+
+const LOGISTICA_STEPS_VENDA = [
+  { key: 'enviado', label: 'Aprov. Gerência', icon: '✅' },
+  { key: 'em_producao', label: 'Aprov. Financeiro', icon: '💰' },
+  { key: 'faturado', label: 'Faturado', icon: '📄' },
+  { key: 'expedido', label: 'Coletado', icon: '📦' },
   { key: 'entregue', label: 'Entregue', icon: '✔️' },
 ]
 
@@ -57,11 +64,19 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function LogisticaTimeline({ status }: { status: string }) {
-  const currentIdx = LOGISTICA_STEPS.findIndex(s => s.key === status)
+function TipoBadge({ tipo }: { tipo?: 'venda' | 'bonificacao' }) {
+  if (tipo === 'bonificacao') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">🧪 Amostra</span>
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">🛒 Venda</span>
+}
+
+function LogisticaTimeline({ status, tipo }: { status: string; tipo?: 'venda' | 'bonificacao' }) {
+  const steps = tipo === 'bonificacao' ? LOGISTICA_STEPS_AMOSTRA : LOGISTICA_STEPS_VENDA
+  const currentIdx = steps.findIndex(s => s.key === status)
   return (
     <div className="flex items-center gap-1">
-      {LOGISTICA_STEPS.map((step, idx) => {
+      {steps.map((step, idx) => {
         const done = idx <= currentIdx
         const current = idx === currentIdx
         return (
@@ -72,7 +87,7 @@ function LogisticaTimeline({ status }: { status: string }) {
               </div>
               <span className={`text-[9px] mt-0.5 ${done ? 'text-primary-700 font-semibold' : 'text-gray-400'}`}>{step.label}</span>
             </div>
-            {idx < LOGISTICA_STEPS.length - 1 && (
+            {idx < steps.length - 1 && (
               <div className={`flex-1 h-0.5 min-w-[12px] ${idx < currentIdx ? 'bg-primary-500' : 'bg-gray-200'}`} />
             )}
           </React.Fragment>
@@ -213,8 +228,13 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
   const visiblePedidos = filteredPedidos.slice(0, visibleCount)
   const hasMore = filteredPedidos.length > visibleCount
 
-  // Logistica: pedidos in transit
-  const pedidosLogistica = acompanhamento.filter(p => ['enviado', 'em_producao', 'faturado', 'expedido'].includes(p.statusOmie))
+  // Logistica: pedidos in transit, enriched with tipo from local pedidos
+  const pedidosLogistica = acompanhamento
+    .filter(p => ['enviado', 'em_producao', 'faturado', 'expedido'].includes(p.statusOmie))
+    .map(p => {
+      const localPedido = pedidos.find(lp => lp.id === p.pedidoId || lp.numero === p.numero)
+      return { ...p, tipo: p.tipo || localPedido?.tipo || 'venda' as const }
+    })
 
   const tabs: { id: OmieTab; icon: React.ElementType; label: string }[] = [
     { id: 'pedidos', icon: ClipboardDocumentListIcon, label: 'Acompanhamento' },
@@ -354,6 +374,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Pedido</th>
+                        <th className="text-center px-4 py-3 font-semibold text-gray-600">Tipo</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Cliente</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Vendedor</th>
                         <th className="text-right px-4 py-3 font-semibold text-gray-600">Valor</th>
@@ -372,6 +393,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                             <br />
                             <span className="text-xs text-gray-400">{new Date(p.dataCriacao).toLocaleDateString('pt-BR')}</span>
                           </td>
+                          <td className="px-4 py-3 text-center"><TipoBadge tipo={pedidos.find(lp => lp.id === p.pedidoId || lp.numero === p.numero)?.tipo} /></td>
                           <td className="px-4 py-3 text-gray-700 max-w-[180px] truncate">{p.clienteNome}</td>
                           <td className="px-4 py-3 text-gray-600 text-xs">{p.vendedorNome}</td>
                           <td className="px-4 py-3 text-right font-semibold text-gray-900">
@@ -619,6 +641,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-gray-900">{p.numero}</span>
                           <StatusBadge status={p.statusOmie} />
+                          <TipoBadge tipo={p.tipo} />
                         </div>
                         <p className="text-sm text-gray-600 mt-0.5">{p.clienteNome}</p>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
@@ -638,7 +661,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                         </button>
                       </div>
                     </div>
-                    <LogisticaTimeline status={p.statusOmie} />
+                    <LogisticaTimeline status={p.statusOmie} tipo={p.tipo} />
                   </div>
                 ))}
               </div>

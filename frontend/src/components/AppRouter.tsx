@@ -143,6 +143,7 @@ export default function AppRouter({
         clientes={clientes}
         vendedores={vendedores}
         interacoes={interacoes}
+        pedidos={pedidos}
         loggedUser={loggedUser}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
