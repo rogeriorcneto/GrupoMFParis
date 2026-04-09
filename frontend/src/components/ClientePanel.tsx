@@ -83,6 +83,17 @@ export default function ClientePanel({
   const [panelAtividadeHora, setPanelAtividadeHora] = useState(currentTimeHHMM())
   const [panelContatoSetor, setPanelContatoSetor] = useState(notasEmpresa.setor)
   const [panelInfoAdicional, setPanelInfoAdicional] = useState(notasEmpresa.info)
+  // Redes sociais estruturadas
+  type RedesSociaisMap = Record<string, string>
+  const parseRedesSociais = (raw: string): RedesSociaisMap => {
+    if (!raw) return {}
+    try { const p = JSON.parse(raw); if (typeof p === 'object' && !Array.isArray(p)) return p } catch {}
+    return {}
+  }
+  const [redesSociaisMap, setRedesSociaisMap] = useState<RedesSociaisMap>(() => parseRedesSociais(c.redesSociais || ''))
+  const [socialModalOpen, setSocialModalOpen] = useState<string | null>(null)
+  const [socialModalValue, setSocialModalValue] = useState('')
+  // keep legacy string in sync for other parts that use panelRedesSociais
   const [panelRedesSociais, setPanelRedesSociais] = useState(c.redesSociais || '')
   const [pinnedInteracoes, setPinnedInteracoes] = useState<number[]>([])
   const [panelNovaTarefa, setPanelNovaTarefa] = useState(false)
@@ -235,16 +246,48 @@ export default function ClientePanel({
     addNotificacao('success', 'Atividade registrada', `${tipoInteracaoLabel[panelAtividadeTipo]}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`, c.id)
   }
 
+  const REDES_CONFIG: { key: string; label: string; placeholder: string; icon: React.ReactNode; activeColor: string }[] = [
+    { key: 'facebook',  label: 'Facebook',  placeholder: 'facebook.com/suapagina',  activeColor: 'text-blue-600',
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg> },
+    { key: 'instagram', label: 'Instagram', placeholder: 'instagram.com/suapagina', activeColor: 'text-pink-600',
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg> },
+    { key: 'linkedin',  label: 'LinkedIn',  placeholder: 'linkedin.com/in/seuperfil', activeColor: 'text-sky-600',
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg> },
+    { key: 'twitter',   label: 'X / Twitter', placeholder: 'x.com/seuperfil',     activeColor: 'text-gray-800',
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.213 5.567zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg> },
+    { key: 'tiktok',    label: 'TikTok',    placeholder: 'tiktok.com/@seuperfil',   activeColor: 'text-gray-900',
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.76a4.85 4.85 0 01-1.01-.07z"/></svg> },
+    { key: 'youtube',   label: 'YouTube',   placeholder: 'youtube.com/@seucanal',   activeColor: 'text-red-600',
+      icon: <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg> },
+    { key: 'site',      label: 'Site',      placeholder: 'www.seusite.com.br',      activeColor: 'text-emerald-600',
+      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg> },
+  ]
+
+  const handleSalvarRedesSociais = async (key: string, value: string) => {
+    const next = { ...redesSociaisMap }
+    if (value.trim()) next[key] = value.trim()
+    else delete next[key]
+    const jsonStr = Object.keys(next).length > 0 ? JSON.stringify(next) : ''
+    setRedesSociaisMap(next)
+    setPanelRedesSociais(jsonStr)
+    setSocialModalOpen(null)
+    try {
+      await db.updateCliente(c.id, { redesSociais: jsonStr || undefined })
+      setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, redesSociais: jsonStr || undefined } : cl))
+    } catch (err) { logger.error('Erro ao salvar rede social:', err) }
+  }
+
   const handleSalvarDadosEmpresa = async () => {
     const notas = composeNotasEmpresa(panelContatoSetor, panelInfoAdicional)
+    const jsonStr = Object.keys(redesSociaisMap).length > 0 ? JSON.stringify(redesSociaisMap) : ''
     try {
       await db.updateCliente(c.id, {
-        redesSociais: panelRedesSociais.trim() || undefined,
+        redesSociais: jsonStr || undefined,
         notas: notas || undefined,
       })
       setClientes(prev => prev.map(cl => cl.id === c.id ? {
         ...cl,
-        redesSociais: panelRedesSociais.trim() || undefined,
+        redesSociais: jsonStr || undefined,
         notas: notas || undefined,
       } : cl))
       addNotificacao('success', 'Dados atualizados', `Informações de ${c.razaoSocial} atualizadas.`, c.id)
@@ -442,49 +485,73 @@ export default function ClientePanel({
           </div>
 
           {/* === REDES E INFO ADICIONAIS === */}
+          {/* Mini-modal de rede social */}
+          {socialModalOpen && (() => {
+            const rede = REDES_CONFIG.find(r => r.key === socialModalOpen)!
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setSocialModalOpen(null)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-80 p-5 space-y-3" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-sm font-bold text-gray-900">Adicionar Rede Social</h3>
+                  <label className="block text-xs font-medium text-gray-600">{rede.label}</label>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={socialModalValue}
+                    onChange={e => setSocialModalValue(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSalvarRedesSociais(rede.key, socialModalValue)}
+                    placeholder={rede.placeholder}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  {redesSociaisMap[rede.key] && (
+                    <a href={redesSociaisMap[rede.key].startsWith('http') ? redesSociaisMap[rede.key] : `https://${redesSociaisMap[rede.key]}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-primary-600 hover:underline truncate">
+                      🔗 {redesSociaisMap[rede.key]}
+                    </a>
+                  )}
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => handleSalvarRedesSociais(rede.key, socialModalValue)} className="flex-1 py-2 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700 transition-colors">Salvar</button>
+                    {redesSociaisMap[rede.key] && (
+                      <button onClick={() => handleSalvarRedesSociais(rede.key, '')} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors">Remover</button>
+                    )}
+                    <button onClick={() => setSocialModalOpen(null)} className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">Cancelar</button>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">🌐 Redes sociais e informações adicionais</h3>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Redes sociais</label>
-              <input
-                type="text"
-                value={panelRedesSociais}
-                onChange={(e) => setPanelRedesSociais(e.target.value)}
-                placeholder="Instagram, LinkedIn, site, etc"
-                className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              {panelRedesSociais.trim() && (() => {
-                const entries = panelRedesSociais.split(/[,;\s]+/).filter(Boolean)
-                const socials: { icon: string; label: string; url: string; color: string }[] = []
-                for (const entry of entries) {
-                  const e = entry.toLowerCase().trim()
-                  if (e.includes('instagram') || e.includes('insta')) {
-                    const url = e.startsWith('http') ? entry.trim() : e.startsWith('@') ? `https://instagram.com/${e.slice(1)}` : `https://instagram.com/${e.replace(/.*instagram\.com\/?/,'')}`
-                    socials.push({ icon: '📸', label: 'Instagram', url, color: 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100' })
-                  } else if (e.includes('linkedin')) {
-                    socials.push({ icon: '💼', label: 'LinkedIn', url: e.startsWith('http') ? entry.trim() : `https://linkedin.com/in/${e}`, color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' })
-                  } else if (e.includes('facebook') || e.includes('fb.com')) {
-                    socials.push({ icon: '👤', label: 'Facebook', url: e.startsWith('http') ? entry.trim() : `https://facebook.com/${e}`, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' })
-                  } else if (e.includes('twitter') || e.includes('x.com')) {
-                    socials.push({ icon: '🐦', label: 'X', url: e.startsWith('http') ? entry.trim() : `https://x.com/${e}`, color: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100' })
-                  } else if (e.includes('tiktok')) {
-                    socials.push({ icon: '🎵', label: 'TikTok', url: e.startsWith('http') ? entry.trim() : `https://tiktok.com/@${e}`, color: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100' })
-                  } else if (e.includes('youtube') || e.includes('youtu.be')) {
-                    socials.push({ icon: '▶️', label: 'YouTube', url: e.startsWith('http') ? entry.trim() : `https://youtube.com/${e}`, color: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' })
-                  } else if (e.startsWith('http') || e.includes('.com') || e.includes('.br')) {
-                    socials.push({ icon: '🌐', label: 'Site', url: e.startsWith('http') ? entry.trim() : `https://${entry.trim()}`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' })
-                  }
-                }
-                return socials.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {socials.map((s, i) => (
-                      <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-apple border text-xs font-medium transition-colors ${s.color}`}>
-                        <span>{s.icon}</span> {s.label}
-                      </a>
-                    ))}
-                  </div>
-                ) : null
-              })()}
+              <label className="block text-xs text-gray-500 mb-2">Redes sociais — clique no ícone para adicionar o link</label>
+              <div className="flex items-center gap-3 flex-wrap">
+                {REDES_CONFIG.map(rede => {
+                  const hasLink = !!redesSociaisMap[rede.key]
+                  const url = hasLink ? (redesSociaisMap[rede.key].startsWith('http') ? redesSociaisMap[rede.key] : `https://${redesSociaisMap[rede.key]}`) : null
+                  return (
+                    <div key={rede.key} className="flex flex-col items-center gap-0.5">
+                      <button
+                        onClick={() => { setSocialModalOpen(rede.key); setSocialModalValue(redesSociaisMap[rede.key] || '') }}
+                        title={hasLink ? `${rede.label}: ${redesSociaisMap[rede.key]}` : `Adicionar ${rede.label}`}
+                        className={`relative p-2 rounded-xl border-2 transition-all ${
+                          hasLink
+                            ? `border-primary-300 bg-primary-50 ${rede.activeColor}`
+                            : 'border-gray-200 bg-white text-gray-300 hover:border-gray-400 hover:text-gray-500'
+                        }`}
+                      >
+                        {rede.icon}
+                        {hasLink && (
+                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                        )}
+                      </button>
+                      {hasLink && url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className={`text-[9px] font-semibold ${rede.activeColor} hover:underline`}>
+                          {rede.label}
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Informações adicionais</label>
