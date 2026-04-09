@@ -126,6 +126,8 @@ export interface PedidoAcompanhamento {
   numero: string
   clienteNome: string
   clienteId: number
+  clienteOmieId: number
+  cnpjCliente: string
   vendedorNome: string
   valor: number
   dataCriacao: string
@@ -221,5 +223,21 @@ export async function omieSyncProdutos(): Promise<{ success: boolean; data?: Syn
 
 export async function omieSyncLogistics(): Promise<{ success: boolean; data?: { atualizados: number; semPedido: number; erros: any[] }; error?: string }> {
   const res = await authFetch(`${OMIE_BASE}/sync/logistics`, { method: 'POST' })
+  return res.json()
+}
+
+// ─── Associar clientes CRM ↔ Omie por CNPJ ───
+
+export interface AssociacaoResult {
+  associados: number
+  jaVinculados: number
+  semCnpj: number
+  naoEncontradosOmie: number
+  erros: { crmId: number; razaoSocial: string; erro: string }[]
+  detalhes: { crmId: number; razaoSocial: string; omieId: string; cnpj: string }[]
+}
+
+export async function omieAssociarPorCnpj(): Promise<{ success: boolean; data?: AssociacaoResult; error?: string }> {
+  const res = await authFetch(`${OMIE_BASE}/sync/associar-por-cnpj`, { method: 'POST' })
   return res.json()
 }

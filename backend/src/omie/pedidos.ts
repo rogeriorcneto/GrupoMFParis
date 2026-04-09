@@ -330,14 +330,20 @@ function mapFormaPagamentoToCodigoParcela(formaPagamento: string): string {
 }
 
 /**
- * Gera array de parcelas Omie com base na forma de pagamento.
- * - "À vista" → 1 parcela, 100%, vencimento = data_previsao
- * - "N dias" → 1 parcela, 100%, vencimento = data_previsao + N dias
+ * Gera array de parcelas Omie com base na forma de pagamento do CRM.
+ *
+ * Formatos suportados:
+ *  - "À vista"          → 1 parcela no vencimento base
+ *  - "7 dias"           → 1 parcela, +7 dias
+ *  - "28 dias"          → 1 parcela, +28 dias
+ *  - "7/14"             → 2 parcelas iguais, +7 e +14 dias
+ *  - "7/14/21"          → 3 parcelas iguais, +7, +14 e +21 dias
+ *  - "14/28/42"         → 3 parcelas iguais, +14, +28 e +42 dias
+ *  - qualquer "D1/D2/.." → N parcelas iguais nos dias informados
  */
 function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisaoStr: string): any[] {
-  const fp = formaPagamento.toLowerCase().trim()
+  const fp = formaPagamento.trim()
 
-  // Helper: parsear dd/mm/yyyy e somar dias
   function parseDataOmie(d: string): Date {
     const parts = d.split('/')
     return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]))
@@ -350,38 +356,48 @@ function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisao
     r.setDate(r.getDate() + days)
     return r
   }
+  function round2(n: number) { return Math.round(n * 100) / 100 }
 
   const baseDate = parseDataOmie(dataPrevisaoStr)
+  const fpLower = fp.toLowerCase()
 
-  // À vista → 1 parcela, vencimento = data_previsao
-  if (fp === 'à vista' || fp === 'a vista') {
-    return [{
-      numero_parcela: 1,
-      data_vencimento: dataPrevisaoStr,
-      percentual: 100,
-      valor: Math.round(totalPedido * 100) / 100,
-    }]
+  // À vista → 1 parcela no vencimento base
+  if (fpLower === 'à vista' || fpLower === 'a vista') {
+    return [{ numero_parcela: 1, data_vencimento: dataPrevisaoStr, percentual: 100, valor: round2(totalPedido) }]
   }
 
-  // "N dias" → 1 parcela com prazo
-  const matchDias = fp.match(/^(\d+)\s*dias?$/)
+  // "N dias" → 1 parcela com N dias de prazo
+  const matchDias = fpLower.match(/^(\d+)\s*dias?$/)
   if (matchDias) {
     const dias = parseInt(matchDias[1], 10)
-    return [{
-      numero_parcela: 1,
+    return [{ numero_parcela: 1, data_vencimento: formatDataOmie(addDays(baseDate, dias)), percentual: 100, valor: round2(totalPedido) }]
+  }
+
+  // "D1/D2/.../Dn" → N parcelas iguais, cada uma com o prazo em dias da data base
+  // Ex: "7/14", "7/14/21", "14/28/42", "28/35/42/49/56"
+  const partes = fp.split('/').map(p => p.trim()).filter(Boolean)
+  const diasParcelas = partes.map(p => parseInt(p, 10)).filter(n => !isNaN(n) && n > 0)
+
+  if (diasParcelas.length >= 2) {
+    const n = diasParcelas.length
+    const valorParcela = round2(totalPedido / n)
+    // Ajuste de arredondamento na última parcela
+    const somaAnterior = round2(valorParcela * (n - 1))
+    const ultimaP = round2(totalPedido - somaAnterior)
+    const pct = round2(100 / n)
+    const pctSomaAnterior = round2(pct * (n - 1))
+    const ultimoPct = round2(100 - pctSomaAnterior)
+
+    return diasParcelas.map((dias, idx) => ({
+      numero_parcela: idx + 1,
       data_vencimento: formatDataOmie(addDays(baseDate, dias)),
-      percentual: 100,
-      valor: Math.round(totalPedido * 100) / 100,
-    }]
+      percentual: idx === n - 1 ? ultimoPct : pct,
+      valor: idx === n - 1 ? ultimaP : valorParcela,
+    }))
   }
 
   // Fallback: à vista
-  return [{
-    numero_parcela: 1,
-    data_vencimento: dataPrevisaoStr,
-    percentual: 100,
-    valor: Math.round(totalPedido * 100) / 100,
-  }]
+  return [{ numero_parcela: 1, data_vencimento: dataPrevisaoStr, percentual: 100, valor: round2(totalPedido) }]
 }
 
 // ============================================
@@ -716,7 +732,9 @@ export interface PedidoAcompanhamento {
   pedidoId: number
   numero: string
   clienteNome: string
-  clienteId: number
+  clienteId: number        // CRM id (resolvido via omie_codigo ou CNPJ)
+  clienteOmieId: number    // codigo_cliente do Omie
+  cnpjCliente: string
   vendedorNome: string
   valor: number
   dataCriacao: string
@@ -727,6 +745,7 @@ export interface PedidoAcompanhamento {
   codigoRastreio: string
   dataFaturamento: string
   omieCodigo: string
+  tipo?: 'venda' | 'bonificacao'
 }
 
 // Helper: converter data dd/mm/aaaa para yyyy-mm-dd (ISO)
@@ -763,7 +782,7 @@ function mapEtapaToStatus(etapa: string): string {
 }
 
 // Extrair dados de um pedido bruto do Omie para formato padronizado
-function mapPedidoOmie(p: any, vendedorMap?: Map<number, string>): PedidoAcompanhamento {
+function mapPedidoOmie(p: any, vendedorMap?: Map<number, string>, crmClienteMap?: Map<number, number>): PedidoAcompanhamento {
   const cab = p.cabecalho || {}
   const infoCad = p.infoCadastro || {}
   const totalPedido = p.total_pedido || {}
@@ -794,11 +813,16 @@ function mapPedidoOmie(p: any, vendedorMap?: Map<number, string>): PedidoAcompan
     vendedorNome = `Vendedor ${codVendedor}`
   }
 
+  const omieClienteId = cab.codigo_cliente || 0
+  const crmId = crmClienteMap ? (crmClienteMap.get(omieClienteId) || 0) : 0
+
   return {
     pedidoId: cab.codigo_pedido || 0,
     numero: cab.numero_pedido ? String(cab.numero_pedido) : String(cab.codigo_pedido || ''),
-    clienteNome: cab.razao_social || cab.nome_fantasia || String(cab.codigo_cliente || ''),
-    clienteId: cab.codigo_cliente || 0,
+    clienteNome: cab.razao_social || cab.nome_fantasia || String(omieClienteId || ''),
+    clienteId: crmId,
+    clienteOmieId: omieClienteId,
+    cnpjCliente: cab.cnpj_cpf || '',
     vendedorNome,
     valor: Number(totalPedido.valor_total_pedido || cab.valor_total || 0),
     dataCriacao: dataISO || dataRaw,
@@ -899,13 +923,14 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  // Buscar pedidos e vendedores em paralelo
-  const [pedidosOmie, vendedoresOmie] = await Promise.all([
+  // Buscar pedidos, vendedores e clientes CRM em paralelo
+  const [pedidosOmie, vendedoresOmie, crmClientesRaw] = await Promise.all([
     fetchAllPedidosOmie(creds),
     fetchVendedoresOmie(creds).catch(err => {
       log.warn({ err: err?.message }, 'Não foi possível carregar vendedores Omie — nomes não serão resolvidos')
       return []
     }),
+    supabase.from('clientes').select('id, omie_codigo, cnpj').then(r => r.data || []),
   ])
 
   if (pedidosOmie.length === 0) return []
@@ -916,6 +941,13 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     if (v.codigo && v.nome) vendedorMap.set(v.codigo, v.nome)
   }
   log.info({ vendedoresCount: vendedorMap.size }, 'Mapa de vendedores Omie carregado')
+
+  // Montar mapa omie_codigo (codigo_cliente Omie) → CRM id
+  const crmClienteMap = new Map<number, number>()
+  for (const c of crmClientesRaw) {
+    if (c.omie_codigo) crmClienteMap.set(parseInt(c.omie_codigo, 10), c.id)
+  }
+  log.info({ vinculados: crmClienteMap.size }, 'Clientes CRM vinculados ao Omie')
 
   // Debug: logar todas as etapas únicas encontradas
   const etapasMap = new Map<string, number>()
@@ -934,7 +966,7 @@ export async function listarPedidosOmieAcompanhamento(): Promise<PedidoAcompanha
     log.info({ primeiroPedido: JSON.stringify(pedidosOmie[0]).slice(0, 2000) }, 'Omie — primeiro pedido RAW (debug)')
   }
 
-  const resultado = pedidosOmie.map(p => mapPedidoOmie(p, vendedorMap))
+  const resultado = pedidosOmie.map(p => mapPedidoOmie(p, vendedorMap, crmClienteMap))
 
   // Ordenar mais recentes primeiro
   resultado.sort((a, b) => Number(b.omieCodigo) - Number(a.omieCodigo))

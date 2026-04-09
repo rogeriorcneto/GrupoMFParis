@@ -15,6 +15,7 @@ import {
   omieGetFinanceiroResumo,
   omieSyncLogistics,
   omieBuscarPedido,
+  omieAssociarPorCnpj,
   type PedidoAcompanhamento,
   type EntregaOmieResult,
   type FinanceiroResumo,
@@ -203,6 +204,28 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
       setSyncLoading(false)
     }
   }, [])
+
+  const [assocLoading, setAssocLoading] = useState(false)
+  const [assocResult, setAssocResult] = useState('')
+
+  const handleAssociarPorCnpj = useCallback(async () => {
+    setAssocLoading(true)
+    setAssocResult('')
+    try {
+      const res = await omieAssociarPorCnpj()
+      if (res.success && res.data) {
+        const d = res.data
+        setAssocResult(`✅ ${d.associados} associados | 🔗 ${d.jaVinculados} já vinculados | ❌ ${d.naoEncontradosOmie} não encontrados no Omie | ⚠️ ${d.semCnpj} sem CNPJ`)
+        if (d.associados > 0) loadPedidos()
+      } else {
+        setAssocResult(`Erro: ${res.error}`)
+      }
+    } catch (err: any) {
+      setAssocResult(`Erro: ${err.message}`)
+    } finally {
+      setAssocLoading(false)
+    }
+  }, [loadPedidos])
 
   useEffect(() => {
     if (activeTab === 'pedidos' && acompanhamento.length === 0) loadPedidos()
@@ -596,7 +619,16 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                 <h2 className="text-lg font-bold text-gray-900">Logística & Entregas</h2>
                 <p className="text-sm text-gray-500">{pedidosLogistica.length} pedido(s) em trânsito</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={handleAssociarPorCnpj}
+                  disabled={assocLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold rounded-apple transition-colors"
+                  title="Associa automaticamente clientes do CRM com clientes do Omie pelo CNPJ"
+                >
+                  <ArrowPathIcon className={`h-4 w-4 ${assocLoading ? 'animate-spin' : ''}`} />
+                  🔗 Associar por CNPJ
+                </button>
                 <button
                   onClick={handleSyncLogistics}
                   disabled={syncLoading}
@@ -616,6 +648,11 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
               </div>
             </div>
 
+            {assocResult && (
+              <div className={`rounded-apple p-3 text-sm ${assocResult.startsWith('Erro') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-amber-50 border border-amber-200 text-amber-800'}`}>
+                {assocResult}
+              </div>
+            )}
             {syncResult && (
               <div className={`rounded-apple p-3 text-sm ${syncResult.startsWith('Erro') ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'}`}>
                 {syncResult}

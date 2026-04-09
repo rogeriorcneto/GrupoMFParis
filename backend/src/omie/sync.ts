@@ -287,6 +287,99 @@ export async function syncPushSingleCliente(clienteId: number): Promise<SinglePu
 }
 
 // ============================================
+// Associar clientes CRM ↔ Omie por CNPJ
+// ============================================
+
+export interface AssociacaoResult {
+  associados: number
+  jaVinculados: number
+  semCnpj: number
+  naoEncontradosOmie: number
+  erros: { crmId: number; razaoSocial: string; erro: string }[]
+  detalhes: { crmId: number; razaoSocial: string; omieId: string; cnpj: string }[]
+}
+
+export async function associarClientesPorCnpj(): Promise<AssociacaoResult> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  // 1. Buscar todos os clientes do CRM
+  const { data: crmClientes, error: crmErr } = await supabase
+    .from('clientes')
+    .select('id, razao_social, cnpj, omie_codigo')
+  if (crmErr) throw new Error(`Erro ao buscar clientes CRM: ${crmErr.message}`)
+
+  // 2. Buscar todos os clientes do Omie (paginação)
+  const omieClientes: any[] = []
+  let page = 1
+  const PER_PAGE = 200
+  while (true) {
+    const result = await omieCall<any>(
+      '/geral/clientes/',
+      'ListarClientesResumido',
+      [{ pagina: page, registros_por_pagina: PER_PAGE, apenas_importado_api: 'N' }],
+      { credentials: creds, skipCache: true }
+    )
+    const items = result?.clientes_cadastro_resumido || result?.clientes_cadastro || []
+    omieClientes.push(...items)
+    if (items.length < PER_PAGE) break
+    page++
+  }
+
+  log.info({ total: omieClientes.length }, 'Clientes Omie carregados para associação por CNPJ')
+
+  // 3. Montar mapa CNPJ (só números) → codigo_cliente_omie
+  const omiePorCnpj = new Map<string, number>()
+  for (const oc of omieClientes) {
+    const cnpj = (oc.cnpj_cpf || '').replace(/\D/g, '')
+    const codigo = oc.codigo_cliente || oc.codigo_cliente_omie || 0
+    if (cnpj && codigo) omiePorCnpj.set(cnpj, codigo)
+  }
+
+  const result: AssociacaoResult = {
+    associados: 0, jaVinculados: 0, semCnpj: 0,
+    naoEncontradosOmie: 0, erros: [], detalhes: [],
+  }
+
+  // 4. Iterar clientes CRM e vincular
+  for (const c of crmClientes || []) {
+    const cnpjClean = (c.cnpj || '').replace(/\D/g, '')
+
+    if (!cnpjClean || cnpjClean.length < 11) {
+      result.semCnpj++
+      continue
+    }
+
+    if (c.omie_codigo) {
+      result.jaVinculados++
+      continue
+    }
+
+    const omieId = omiePorCnpj.get(cnpjClean)
+    if (!omieId) {
+      result.naoEncontradosOmie++
+      continue
+    }
+
+    try {
+      await supabase
+        .from('clientes')
+        .update({ omie_codigo: String(omieId) })
+        .eq('id', c.id)
+
+      result.associados++
+      result.detalhes.push({ crmId: c.id, razaoSocial: c.razao_social, omieId: String(omieId), cnpj: c.cnpj })
+      log.info({ crmId: c.id, omieId, cnpj: cnpjClean, razao: c.razao_social }, '🔗 Cliente CRM vinculado ao Omie por CNPJ')
+    } catch (err: any) {
+      result.erros.push({ crmId: c.id, razaoSocial: c.razao_social, erro: err.message })
+    }
+  }
+
+  log.info(result, 'Associação CRM ↔ Omie por CNPJ concluída')
+  return result
+}
+
+// ============================================
 // Sync Push — CRM → Omie
 // ============================================
 

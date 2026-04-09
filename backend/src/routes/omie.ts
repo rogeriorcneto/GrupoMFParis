@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
-import { getSyncDiff, syncPullClientes, syncPushClientes, syncPushSingleCliente } from '../omie/sync.js'
+import { getSyncDiff, syncPullClientes, syncPushClientes, syncPushSingleCliente, associarClientesPorCnpj } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
@@ -268,6 +268,16 @@ omieRouter.post('/sync/produtos', rateLimit(3, 60_000), async (req, res) => {
     res.json({ success: true, data: result })
   } catch (err: any) {
     log.error({ err }, 'Erro no sync de produtos Omie → CRM')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.post('/sync/associar-por-cnpj', rateLimit(3, 60_000), async (_req, res) => {
+  try {
+    const result = await associarClientesPorCnpj()
+    res.json({ success: true, data: result })
+  } catch (err: any) {
+    log.error({ err }, 'Erro na associação CRM ↔ Omie por CNPJ')
     res.status(500).json({ success: false, error: err.message })
   }
 })
