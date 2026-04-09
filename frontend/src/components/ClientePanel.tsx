@@ -106,6 +106,7 @@ export default function ClientePanel({
   // Collapsible sections
   const [showHistorico, setShowHistorico] = useState(true)
   const [expandedHistoricoGroups, setExpandedHistoricoGroups] = useState<Record<string, boolean>>({})
+  const [historicoItemCount, setHistoricoItemCount] = useState<Record<string, number>>({})
 
   // Gravações de ligação
   const [gravacoes, setGravacoes] = useState<any[]>([])
@@ -913,12 +914,17 @@ export default function ClientePanel({
                   <div className="px-4 pb-4 space-y-2">
                     {sortedTypes.map(tipo => {
                       const items = grouped[tipo]
-                      const isOpen = expandedHistoricoGroups[tipo] || false
+                      // Grupos começam abertos por padrão
+                      const isOpen = expandedHistoricoGroups[tipo] !== false
+                      // Quantidade visível: começa em 1, pode ser expandida
+                      const visibleCount = historicoItemCount[tipo] ?? 1
+                      const visibleItems = items.slice(0, visibleCount)
+                      const hasMore = items.length > visibleCount
                       const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
                       return (
                         <div key={tipo} className={`rounded-lg border ${cor.border} overflow-hidden`}>
                           <button
-                            onClick={() => setExpandedHistoricoGroups(prev => ({ ...prev, [tipo]: !prev[tipo] }))}
+                            onClick={() => setExpandedHistoricoGroups(prev => ({ ...prev, [tipo]: isOpen ? false : true }))}
                             className={`w-full flex items-center justify-between px-3 py-2.5 ${cor.bg} hover:brightness-95 transition-all`}
                           >
                             <div className="flex items-center gap-2">
@@ -930,7 +936,7 @@ export default function ClientePanel({
                           </button>
                           {isOpen && (
                             <div className="bg-white divide-y divide-gray-100">
-                              {items.map(inter => {
+                              {visibleItems.map(inter => {
                                 const isPinned = pinnedInteracoes.includes(inter.id)
                                 return (
                                   <div key={inter.id} className={`px-3 py-2.5 ${isPinned ? 'bg-amber-50/50' : ''}`}>
@@ -994,6 +1000,14 @@ export default function ClientePanel({
                                   </div>
                                 )
                               })}
+                              {hasMore && (
+                                <button
+                                  onClick={() => setHistoricoItemCount(prev => ({ ...prev, [tipo]: (prev[tipo] ?? 1) + 5 }))}
+                                  className="w-full py-2 text-[11px] font-semibold text-primary-600 hover:bg-primary-50 transition-colors"
+                                >
+                                  ↓ Exibir mais ({items.length - visibleCount} restantes)
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
