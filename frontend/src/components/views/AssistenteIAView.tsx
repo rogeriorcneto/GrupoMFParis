@@ -150,7 +150,9 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   }, [messages, loading])
 
   const systemPrompt = buildCRMContext({
-    clientes, pedidos, vendedores, interacoes, loggedUser,
+    clientes, pedidos, vendedores,
+    interacoes: [], // interacoes individuais nao sao enviadas para evitar payload gigante
+    loggedUser,
     whatsappMessages: extraData?.whatsappMessages,
     callRecordings: extraData?.callRecordings,
     produtos: extraData?.produtos || produtos,
@@ -270,8 +272,10 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
 
     try {
       // Build history without attachments for older messages (to keep payload small)
+      // Limit to last 10 messages to avoid token overflow
       const history: AIMessage[] = messages
         .filter(m => m.id !== '0')
+        .slice(-10)
         .map(m => ({ role: m.role, content: m.text }))
       // Current message with attachments
       const userContent = text.trim() || (attachments.some(a => a.mimeType.startsWith('image')) ? 'Analise esta imagem.' : 'Transcreva e analise este áudio.')
