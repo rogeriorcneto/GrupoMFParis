@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido } from '../types'
 import * as db from '../lib/database'
@@ -8,6 +8,8 @@ import WhatsAppUserPanel from './WhatsAppUserPanel'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
+import { supabase } from '../lib/supabase'
+import { transcribeCallRecording } from '../lib/botApi'
 
 interface ClientePanelProps {
   cliente: Cliente
@@ -104,6 +106,46 @@ export default function ClientePanel({
   // Collapsible sections
   const [showHistorico, setShowHistorico] = useState(true)
   const [expandedHistoricoGroups, setExpandedHistoricoGroups] = useState<Record<string, boolean>>({})
+
+  // Gravações de ligação
+  const [gravacoes, setGravacoes] = useState<any[]>([])
+  const [gravacoesPorData, setGravacoesPorData] = useState<Map<string, any>>(new Map())
+  const [transcricoes, setTranscricoes] = useState<Record<number, string>>({})
+  const [transcrevendo, setTranscrevendo] = useState<Record<number, boolean>>({})
+
+  useEffect(() => {
+    supabase
+      .from('gravacoes_chamada')
+      .select('*')
+      .eq('cliente_id', c.id)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (!data) return
+        setGravacoes(data)
+        const map = new Map<string, any>()
+        for (const g of data) {
+          const dia = (g.created_at || '').split('T')[0]
+          if (!map.has(dia)) map.set(dia, g)
+        }
+        setGravacoesPorData(map)
+      })
+  }, [c.id])
+
+  const handleTranscrever = useCallback(async (gravacaoId: number) => {
+    setTranscrevendo(prev => ({ ...prev, [gravacaoId]: true }))
+    try {
+      const result = await transcribeCallRecording(gravacaoId)
+      if (result.success && result.transcription) {
+        setTranscricoes(prev => ({ ...prev, [gravacaoId]: result.transcription! }))
+      } else {
+        setTranscricoes(prev => ({ ...prev, [gravacaoId]: `Erro: ${result.error || 'Não foi possível transcrever'}` }))
+      }
+    } catch (err: any) {
+      setTranscricoes(prev => ({ ...prev, [gravacaoId]: `Erro: ${err.message}` }))
+    } finally {
+      setTranscrevendo(prev => ({ ...prev, [gravacaoId]: false }))
+    }
+  }, [])
   const [showTimeline, setShowTimeline] = useState(false)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
@@ -905,6 +947,50 @@ export default function ClientePanel({
                                       </div>
                                     </div>
                                     {inter.descricao && <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">{inter.descricao}</p>}
+                                    {inter.tipo === 'ligacao' && (() => {
+                                      const diaDaInteracao = (inter.data || '').split('T')[0]
+                                      const gravacao = gravacoesPorData.get(diaDaInteracao)
+                                        || gravacoes.find(g => Math.abs(new Date(g.created_at).getTime() - new Date(inter.data).getTime()) < 24 * 3600 * 1000)
+                                      if (!gravacao) return null
+                                      const tid = transcricoes[gravacao.id]
+                                      const carregando = transcrevendo[gravacao.id]
+                                      return (
+                                        <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-2">
+                                          {gravacao.arquivo_url && (
+                                            <audio controls src={gravacao.arquivo_url} className="w-full h-8" />
+                                          )}
+                                          <div className="flex gap-1.5 flex-wrap">
+                                            {gravacao.arquivo_url && (
+                                              <a
+                                                href={gravacao.arquivo_url}
+                                                download
+                                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                                              >
+                                                ⬇️ Download
+                                              </a>
+                                            )}
+                                            {!tid && (
+                                              <button
+                                                onClick={() => handleTranscrever(gravacao.id)}
+                                                disabled={carregando}
+                                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
+                                              >
+                                                {carregando ? '⏳ Transcrevendo...' : '🤖 Transcrever com IA'}
+                                              </button>
+                                            )}
+                                            <span className="text-[9px] text-gray-400 self-center">
+                                              {Math.floor((gravacao.duracao_segundos || 0) / 60)}:{String((gravacao.duracao_segundos || 0) % 60).padStart(2, '0')} min
+                                            </span>
+                                          </div>
+                                          {tid && (
+                                            <div className={`rounded-lg p-2 text-[10px] leading-relaxed ${tid.startsWith('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-white text-gray-700 border border-gray-200'}`}>
+                                              <span className="font-semibold block mb-0.5">📝 Transcrição:</span>
+                                              {tid}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })()}
                                   </div>
                                 )
                               })}
