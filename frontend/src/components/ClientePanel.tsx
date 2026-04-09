@@ -636,69 +636,132 @@ export default function ClientePanel({
           </div>
 
           {/* === TAREFAS === */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">✅ Tarefas ({clienteTarefas.length})</h3>
-              {!panelNovaTarefa && (
-                <button onClick={() => setPanelNovaTarefa(true)} className="px-2 py-1 text-xs font-medium text-primary-700 bg-primary-50 rounded-apple hover:bg-primary-100 transition-colors">
-                  ➕ Nova
-                </button>
-              )}
-            </div>
-            {panelNovaTarefa && (
-              <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
-                <input type="text" value={panelTarefaTitulo} onChange={(e) => setPanelTarefaTitulo(e.target.value)} placeholder="Título da tarefa... ex: Ligar para confirmar pedido" className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                <div className="grid grid-cols-4 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Data</label>
-                    <input type="date" value={panelTarefaData} onChange={(e) => setPanelTarefaData(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          {(() => {
+            const hoje = new Date().toISOString().split('T')[0]
+            const tarefasPendentes = clienteTarefas.filter(t => t.status !== 'concluida')
+            const tarefasVencidas = tarefasPendentes.filter(t => t.data < hoje)
+            const tarefasConcluidas = clienteTarefas.filter(t => t.status === 'concluida')
+            const tipoIcone: Record<string, string> = { ligacao: '📞', email: '📧', whatsapp: '💬', reuniao: '🤝', 'follow-up': '🔄', outro: '📌' }
+            return (
+              <div className="rounded-apple border border-gray-200 bg-white overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-900">✅ Tarefas</span>
+                    {tarefasVencidas.length > 0 && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full">{tarefasVencidas.length} vencida{tarefasVencidas.length > 1 ? 's' : ''}</span>
+                    )}
+                    {tarefasPendentes.length > 0 && tarefasVencidas.length === 0 && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-yellow-100 text-yellow-700 rounded-full">{tarefasPendentes.length} pendente{tarefasPendentes.length > 1 ? 's' : ''}</span>
+                    )}
+                    {clienteTarefas.length === 0 && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded-full">nenhuma</span>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Horário</label>
-                    <input type="time" value={panelTarefaHora} onChange={(e) => setPanelTarefaHora(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Tipo</label>
-                    <select value={panelTarefaTipo} onChange={(e) => setPanelTarefaTipo(e.target.value as Tarefa['tipo'])} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500">
-                      <option value="follow-up">Follow-up</option><option value="ligacao">Ligação</option><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="reuniao">Reunião</option><option value="outro">Outro</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Prioridade</label>
-                    <select value={panelTarefaPrioridade} onChange={(e) => setPanelTarefaPrioridade(e.target.value as Tarefa['prioridade'])} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500">
-                      <option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
-                    </select>
-                  </div>
+                  <span className="text-[10px] text-gray-400">{tarefasConcluidas.length} concluída{tarefasConcluidas.length !== 1 ? 's' : ''}</span>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={handleCriarTarefa} disabled={!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-apple text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">✅ Criar Tarefa</button>
-                  <button onClick={() => setPanelNovaTarefa(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-apple text-sm font-medium hover:bg-gray-200">Cancelar</button>
-                </div>
-              </div>
-            )}
-            {clienteTarefas.length > 0 && (
-              <div className="space-y-2">
-                {clienteTarefas.slice(0, 5).map((t) => (
-                  <div key={t.id} className={`bg-white rounded-apple border p-3 ${t.status === 'concluida' ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
-                    <div className="flex items-start gap-2">
-                      <button onClick={async () => { const ns = t.status === 'concluida' ? 'pendente' : 'concluida'; try { await db.updateTarefa(t.id, { status: ns }); } catch (err) { logger.error('Erro toggle tarefa:', err) } setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, status: ns } : x)) }} className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.status === 'concluida' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-primary-500'}`}>
-                        {t.status === 'concluida' && <span className="text-xs">✓</span>}
-                      </button>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${t.status === 'concluida' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{t.titulo}</p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <span className="text-[10px] text-gray-400">{new Date(t.data).toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
-                          <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${t.prioridade === 'alta' ? 'bg-red-100 text-red-700' : t.prioridade === 'media' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>{t.prioridade}</span>
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-600 rounded-full">{t.tipo}</span>
-                        </div>
-                      </div>
+
+                {/* Formulário nova tarefa — sempre aberto */}
+                <div className="p-3 border-b border-gray-100 bg-primary-50/40">
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={panelTarefaTitulo}
+                      onChange={(e) => setPanelTarefaTitulo(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleCriarTarefa()}
+                      placeholder="Nova tarefa... ex: Ligar para confirmar pedido"
+                      className="flex-1 px-2.5 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    />
+                    <button
+                      onClick={handleCriarTarefa}
+                      disabled={!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora}
+                      className="px-3 py-1.5 bg-primary-600 text-white rounded-apple text-xs font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                    >
+                      + Criar
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Data</label>
+                      <input type="date" value={panelTarefaData} onChange={(e) => setPanelTarefaData(e.target.value)} className="w-full px-1.5 py-1 border border-gray-300 rounded-apple text-[10px] focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Horário</label>
+                      <input type="time" value={panelTarefaHora} onChange={(e) => setPanelTarefaHora(e.target.value)} className="w-full px-1.5 py-1 border border-gray-300 rounded-apple text-[10px] focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Tipo</label>
+                      <select value={panelTarefaTipo} onChange={(e) => setPanelTarefaTipo(e.target.value as Tarefa['tipo'])} className="w-full px-1 py-1 border border-gray-300 rounded-apple text-[10px] focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white">
+                        <option value="follow-up">Follow-up</option><option value="ligacao">Ligação</option><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="reuniao">Reunião</option><option value="outro">Outro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Prioridade</label>
+                      <select value={panelTarefaPrioridade} onChange={(e) => setPanelTarefaPrioridade(e.target.value as Tarefa['prioridade'])} className="w-full px-1 py-1 border border-gray-300 rounded-apple text-[10px] focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white">
+                        <option value="alta">🔴 Alta</option><option value="media">🟡 Média</option><option value="baixa">🟢 Baixa</option>
+                      </select>
                     </div>
                   </div>
-                ))}
-                {clienteTarefas.length > 5 && <p className="text-xs text-gray-400 text-center">... e mais {clienteTarefas.length - 5} tarefas</p>}
+                </div>
+
+                {/* Lista de tarefas */}
+                {clienteTarefas.length > 0 ? (
+                  <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                    {/* Pendentes/Vencidas primeiro */}
+                    {[...tarefasPendentes, ...tarefasConcluidas].map((t) => {
+                      const isVencida = t.status !== 'concluida' && t.data < hoje
+                      const isHoje = t.data === hoje
+                      return (
+                        <div key={t.id} className={`flex items-start gap-2.5 px-3 py-2.5 transition-colors ${t.status === 'concluida' ? 'bg-gray-50 opacity-60' : isVencida ? 'bg-red-50' : isHoje ? 'bg-yellow-50' : 'bg-white hover:bg-gray-50'}`}>
+                          {/* Checkbox */}
+                          <button
+                            onClick={async () => {
+                              const ns = t.status === 'concluida' ? 'pendente' : 'concluida'
+                              try { await db.updateTarefa(t.id, { status: ns }) } catch (err) { logger.error('Erro toggle tarefa:', err) }
+                              setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, status: ns } : x))
+                            }}
+                            className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.status === 'concluida' ? 'bg-green-500 border-green-500 text-white' : isVencida ? 'border-red-400 hover:border-red-600' : 'border-gray-300 hover:border-primary-500'}`}
+                          >
+                            {t.status === 'concluida' && <span className="text-[8px] leading-none">✓</span>}
+                          </button>
+
+                          {/* Ícone tipo */}
+                          <span className="text-sm flex-shrink-0 mt-0.5">{tipoIcone[t.tipo] || '📌'}</span>
+
+                          {/* Conteúdo */}
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-medium leading-snug ${t.status === 'concluida' ? 'text-gray-400 line-through' : isVencida ? 'text-red-800' : 'text-gray-900'}`}>
+                              {t.titulo}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {/* Data e hora */}
+                              <span className={`text-[10px] font-medium ${isVencida ? 'text-red-600' : isHoje ? 'text-yellow-700' : 'text-gray-400'}`}>
+                                {isVencida ? '⚠️ ' : isHoje ? '🕐 ' : '📅 '}
+                                {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                                {t.hora ? ` às ${t.hora}` : ''}
+                              </span>
+                              {/* Prioridade */}
+                              <span className={`px-1 py-0.5 text-[9px] font-semibold rounded-full ${t.prioridade === 'alta' ? 'bg-red-100 text-red-700' : t.prioridade === 'media' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                                {t.prioridade}
+                              </span>
+                              {/* Status vencida */}
+                              {isVencida && <span className="px-1 py-0.5 text-[9px] font-bold bg-red-200 text-red-800 rounded-full">VENCIDA</span>}
+                              {isHoje && t.status !== 'concluida' && <span className="px-1 py-0.5 text-[9px] font-bold bg-yellow-200 text-yellow-800 rounded-full">HOJE</span>}
+                            </div>
+                            {t.descricao && <p className="text-[10px] text-gray-400 mt-0.5 truncate">{t.descricao}</p>}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-4 py-5 text-center text-xs text-gray-400">
+                    Nenhuma tarefa. Crie a primeira acima ↑
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()}
 
           {/* === PEDIDO RÁPIDO === */}
           {onAddPedido && produtos && produtos.length > 0 && (
