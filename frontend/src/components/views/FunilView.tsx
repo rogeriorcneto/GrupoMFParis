@@ -214,7 +214,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
 
   // Vendedor vê apenas: Prospecção, Amostra, Proposta, Negociação, Follow-up
   // Gerente vê todas: Leads, Prospecção, Amostra, Amostra Perdida, Proposta, Negociação, Follow-up, Inativos, Perdido
-  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up'])
+  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up'])
   const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
   const FUNIL_ETAPAS = isGerente ? GERENTE_ETAPAS : VENDEDOR_ETAPAS
 
@@ -222,7 +222,7 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
     { title: 'Leads', key: 'lead', badge: 'bg-emerald-100 text-emerald-800', icon: '🌐', prob: 0.05, gerenteOnly: true },
     { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10, gerenteOnly: false },
     { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25, gerenteOnly: false },
-    { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🧪❌', prob: 0.05, gerenteOnly: true },
+    { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🚫', prob: 0.05, gerenteOnly: false },
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.60, gerenteOnly: false },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
@@ -537,13 +537,12 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
         <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
         <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
 
+        <div className="h-5 w-px bg-gray-300" />
+        <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
+          🚫
+        </button>
         {isGerente && (
           <>
-            <div className="h-5 w-px bg-gray-300" />
-
-            <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
-              🧪
-            </button>
             <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
               💤
             </button>
@@ -626,9 +625,45 @@ function FunilView({ clientes, vendedores, interacoes, loggedUser, onDragStart, 
                             {cliente.produtosInteresse.length > 2 && <span className="text-[8px] text-gray-400">+{cliente.produtosInteresse.length - 2}</span>}
                           </div>
                         )}
-                        <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {cliente.redesSociais && (() => {
+                          const entries = cliente.redesSociais!.split(/[,;\s]+/).filter(Boolean)
+                          const socials: { icon: string; url: string; title: string }[] = []
+                          for (const entry of entries) {
+                            const e = entry.toLowerCase().trim()
+                            if (e.includes('instagram') || e.includes('insta')) {
+                              const url = e.startsWith('http') ? entry.trim() : e.startsWith('@') ? `https://instagram.com/${e.slice(1)}` : `https://instagram.com/${e.replace(/.*instagram\.com\/?/,'')}`
+                              socials.push({ icon: '📸', url, title: 'Instagram' })
+                            } else if (e.includes('linkedin')) {
+                              socials.push({ icon: '💼', url: e.startsWith('http') ? entry.trim() : `https://linkedin.com/in/${e}`, title: 'LinkedIn' })
+                            } else if (e.includes('facebook') || e.includes('fb.com')) {
+                              socials.push({ icon: '👤', url: e.startsWith('http') ? entry.trim() : `https://facebook.com/${e}`, title: 'Facebook' })
+                            } else if (e.includes('twitter') || e.includes('x.com')) {
+                              socials.push({ icon: '🐦', url: e.startsWith('http') ? entry.trim() : `https://x.com/${e}`, title: 'X / Twitter' })
+                            } else if (e.includes('tiktok')) {
+                              socials.push({ icon: '🎵', url: e.startsWith('http') ? entry.trim() : `https://tiktok.com/@${e}`, title: 'TikTok' })
+                            } else if (e.includes('youtube') || e.includes('youtu.be')) {
+                              socials.push({ icon: '▶️', url: e.startsWith('http') ? entry.trim() : `https://youtube.com/${e}`, title: 'YouTube' })
+                            } else if (e.startsWith('http') || e.includes('.com') || e.includes('.br')) {
+                              socials.push({ icon: '🌐', url: e.startsWith('http') ? entry.trim() : `https://${entry.trim()}`, title: 'Site' })
+                            }
+                          }
+                          return socials.length > 0 ? (
+                            <div className="flex gap-1 mt-1">
+                              {socials.map((s, i) => (
+                                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="w-5 h-5 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 transition-colors text-[10px]" title={s.title}>{s.icon}</a>
+                              ))}
+                            </div>
+                          ) : null
+                        })()}
+                        <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
+                          {cliente.etapa === 'amostra' && moverCliente && (
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-1.5 py-0.5 text-[8px] bg-orange-50 text-orange-700 rounded hover:bg-orange-100 font-medium" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
+                          )}
+                          {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && (
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-1.5 py-0.5 text-[8px] bg-red-50 text-red-700 rounded hover:bg-red-100 font-medium" title="Cancelar envio de amostra e voltar para Prospecção">❌ Cancelar</button>
+                          )}
                           {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="Abrir WhatsApp">� WA</button>
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-green-50 text-green-700 rounded hover:bg-green-100 font-medium" title="Abrir WhatsApp">📱 WA</button>
                           )}
                           {cliente.contatoEmail && (
                             <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-1.5 py-0.5 text-[8px] bg-blue-50 text-blue-700 rounded hover:bg-blue-100 font-medium" title="Enviar Email">📧</button>

@@ -361,8 +361,9 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
               </select>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {produtosFiltrados.length === 0 && <p className="text-center py-12 text-gray-400 text-xs">Nenhum produto encontrado</p>}
-              {produtosFiltrados.map(produto => {
+              {!searchProduto.trim() && !filterCategoria && <p className="text-center py-12 text-gray-400 text-xs">Digite o nome do produto para buscar</p>}
+              {(searchProduto.trim() || filterCategoria) && produtosFiltrados.length === 0 && <p className="text-center py-12 text-gray-400 text-xs">Nenhum produto encontrado</p>}
+              {(searchProduto.trim() || filterCategoria) && produtosFiltrados.map(produto => {
                 const qtd = getItemQtd(produto.id)
                 const noCarrinho = qtd > 0
                 return (
@@ -380,12 +381,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     <p className="text-xs font-medium text-gray-400 flex-shrink-0 w-20 text-right">/kg</p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 w-28 justify-end">
                       {noCarrinho ? (
-                        <>
-                          <button onClick={() => setItemQtd(produto, qtd - 1)} className="w-7 h-7 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold text-sm">-</button>
-                          <input type="number" min={1} value={qtd} onChange={e => setItemQtd(produto, Math.max(1, parseInt(e.target.value) || 1))} onFocus={e => e.target.select()}
-                            className="w-11 text-center font-bold text-xs text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 py-1" />
-                          <button onClick={() => setItemQtd(produto, qtd + 1)} className="w-7 h-7 rounded-md bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white font-bold text-sm">+</button>
-                        </>
+                        <input type="number" min={1} value={qtd} onChange={e => setItemQtd(produto, Math.max(1, parseInt(e.target.value) || 1))} onFocus={e => e.target.select()}
+                          className="w-16 text-center font-bold text-xs text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 py-1" />
                       ) : (
                         <button onClick={() => setItemQtd(produto, 1)} className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold rounded-lg transition-colors">+ Adicionar</button>
                       )}
@@ -428,11 +425,9 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                           <span className="text-[10px] text-gray-400">/ kg</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button onClick={() => setItemQtd(produtos.find(p => p.id === item.produtoId)!, item.quantidade - 1)} className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-600 text-xs font-bold">-</button>
+                      <div className="flex items-center flex-shrink-0">
                         <input type="number" min={1} value={item.quantidade} onChange={e => setItemQtd(produtos.find(p => p.id === item.produtoId)!, Math.max(1, parseInt(e.target.value) || 1))} onFocus={e => e.target.select()}
-                          className="w-10 text-center text-xs font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-400 py-0.5" />
-                        <button onClick={() => setItemQtd(produtos.find(p => p.id === item.produtoId)!, item.quantidade + 1)} className="w-6 h-6 rounded-md bg-primary-100 hover:bg-primary-200 flex items-center justify-center text-primary-700 text-xs font-bold">+</button>
+                          className="w-16 text-center text-sm font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 py-1" />
                       </div>
                       <div className="text-right flex-shrink-0 w-16">
                         <p className="text-xs font-bold text-gray-900">R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>

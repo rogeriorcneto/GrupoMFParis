@@ -34,6 +34,15 @@ const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emeral
 const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
 const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação' }
+const tipoInteracaoCor: Record<string, { bg: string; border: string; dot: string }> = {
+  ligacao: { bg: 'bg-green-50', border: 'border-green-200', dot: 'bg-green-500' },
+  whatsapp: { bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  email: { bg: 'bg-blue-50', border: 'border-blue-200', dot: 'bg-blue-500' },
+  reuniao: { bg: 'bg-purple-50', border: 'border-purple-200', dot: 'bg-purple-500' },
+  instagram: { bg: 'bg-pink-50', border: 'border-pink-200', dot: 'bg-pink-500' },
+  linkedin: { bg: 'bg-sky-50', border: 'border-sky-200', dot: 'bg-sky-500' },
+  nota: { bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500' },
+}
 
 function currentTimeHHMM(): string {
   const now = new Date()
@@ -93,6 +102,8 @@ export default function ClientePanel({
   const [pedidoFormaPagamento, setPedidoFormaPagamento] = useState(DEFAULT_PAYMENT_TERM)
 
   // Collapsible sections
+  const [showHistorico, setShowHistorico] = useState(true)
+  const [expandedHistoricoGroups, setExpandedHistoricoGroups] = useState<Record<string, boolean>>({})
   const [showTimeline, setShowTimeline] = useState(false)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
@@ -399,6 +410,38 @@ export default function ClientePanel({
                 placeholder="Instagram, LinkedIn, site, etc"
                 className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
+              {panelRedesSociais.trim() && (() => {
+                const entries = panelRedesSociais.split(/[,;\s]+/).filter(Boolean)
+                const socials: { icon: string; label: string; url: string; color: string }[] = []
+                for (const entry of entries) {
+                  const e = entry.toLowerCase().trim()
+                  if (e.includes('instagram') || e.includes('insta')) {
+                    const url = e.startsWith('http') ? entry.trim() : e.startsWith('@') ? `https://instagram.com/${e.slice(1)}` : `https://instagram.com/${e.replace(/.*instagram\.com\/?/,'')}`
+                    socials.push({ icon: '📸', label: 'Instagram', url, color: 'bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100' })
+                  } else if (e.includes('linkedin')) {
+                    socials.push({ icon: '💼', label: 'LinkedIn', url: e.startsWith('http') ? entry.trim() : `https://linkedin.com/in/${e}`, color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' })
+                  } else if (e.includes('facebook') || e.includes('fb.com')) {
+                    socials.push({ icon: '👤', label: 'Facebook', url: e.startsWith('http') ? entry.trim() : `https://facebook.com/${e}`, color: 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' })
+                  } else if (e.includes('twitter') || e.includes('x.com')) {
+                    socials.push({ icon: '🐦', label: 'X', url: e.startsWith('http') ? entry.trim() : `https://x.com/${e}`, color: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100' })
+                  } else if (e.includes('tiktok')) {
+                    socials.push({ icon: '🎵', label: 'TikTok', url: e.startsWith('http') ? entry.trim() : `https://tiktok.com/@${e}`, color: 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100' })
+                  } else if (e.includes('youtube') || e.includes('youtu.be')) {
+                    socials.push({ icon: '▶️', label: 'YouTube', url: e.startsWith('http') ? entry.trim() : `https://youtube.com/${e}`, color: 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' })
+                  } else if (e.startsWith('http') || e.includes('.com') || e.includes('.br')) {
+                    socials.push({ icon: '🌐', label: 'Site', url: e.startsWith('http') ? entry.trim() : `https://${entry.trim()}`, color: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' })
+                  }
+                }
+                return socials.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {socials.map((s, i) => (
+                      <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-apple border text-xs font-medium transition-colors ${s.color}`}>
+                        <span>{s.icon}</span> {s.label}
+                      </a>
+                    ))}
+                  </div>
+                ) : null
+              })()}
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Informações adicionais</label>
@@ -504,7 +547,14 @@ export default function ClientePanel({
                 <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
               )}
               {c.etapa === 'amostra' && (
-                <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada' }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar Amostra</button>
+                <>
+                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar Amostra</button>
+                  <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-apple hover:bg-orange-700">🚫 Reprovar Amostra</button>
+                  <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
+                </>
+              )}
+              {c.etapa === 'amostra_perdida' && (
+                <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
               )}
               {c.etapa === 'proposta' && (
                 <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
@@ -735,31 +785,74 @@ export default function ClientePanel({
             </div>
           )}
 
-          {/* === HISTÓRICO DE INTERAÇÕES === */}
+          {/* === HISTÓRICO DE INTERAÇÕES (grouped by type, collapsible) === */}
           {clienteInteracoes.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-gray-900">🕐 Histórico ({clienteInteracoes.length})</h3>
-              <div className="relative pl-4 border-l-2 border-gray-200 space-y-3">
-                {clienteInteracoesOrdenadas.slice(0, 10).map((inter) => (
-                  <div key={inter.id} className="relative">
-                    <div className={`absolute -left-[1.3rem] w-3 h-3 rounded-full ${inter.automatico ? 'bg-gray-400' : 'bg-primary-500'}`} />
-                    <div className="ml-2 bg-white rounded-apple border border-gray-200 p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-900">{tipoInteracaoIcon[inter.tipo] || '📋'} {inter.assunto}</span>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => handleTogglePinInteracao(inter.id)} className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full border ${pinnedInteracoes.includes(inter.id) ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
-                            {pinnedInteracoes.includes(inter.id) ? '📌 Fixado' : '📍 Fixar'}
+            <div className="bg-gray-50 rounded-apple border border-gray-200">
+              <button onClick={() => setShowHistorico(!showHistorico)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
+                <span>🕐 Histórico ({clienteInteracoes.length})</span>
+                <span className={`transition-transform duration-200 ${showHistorico ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+              {showHistorico && (() => {
+                const grouped: Record<string, typeof clienteInteracoesOrdenadas> = {}
+                for (const inter of clienteInteracoesOrdenadas) {
+                  const tipo = inter.tipo || 'nota'
+                  if (!grouped[tipo]) grouped[tipo] = []
+                  grouped[tipo].push(inter)
+                }
+                const tipoOrder = ['ligacao', 'whatsapp', 'email', 'reuniao', 'instagram', 'linkedin', 'nota']
+                const sortedTypes = Object.keys(grouped).sort((a, b) => {
+                  const ia = tipoOrder.indexOf(a), ib = tipoOrder.indexOf(b)
+                  return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+                })
+                return (
+                  <div className="px-4 pb-4 space-y-2">
+                    {sortedTypes.map(tipo => {
+                      const items = grouped[tipo]
+                      const isOpen = expandedHistoricoGroups[tipo] || false
+                      const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
+                      return (
+                        <div key={tipo} className={`rounded-lg border ${cor.border} overflow-hidden`}>
+                          <button
+                            onClick={() => setExpandedHistoricoGroups(prev => ({ ...prev, [tipo]: !prev[tipo] }))}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 ${cor.bg} hover:brightness-95 transition-all`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${cor.dot}`} />
+                              <span className="text-sm font-semibold text-gray-800">{tipoInteracaoIcon[tipo] || '📋'} {tipoInteracaoLabel[tipo] || tipo}</span>
+                              <span className="text-xs text-gray-500 font-normal">({items.length})</span>
+                            </div>
+                            <span className={`text-xs text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
                           </button>
-                          {inter.automatico && <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-500 rounded-full">Auto</span>}
+                          {isOpen && (
+                            <div className="bg-white divide-y divide-gray-100">
+                              {items.map(inter => {
+                                const isPinned = pinnedInteracoes.includes(inter.id)
+                                return (
+                                  <div key={inter.id} className={`px-3 py-2.5 ${isPinned ? 'bg-amber-50/50' : ''}`}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-semibold text-gray-900 truncate">{inter.assunto}</p>
+                                        <p className="text-[10px] text-gray-400 mt-0.5">{new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                                      </div>
+                                      <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button onClick={() => handleTogglePinInteracao(inter.id)} className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full border transition-colors ${isPinned ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}>
+                                          {isPinned ? '📌' : '📍'}
+                                        </button>
+                                        {inter.automatico && <span className="px-1 py-0.5 text-[8px] font-medium bg-gray-100 text-gray-400 rounded-full">Auto</span>}
+                                      </div>
+                                    </div>
+                                    {inter.descricao && <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">{inter.descricao}</p>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">{inter.descricao}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                    </div>
+                      )
+                    })}
                   </div>
-                ))}
-                {clienteInteracoes.length > 10 && <p className="text-xs text-gray-400 text-center">... e mais {clienteInteracoes.length - 10} interações</p>}
-              </div>
+                )
+              })()}
             </div>
           )}
 

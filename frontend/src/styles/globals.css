@@ -178,6 +178,16 @@
 .dark .recharts-default-tooltip .recharts-tooltip-item { color: #d1d5db !important; }
 .dark .recharts-legend-item-text { color: #d1d5db !important; }
 
+/* Hide number input spinners (arrows) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

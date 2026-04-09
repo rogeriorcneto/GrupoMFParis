@@ -12,7 +12,7 @@ export const stageLabels: Record<string, string> = {
 
 export const transicoesPermitidas: Record<string, string[]> = {
   'lead': ['prospecção'],
-  'prospecção': ['amostra', 'perdido'],
+  'prospecção': ['lead', 'amostra', 'perdido'],
   'amostra': ['proposta', 'amostra_perdida'],
   'amostra_perdida': ['amostra', 'perdido'],
   'proposta': ['negociacao', 'inativo', 'perdido'],

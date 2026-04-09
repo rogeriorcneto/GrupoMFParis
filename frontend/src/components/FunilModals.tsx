@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Cliente, Vendedor, Produto, Pedido, ItemPedido } from '../types'
+import { PAYMENT_TERM_GROUPS, DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 
 interface DragItem {
   cliente: Cliente
@@ -27,7 +28,7 @@ interface FunilModalsProps {
   setShowModalProposta: (v: boolean) => void
   modalPropostaValor: string
   setModalPropostaValor: (v: string) => void
-  confirmProposta: () => void
+  confirmProposta: (extraNegociacao?: Partial<Cliente>) => void
   // Shared
   draggedItem: DragItem | null
   setDraggedItem: (v: DragItem | null) => void
@@ -69,6 +70,58 @@ export default function FunilModals({
     setPedidoObs('')
     setPedidoSearch('')
   }, [showModalAmostra])
+
+  // ── Proposta / Negociação state ──
+  const [propostaFrete, setPropostaFrete] = React.useState<'CIF' | 'FOB' | ''>('')
+  const [propostaPagamento, setPropostaPagamento] = React.useState(DEFAULT_PAYMENT_TERM)
+  const [propostaItens, setPropostaItens] = React.useState<ItemPedido[]>([])
+  const [propostaObs, setPropostaObs] = React.useState('')
+  const [propostaSearch, setPropostaSearch] = React.useState('')
+
+  React.useEffect(() => {
+    if (!showModalProposta) return
+    setPropostaFrete('')
+    setPropostaItens([])
+    setPropostaObs('')
+    setPropostaSearch('')
+    setPropostaPagamento(DEFAULT_PAYMENT_TERM)
+  }, [showModalProposta])
+
+  const propostaTotal = propostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+  const propostaFilteredProdutos = produtos.filter(p => {
+    if (!propostaSearch.trim()) return false
+    return p.ativo && p.nome.toLowerCase().includes(propostaSearch.toLowerCase())
+  })
+
+  const setPropostaItemQtd = (produto: Produto, qtd: number) => {
+    if (qtd <= 0) {
+      setPropostaItens(prev => prev.filter(i => i.produtoId !== produto.id))
+      return
+    }
+    setPropostaItens(prev => {
+      const exists = prev.find(i => i.produtoId === produto.id)
+      if (exists) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
+      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: produto.preco, unidade: produto.unidade, quantidade: qtd }]
+    })
+  }
+
+  const handleConfirmNegociacao = () => {
+    if (!draggedItem) return
+    const totalFromProducts = propostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+    const valorFinal = totalFromProducts > 0 ? totalFromProducts : (Number(modalPropostaValor) || draggedItem.cliente.valorEstimado || 0)
+    setModalPropostaValor(String(valorFinal))
+    const extras: Partial<Cliente> = {
+      valorProposta: valorFinal,
+    }
+    if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)
+    // Encode frete, payment and observations into notas
+    const notasParts: string[] = []
+    if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
+    if (propostaPagamento && propostaPagamento !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${propostaPagamento}`)
+    if (propostaObs.trim()) notasParts.push(propostaObs.trim())
+    if (notasParts.length > 0) extras.notas = notasParts.join(' | ')
+    confirmProposta(extras)
+  }
 
   const pedidoTotal = pedidoItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
   const filteredProdutos = produtos.filter(p => {
@@ -229,17 +282,74 @@ export default function FunilModals({
         </div>
       )}
 
-      {/* Modal Valor da Proposta */}
+      {/* Modal Negociação — painel completo com produtos, frete e pagamento */}
       {showModalProposta && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={cancelProposta}>
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-1">💰 Nova Negociação</h2>
-            <p className="text-sm text-gray-600 mb-4">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Valor da proposta (R$)</label>
-            <input type="number" value={modalPropostaValor} onChange={(e) => setModalPropostaValor(e.target.value)} placeholder="Ex: 150000" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 mb-4 text-sm" />
+            <p className="text-sm text-gray-600 mb-3">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
+
+            {/* Frete */}
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Tipo de Frete</p>
+              <div className="flex gap-2">
+                <button onClick={() => setPropostaFrete('CIF')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${propostaFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                  📦 CIF (Entrega)
+                </button>
+                <button onClick={() => setPropostaFrete('FOB')} className={`flex-1 py-2 px-3 rounded-apple text-sm font-medium border-2 transition-colors ${propostaFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}>
+                  🏭 FOB (Retirada)
+                </button>
+              </div>
+            </div>
+
+            {/* Pagamento */}
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Forma de Pagamento</p>
+              <select value={propostaPagamento} onChange={e => setPropostaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                {PAYMENT_TERM_GROUPS.map(group => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            {/* Produtos */}
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Produtos da Negociação</p>
+              <input type="text" placeholder="Buscar produto pelo nome..." value={propostaSearch} onChange={e => setPropostaSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 mb-2" />
+              <div className="max-h-44 overflow-y-auto space-y-1 mb-2">
+                {!propostaSearch.trim() && <p className="text-xs text-gray-500 px-2 py-1">Digite o nome do produto para buscar.</p>}
+                {propostaSearch.trim() && propostaFilteredProdutos.length === 0 && <p className="text-xs text-gray-500 px-2 py-1">Nenhum produto encontrado.</p>}
+                {propostaFilteredProdutos.slice(0, 20).map(p => {
+                  const qtd = propostaItens.find(i => i.produtoId === p.id)?.quantidade || 0
+                  return (
+                    <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100'}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
+                        <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / {p.unidade.toUpperCase()}</p>
+                      </div>
+                      <input type="number" min={0} value={qtd || ''} onChange={e => setPropostaItemQtd(p, Math.max(0, parseInt(e.target.value || '0', 10) || 0))} placeholder="Qtd" className="w-20 px-2 py-1 border border-gray-300 rounded-apple text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Observações */}
+            <textarea value={propostaObs} onChange={e => setPropostaObs(e.target.value)} placeholder="Observações da negociação..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none mb-3" />
+
+            {/* Resumo */}
+            {propostaItens.length > 0 && (
+              <div className="mb-3 flex items-center justify-between text-sm font-bold text-gray-900 pt-2 border-t border-gray-200">
+                <span>{propostaItens.reduce((s, i) => s + i.quantidade, 0)} item(ns)</span>
+                <span>R$ {propostaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+
             <div className="flex justify-end gap-3">
               <button onClick={cancelProposta} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
-              <button onClick={confirmProposta} className="px-4 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-medium">Iniciar Negociação</button>
+              <button onClick={handleConfirmNegociacao} className="px-4 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-medium">Iniciar Negociação</button>
             </div>
           </div>
         </div>

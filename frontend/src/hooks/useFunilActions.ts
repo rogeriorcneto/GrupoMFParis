@@ -347,11 +347,12 @@ export function useFunilActions({
     setDraggedItem(null); setPendingDrop(null); setShowModalSatisfacao(false); setModalSatisfacaoNota(5); setModalSatisfacaoFeedback('')
   }
 
-  const confirmProposta = () => {
+  const confirmProposta = (extraNegociacao?: Partial<Cliente>) => {
     if (draggedItem) {
       moverCliente(draggedItem.cliente.id, 'negociacao', {
         valorProposta: Number(modalPropostaValor) || draggedItem.cliente.valorEstimado || 0,
-        dataProposta: new Date().toISOString().split('T')[0]
+        dataProposta: new Date().toISOString().split('T')[0],
+        ...extraNegociacao,
       })
     }
     setDraggedItem(null); setPendingDrop(null); setShowModalProposta(false); setModalPropostaValor('')

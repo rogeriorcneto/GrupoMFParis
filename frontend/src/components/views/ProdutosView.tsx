@@ -142,7 +142,7 @@ const ProdutosView: React.FC<{
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map(p => (
-          <div key={p.id} className={`bg-white rounded-apple shadow-apple-sm border border-gray-200 overflow-hidden hover:shadow-apple transition-shadow ${!p.ativo ? 'opacity-60' : ''}`}>
+          <div key={p.id} className={`bg-white rounded-apple shadow-apple-sm border border-gray-200 overflow-hidden ${!p.ativo ? 'opacity-60' : ''}`}>
             <div className="h-40 bg-gray-100 flex items-center justify-center relative">
               {p.foto ? <img src={p.foto} alt={p.nome} className="w-full h-full object-cover" /> : <PhotoIcon className="h-16 w-16 text-gray-300" />}
               {p.destaque && <span className="absolute top-2 left-2 px-2 py-0.5 text-xs font-bold bg-yellow-400 text-yellow-900 rounded-full">Destaque</span>}

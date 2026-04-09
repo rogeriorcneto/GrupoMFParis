@@ -1,6 +1,1 @@
--- Add IMAP inbox configuration columns to bot_config
-ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_host TEXT DEFAULT '';
-ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_port INTEGER DEFAULT 993;
-ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_user TEXT DEFAULT '';
-ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_pass TEXT DEFAULT '';
-ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_secure BOOLEAN DEFAULT TRUE;
+-- Add IMAP inbox configuration columns to bot_configALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_host TEXT DEFAULT '';ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_port INTEGER DEFAULT 993;ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_user TEXT DEFAULT '';ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_pass TEXT DEFAULT '';ALTER TABLE bot_config ADD COLUMN IF NOT EXISTS email_imap_secure BOOLEAN DEFAULT TRUE;
