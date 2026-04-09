@@ -24,36 +24,47 @@ async function callGemini(
   apiKey: string,
   contents: any[],
   tools?: any[],
+  systemInstruction?: string,
 ): Promise<any> {
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash']
 
   const body: any = {
     contents,
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096,
     },
+  }
+
+  if (systemInstruction) {
+    body.systemInstruction = { parts: [{ text: systemInstruction }] }
   }
 
   if (tools && tools.length > 0) {
     body.tools = tools
-    // AUTO lets Gemini decide whether to call a function or respond with text
     body.tool_config = { function_calling_config: { mode: 'AUTO' } }
   }
 
-  const geminiResponse = await fetch(geminiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let lastError: Error | null = null
+  for (const model of models) {
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+    const geminiResponse = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
 
-  if (!geminiResponse.ok) {
-    const errorText = await geminiResponse.text()
-    log.error({ error: errorText }, 'Erro na Gemini API')
-    throw new Error(`Gemini API error ${geminiResponse.status}: ${errorText}`)
+    if (!geminiResponse.ok) {
+      const errorText = await geminiResponse.text()
+      log.warn({ error: errorText, model }, `Gemini API error com modelo ${model}, tentando próximo...`)
+      lastError = new Error(`Gemini API error ${geminiResponse.status}: ${errorText}`)
+      continue
+    }
+
+    return geminiResponse.json()
   }
 
-  return geminiResponse.json()
+  throw lastError ?? new Error('Todos os modelos Gemini falharam')
 }
 
 /**
@@ -90,10 +101,8 @@ export async function geminiHandler(req: Request, res: Response): Promise<void> 
     // Build tools array with function declarations
     const tools = vendedor ? [{ functionDeclarations: FUNCTION_DECLARATIONS }] : []
 
-    // Build contents with system instruction
+    // Build contents — systemInstruction vai como campo separado, nao no contents
     const contents: any[] = [
-      { role: 'user', parts: [{ text: systemInstruction }] },
-      { role: 'model', parts: [{ text: 'Entendido, tenho acesso a todos os dados do CRM e posso executar ações. Vou responder de forma direta e natural.' }] },
       ...messages.map(m => {
         const parts: any[] = []
         // Add any attachments (images/audio) as inline_data
@@ -120,7 +129,7 @@ export async function geminiHandler(req: Request, res: Response): Promise<void> 
     // Function calling loop: Gemini may call functions, we execute them and feed results back
     let callCount = 0
     while (callCount < MAX_FUNCTION_CALLS) {
-      const geminiData = await callGemini(apiKey, contents, tools)
+      const geminiData = await callGemini(apiKey, contents, tools, systemInstruction)
       const candidate = geminiData.candidates?.[0]
       if (!candidate?.content?.parts) break
 
@@ -202,7 +211,7 @@ export async function geminiHandler(req: Request, res: Response): Promise<void> 
     }
 
     // Safety: if we hit the loop limit, ask Gemini for a final text response without tools
-    const geminiData = await callGemini(apiKey, contents)
+    const geminiData = await callGemini(apiKey, contents, undefined, systemInstruction)
     const textResponse = geminiData.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text || 'Ações executadas.'
     res.json({ 
       success: true, 

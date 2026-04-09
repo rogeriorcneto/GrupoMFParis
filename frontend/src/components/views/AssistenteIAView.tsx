@@ -150,9 +150,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   }, [messages, loading])
 
   const systemPrompt = buildCRMContext({
-    clientes, pedidos, vendedores,
-    interacoes: [], // interacoes individuais nao sao enviadas para evitar payload gigante
-    loggedUser,
+    clientes, pedidos, vendedores, interacoes, loggedUser,
     whatsappMessages: extraData?.whatsappMessages,
     callRecordings: extraData?.callRecordings,
     produtos: extraData?.produtos || produtos,
