@@ -335,6 +335,7 @@ export interface FunilViewProps {
   vendedores: Vendedor[]
   interacoes: Interacao[]
   pedidos?: Pedido[]
+  propostas?: PropostaHistorico[]
   loggedUser: Vendedor | null
   onDragStart: (e: React.DragEvent, cliente: Cliente, fromStage: string) => void
   onDragOver: (e: React.DragEvent) => void

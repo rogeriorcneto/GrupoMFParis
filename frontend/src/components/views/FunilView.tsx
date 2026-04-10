@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react'
-import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps } from '../../types'
+import React, { useEffect, useMemo, useState } from 'react'
+import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
+import { fetchPropostasByCliente } from '../../lib/database'
 import CallRecorder from '../CallRecorder'
 
-function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean }) {
+function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
@@ -17,6 +18,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser,
   const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
   const [callRecordingCliente, setCallRecordingCliente] = useState<Cliente | null>(null)
   const [lockProcessing, setLockProcessing] = useState(false)
+  const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
 
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
   const amostraLockedClients = useMemo(() => {
@@ -30,6 +32,38 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser,
   }, [clientes, loggedUser, isGerente])
 
   const hasLock = amostraLockedClients.length > 0 || followUpLockedClients.length > 0
+
+  // Carregar propostas de todos os clientes
+  useEffect(() => {
+    const loadAll = async () => {
+      const all: PropostaHistorico[] = []
+      for (const c of clientes) {
+        try {
+          const list = await fetchPropostasByCliente(c.id)
+          all.push(...list)
+        } catch { /* ignore */ }
+      }
+      setPropostasLoaded(all)
+    }
+    loadAll()
+  }, [clientes])
+
+  // Agrupar propostas por cliente (use prop se fornecida, senão loaded)
+  const propostasPorCliente = useMemo(() => {
+    const source = propostas.length > 0 ? propostas : propostasLoaded
+    const map = new Map<number, PropostaHistorico[]>()
+    for (const p of source) {
+      const list = map.get(p.clienteId) || []
+      list.push(p)
+      map.set(p.clienteId, list)
+    }
+    // Ordenar por data (mais recente primeiro)
+    for (const [id, list] of map) {
+      list.sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime())
+      map.set(id, list)
+    }
+    return map
+  }, [propostas, propostasLoaded])
 
   const handleImportNegocios = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -655,6 +689,32 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser,
                             <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Ligar com gravação">📞 Ligar</button>
                           )}
                         </div>
+
+                        {/* Histórico de Propostas (negociação) */}
+                        {(() => {
+                          const historico = propostasPorCliente.get(cliente.id)
+                          if (!historico || historico.length === 0) return null
+                          const ultima = historico[0]
+                          return (
+                            <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-[10px] font-semibold text-purple-800">💰 Propostas ({historico.length})</span>
+                              </div>
+                              <div className="space-y-1">
+                                {historico.slice(0, 2).map((p, i) => (
+                                  <div key={p.id || i} className="flex items-center justify-between text-[9px]">
+                                    <span className="text-gray-600 truncate max-w-[70px]">{p.numero}</span>
+                                    <span className="font-medium text-purple-700">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
+                                    <span className="text-gray-400">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                  </div>
+                                ))}
+                                {historico.length > 2 && <p className="text-[9px] text-purple-600 text-center">+{historico.length - 2} mais</p>}
+                              </div>
+                              {ultima.frete && <p className="text-[9px] text-gray-500 mt-1">🚚 {ultima.frete}</p>}
+                            </div>
+                          )
+                        })()}
+
                         {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                         {renderCardInfo(cliente)}
                         {/* Logistics mini-info from pedidos */}
