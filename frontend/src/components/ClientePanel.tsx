@@ -406,9 +406,6 @@ export default function ClientePanel({
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
-              {c.etapa !== 'perdido' && (
-                <button onClick={() => { onEditCliente(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-apple hover:bg-gray-50">✏️ Editar</button>
-              )}
               <button
                 onClick={() => {
                   if (!ultimaProposta) return
@@ -442,7 +439,38 @@ export default function ClientePanel({
               )}
               {c.etapa === 'negociacao' && (
                 <>
-                  <button onClick={() => { onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'pedido_aprovado', dataUltimoPedido: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">🎉 Ganhou</button>
+                  <button
+                    onClick={async () => {
+                      const hoje = new Date().toISOString().split('T')[0]
+                      if (onAddPedido && ultimaProposta && ultimaProposta.itens.length > 0) {
+                        try {
+                          const numero = `PED-${Date.now().toString().slice(-6)}`
+                          await onAddPedido({
+                            numero,
+                            clienteId: c.id,
+                            vendedorId: loggedUser?.id || 0,
+                            itens: ultimaProposta.itens,
+                            observacoes: ultimaProposta.observacoes || '',
+                            status: 'enviado',
+                            dataCriacao: new Date().toISOString(),
+                            dataEnvio: new Date().toISOString(),
+                            totalValor: ultimaProposta.totalValor,
+                            tipo: 'venda',
+                            formaPagamento: ultimaProposta.pagamento || DEFAULT_PAYMENT_TERM,
+                            tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB') || undefined,
+                          })
+                          addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${ultimaProposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação`, c.id)
+                        } catch {
+                          addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
+                        }
+                      }
+                      onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'pedido_aprovado', dataUltimoPedido: hoje })
+                      onClose()
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
+                  >
+                    🎉 Ganhou
+                  </button>
                   <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>
               )}
