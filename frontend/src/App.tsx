@@ -487,6 +487,7 @@ function App() {
         draggedItem={draggedItem} setDraggedItem={setDraggedItem} setPendingDrop={setPendingDrop}
         loggedUser={loggedUser}
         produtos={produtos}
+        clientes={clientes}
         onAddPedido={async (p) => {
           const saved = await db.insertPedido(p)
           setPedidos(prev => [...prev, saved])

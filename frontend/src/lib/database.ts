@@ -3,7 +3,8 @@ import { supabase } from './supabase'
 import type {
   Cliente, Interacao, Tarefa, Produto, Pedido, Vendedor,
   Template, TemplateMsg, Cadencia, CadenciaStep, Campanha,
-  JobAutomacao, Atividade, Notificacao, HistoricoEtapa, ItemPedido
+  JobAutomacao, Atividade, Notificacao, HistoricoEtapa, ItemPedido,
+  PropostaHistorico
 } from '../types'
 
 // ============================================
@@ -1080,4 +1081,56 @@ export async function markNotificacaoLida(id: number): Promise<void> {
 export async function markAllNotificacoesLidas(): Promise<void> {
   const { error } = await supabase.from('notificacoes').update({ lida: true }).eq('lida', false)
   if (error) throw error
+}
+
+// ============================================
+// PROPOSTAS (histórico de propostas geradas)
+// ============================================
+
+export async function savePropostaHistorico(
+  p: Omit<PropostaHistorico, 'id'>
+): Promise<PropostaHistorico> {
+  const { data, error } = await supabase
+    .from('propostas')
+    .insert({
+      numero: p.numero,
+      cliente_id: p.clienteId,
+      vendedor_nome: p.vendedorNome,
+      itens: p.itens,
+      observacoes: p.observacoes,
+      frete: p.frete || null,
+      pagamento: p.pagamento || null,
+      total_valor: p.totalValor,
+      criado_em: p.criadoEm,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return propostaFromDb(data)
+}
+
+export async function fetchPropostasByCliente(clienteId: number): Promise<PropostaHistorico[]> {
+  const { data, error } = await supabase
+    .from('propostas')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .order('criado_em', { ascending: false })
+    .limit(50)
+  if (error) throw error
+  return (data || []).map(propostaFromDb)
+}
+
+function propostaFromDb(row: any): PropostaHistorico {
+  return {
+    id: row.id,
+    numero: row.numero,
+    clienteId: row.cliente_id,
+    vendedorNome: row.vendedor_nome,
+    itens: row.itens || [],
+    observacoes: row.observacoes || '',
+    frete: row.frete || undefined,
+    pagamento: row.pagamento || undefined,
+    totalValor: Number(row.total_valor) || 0,
+    criadoEm: row.criado_em,
+  }
 }

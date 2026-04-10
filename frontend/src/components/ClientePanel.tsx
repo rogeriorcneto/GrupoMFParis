@@ -383,6 +383,50 @@ export default function ClientePanel({
           <div className="lg:h-full grid grid-cols-1 lg:grid-cols-12 gap-4">
             <div className="space-y-4 lg:col-span-5 xl:col-span-4 lg:overflow-y-auto lg:pr-1">
 
+          {/* === AÇÕES RÁPIDAS === */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {c.etapa !== 'perdido' && (
+                <button onClick={() => { onEditCliente(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-apple hover:bg-gray-50">✏️ Editar</button>
+              )}
+              {c.etapa === 'prospecção' && (
+                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
+              )}
+              {c.etapa === 'amostra' && (
+                <>
+                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar Amostra</button>
+                  <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-apple hover:bg-orange-700">🚫 Reprovar Amostra</button>
+                  <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
+                </>
+              )}
+              {c.etapa === 'amostra_perdida' && (
+                <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
+              )}
+              {c.etapa === 'proposta' && (
+                <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
+              )}
+              {c.etapa === 'negociacao' && (
+                <>
+                  <button onClick={() => { onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'pedido_aprovado', dataUltimoPedido: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">🎉 Ganhou</button>
+                  <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
+                </>
+              )}
+              {c.etapa !== 'perdido' && (
+                <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
+              )}
+              {c.etapa === 'lead' && (
+                <button onClick={() => { onMoverCliente(c.id, 'prospecção'); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-sky-600 text-white rounded-apple hover:bg-sky-700">🔎 Enviar para Prospecção</button>
+              )}
+              {c.etapa === 'amostra_perdida' && (c.tentativaAmostra || 0) < 2 && (
+                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">🔄 2ª Tentativa Amostra</button>
+              )}
+              {(c.etapa === 'inativo' || c.etapa === 'perdido') && (
+                <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">🔄 Reativar</button>
+              )}
+            </div>
+          </div>
+
           {/* === CONTATO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">🏢 Dados básicos da empresa</h3>
@@ -646,50 +690,6 @@ export default function ClientePanel({
             )}
           </div>
 
-          {/* === AÇÕES RÁPIDAS === */}
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
-            <div className="flex flex-wrap gap-1.5">
-              {c.etapa !== 'perdido' && (
-                <button onClick={() => { onEditCliente(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-apple hover:bg-gray-50">✏️ Editar</button>
-              )}
-              {c.etapa === 'prospecção' && (
-                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
-              )}
-              {c.etapa === 'amostra' && (
-                <>
-                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar Amostra</button>
-                  <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-apple hover:bg-orange-700">🚫 Reprovar Amostra</button>
-                  <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
-                </>
-              )}
-              {c.etapa === 'amostra_perdida' && (
-                <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
-              )}
-              {c.etapa === 'proposta' && (
-                <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
-              )}
-              {c.etapa === 'negociacao' && (
-                <>
-                  <button onClick={() => { onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'pedido_aprovado', dataUltimoPedido: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">🎉 Ganhou</button>
-                  <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
-                </>
-              )}
-              {c.etapa !== 'perdido' && (
-                <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
-              )}
-              {c.etapa === 'lead' && (
-                <button onClick={() => { onMoverCliente(c.id, 'prospecção'); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-sky-600 text-white rounded-apple hover:bg-sky-700">🔎 Enviar para Prospecção</button>
-              )}
-              {c.etapa === 'amostra_perdida' && (c.tentativaAmostra || 0) < 2 && (
-                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">🔄 2ª Tentativa Amostra</button>
-              )}
-              {(c.etapa === 'inativo' || c.etapa === 'perdido') && (
-                <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">🔄 Reativar</button>
-              )}
-            </div>
-          </div>
-
           </div>
 
           <div className="space-y-4 lg:col-span-7 xl:col-span-8 lg:overflow-y-auto lg:pl-1">
@@ -902,54 +902,71 @@ export default function ClientePanel({
                       ))}
                     </select>
                   </div>
-                  <input type="text" placeholder="Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                  <div className="max-h-48 overflow-y-auto space-y-1">
-                    {filteredProdutos.slice(0, 20).map(p => {
-                      const qtd = pedidoItens.find(i => i.produtoId === p.id)?.quantidade || 0
-                      return (
-                        <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100'}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium text-gray-900 truncate">{p.nome}</p>
-                            <p className="text-[10px] text-gray-500">Unidade: {p.unidade.toUpperCase()}</p>
-                          </div>
-                          {qtd > 0 ? (
-                            <div className="flex flex-col items-end gap-1">
-                              {pedidoTipo === 'venda' && (
-                                <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                                  <span>R$</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    value={pedidoItens.find(i => i.produtoId === p.id)?.preco || 0}
-                                    onChange={e => setPedidoItemPreco(p.id, parseFloat(e.target.value))}
-                                    onFocus={e => e.target.select()}
-                                    className="w-16 px-1 py-0.5 border border-gray-300 rounded text-[10px] text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
-                                  />
-                                  <span>/{p.unidade.toUpperCase()}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1">
-                              <button onClick={() => setPedidoItemQtd(p, qtd - 1)} className="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-xs font-bold">−</button>
-                              <span className="w-8 text-center text-xs font-bold">{qtd}</span>
-                              <button onClick={() => setPedidoItemQtd(p, qtd + 1)} className="w-6 h-6 rounded-full bg-primary-600 hover:bg-primary-700 flex items-center justify-center text-white text-xs font-bold">+</button>
-                              <span className="text-[9px] text-gray-400">(Quilo(s))</span>
+                  {/* Layout duas colunas: busca à esquerda, carrinho à direita */}
+                  <div className="flex gap-3 min-h-[280px]">
+                    {/* Coluna esquerda: busca */}
+                    <div className="flex-1 flex flex-col min-w-0">
+                      <input type="text" placeholder="🔍 Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 mb-2" />
+                      <div className="flex-1 overflow-y-auto space-y-1 max-h-52">
+                        {filteredProdutos.length === 0 && <p className="text-[10px] text-gray-400 text-center py-4">Nenhum produto encontrado</p>}
+                        {filteredProdutos.slice(0, 30).map(p => {
+                          const qtd = pedidoItens.find(i => i.produtoId === p.id)?.quantidade || 0
+                          return (
+                            <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border transition-colors ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'}`}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[11px] font-medium text-gray-900 truncate">{p.nome}</p>
+                                <p className="text-[10px] text-gray-400">{p.unidade.toUpperCase()}{pedidoTipo === 'venda' ? ` · R$ ${p.preco.toFixed(2).replace('.', ',')}` : ''}</p>
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button onClick={() => setPedidoItemQtd(p, Math.max(0, qtd - 1))} className="w-5 h-5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 text-xs font-bold flex items-center justify-center">−</button>
+                                <input type="number" min={0} value={qtd || ''} onChange={e => setPedidoItemQtd(p, Math.max(0, parseInt(e.target.value || '0', 10) || 0))} placeholder="0" className="w-12 px-1 py-0.5 border border-gray-300 rounded text-[10px] text-center focus:outline-none focus:ring-1 focus:ring-primary-400" />
+                                <button onClick={() => setPedidoItemQtd(p, qtd + 1)} className="w-5 h-5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 text-xs font-bold flex items-center justify-center">+</button>
                               </div>
                             </div>
-                          ) : (
-                            <button onClick={() => setPedidoItemQtd(p, 1)} className="px-2 py-1 bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-medium rounded-apple">+ Add</button>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <textarea value={pedidoObs} onChange={e => setPedidoObs(e.target.value)} placeholder="Observações..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none" />
-                  {pedidoItens.length > 0 && (
-                    <div className="flex items-center justify-between text-sm font-bold text-gray-900 pt-2 border-t">
-                      <span>{pedidoItens.reduce((s, i) => s + i.quantidade, 0)} kg</span>
-                      <span>{pedidoTipo === 'venda' ? `R$ ${pedidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Amostra sem valor'}</span>
+                          )
+                        })}
+                      </div>
                     </div>
-                  )}
+
+                    {/* Coluna direita: carrinho fixo */}
+                    <div className="w-44 flex flex-col bg-gray-50 rounded-apple border border-gray-200 flex-shrink-0">
+                      <p className="text-[10px] font-semibold text-gray-700 px-3 py-2 border-b border-gray-200">🛒 Selecionados</p>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-44">
+                        {pedidoItens.length === 0 && <p className="text-[10px] text-gray-400 text-center py-4">Nenhum item</p>}
+                        {pedidoItens.map(item => (
+                          <div key={item.produtoId} className="bg-white rounded border border-gray-200 p-1.5">
+                            <p className="text-[10px] font-semibold text-gray-800 leading-tight truncate">{item.nomeProduto}</p>
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className="text-[9px] text-gray-400">{item.quantidade}x</span>
+                              {pedidoTipo === 'venda' ? (
+                                <div className="flex items-center gap-0.5 flex-1">
+                                  <span className="text-[9px] text-gray-400">R$</span>
+                                  <input
+                                    type="number" min={0} step="0.01"
+                                    value={item.preco || ''}
+                                    onChange={e => setPedidoItemPreco(item.produtoId, parseFloat(e.target.value) || 0)}
+                                    onFocus={e => e.target.select()}
+                                    placeholder="0,00"
+                                    className="w-full px-1 py-0.5 border border-gray-300 rounded text-[9px] text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-[9px] text-gray-400">bonificação</span>
+                              )}
+                            </div>
+                            {pedidoTipo === 'venda' && item.preco > 0 && (
+                              <p className="text-[9px] font-bold text-primary-700 mt-0.5">= R$ {(item.quantidade * item.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-2 border-t border-gray-200">
+                        <p className="text-[10px] text-gray-500">{pedidoItens.reduce((s, i) => s + i.quantidade, 0)} item(ns)</p>
+                        <p className="text-xs font-bold text-gray-900">{pedidoTipo === 'venda' ? `R$ ${pedidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'Bonificação'}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <textarea value={pedidoObs} onChange={e => setPedidoObs(e.target.value)} placeholder="Observações..." rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none" />
                   <button onClick={handleEnviarPedido} disabled={pedidoItens.length === 0 || !pedidoFrete || pedidoSaving} className="w-full py-2.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-semibold rounded-apple text-sm transition-colors">
                     {pedidoSaving ? '⏳ Enviando...' : (pedidoTipo === 'venda' ? `📤 Enviar Pedido — R$ ${pedidoTotal.toFixed(2)}` : '📤 Enviar Amostra')}
                   </button>

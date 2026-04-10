@@ -287,6 +287,19 @@ export interface ItemPedido {
   quantidade: number
 }
 
+export interface PropostaHistorico {
+  id: number
+  numero: string
+  clienteId: number
+  vendedorNome: string
+  itens: ItemPedido[]
+  observacoes: string
+  frete?: string
+  pagamento?: string
+  totalValor: number
+  criadoEm: string
+}
+
 export interface Pedido {
   id: number
   numero: string

@@ -637,7 +637,25 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser,
                           <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
                           {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
-                        {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
+                        {/* Ações rápidas — sempre visíveis no topo */}
+                        <div className="flex gap-1 mt-2 flex-wrap">
+                          {cliente.etapa === 'amostra' && moverCliente && (
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
+                          )}
+                          {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && (
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-0.5 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium border border-red-100" title="Cancelar amostra e voltar para Prospecção">❌ Cancelar</button>
+                          )}
+                          {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Abrir WhatsApp">📱 WA</button>
+                          )}
+                          {cliente.contatoEmail && (
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 font-medium border border-blue-100" title="Enviar Email">📧 Email</button>
+                          )}
+                          {(cliente.contatoTelefone || cliente.contatoCelular) && (
+                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Ligar com gravação">📞 Ligar</button>
+                          )}
+                        </div>
+                        {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                         {renderCardInfo(cliente)}
                         {/* Logistics mini-info from pedidos */}
                         {(() => {
@@ -699,23 +717,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], loggedUser,
                             </div>
                           ) : null
                         })()}
-                        <div className="flex gap-1.5 mt-2 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap">
-                          {cliente.etapa === 'amostra' && moverCliente && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-1 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
-                          )}
-                          {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-1 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium" title="Cancelar envio de amostra e voltar para Prospecção">❌ Cancelar</button>
-                          )}
-                          {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-1 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium" title="Abrir WhatsApp">📱 WA</button>
-                          )}
-                          {cliente.contatoEmail && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-1 text-[9px] bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 font-medium" title="Enviar Email">📧</button>
-                          )}
-                          {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-2 py-1 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium" title="Ligar com gravação">📞</button>
-                          )}
-                        </div>
                       </div>
                     )
                   })}

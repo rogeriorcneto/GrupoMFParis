@@ -19,7 +19,7 @@ import {
 import { sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
-import { loadConversation, saveConversation, clearConversation } from '../lib/aiConversations'
+import { loadConversationByChannel as loadConversation, saveConversationByChannel as saveConversation, clearConversationByChannel as clearConversation } from '../lib/aiConversations'
 
 // ── Types ──
 

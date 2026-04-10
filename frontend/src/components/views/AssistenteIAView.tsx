@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
 import type { Tarefa } from '../../types'
 import { callAIFull, buildCRMContext } from '../../lib/gemini'
 import type { AIMessage, AIUIAction, AIAttachment } from '../../lib/gemini'
-import { loadConversation, saveConversation, clearConversation } from '../../lib/aiConversations'
+import {
+  listConversations, loadConversation, createConversation,
+  saveConversation, renameConversation, deleteConversation, generateTitle,
+  type Conversation,
+} from '../../lib/aiConversations'
 import { fetchAIContextData, type AIContextData } from '../../lib/botApi'
 
 interface ChatMessage {
@@ -96,23 +100,31 @@ function renderInline(text: string): React.ReactNode {
 }
 
 export default function AssistenteIAView({ clientes, pedidos, vendedores, interacoes, produtos, tarefas, loggedUser, onRefreshData, showToast }: AssistenteIAViewProps) {
-  const welcomeMsg: ChatMessage = {
+  const makeWelcome = (): ChatMessage => ({
     id: '0',
     role: 'assistant',
     text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos**, **${vendedores.length} vendedores** + mensagens de WhatsApp, ligações e produtos.\n\nPode perguntar qualquer coisa: relatórios, análise de WhatsApp, transcrições de ligações, estratégias baseadas em dados reais.`,
     timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-  }
-  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMsg])
+  })
+
+  const [messages, setMessages] = useState<ChatMessage[]>([makeWelcome()])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeCategory, setActiveCategory] = useState(0)
   const [copied, setCopied] = useState<string | null>(null)
-  const [conversationLoaded, setConversationLoaded] = useState(false)
   const [extraData, setExtraData] = useState<AIContextData | null>(null)
   const [pendingAttachments, setPendingAttachments] = useState<AIAttachment[]>([])
   const [isRecordingAudio, setIsRecordingAudio] = useState(false)
   const [audioSeconds, setAudioSeconds] = useState(0)
+
+  // ── Múltiplos históricos ──
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeConvId, setActiveConvId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -121,29 +133,67 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   const audioChunksRef = useRef<Blob[]>([])
   const audioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Fetch extra AI context data (WhatsApp msgs, calls, etc.) on mount
+  // Fetch extra AI context data on mount
   useEffect(() => {
     fetchAIContextData().then(data => setExtraData(data)).catch(() => {})
   }, [])
 
-  // Load saved conversation on mount
+  // Carregar lista de conversas ao abrir
   useEffect(() => {
-    loadConversation('assistente').then(saved => {
-      if (saved.length > 0) {
-        setMessages([welcomeMsg, ...saved])
+    listConversations().then(list => {
+      setConversations(list)
+      if (list.length > 0) {
+        // abre a mais recente automaticamente
+        const latest = list[0]
+        setActiveConvId(latest.id)
+        setMessages([makeWelcome(), ...latest.messages])
       }
-      setConversationLoaded(true)
-    }).catch(() => setConversationLoaded(true))
+    }).catch(() => {})
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-save conversation when messages change (skip welcome msg)
+  // Auto-salvar quando mensagens mudarem
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!conversationLoaded) return
     const toSave = messages.filter(m => m.id !== '0')
-    if (toSave.length > 0) {
-      saveConversation('assistente', toSave).catch(() => {})
-    }
-  }, [messages, conversationLoaded])
+    if (toSave.length === 0) return
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(async () => {
+      if (activeConvId) {
+        await saveConversation(activeConvId, toSave)
+        setConversations(prev => prev.map(c =>
+          c.id === activeConvId ? { ...c, messages: toSave, updated_at: new Date().toISOString() } : c
+        ))
+      }
+    }, 1000)
+  }, [messages, activeConvId])
+
+  const startNewConversation = useCallback(() => {
+    setActiveConvId(null)
+    setMessages([makeWelcome()])
+    setError(null)
+    setInput('')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openConversation = useCallback((conv: Conversation) => {
+    setActiveConvId(conv.id)
+    setMessages([makeWelcome(), ...conv.messages])
+    setError(null)
+    setShowHistory(false)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    await deleteConversation(id)
+    setConversations(prev => prev.filter(c => c.id !== id))
+    if (activeConvId === id) startNewConversation()
+  }, [activeConvId, startNewConversation])
+
+  const handleRenameSubmit = useCallback(async (id: string) => {
+    if (!renameValue.trim()) return
+    await renameConversation(id, renameValue.trim())
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, title: renameValue.trim() } : c))
+    setRenamingId(null)
+  }, [renameValue])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -269,13 +319,11 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     setLoading(true)
 
     try {
-      // Build history without attachments for older messages (to keep payload small)
-      // Limit to last 10 messages to avoid token overflow
+      // Últimas 20 mensagens como contexto
       const history: AIMessage[] = messages
         .filter(m => m.id !== '0')
-        .slice(-10)
+        .slice(-20)
         .map(m => ({ role: m.role, content: m.text }))
-      // Current message with attachments
       const userContent = text.trim() || (attachments.some(a => a.mimeType.startsWith('image')) ? 'Analise esta imagem.' : 'Transcreva e analise este áudio.')
       history.push({ role: 'user', content: userContent, attachments })
 
@@ -289,7 +337,24 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
       }
       setMessages(prev => [...prev, aiMsg])
 
-      // Handle UI actions from the AI agent
+      // Se não tem conversa ativa, criar uma nova com título automático
+      if (!activeConvId) {
+        const allMsgs = [...messages.filter(m => m.id !== '0'), userMsg, aiMsg]
+        const title = generateTitle(allMsgs)
+        const newId = await createConversation(title, allMsgs)
+        if (newId) {
+          setActiveConvId(newId)
+          const newConv: Conversation = {
+            id: newId,
+            title,
+            messages: allMsgs,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+          setConversations(prev => [newConv, ...prev])
+        }
+      }
+
       if (result.uiActions && result.uiActions.length > 0) {
         handleUIActions(result.uiActions)
       }
@@ -313,72 +378,128 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
     setTimeout(() => setCopied(null), 2000)
   }
 
-  const clearChat = () => {
-    setMessages([{
-      id: '0',
-      role: 'assistant',
-      text: `Conversa limpa, ${loggedUser.nome.split(' ')[0]}! 🔄 Os dados continuam carregados — **${clientes.length} clientes**, **${pedidos.length} pedidos**, **${vendedores.length} vendedores**. Manda aí!`,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    }])
-    setError(null)
-    clearConversation('assistente').catch(() => {})
-  }
+  const clearChat = () => startNewConversation()
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
-      {/* Sidebar de prompts */}
+      {/* Sidebar: Histórico + Prompts */}
       <div className="hidden lg:flex flex-col w-72 flex-shrink-0 bg-white rounded-apple shadow-apple-sm border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-blue-600">
-          <h3 className="text-sm font-semibold text-white">💡 Prompts Sugeridos</h3>
-          <p className="text-xs text-purple-200 mt-0.5">Clique para usar</p>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200">
+          <button
+            onClick={() => setShowHistory(false)}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${!showHistory ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            💡 Prompts
+          </button>
+          <button
+            onClick={() => setShowHistory(true)}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${showHistory ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" />
+            Histórico {conversations.length > 0 && <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${showHistory ? 'bg-white/20' : 'bg-purple-100 text-purple-700'}`}>{conversations.length}</span>}
+          </button>
         </div>
-        {/* Category tabs */}
-        <div className="flex flex-wrap gap-1 p-3 border-b border-gray-100">
-          {PROMPT_CATEGORIES.map((cat, i) => (
-            <button
-              key={i}
-              onClick={() => setActiveCategory(i)}
-              className={`px-2 py-1 text-xs rounded-apple font-medium transition-colors ${activeCategory === i ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-100'}`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-        {/* Prompts list */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-          {PROMPT_CATEGORIES[activeCategory].prompts.map((p, i) => (
-            <button
-              key={i}
-              onClick={() => sendMessage(p)}
-              disabled={loading}
-              className="w-full text-left px-3 py-2.5 text-xs text-gray-700 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 hover:border-purple-200 rounded-apple transition-colors disabled:opacity-50"
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-        {/* Stats mini */}
-        <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-1">
-          <p className="text-[10px] text-gray-400 font-semibold uppercase">Dados carregados</p>
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>👥 Clientes</span><span className="font-bold">{clientes.length}</span>
+
+        {showHistory ? (
+          /* ── Painel de histórico ── */
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <div className="p-2 border-b border-gray-100">
+              <button
+                onClick={startNewConversation}
+                className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition-colors"
+              >
+                <PlusIcon className="h-4 w-4" /> Nova conversa
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+              {conversations.length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-8 px-4">Nenhuma conversa salva ainda.<br/>Envie uma mensagem para começar.</p>
+              )}
+              {conversations.map(conv => (
+                <div
+                  key={conv.id}
+                  onClick={() => openConversation(conv)}
+                  className={`group relative flex items-start gap-2 px-3 py-2.5 cursor-pointer transition-colors ${activeConvId === conv.id ? 'bg-purple-50 border-l-2 border-purple-500' : 'hover:bg-gray-50 border-l-2 border-transparent'}`}
+                >
+                  <ChatBubbleLeftRightIcon className={`h-4 w-4 flex-shrink-0 mt-0.5 ${activeConvId === conv.id ? 'text-purple-500' : 'text-gray-400'}`} />
+                  <div className="flex-1 min-w-0">
+                    {renamingId === conv.id ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onBlur={() => handleRenameSubmit(conv.id)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(conv.id); if (e.key === 'Escape') setRenamingId(null) }}
+                        onClick={e => e.stopPropagation()}
+                        className="w-full text-xs border border-purple-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                      />
+                    ) : (
+                      <p className="text-xs font-medium text-gray-800 truncate">{conv.title}</p>
+                    )}
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {new Date(conv.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} · {conv.messages.length} msgs
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={e => { e.stopPropagation(); setRenamingId(conv.id); setRenameValue(conv.title) }}
+                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+                      title="Renomear"
+                    >
+                      <PencilIcon className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={e => handleDeleteConversation(conv.id, e)}
+                      className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600"
+                      title="Deletar"
+                    >
+                      <TrashIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Stats mini */}
+            <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-1">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Dados carregados</p>
+              <div className="flex justify-between text-xs text-gray-600"><span>👥 Clientes</span><span className="font-bold">{clientes.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>🛒 Pedidos</span><span className="font-bold">{pedidos.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>📱 Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span></div>
+            </div>
           </div>
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>🛒 Pedidos</span><span className="font-bold">{pedidos.length}</span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>👤 Vendedores</span><span className="font-bold">{vendedores.length}</span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>📱 Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>📞 Ligações</span><span className="font-bold">{extraData?.callRecordings?.length || '...'}</span>
-          </div>
-          <div className="flex justify-between text-xs text-gray-600">
-            <span>📦 Produtos</span><span className="font-bold">{(extraData?.produtos || produtos).length}</span>
-          </div>
-        </div>
+        ) : (
+          /* ── Painel de prompts ── */
+          <>
+            <div className="flex flex-wrap gap-1 p-3 border-b border-gray-100">
+              {PROMPT_CATEGORIES.map((cat, i) => (
+                <button key={i} onClick={() => setActiveCategory(i)}
+                  className={`px-2 py-1 text-xs rounded-apple font-medium transition-colors ${activeCategory === i ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-100'}`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {PROMPT_CATEGORIES[activeCategory].prompts.map((p, i) => (
+                <button key={i} onClick={() => sendMessage(p)} disabled={loading}
+                  className="w-full text-left px-3 py-2.5 text-xs text-gray-700 bg-gray-50 hover:bg-purple-50 hover:text-purple-700 border border-gray-200 hover:border-purple-200 rounded-apple transition-colors disabled:opacity-50"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-1">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Dados carregados</p>
+              <div className="flex justify-between text-xs text-gray-600"><span>👥 Clientes</span><span className="font-bold">{clientes.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>🛒 Pedidos</span><span className="font-bold">{pedidos.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>👤 Vendedores</span><span className="font-bold">{vendedores.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>📱 Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>📞 Ligações</span><span className="font-bold">{extraData?.callRecordings?.length || '...'}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>📦 Produtos</span><span className="font-bold">{(extraData?.produtos || produtos).length}</span></div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Chat area */}
@@ -391,14 +512,17 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Assistente IA — Grupo MF Paris</p>
+              {activeConvId && conversations.find(c => c.id === activeConvId) && (
+                <p className="text-[11px] text-white/70 truncate max-w-[260px]">{conversations.find(c => c.id === activeConvId)!.title}</p>
+              )}
             </div>
           </div>
           <button
-            onClick={clearChat}
+            onClick={startNewConversation}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-apple transition-colors"
             title="Nova conversa"
           >
-            <ArrowPathIcon className="h-3.5 w-3.5" />
+            <PlusIcon className="h-3.5 w-3.5" />
             Nova conversa
           </button>
         </div>
