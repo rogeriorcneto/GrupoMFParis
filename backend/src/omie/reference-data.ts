@@ -355,6 +355,46 @@ export async function garantirVendedorOmie(vendedorCrmId: number, creds?: OmieCr
 }
 
 // ============================================
+// Dados da Empresa (estado para CFOP)
+// ============================================
+
+export async function getEstadoEmpresa(creds?: OmieCredentials): Promise<string> {
+  const cached = getCached<string>('empresa_estado')
+  if (cached) return cached
+
+  const credentials = creds || await getOmieCredentials()
+  if (!credentials) throw new Error('Credenciais Omie não configuradas')
+
+  try {
+    const response = await omieCall<any>(
+      '/geral/empresas/',
+      'ListarEmpresas',
+      [{ nPagina: 1, nRegPorPagina: 10 }],
+      { credentials }
+    )
+    const empresas = response.empresasCadastro || []
+    const empresa = empresas[0]
+    if (empresa?.estado) {
+      const estado = String(empresa.estado).toUpperCase()
+      setCache('empresa_estado', estado)
+      log.info({ estado }, 'Estado da empresa obtido do Omie')
+      return estado
+    }
+  } catch (err) {
+    log.warn({ err }, 'Erro ao buscar estado da empresa no Omie')
+  }
+  // Fallback: tentar buscar das configurações locais
+  const { data: config } = await supabase
+    .from('configuracoes')
+    .select('valor')
+    .eq('chave', 'omie_empresa_estado')
+    .maybeSingle()
+  if (config?.valor) return config.valor.toUpperCase()
+  // Default: MG
+  return 'MG'
+}
+
+// ============================================
 // Helper: calcular 7 dias úteis
 // ============================================
 

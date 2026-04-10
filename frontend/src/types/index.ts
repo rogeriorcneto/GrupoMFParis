@@ -57,7 +57,7 @@ export interface Cliente {
   resultadoAmostra?: 'aprovada' | 'reprovada'
   dataResultadoAmostra?: string
   motivoReprovacao?: string
-  statusFollowUp?: 'pedido_aprovado' | 'em_producao' | 'faturado' | 'expedido' | 'entregue' | 'satisfacao_pendente' | 'concluido'
+  statusFollowUp?: 'aguardando_aprovacao_gerente' | 'pedido_aprovado' | 'em_producao' | 'faturado' | 'expedido' | 'entregue' | 'satisfacao_pendente' | 'concluido'
   statusSatisfacao?: 'pendente' | 'satisfeito' | 'insatisfeito'
   notaSatisfacao?: number
   feedbackSatisfacao?: string

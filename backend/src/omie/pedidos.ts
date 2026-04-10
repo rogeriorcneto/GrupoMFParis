@@ -11,6 +11,7 @@ import {
   getCategoriaVendasMercadoria,
   getContaBancoBrasil,
   getLocalEstoqueVilaParis,
+  getEstadoEmpresa,
 } from './reference-data.js'
 
 // ============================================
@@ -449,12 +450,13 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   const estadoEntrega = pedido.endereco_diferente && pedido.endereco_entrega_estado
     ? pedido.endereco_entrega_estado.toUpperCase()
     : estadoCliente
-  const isIntraEstado = estadoEntrega === 'MG'
+  const estadoEmpresa = await getEstadoEmpresa(creds)
+  const isIntraEstado = estadoEntrega === estadoEmpresa
 
   // Tipo do pedido: 'venda' ou 'bonificacao'
   const tipoPedido = pedido.tipo || 'venda'
 
-  log.info({ pedidoId, clienteId: pedido.cliente_id, qtdItens: itens.length, tipoPedido, estadoEntrega }, '📦 Preparando pedido para Omie...')
+  log.info({ pedidoId, clienteId: pedido.cliente_id, qtdItens: itens.length, tipoPedido, estadoEntrega, estadoEmpresa, isIntraEstado }, '📦 Preparando pedido para Omie...')
 
   // 1. Garantir cliente no Omie
   const codigoClienteOmie = await garantirClienteOmie(pedido.cliente_id)
@@ -613,9 +615,9 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   // Parcelas baseadas na forma de pagamento
   const totalPedido = itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
-  omiePedido.lista_parcelas = {
-    parcela: gerarParcelas(formaPagamento, totalPedido, dataPrevisao),
-  }
+  const parcelas = gerarParcelas(formaPagamento, totalPedido, dataPrevisao)
+  omiePedido.lista_parcelas = { parcela: parcelas }
+  log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas geradas para Omie')
 
   // Observações do CRM
   if (pedido.observacoes) {

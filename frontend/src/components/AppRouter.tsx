@@ -120,6 +120,13 @@ export default function AppRouter({
               setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusAmostra: 'liberada' } : c))
               try { await db.updateCliente(pedido.clienteId, { statusAmostra: 'liberada' }) } catch { /* non-critical */ }
             }
+            // Se cliente está em follow_up aguardando aprovação, atualizar para pedido aprovado
+            if (cliAprov?.etapa === 'follow_up' && cliAprov?.statusFollowUp === 'aguardando_aprovacao_gerente') {
+              try { 
+                await db.updateCliente(pedido.clienteId, { statusFollowUp: 'pedido_aprovado' })
+                setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusFollowUp: 'pedido_aprovado' } : c))
+              } catch { /* non-critical */ }
+            }
             if (shouldMoveToFollowUpOnApproval(pedido, cliAprov)) {
               try { moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' }) } catch { /* non-critical */ }
             }

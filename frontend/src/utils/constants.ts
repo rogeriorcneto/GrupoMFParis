@@ -42,7 +42,8 @@ export const subStatusAmostraLabels: Record<string, string> = {
 }
 
 export const subStatusFollowUpLabels: Record<string, string> = {
-  'pedido_aprovado': 'Pedido Aprovado',
+  'aguardando_aprovacao_gerente': 'Aguardando Aprovação do Financeiro',
+  'pedido_aprovado': 'Aguardando Faturamento',
   'em_producao': 'Em Produção',
   'faturado': 'Faturado',
   'expedido': 'Expedido',

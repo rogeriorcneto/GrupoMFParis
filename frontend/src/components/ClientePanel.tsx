@@ -464,7 +464,7 @@ export default function ClientePanel({
                           addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
                         }
                       }
-                      onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'pedido_aprovado', dataUltimoPedido: hoje })
+                      onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
                       onClose()
                     }}
                     className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
