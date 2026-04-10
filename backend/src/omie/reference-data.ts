@@ -355,6 +355,75 @@ export async function garantirVendedorOmie(vendedorCrmId: number, creds?: OmieCr
 }
 
 // ============================================
+// Parcelas (Prazos de Pagamento)
+// ============================================
+
+export interface OmieParcela {
+  codigo: string
+  descricao: string
+}
+
+export async function fetchParcelasOmie(creds?: OmieCredentials): Promise<OmieParcela[]> {
+  const cached = getCached<OmieParcela[]>('parcelas')
+  if (cached) return cached
+
+  const credentials = creds || await getOmieCredentials()
+  if (!credentials) throw new Error('Credenciais Omie não configuradas')
+
+  try {
+    const response = await omieCall<any>(
+      '/geral/parcelas/',
+      'ListarParcelas',
+      [{ nPagina: 1, nRegPorPagina: 200 }],
+      { credentials }
+    )
+    const parcelas: OmieParcela[] = (response.cadastros || []).map((p: any) => ({
+      codigo: String(p.codigo || p.cCodigo || ''),
+      descricao: p.descricao || p.cDescricao || '',
+    }))
+    setCache('parcelas', parcelas)
+    log.info({ count: parcelas.length }, 'Parcelas carregadas do Omie')
+    return parcelas
+  } catch (err) {
+    log.warn({ err }, 'Erro ao buscar parcelas do Omie')
+    return []
+  }
+}
+
+/**
+ * Mapeia forma de pagamento para código de parcela Omie.
+ * Busca parcelas cadastradas no Omie e tenta fazer match com a descrição.
+ */
+export async function mapFormaPagamentoToCodigoParcelaOmie(
+  formaPagamento: string,
+  creds?: OmieCredentials
+): Promise<{ codigo: string; usarListaParcelas: boolean }> {
+  const fp = formaPagamento.toLowerCase().trim()
+  
+  // À vista → código 000
+  if (fp === 'à vista' || fp === 'a vista') {
+    return { codigo: '000', usarListaParcelas: false }
+  }
+  
+  // Buscar parcelas cadastradas no Omie
+  const parcelas = await fetchParcelasOmie(creds)
+  
+  // Tentar match com descrições de parcelas
+  for (const p of parcelas) {
+    const desc = p.descricao.toLowerCase()
+    // Match exato ou parcial
+    if (desc === fp || desc.includes(fp) || fp.includes(desc)) {
+      log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao }, '✅ Match de parcela encontrado no Omie')
+      return { codigo: p.codigo, usarListaParcelas: false }
+    }
+  }
+  
+  // Se não encontrou match, usar código 999 (parcelas customizadas via lista_parcelas)
+  log.info({ formaPagamento, parcelasDisponiveis: parcelas.length }, '⚠️ Nenhum match de parcela, usando customizado (999)')
+  return { codigo: '999', usarListaParcelas: true }
+}
+
+// ============================================
 // Dados da Empresa (estado para CFOP)
 // ============================================
 

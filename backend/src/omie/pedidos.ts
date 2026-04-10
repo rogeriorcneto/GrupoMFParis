@@ -12,6 +12,7 @@ import {
   getContaBancoBrasil,
   getLocalEstoqueVilaParis,
   getEstadoEmpresa,
+  mapFormaPagamentoToCodigoParcelaOmie,
 } from './reference-data.js'
 
 // ============================================
@@ -319,18 +320,6 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
 // ============================================
 
 /**
- * Mapeia a forma de pagamento do CRM para o código de parcela do Omie.
- * - "000" = À vista
- * - "999" = Parcelas customizadas (nós especificamos em lista_parcelas)
- */
-function mapFormaPagamentoToCodigoParcela(formaPagamento: string): string {
-  const fp = formaPagamento.toLowerCase().trim()
-  if (fp === 'à vista' || fp === 'a vista') return '000'
-  // Qualquer prazo ou parcelamento → parcelas customizadas
-  return '999'
-}
-
-/**
  * Gera array de parcelas Omie com base na forma de pagamento do CRM.
  *
  * Formatos suportados:
@@ -542,7 +531,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   // 5. Forma de pagamento → parcelas Omie
   const formaPagamento = (pedido.forma_pagamento || 'À vista').trim()
-  const codigoParcela = mapFormaPagamentoToCodigoParcela(formaPagamento)
+  const { codigo: codigoParcela, usarListaParcelas } = await mapFormaPagamentoToCodigoParcelaOmie(formaPagamento, creds)
 
   // 5. Cabeçalho do pedido
   const cabecalho: any = {
@@ -615,9 +604,15 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   // Parcelas baseadas na forma de pagamento
   const totalPedido = itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
-  const parcelas = gerarParcelas(formaPagamento, totalPedido, dataPrevisao)
-  omiePedido.lista_parcelas = { parcela: parcelas }
-  log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas geradas para Omie')
+  
+  // Só enviar lista_parcelas se for usar parcelas customizadas (código 999)
+  if (usarListaParcelas) {
+    const parcelas = gerarParcelas(formaPagamento, totalPedido, dataPrevisao)
+    omiePedido.lista_parcelas = { parcela: parcelas }
+    log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas customizadas geradas para Omie')
+  } else {
+    log.info({ pedidoId, formaPagamento, codigoParcela }, '✅ Usando parcela pré-cadastrada do Omie')
+  }
 
   // Observações do CRM
   if (pedido.observacoes) {
