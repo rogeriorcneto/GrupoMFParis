@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
-import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido } from '../types'
+import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico } from '../types'
+import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
+import { gerarPropostaPDF } from '../utils/pdfGenerator'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { formatCNPJ } from '../utils/validators'
@@ -97,6 +99,7 @@ export default function ClientePanel({
   const [panelRedesSociais, setPanelRedesSociais] = useState(c.redesSociais || '')
   const [pinnedInteracoes, setPinnedInteracoes] = useState<number[]>([])
   const [panelNovaTarefa, setPanelNovaTarefa] = useState(false)
+  const [showAllTarefas, setShowAllTarefas] = useState(false)
   const [panelTarefaTitulo, setPanelTarefaTitulo] = useState('')
   const [panelTarefaData, setPanelTarefaData] = useState(new Date().toISOString().split('T')[0])
   const [panelTarefaHora, setPanelTarefaHora] = useState('')
@@ -119,11 +122,27 @@ export default function ClientePanel({
   const [expandedHistoricoGroups, setExpandedHistoricoGroups] = useState<Record<string, boolean>>({})
   const [historicoItemCount, setHistoricoItemCount] = useState<Record<string, number>>({})
 
+  // Editar Proposta
+  const [showEditProposta, setShowEditProposta] = useState(false)
+  const [ultimaProposta, setUltimaProposta] = useState<PropostaHistorico | null>(null)
+  const [editPropostaItens, setEditPropostaItens] = useState<ItemPedido[]>([])
+  const [editPropostaFrete, setEditPropostaFrete] = useState<'CIF' | 'FOB' | ''>('')
+  const [editPropostaPagamento, setEditPropostaPagamento] = useState(DEFAULT_PAYMENT_TERM)
+  const [editPropostaObs, setEditPropostaObs] = useState('')
+  const [editPropostaSaving, setEditPropostaSaving] = useState(false)
+
   // Gravações de ligação
   const [gravacoes, setGravacoes] = useState<any[]>([])
   const [gravacoesPorData, setGravacoesPorData] = useState<Map<string, any>>(new Map())
   const [transcricoes, setTranscricoes] = useState<Record<number, string>>({})
   const [transcrevendo, setTranscrevendo] = useState<Record<number, boolean>>({})
+
+  // Carregar última proposta do cliente
+  useEffect(() => {
+    fetchPropostasByCliente(c.id)
+      .then(list => setUltimaProposta(list[0] || null))
+      .catch(() => {})
+  }, [c.id])
 
   useEffect(() => {
     supabase
@@ -390,6 +409,21 @@ export default function ClientePanel({
               {c.etapa !== 'perdido' && (
                 <button onClick={() => { onEditCliente(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 rounded-apple hover:bg-gray-50">✏️ Editar</button>
               )}
+              <button
+                onClick={() => {
+                  if (!ultimaProposta) return
+                  setEditPropostaItens(ultimaProposta.itens.map(i => ({ ...i })))
+                  setEditPropostaFrete((ultimaProposta.frete as 'CIF' | 'FOB' | '') || '')
+                  setEditPropostaPagamento(ultimaProposta.pagamento || DEFAULT_PAYMENT_TERM)
+                  setEditPropostaObs(ultimaProposta.observacoes || '')
+                  setShowEditProposta(true)
+                }}
+                disabled={!ultimaProposta}
+                className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                title={ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Nenhuma proposta gerada ainda'}
+              >
+                📝 Editar Proposta
+              </button>
               {c.etapa === 'prospecção' && (
                 <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
               )}
@@ -816,9 +850,9 @@ export default function ClientePanel({
 
                 {/* Lista de tarefas */}
                 {clienteTarefas.length > 0 ? (
-                  <div className="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                  <div className="divide-y divide-gray-100">
                     {/* Pendentes/Vencidas primeiro */}
-                    {[...tarefasPendentes, ...tarefasConcluidas].map((t) => {
+                    {([...tarefasPendentes, ...tarefasConcluidas]).slice(0, showAllTarefas ? undefined : 2).map((t) => {
                       const isVencida = t.status !== 'concluida' && t.data < hoje
                       const isHoje = t.data === hoje
                       return (
@@ -863,6 +897,16 @@ export default function ClientePanel({
                         </div>
                       )
                     })}
+                    {clienteTarefas.length > 2 && (
+                      <button
+                        onClick={() => setShowAllTarefas(v => !v)}
+                        className="w-full py-2 text-xs font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 transition-colors border-t border-gray-100"
+                      >
+                        {showAllTarefas
+                          ? '▲ Ver menos'
+                          : `▼ Ver mais ${clienteTarefas.length - 2} tarefa${clienteTarefas.length - 2 > 1 ? 's' : ''}`}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="px-4 py-5 text-center text-xs text-gray-400">
@@ -1177,6 +1221,171 @@ export default function ClientePanel({
           phoneNumber={(c.contatoCelular || c.contatoTelefone || '').replace(/\D/g, '')}
           onClose={() => setShowCallRecorder(false)}
         />
+      )}
+
+      {/* Modal Editar Proposta */}
+      {showEditProposta && ultimaProposta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">📝 Editar Proposta</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta.numero} · {new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}</p>
+              </div>
+              <button onClick={() => setShowEditProposta(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Frete */}
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-2">Tipo de Frete</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditPropostaFrete('CIF')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${editPropostaFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>📦 CIF (Entrega)</button>
+                  <button onClick={() => setEditPropostaFrete('FOB')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${editPropostaFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🏭 FOB (Retirada)</button>
+                </div>
+              </div>
+
+              {/* Pagamento */}
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-1">Forma de Pagamento</p>
+                <select value={editPropostaPagamento} onChange={e => setEditPropostaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  {PAYMENT_TERM_GROUPS.map(group => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              {/* Itens */}
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-2">Itens da Proposta</p>
+                <div className="space-y-2">
+                  {editPropostaItens.map((item, idx) => (
+                    <div key={item.produtoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-apple border border-gray-200">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{item.nomeProduto}</p>
+                        <p className="text-[10px] text-gray-400">{item.unidade?.toUpperCase()}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <label className="text-[9px] text-gray-400">Qtd</label>
+                          <input
+                            type="number" min={0}
+                            value={item.quantidade}
+                            onChange={e => setEditPropostaItens(prev => prev.map((it, i) => i === idx ? { ...it, quantidade: Math.max(0, parseInt(e.target.value) || 0) } : it))}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <label className="text-[9px] text-gray-400">R$ / un</label>
+                          <input
+                            type="number" min={0} step="0.01"
+                            value={item.preco}
+                            onChange={e => setEditPropostaItens(prev => prev.map((it, i) => i === idx ? { ...it, preco: parseFloat(e.target.value) || 0 } : it))}
+                            onFocus={e => e.target.select()}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                          />
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <label className="text-[9px] text-gray-400">Total</label>
+                          <p className="text-xs font-bold text-indigo-700 w-24 text-right">R$ {(item.quantidade * item.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <button
+                          onClick={() => setEditPropostaItens(prev => prev.filter((_, i) => i !== idx))}
+                          className="w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title="Remover item"
+                        >✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  {editPropostaItens.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Nenhum item. Adicione produtos abaixo.</p>}
+                </div>
+
+                {/* Adicionar produto */}
+                {produtos && produtos.length > 0 && (
+                  <div className="mt-3">
+                    <p className="text-[10px] text-gray-500 mb-1">Adicionar produto:</p>
+                    <select
+                      onChange={e => {
+                        const p = produtos.find(pr => pr.id === Number(e.target.value))
+                        if (!p) return
+                        setEditPropostaItens(prev => {
+                          if (prev.find(it => it.produtoId === p.id)) return prev
+                          return [...prev, { produtoId: p.id, nomeProduto: p.nome, sku: p.omieCodigo || p.sku || '', unidade: p.unidade, preco: p.preco, quantidade: 1 }]
+                        })
+                        e.target.value = ''
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                      defaultValue=""
+                    >
+                      <option value="">+ Selecionar produto para adicionar...</option>
+                      {produtos.filter(p => p.ativo).map(p => (
+                        <option key={p.id} value={p.id}>{p.nome} — R$ {p.preco.toFixed(2).replace('.', ',')}/{p.unidade}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Observações */}
+              <div>
+                <p className="text-xs font-medium text-gray-700 mb-1">Observações</p>
+                <textarea
+                  value={editPropostaObs}
+                  onChange={e => setEditPropostaObs(e.target.value)}
+                  rows={3}
+                  placeholder="Observações da proposta..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                />
+              </div>
+
+              {/* Total */}
+              <div className="flex items-center justify-between py-3 border-t border-gray-200">
+                <span className="text-sm text-gray-600">{editPropostaItens.reduce((s, i) => s + i.quantidade, 0)} item(ns)</span>
+                <span className="text-lg font-bold text-indigo-700">
+                  R$ {editPropostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0">
+              <button onClick={() => setShowEditProposta(false)} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
+              <button
+                disabled={editPropostaSaving || editPropostaItens.length === 0}
+                onClick={async () => {
+                  setEditPropostaSaving(true)
+                  try {
+                    const total = editPropostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+                    const numero = `PROP-${Date.now().toString().slice(-6)}`
+                    await gerarPropostaPDF(c, editPropostaItens, editPropostaObs, loggedUser?.nome || 'Vendedor', numero, { formaPagamento: editPropostaPagamento, tipoFrete: editPropostaFrete as 'CIF' | 'FOB' | '' })
+                    const saved = await savePropostaHistorico({
+                      numero, clienteId: c.id, vendedorNome: loggedUser?.nome || 'Vendedor',
+                      itens: editPropostaItens, observacoes: editPropostaObs,
+                      frete: editPropostaFrete || undefined, pagamento: editPropostaPagamento || undefined,
+                      totalValor: total, criadoEm: new Date().toISOString(),
+                    })
+                    setUltimaProposta(saved)
+                    setShowEditProposta(false)
+                  } catch {
+                    alert('Erro ao gerar proposta.')
+                  } finally {
+                    setEditPropostaSaving(false)
+                  }
+                }}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-apple text-sm flex items-center gap-2"
+              >
+                {editPropostaSaving
+                  ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Gerando...</>
+                  : '📄 Gerar Nova Versão PDF'
+                }
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
