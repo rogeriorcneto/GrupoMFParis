@@ -43,7 +43,11 @@ exports.handler = async (event, context) => {
     })
 
     const data = await response.json()
-    const result = data.candidates[0]?.content?.parts[0]?.text || 'Sem resposta da IA.'
+    if (!response.ok || !data.candidates) {
+      const errMsg = data.error?.message || JSON.stringify(data)
+      return { statusCode: 500, body: JSON.stringify({ success: false, error: errMsg }) }
+    }
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sem resposta da IA.'
 
     return {
       statusCode: 200,
