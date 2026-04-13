@@ -137,10 +137,12 @@ export default function ClientePanel({
   const [transcricoes, setTranscricoes] = useState<Record<number, string>>({})
   const [transcrevendo, setTranscrevendo] = useState<Record<number, boolean>>({})
 
-  // Carregar última proposta do cliente
+  // Carregar propostas do cliente
+  const [todasPropostas, setTodasPropostas] = useState<PropostaHistorico[]>([])
+  const [showPropostasAnteriores, setShowPropostasAnteriores] = useState(false)
   useEffect(() => {
     fetchPropostasByCliente(c.id)
-      .then(list => setUltimaProposta(list[0] || null))
+      .then(list => { setUltimaProposta(list[0] || null); setTodasPropostas(list) })
       .catch(() => {})
   }, [c.id])
 
@@ -421,14 +423,54 @@ export default function ClientePanel({
               >
                 📝 Editar Proposta
               </button>
+              {todasPropostas.length > 1 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowPropostasAnteriores(v => !v)}
+                    className="px-3 py-1.5 text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200 rounded-apple hover:bg-gray-100"
+                    title="Ver histórico de propostas"
+                  >
+                    📋 Anteriores ({todasPropostas.length - 1})
+                  </button>
+                  {showPropostasAnteriores && (
+                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[260px] max-h-72 overflow-y-auto">
+                      <div className="px-3 py-2 border-b border-gray-100">
+                        <p className="text-[11px] font-semibold text-gray-700">Histórico de Propostas</p>
+                      </div>
+                      {todasPropostas.map((p, i) => (
+                        <div key={p.id} className={`flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 ${i === 0 ? 'bg-indigo-50' : ''}`}>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-medium text-gray-800 truncate">{p.numero} {i === 0 ? <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">atual</span> : ''}</p>
+                            <p className="text-[10px] text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR')} · R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            {p.pagamento && <p className="text-[9px] text-gray-400">{p.pagamento}</p>}
+                          </div>
+                          <button
+                            onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento })}
+                            className="flex-shrink-0 px-2 py-1 text-[10px] bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            title="Baixar PDF"
+                          >
+                            📄 PDF
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {c.etapa === 'prospecção' && (
                 <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
               )}
               {c.etapa === 'amostra' && (
                 <>
-                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar Amostra</button>
-                  <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-apple hover:bg-orange-700">🚫 Reprovar Amostra</button>
-                  <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
+                  {c.statusAmostra === 'entregue' && (
+                    <>
+                      <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar</button>
+                      <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-apple hover:bg-orange-700">🚫 Reprovar</button>
+                    </>
+                  )}
+                  {!['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(c.statusAmostra || '') && (
+                    <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
+                  )}
                 </>
               )}
               {c.etapa === 'amostra_perdida' && (
@@ -474,7 +516,7 @@ export default function ClientePanel({
                   <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>
               )}
-              {c.etapa !== 'perdido' && (
+              {['negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
                 <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
               )}
               {c.etapa === 'lead' && (

@@ -1176,14 +1176,14 @@ async function start() {
   }, 5 * 60 * 1000)
   log.info('⏰ Scheduler de jobs: a cada 5 minutos')
 
-  // Cron: sync Omie logistics a cada 15 minutos (com guard anti-overlap)
+  // Cron: sync Omie logistics a cada 3 minutos (com guard anti-overlap)
   let logisticsRunning = false
   setInterval(async () => {
     if (logisticsRunning) return
     logisticsRunning = true
     try { await syncOmieLogistics() } catch (err) { log.error({ err }, 'Erro no sync logístico Omie') } finally { logisticsRunning = false }
-  }, 15 * 60 * 1000)
-  log.info('🚚 Sync logístico Omie: a cada 15 minutos')
+  }, 3 * 60 * 1000)
+  log.info('🚚 Sync logístico Omie: a cada 3 minutos')
 }
 
 start().catch(err => log.fatal({ err }, 'Falha ao iniciar servidor'))

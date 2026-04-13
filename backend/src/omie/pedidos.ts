@@ -535,7 +535,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   // 5. Cabeçalho do pedido
   const cabecalho: any = {
-    codigo_pedido_integracao: `CRM-PED-${pedidoId}`,
+    codigo_pedido_integracao: `CRM-${tipoPedido === 'bonificacao' ? 'AMT' : 'PED'}-${pedidoId}`,
     codigo_cliente: codigoClienteOmie,
     data_previsao: dataPrevisao,
     etapa: '10',

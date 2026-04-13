@@ -53,6 +53,7 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       return { text: '💬 Aguardar decisão', color: 'text-gray-500' }
     case 'follow_up': {
       const sub = cliente.statusFollowUp
+      if (sub === 'aguardando_aprovacao_gerente') return { text: '⏳ Aguardando aprovação da gerência', color: 'text-amber-600' }
       if (sub === 'pedido_aprovado') return { text: '🏭 Aguardando produção', color: 'text-blue-600' }
       if (sub === 'em_producao') return { text: '🏭 Em produção', color: 'text-blue-600' }
       if (sub === 'faturado') return { text: '📄 Faturado — aguardar expedição', color: 'text-blue-600' }

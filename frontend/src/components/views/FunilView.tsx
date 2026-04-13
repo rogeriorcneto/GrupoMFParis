@@ -4,6 +4,7 @@ import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategori
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { fetchPropostasByCliente } from '../../lib/database'
+import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
 
 function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
@@ -19,6 +20,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [callRecordingCliente, setCallRecordingCliente] = useState<Cliente | null>(null)
   const [lockProcessing, setLockProcessing] = useState(false)
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
+  const [syncing, setSyncing] = useState(false)
 
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
   const amostraLockedClients = useMemo(() => {
@@ -458,12 +460,13 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       }
       case 'follow_up': {
         const subLabel = cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando'
-        const subIdx = cliente.statusFollowUp ? ['pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0
-        const pctSub = Math.min(((subIdx + 1) / 7) * 100, 100)
+        const subIdx = cliente.statusFollowUp ? ['aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0
+        const pctSub = Math.min(((subIdx + 1) / 8) * 100, 100)
         const subBadgeColor = cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' :
           cliente.statusFollowUp === 'entregue' ? 'bg-emerald-100 text-emerald-700' :
           cliente.statusFollowUp === 'expedido' ? 'bg-cyan-100 text-cyan-700' :
           cliente.statusFollowUp === 'faturado' ? 'bg-indigo-100 text-indigo-700' :
+          cliente.statusFollowUp === 'aguardando_aprovacao_gerente' ? 'bg-amber-100 text-amber-700' :
           'bg-blue-100 text-blue-700'
         return (
           <div className="mt-1.5 space-y-1">
@@ -607,6 +610,31 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
           </>
         )}
 
+        {isGerente && (
+          <button
+            onClick={async () => {
+              if (syncing) return
+              setSyncing(true)
+              try {
+                const res = await omieSyncLogistics()
+                if (res.success && res.data) {
+                  alert(`✅ Sync Omie concluído!\n${res.data.atualizados} atualizados, ${res.data.erros?.length || 0} erros`)
+                  window.location.reload()
+                } else {
+                  alert(`⚠️ Sync Omie: ${res.error || 'Sem alterações'}`)
+                }
+              } catch { alert('❌ Erro ao sincronizar com Omie') }
+              finally { setSyncing(false) }
+            }}
+            disabled={syncing}
+            className={`h-7 px-2 flex items-center gap-1 rounded-md text-xs border transition-colors ${syncing ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'}`}
+            title="Sincronizar status dos pedidos com o Omie"
+          >
+            {syncing ? <span className="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : '🔄'}
+            <span>Sync Omie</span>
+          </button>
+        )}
+
         {isGerente && onImportNegocios && (
           <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-2.5 rounded-lg transition-colors shadow-sm flex items-center gap-1 cursor-pointer text-xs ml-auto">
             <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
@@ -673,10 +701,13 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         </div>
                         {/* Ações rápidas — sempre visíveis no topo */}
                         <div className="flex gap-1 mt-2 flex-wrap">
-                          {cliente.etapa === 'amostra' && moverCliente && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
+                          {cliente.etapa === 'amostra' && moverCliente && cliente.statusAmostra === 'entregue' && (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); moverCliente(cliente.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Aprovar amostra → Proposta">✅ Aprovar</button>
+                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
+                            </>
                           )}
-                          {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && (
+                          {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(cliente.statusAmostra || '') && (
                             <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-0.5 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium border border-red-100" title="Cancelar amostra e voltar para Prospecção">❌ Cancelar</button>
                           )}
                           {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
@@ -722,14 +753,14 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           const info = getClientePedidoInfo(cliente.id)
                           if (!info) return null
                           const p = info.latest
-                          const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Enviado', confirmado: 'Confirmado', cancelado: 'Cancelado' }
+                          const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando Aprov. Gerência', confirmado: 'Confirmado', cancelado: 'Cancelado' }
                           return (
                             <div className="mt-1.5 p-2 bg-gray-50 rounded-md border border-gray-100 space-y-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
                                   {p.tipo === 'bonificacao' ? '🧪 Amostra' : '🛒 Venda'}
                                 </span>
-                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 text-green-700' : p.status === 'enviado' ? 'bg-blue-100 text-blue-700' : p.status === 'cancelado' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 text-green-700' : p.status === 'enviado' ? 'bg-amber-100 text-amber-700' : p.status === 'cancelado' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
                                   {statusLabel[p.status] || p.status}
                                 </span>
                                 {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}

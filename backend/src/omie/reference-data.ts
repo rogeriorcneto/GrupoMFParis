@@ -394,6 +394,23 @@ export async function fetchParcelasOmie(creds?: OmieCredentials): Promise<OmiePa
  * Mapeia forma de pagamento para código de parcela Omie.
  * Busca parcelas cadastradas no Omie e tenta fazer match com a descrição.
  */
+/**
+ * Normaliza uma string de parcela para comparação.
+ * Remove espaços, "dd", "dias", "dia" e converte para minúsculo.
+ * Ex: "07/14/21 DD" → "7/14/21", "Para 07 dias" → "para7", "07/14 Dias" → "7/14"
+ */
+function normalizeParcela(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\bdd\b/gi, '')
+    .replace(/\bdias?\b/gi, '')
+    .replace(/\bpara\b/gi, '')
+    .replace(/\s+/g, '')
+    // Remove leading zeros from numbers: "07/14" → "7/14"
+    .replace(/\b0+(\d)/g, '$1')
+    .trim()
+}
+
 export async function mapFormaPagamentoToCodigoParcelaOmie(
   formaPagamento: string,
   creds?: OmieCredentials
@@ -408,18 +425,47 @@ export async function mapFormaPagamentoToCodigoParcelaOmie(
   // Buscar parcelas cadastradas no Omie
   const parcelas = await fetchParcelasOmie(creds)
   
-  // Tentar match com descrições de parcelas
+  const fpNorm = normalizeParcela(fp)
+  
+  // 1. Exact match (normalized)
   for (const p of parcelas) {
-    const desc = p.descricao.toLowerCase()
-    // Match exato ou parcial
-    if (desc === fp || desc.includes(fp) || fp.includes(desc)) {
-      log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao }, '✅ Match de parcela encontrado no Omie')
+    const descNorm = normalizeParcela(p.descricao)
+    if (descNorm === fpNorm) {
+      log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao }, '✅ Match exato de parcela Omie')
       return { codigo: p.codigo, usarListaParcelas: false }
     }
   }
   
+  // 2. Check if the normalized CRM string contains ONLY the same day-numbers as a parcela
+  //    Parse "7/14/21" → [7,14,21] and compare sets
+  const fpDias = fpNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
+  if (fpDias.length > 0) {
+    for (const p of parcelas) {
+      const descNorm = normalizeParcela(p.descricao)
+      const descDias = descNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
+      if (descDias.length === fpDias.length && descDias.every((d, i) => d === fpDias[i])) {
+        log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao, diasMatch: fpDias }, '✅ Match por dias de parcela Omie')
+        return { codigo: p.codigo, usarListaParcelas: false }
+      }
+    }
+  }
+  
+  // 3. Single day match: "28 dias" → parcela "028" or "28"
+  const matchSingleDay = fp.match(/^(\d+)\s*dias?$/)
+  if (matchSingleDay) {
+    const dia = parseInt(matchSingleDay[1], 10)
+    for (const p of parcelas) {
+      const descNorm = normalizeParcela(p.descricao)
+      const descDias = descNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
+      if (descDias.length === 1 && descDias[0] === dia) {
+        log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao }, '✅ Match single-day parcela Omie')
+        return { codigo: p.codigo, usarListaParcelas: false }
+      }
+    }
+  }
+  
   // Se não encontrou match, usar código 999 (parcelas customizadas via lista_parcelas)
-  log.info({ formaPagamento, parcelasDisponiveis: parcelas.length }, '⚠️ Nenhum match de parcela, usando customizado (999)')
+  log.info({ formaPagamento, fpNorm, parcelasDisponiveis: parcelas.map(p => ({ codigo: p.codigo, desc: p.descricao, norm: normalizeParcela(p.descricao) })) }, '⚠️ Nenhum match de parcela, usando customizado (999)')
   return { codigo: '999', usarListaParcelas: true }
 }
 

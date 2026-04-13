@@ -610,6 +610,9 @@ export async function moverClienteAtomico(
   if (extras.statusEntrega !== undefined) extrasDb.status_entrega = extras.statusEntrega
   if (extras.dataUltimoPedido !== undefined) extrasDb.data_ultimo_pedido = extras.dataUltimoPedido
   if (extras.statusFaturamento !== undefined) extrasDb.status_faturamento = extras.statusFaturamento
+  if (extras.statusFollowUp !== undefined) extrasDb.status_follow_up = extras.statusFollowUp
+  if (extras.statusSatisfacao !== undefined) extrasDb.status_satisfacao = extras.statusSatisfacao
+  if (extras.ultimaInteracao !== undefined) extrasDb.ultima_interacao = extras.ultimaInteracao
 
   const { error } = await supabase.rpc('mover_cliente_atomico', {
     p_cliente_id: clienteId,

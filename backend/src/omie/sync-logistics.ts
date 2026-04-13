@@ -90,15 +90,33 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
       const dataFaturamento = infoCad.dDataFaturamento || infoCad.dDtFat || ''
 
       // Map Omie etapa to our follow_up sub-status
+      // Uses numeric codes first (confirmed: 10=enviado, 20/30=producao, 40/50/60=faturado, 70=expedido, 80=entregue)
       let newStatusFollowUp = cliente.status_follow_up || 'pedido_aprovado'
-      const etapaLower = statusLogistico.toLowerCase()
-      if (etapaLower.includes('faturado') || etapaLower.includes('faturar')) {
-        newStatusFollowUp = 'faturado'
-      } else if (etapaLower.includes('separar') || etapaLower.includes('produção') || etapaLower.includes('producao')) {
+      const etapaTrimmed = String(statusLogistico).trim()
+      const etapaLower = etapaTrimmed.toLowerCase()
+
+      // Numeric etapa codes from Omie (most reliable)
+      if (etapaTrimmed === '20' || etapaTrimmed === '30') {
         newStatusFollowUp = 'em_producao'
-      } else if (etapaLower.includes('expedir') || etapaLower.includes('enviado') || etapaLower.includes('expedido') || etapaLower.includes('coletado')) {
+      } else if (etapaTrimmed === '40' || etapaTrimmed === '50' || etapaTrimmed === '60') {
+        newStatusFollowUp = 'faturado'
+      } else if (etapaTrimmed === '70') {
         newStatusFollowUp = 'expedido'
-      } else if (etapaLower.includes('entregue') || etapaLower.includes('finalizado')) {
+      } else if (etapaTrimmed === '80') {
+        newStatusFollowUp = 'entregue'
+      } else if (etapaTrimmed === '00' || etapaTrimmed === '90' || etapaTrimmed === '99') {
+        // Cancelado — don't change follow-up status
+      } else if (etapaTrimmed === '10') {
+        newStatusFollowUp = 'pedido_aprovado'
+      }
+      // Text-based fallback (if Omie sends descriptive strings)
+      else if (etapaLower.includes('faturad') || etapaLower.includes('faturar')) {
+        newStatusFollowUp = 'faturado'
+      } else if (etapaLower.includes('separ') || etapaLower.includes('produ')) {
+        newStatusFollowUp = 'em_producao'
+      } else if (etapaLower.includes('exped') || etapaLower.includes('trânsito') || etapaLower.includes('transit') || etapaLower.includes('coletado')) {
+        newStatusFollowUp = 'expedido'
+      } else if (etapaLower.includes('entreg') || etapaLower.includes('finaliz') || etapaLower.includes('encerr')) {
         newStatusFollowUp = 'entregue'
       }
 

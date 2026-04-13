@@ -246,10 +246,19 @@ export function useFunilActions({
     e.preventDefault()
     if (!draggedItem || draggedItem.fromStage === toStage) { setDraggedItem(null); return }
 
+    const isGerente = loggedUser?.cargo === 'gerente'
     const permitidas = transicoesPermitidas[draggedItem.fromStage] || []
-    if (!permitidas.includes(toStage)) {
+    if (!isGerente && !permitidas.includes(toStage)) {
       setTransicaoInvalida(`Não é possível mover de "${stageLabels[draggedItem.fromStage]}" para "${stageLabels[toStage]}". Transições permitidas: ${permitidas.map(s => stageLabels[s]).join(', ')}`)
       setTimeout(() => setTransicaoInvalida(''), 4000)
+      setDraggedItem(null)
+      return
+    }
+
+    // Gerente movendo fora do fluxo normal: mover direto sem modal
+    const isOutOfFlow = !permitidas.includes(toStage)
+    if (isGerente && isOutOfFlow) {
+      moverCliente(draggedItem.cliente.id, toStage, {})
       setDraggedItem(null)
       return
     }
