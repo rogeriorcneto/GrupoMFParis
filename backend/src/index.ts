@@ -1056,9 +1056,8 @@ app.post('/api/twilio/status-callback', (req, res, next) => twilioRouter(req, re
 app.use('/api/twilio/voice-ai', twilioVoiceAiRouter)
 
 // ─── TTS (Text-to-Speech neural) ───
-// /status is public; /  requires auth
-app.get('/api/tts/status', ttsRouter)
-app.post('/api/tts', requireAuth, ttsRouter)
+// GET /api/tts/status é público; POST /api/tts requer auth (verificado internamente)
+app.use('/api/tts', ttsRouter)
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
