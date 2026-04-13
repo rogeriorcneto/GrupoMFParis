@@ -237,7 +237,8 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       setTurns(prev => [...prev, { role: 'user', text: said }])
 
       try {
-        const reply = await callAIVoice(historyRef.current, systemPrompt)
+          const voicePrompt = systemPrompt + `\n\n## MODO VOZ ATIVA\nVocê está em uma conversa de VOZ agora. Regras OBRIGATÓRIAS:\n- Respostas CURTAS: máximo 2-3 frases. Nunca use listas ou tabelas.\n- NUNCA diga "Sou a assistente do CRM" ou se apresente novamente — já se apresentou.\n- Fale como colega de trabalho, natural e direto. Sem formalidade.\n- Números: fale por extenso ("mil quatrocentos" não "1400").\n- Se precisar de mais detalhes, faça UMA pergunta só.`
+        const reply = await callAIVoice(historyRef.current, voicePrompt)
 
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
@@ -280,7 +281,13 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   // ── Greet on mount ──────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const greeting = `Olá ${loggedUserName.split(' ')[0]}! Sou a assistente do CRM. Como posso ajudar?`
+    const firstName = loggedUserName.split(' ')[0]
+    const greetings = [
+      `E aí, ${firstName}! O que tá rolando?`,
+      `Oi ${firstName}, tudo bem? Me fala.`,
+      `Oi ${firstName}! Pode falar.`,
+    ]
+    const greeting = greetings[Math.floor(Math.random() * greetings.length)]
     setAiText(greeting)
     setCallState('speaking')
     historyRef.current.push({ role: 'assistant', content: greeting })
