@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon, PhoneIcon } from '@heroicons/react/24/outline'
+import VoiceCallModal from '../VoiceCallModal'
 import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
 import type { Tarefa } from '../../types'
 import { callAIFull, buildCRMContext } from '../../lib/gemini'
@@ -117,6 +118,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   const [pendingAttachments, setPendingAttachments] = useState<AIAttachment[]>([])
   const [isRecordingAudio, setIsRecordingAudio] = useState(false)
   const [audioSeconds, setAudioSeconds] = useState(0)
+  const [voiceCallOpen, setVoiceCallOpen] = useState(false)
 
   // ── Múltiplos históricos ──
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -382,6 +384,13 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
+      {voiceCallOpen && (
+        <VoiceCallModal
+          systemPrompt={systemPrompt}
+          loggedUserName={loggedUser.nome}
+          onClose={() => setVoiceCallOpen(false)}
+        />
+      )}
       {/* Sidebar: Histórico + Prompts */}
       <div className="hidden lg:flex flex-col w-72 flex-shrink-0 bg-white rounded-apple shadow-apple-sm border border-gray-200 overflow-hidden">
         {/* Tabs */}
@@ -517,14 +526,24 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
               )}
             </div>
           </div>
-          <button
-            onClick={startNewConversation}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-apple transition-colors"
-            title="Nova conversa"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            Nova conversa
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setVoiceCallOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white font-semibold bg-white/20 hover:bg-white/30 border border-white/30 rounded-apple transition-colors"
+              title="Ligar para a IA (conversa por voz)"
+            >
+              <PhoneIcon className="h-3.5 w-3.5" />
+              Ligar
+            </button>
+            <button
+              onClick={startNewConversation}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-apple transition-colors"
+              title="Nova conversa"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              Nova
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
