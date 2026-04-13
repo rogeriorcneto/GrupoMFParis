@@ -90,26 +90,55 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
   }
   window.speechSynthesis.cancel()
 
-  // Try neural TTS via backend
+  // Try ElevenLabs directly from browser (free tier works with residential IPs)
+  const elevenKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY
+  if (elevenKey) {
+    try {
+      const VOICE_ID = 'EXAVITQu4vr4xnSDxMaL' // Sarah - multilingual natural pt-BR
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': elevenKey,
+        },
+        body: JSON.stringify({
+          text: clean,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      })
+      console.log('[TTS] ElevenLabs status:', res.status)
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+        audioRef.current = audio
+        audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
+        audio.onerror = (e) => { console.error('[TTS] audio error', e); URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
+        await audio.play()
+        return
+      }
+      const errBody = await res.text().catch(() => '')
+      console.error('[TTS] ElevenLabs error:', res.status, errBody)
+    } catch (e) {
+      console.error('[TTS] ElevenLabs fetch error:', e)
+    }
+  }
+
+  // Try Google TTS via backend
   try {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
     if (!token) throw new Error('no token')
 
-    console.log('[TTS] calling', `${BOT_URL}/api/tts`)
     const res = await fetch(`${BOT_URL}/api/tts`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ text: clean }),
     })
 
-    console.log('[TTS] response status:', res.status, res.headers.get('content-type'))
     if (res.ok) {
       const blob = await res.blob()
-      console.log('[TTS] blob size:', blob.size)
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audioRef.current = audio
@@ -118,11 +147,9 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
       await audio.play()
       return
     }
-    const errBody = await res.text().catch(() => '')
-    console.error('[TTS] non-ok response:', res.status, errBody)
+    console.error('[TTS] backend error:', res.status)
   } catch (e) {
-    console.error('[TTS] fetch error:', e)
-    // Fall through to browser TTS
+    console.error('[TTS] backend fetch error:', e)
   }
 
   // Browser fallback
