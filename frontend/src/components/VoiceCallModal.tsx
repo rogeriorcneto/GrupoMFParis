@@ -94,7 +94,7 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
   const elevenKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY
   if (elevenKey) {
     try {
-      const VOICE_ID = 'EXAVITQu4vr4xnSDxMaL' // Sarah - multilingual natural pt-BR
+      const VOICE_ID = 'tZ2oxQJXfOrGrN7iKnta' // Voz customizada pt-BR
       const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
         method: 'POST',
         headers: {
