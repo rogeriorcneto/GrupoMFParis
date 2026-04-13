@@ -96,6 +96,7 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
     const token = session?.access_token
     if (!token) throw new Error('no token')
 
+    console.log('[TTS] calling', `${BOT_URL}/api/tts`)
     const res = await fetch(`${BOT_URL}/api/tts`, {
       method: 'POST',
       headers: {
@@ -105,17 +106,22 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
       body: JSON.stringify({ text: clean }),
     })
 
+    console.log('[TTS] response status:', res.status, res.headers.get('content-type'))
     if (res.ok) {
       const blob = await res.blob()
+      console.log('[TTS] blob size:', blob.size)
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audioRef.current = audio
       audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
-      audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
+      audio.onerror = (e) => { console.error('[TTS] audio error', e); URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
       await audio.play()
       return
     }
-  } catch {
+    const errBody = await res.text().catch(() => '')
+    console.error('[TTS] non-ok response:', res.status, errBody)
+  } catch (e) {
+    console.error('[TTS] fetch error:', e)
     // Fall through to browser TTS
   }
 
