@@ -320,14 +320,66 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
   const [campanhas, setCampanhas] = useState<Campanha[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [tab, setTab] = useState<'dashboard' | 'campanhas' | 'criar' | 'config'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'campanhas' | 'ia' | 'copy' | 'criativos' | 'config'>('dashboard')
   const [showNovaCampanha, setShowNovaCampanha] = useState(false)
   const [filterPlat, setFilterPlat] = useState<'all' | 'meta' | 'google'>('all')
   const [filterStatus, setFilterStatus] = useState<'all' | 'ACTIVE' | 'PAUSED'>('all')
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d'>('30d')
   const [toastMsg, setToastMsg] = useState('')
 
+  // IA Planejamento state
+  const [iaBriefing, setIaBriefing] = useState({ produto: '', objetivo: 'Geração de leads', orcamento: '', publicoAlvo: '', contexto: '' })
+  const [iaPlano, setIaPlano] = useState<any>(null)
+  const [iaLoading, setIaLoading] = useState(false)
+
+  // Copy state
+  const [copyForm, setCopyForm] = useState({ produto: '', publicoAlvo: '', objetivo: 'Geração de leads', tom: 'Profissional e persuasivo', diferencial: '' })
+  const [copyResult, setCopyResult] = useState<any>(null)
+  const [copyLoading, setCopyLoading] = useState(false)
+  const [copiedItem, setCopiedItem] = useState('')
+
+  // Criativos state
+  const [criativoForm, setCriativoForm] = useState({ produto: '', descricao: '', formato: 'feed_quadrado', estilo: 'Moderno e profissional' })
+  const [criativoImages, setCriativoImages] = useState<{ base64: string; mimeType: string }[]>([])
+  const [criativoLoading, setCriativoLoading] = useState(false)
+
   function showToast(msg: string) { setToastMsg(msg); setTimeout(() => setToastMsg(''), 3500) }
+
+  function copyToClipboard(text: string, key: string) {
+    navigator.clipboard.writeText(text)
+    setCopiedItem(key)
+    setTimeout(() => setCopiedItem(''), 2000)
+  }
+
+  async function handleGerarPlano() {
+    setIaLoading(true)
+    setIaPlano(null)
+    try {
+      const r = await apiFetch('/trafico/ia/planejar', { method: 'POST', body: JSON.stringify({ ...iaBriefing, canais: ['Meta Ads', 'Google Ads'] }) })
+      if (r.success) setIaPlano(r.plano)
+      else showToast('❌ ' + r.error)
+    } catch { showToast('❌ Erro ao gerar plano') } finally { setIaLoading(false) }
+  }
+
+  async function handleGerarCopy() {
+    setCopyLoading(true)
+    setCopyResult(null)
+    try {
+      const r = await apiFetch('/trafico/ia/copy', { method: 'POST', body: JSON.stringify(copyForm) })
+      if (r.success) setCopyResult(r.copy)
+      else showToast('❌ ' + r.error)
+    } catch { showToast('❌ Erro ao gerar copy') } finally { setCopyLoading(false) }
+  }
+
+  async function handleGerarImagem() {
+    setCriativoLoading(true)
+    setCriativoImages([])
+    try {
+      const r = await apiFetch('/trafico/ia/imagem', { method: 'POST', body: JSON.stringify(criativoForm) })
+      if (r.success) setCriativoImages(r.images)
+      else showToast('❌ ' + r.error)
+    } catch { showToast('❌ Erro ao gerar imagem') } finally { setCriativoLoading(false) }
+  }
 
   // Load saved creds
   useEffect(() => {
@@ -465,10 +517,13 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mt-4">
+        <div className="flex gap-1 mt-4 flex-wrap">
           {[
             { id: 'dashboard', label: '📈 Dashboard' },
             { id: 'campanhas', label: '📋 Campanhas' },
+            { id: 'ia', label: '🤖 IA Planejar' },
+            { id: 'copy', label: '✍️ Copy' },
+            { id: 'criativos', label: '🎨 Criativos' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id as any)}
               className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tab === t.id ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
@@ -641,6 +696,321 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                     </table>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── IA PLANEJAR TAB ── */}
+            {tab === 'ia' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Briefing form */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+                  <h3 className="font-bold text-gray-800">🤖 Planejamento com IA</h3>
+                  <p className="text-xs text-gray-500">Preencha o briefing e a IA criará um plano completo de campanha com estratégia, público-alvo, orçamento e cronograma.</p>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Produto / Serviço *</label>
+                    <input value={iaBriefing.produto} onChange={e => setIaBriefing(v => ({ ...v, produto: e.target.value }))} placeholder="Ex: Tecidos e malhas para moda feminina" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Objetivo da Campanha</label>
+                    <select value={iaBriefing.objetivo} onChange={e => setIaBriefing(v => ({ ...v, objetivo: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      {['Geração de leads', 'Vendas diretas', 'Reconhecimento de marca', 'Tráfego para site', 'Mensagens WhatsApp'].map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Orçamento Mensal (R$)</label>
+                    <input type="number" value={iaBriefing.orcamento} onChange={e => setIaBriefing(v => ({ ...v, orcamento: e.target.value }))} placeholder="Ex: 2000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Público-alvo</label>
+                    <input value={iaBriefing.publicoAlvo} onChange={e => setIaBriefing(v => ({ ...v, publicoAlvo: e.target.value }))} placeholder="Ex: Donos de confecções, São Paulo e Minas Gerais" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Contexto adicional (opcional)</label>
+                    <textarea value={iaBriefing.contexto} onChange={e => setIaBriefing(v => ({ ...v, contexto: e.target.value }))} rows={3} placeholder="Diferenciais, sazonalidade, histórico de campanhas..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  </div>
+                  <button onClick={handleGerarPlano} disabled={!iaBriefing.produto || iaLoading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                    {iaLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando plano...</> : '🤖 Gerar Plano Completo'}
+                  </button>
+                </div>
+
+                {/* Plano result */}
+                <div className="space-y-4">
+                  {!iaPlano && !iaLoading && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+                      <p className="text-4xl mb-3">🤖</p>
+                      <p className="text-gray-500 font-medium">Preencha o briefing e clique em gerar</p>
+                      <p className="text-gray-400 text-xs mt-1">A IA vai criar um plano completo com estratégia, público, orçamento e cronograma</p>
+                    </div>
+                  )}
+                  {iaLoading && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-gray-500 text-sm">IA analisando e criando seu plano...</p>
+                    </div>
+                  )}
+                  {iaPlano && (
+                    <>
+                      <div className="bg-indigo-50 rounded-xl border border-indigo-100 p-4">
+                        <p className="text-xs font-bold text-indigo-700 mb-1">📋 Resumo Executivo</p>
+                        <p className="text-sm text-indigo-900">{iaPlano.resumo}</p>
+                      </div>
+                      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+                        <p className="text-xs font-bold text-gray-700">💰 Distribuição do Orçamento</p>
+                        {(iaPlano.distribuicaoOrcamento || []).map((d: any, i: number) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <span className="text-xs font-medium text-gray-700 w-24">{d.canal}</span>
+                            <div className="flex-1 bg-gray-100 rounded-full h-2">
+                              <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${d.percentual}%` }} />
+                            </div>
+                            <span className="text-xs font-bold text-gray-800 w-20 text-right">R$ {d.valor} ({d.percentual}%)</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
+                        <p className="text-xs font-bold text-gray-700">🎯 Campanhas Sugeridas</p>
+                        {(iaPlano.campanhas || []).map((c: any, i: number) => (
+                          <div key={i} className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-xs font-bold text-gray-800">{c.nome}</p>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.canal?.includes('Meta') ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{c.canal}</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500">{c.publicoSegmentado}</p>
+                            <div className="flex gap-3 mt-1">
+                              <span className="text-[10px] text-indigo-600 font-medium">R$ {c.orcamentoDiario}/dia</span>
+                              <span className="text-[10px] text-green-600 font-medium">{c.kpis?.leadsMes} leads/mês</span>
+                              <span className="text-[10px] text-gray-500">CPL: R$ {c.kpis?.cplMeta}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="bg-white rounded-xl border border-gray-200 p-4">
+                        <p className="text-xs font-bold text-gray-700 mb-2">📅 Cronograma</p>
+                        <div className="space-y-1">
+                          {(iaPlano.cronograma || []).map((s: any) => (
+                            <div key={s.semana} className="flex gap-2 text-xs">
+                              <span className="font-bold text-indigo-600 w-14 shrink-0">Semana {s.semana}</span>
+                              <span className="text-gray-600">{s.acao}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {(iaPlano.recomendacoes || []).length > 0 && (
+                        <div className="bg-amber-50 rounded-xl border border-amber-100 p-4">
+                          <p className="text-xs font-bold text-amber-700 mb-2">💡 Recomendações</p>
+                          <ul className="space-y-1">
+                            {iaPlano.recomendacoes.map((r: string, i: number) => <li key={i} className="text-xs text-amber-800">• {r}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── COPY TAB ── */}
+            {tab === 'copy' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Form */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+                  <h3 className="font-bold text-gray-800">✍️ Gerador de Copy com IA</h3>
+                  <p className="text-xs text-gray-500">A IA gera headlines, textos principais, descrições e CTAs otimizados para Meta Ads e Google Ads.</p>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Produto / Serviço *</label>
+                    <input value={copyForm.produto} onChange={e => setCopyForm(v => ({ ...v, produto: e.target.value }))} placeholder="Ex: Tecidos premium para confecção" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Público-alvo</label>
+                    <input value={copyForm.publicoAlvo} onChange={e => setCopyForm(v => ({ ...v, publicoAlvo: e.target.value }))} placeholder="Ex: Donos de confecção e ateliês" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Diferencial / Ponto forte</label>
+                    <input value={copyForm.diferencial} onChange={e => setCopyForm(v => ({ ...v, diferencial: e.target.value }))} placeholder="Ex: Entrega em 24h, qualidade premium, preço de fábrica" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Tom da comunicação</label>
+                    <select value={copyForm.tom} onChange={e => setCopyForm(v => ({ ...v, tom: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      {['Profissional e persuasivo', 'Descontraído e próximo', 'Urgência e escassez', 'Autoridade e confiança', 'Emocional e inspirador'].map(t => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={handleGerarCopy} disabled={!copyForm.produto || copyLoading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                    {copyLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando copies...</> : '✍️ Gerar Copies'}
+                  </button>
+                </div>
+
+                {/* Result */}
+                <div className="space-y-4">
+                  {!copyResult && !copyLoading && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+                      <p className="text-4xl mb-3">✍️</p>
+                      <p className="text-gray-500 font-medium">Preencha o formulário e gere seus copies</p>
+                    </div>
+                  )}
+                  {copyLoading && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-gray-500 text-sm">Criando copies de alta conversão...</p>
+                    </div>
+                  )}
+                  {copyResult && (
+                    <>
+                      {/* Meta */}
+                      <div className="bg-white rounded-xl border border-blue-100 p-4 space-y-3">
+                        <p className="text-xs font-bold text-blue-700">📘 Meta Ads</p>
+                        <div>
+                          <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Headlines</p>
+                          <div className="space-y-1">
+                            {(copyResult.meta?.headlines || []).map((h: string, i: number) => (
+                              <div key={i} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+                                <span className="flex-1 text-xs text-gray-800">{h}</span>
+                                <button onClick={() => copyToClipboard(h, `mh${i}`)} className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium shrink-0">{copiedItem === `mh${i}` ? '✓' : 'Copiar'}</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Textos Principais</p>
+                          <div className="space-y-1">
+                            {(copyResult.meta?.textosPrimarios || []).map((t: string, i: number) => (
+                              <div key={i} className="flex items-start gap-2 bg-gray-50 rounded px-2 py-1.5">
+                                <span className="flex-1 text-xs text-gray-800">{t}</span>
+                                <button onClick={() => copyToClipboard(t, `mt${i}`)} className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium shrink-0 mt-0.5">{copiedItem === `mt${i}` ? '✓' : 'Copiar'}</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">CTAs</p>
+                          <div className="flex flex-wrap gap-1">
+                            {(copyResult.meta?.ctas || []).map((c: string, i: number) => (
+                              <button key={i} onClick={() => copyToClipboard(c, `mc${i}`)} className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full hover:bg-blue-100 transition-colors">
+                                {copiedItem === `mc${i}` ? '✓ Copiado' : c}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Google */}
+                      <div className="bg-white rounded-xl border border-red-100 p-4 space-y-3">
+                        <p className="text-xs font-bold text-red-700">🔴 Google Ads</p>
+                        <div>
+                          <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Headlines</p>
+                          <div className="space-y-1">
+                            {(copyResult.google?.headlines || []).map((h: string, i: number) => (
+                              <div key={i} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1.5">
+                                <span className="flex-1 text-xs text-gray-800">{h}</span>
+                                <button onClick={() => copyToClipboard(h, `gh${i}`)} className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium shrink-0">{copiedItem === `gh${i}` ? '✓' : 'Copiar'}</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Palavras-chave Sugeridas</p>
+                          <div className="flex flex-wrap gap-1">
+                            {(copyResult.google?.keywords || []).map((k: string, i: number) => (
+                              <button key={i} onClick={() => copyToClipboard(k, `gk${i}`)} className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-medium rounded border border-red-100 hover:bg-red-100">
+                                {copiedItem === `gk${i}` ? '✓' : k}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Proposta de valor */}
+                      {copyResult.geral?.proposta_valor && (
+                        <div className="bg-amber-50 rounded-xl border border-amber-100 p-4">
+                          <p className="text-xs font-bold text-amber-700 mb-1">💡 Proposta de Valor</p>
+                          <p className="text-sm text-amber-900 font-medium">{copyResult.geral.proposta_valor}</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── CRIATIVOS TAB ── */}
+            {tab === 'criativos' && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Form */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+                  <h3 className="font-bold text-gray-800">🎨 Gerador de Criativos com IA</h3>
+                  <p className="text-xs text-gray-500">Descreva o criativo e a IA gera imagens prontas para seus anúncios usando Google Imagen 3.</p>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Produto / Serviço *</label>
+                    <input value={criativoForm.produto} onChange={e => setCriativoForm(v => ({ ...v, produto: e.target.value }))} placeholder="Ex: Tecidos e malhas Grupo MF Paris" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Descrição do criativo *</label>
+                    <textarea value={criativoForm.descricao} onChange={e => setCriativoForm(v => ({ ...v, descricao: e.target.value }))} rows={3} placeholder="Ex: Modelo usando vestido elegante com tecido fluido, ambiente de atelier moderno, luz natural" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Formato do anúncio</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: 'feed_quadrado', label: '⬜ Feed (1:1)', sub: 'Instagram/Facebook' },
+                        { value: 'stories', label: '📱 Stories (9:16)', sub: 'Reels/Stories' },
+                        { value: 'feed_retangular', label: '🖼️ Link (1.91:1)', sub: 'Link Ads' },
+                      ].map(f => (
+                        <button key={f.value} type="button" onClick={() => setCriativoForm(v => ({ ...v, formato: f.value }))}
+                          className={`p-2 rounded-lg border-2 text-center transition-colors ${criativoForm.formato === f.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                          <p className="text-xs font-semibold text-gray-800">{f.label}</p>
+                          <p className="text-[10px] text-gray-500">{f.sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Estilo visual</label>
+                    <select value={criativoForm.estilo} onChange={e => setCriativoForm(v => ({ ...v, estilo: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      {['Moderno e profissional', 'Elegante e luxuoso', 'Colorido e vibrante', 'Minimalista e clean', 'Natural e autêntico', 'Bold e impactante'].map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={handleGerarImagem} disabled={!criativoForm.produto || !criativoForm.descricao || criativoLoading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                    {criativoLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando imagens...</> : '🎨 Gerar Criativos (2 imagens)'}
+                  </button>
+                  <p className="text-[10px] text-gray-400 text-center">Powered by Google Imagen 3 • Geração pode levar 10-20 segundos</p>
+                </div>
+
+                {/* Results */}
+                <div>
+                  {!criativoImages.length && !criativoLoading && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+                      <p className="text-4xl mb-3">🎨</p>
+                      <p className="text-gray-500 font-medium">Preencha o formulário e gere seus criativos</p>
+                      <p className="text-gray-400 text-xs mt-1">A IA vai gerar 2 variações para você escolher</p>
+                    </div>
+                  )}
+                  {criativoLoading && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-gray-500 text-sm">Imagen 3 criando seus anúncios...</p>
+                      <p className="text-gray-400 text-xs mt-1">Pode levar até 20 segundos</p>
+                    </div>
+                  )}
+                  {criativoImages.length > 0 && (
+                    <div className="space-y-4">
+                      <p className="text-xs font-bold text-gray-700">{criativoImages.length} criativos gerados — clique para baixar</p>
+                      <div className="grid grid-cols-1 gap-4">
+                        {criativoImages.map((img, i) => (
+                          <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                            <img src={`data:${img.mimeType};base64,${img.base64}`} alt={`Criativo ${i + 1}`} className="w-full object-cover" />
+                            <div className="p-3 flex gap-2">
+                              <a href={`data:${img.mimeType};base64,${img.base64}`} download={`criativo-${i + 1}.png`}
+                                className="flex-1 py-2 bg-indigo-600 text-white text-xs font-bold text-center rounded-lg hover:bg-indigo-700 transition-colors">
+                                ⬇️ Baixar Criativo {i + 1}
+                              </a>
+                              <button onClick={handleGerarImagem} disabled={criativoLoading} className="px-3 py-2 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+                                🔄 Regerar
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

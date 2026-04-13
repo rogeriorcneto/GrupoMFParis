@@ -356,6 +356,176 @@ traficoRouter.post('/campanha', async (req, res) => {
   } catch (err: any) { log.error({ err }, 'Erro ao criar campanha'); res.status(500).json({ success: false, error: err.message }) }
 })
 
+// POST /trafico/ia/planejar — Gemini gera plano completo de campanha
+traficoRouter.post('/ia/planejar', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) { res.status(500).json({ success: false, error: 'GEMINI_API_KEY não configurada' }); return }
+
+    const { produto, objetivo, orcamento, publicoAlvo, canais, contexto } = req.body
+
+    const prompt = `Você é especialista em tráfego pago e marketing digital B2B no Brasil.
+Crie um plano completo de campanha de anúncios com base nas informações abaixo.
+
+Produto/Serviço: ${produto || 'Não informado'}
+Objetivo: ${objetivo || 'Geração de leads'}
+Orçamento disponível: R$ ${orcamento || '0'}/mês
+Público-alvo: ${publicoAlvo || 'Não informado'}
+Canais desejados: ${(canais || ['Meta Ads', 'Google Ads']).join(', ')}
+${contexto ? `Contexto adicional: ${contexto}` : ''}
+
+Responda em JSON com a seguinte estrutura exata:
+{
+  "resumo": "resumo executivo da estratégia em 2-3 frases",
+  "estrategia": "descrição da estratégia geral",
+  "publicoAlvo": {
+    "demografico": "faixa etária, gênero, localização",
+    "interesses": ["interesse1", "interesse2"],
+    "comportamentos": ["comportamento1", "comportamento2"]
+  },
+  "distribuicaoOrcamento": [
+    { "canal": "Meta Ads", "percentual": 60, "valor": 600, "justificativa": "..." },
+    { "canal": "Google Ads", "percentual": 40, "valor": 400, "justificativa": "..." }
+  ],
+  "campanhas": [
+    {
+      "nome": "nome da campanha",
+      "canal": "Meta Ads",
+      "objetivo": "LEAD_GENERATION",
+      "orcamentoDiario": 20,
+      "publicoSegmentado": "descrição do público",
+      "formato": "formato do anúncio",
+      "kpis": { "cplMeta": 50, "ctrMeta": 2.5, "leadsMes": 12 }
+    }
+  ],
+  "cronograma": [
+    { "semana": 1, "acao": "ação da semana 1" },
+    { "semana": 2, "acao": "ação da semana 2" },
+    { "semana": 3, "acao": "ação da semana 3" },
+    { "semana": 4, "acao": "ação da semana 4" }
+  ],
+  "kpisGerais": { "leadsMensalMeta": 30, "cplMedio": 40, "roasMeta": 3.5 },
+  "recomendacoes": ["dica1", "dica2", "dica3"]
+}`
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 4096, responseMimeType: 'application/json' },
+        }),
+      }
+    )
+
+    if (!geminiRes.ok) { res.status(500).json({ success: false, error: 'Erro na API Gemini' }); return }
+    const geminiData = await geminiRes.json() as any
+    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
+    const plano = JSON.parse(text)
+    res.json({ success: true, plano })
+  } catch (err: any) { log.error({ err }, 'Erro ao gerar plano IA'); res.status(500).json({ success: false, error: err.message }) }
+})
+
+// POST /trafico/ia/copy — Gemini gera copies para anúncios
+traficoRouter.post('/ia/copy', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) { res.status(500).json({ success: false, error: 'GEMINI_API_KEY não configurada' }); return }
+
+    const { produto, publicoAlvo, objetivo, canal, tom, diferencial } = req.body
+
+    const prompt = `Você é redator especialista em copy para anúncios digitais no Brasil (B2B e B2C).
+Crie copies de alta conversão para anúncios com base nas informações abaixo.
+
+Produto/Serviço: ${produto}
+Público-alvo: ${publicoAlvo || 'Empresas e profissionais'}
+Objetivo: ${objetivo || 'Geração de leads'}
+Canal: ${canal || 'Meta Ads e Google Ads'}
+Tom: ${tom || 'Profissional e persuasivo'}
+Diferencial: ${diferencial || 'Qualidade e confiança'}
+
+Responda em JSON com a seguinte estrutura exata:
+{
+  "meta": {
+    "headlines": ["headline 1 (máx 40 chars)", "headline 2", "headline 3", "headline 4", "headline 5"],
+    "textosPrimarios": ["texto principal 1 (máx 125 chars)", "texto principal 2", "texto principal 3"],
+    "descricoes": ["descrição 1 (máx 30 chars)", "descrição 2"],
+    "ctas": ["CTA 1", "CTA 2", "CTA 3"]
+  },
+  "google": {
+    "headlines": ["headline 1 (máx 30 chars)", "headline 2", "headline 3", "headline 4", "headline 5"],
+    "descricoes": ["descrição 1 (máx 90 chars)", "descrição 2"],
+    "keywords": ["palavra-chave 1", "palavra-chave 2", "palavra-chave 3", "palavra-chave 4", "palavra-chave 5"]
+  },
+  "geral": {
+    "proposta_valor": "proposta de valor principal em 1 frase",
+    "dores": ["dor do público 1", "dor do público 2"],
+    "beneficios": ["benefício 1", "benefício 2", "benefício 3"]
+  }
+}`
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 2048, responseMimeType: 'application/json' },
+        }),
+      }
+    )
+
+    if (!geminiRes.ok) { res.status(500).json({ success: false, error: 'Erro na API Gemini' }); return }
+    const geminiData = await geminiRes.json() as any
+    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
+    const copy = JSON.parse(text)
+    res.json({ success: true, copy })
+  } catch (err: any) { log.error({ err }, 'Erro ao gerar copy'); res.status(500).json({ success: false, error: err.message }) }
+})
+
+// POST /trafico/ia/imagem — Imagen 3 gera criativo para anúncio
+traficoRouter.post('/ia/imagem', async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) { res.status(500).json({ success: false, error: 'GEMINI_API_KEY não configurada' }); return }
+
+    const { descricao, formato, estilo, produto } = req.body
+    const aspectRatio = formato === 'stories' ? '9:16' : formato === 'feed_retangular' ? '1.91:1' : '1:1'
+
+    const imagePrompt = `Professional advertising creative for ${produto || 'business product'}: ${descricao}. Style: ${estilo || 'modern, clean, professional'}. High quality commercial photography look, vibrant colors, suitable for digital advertising. No text overlays.`
+
+    const imagenRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt: imagePrompt }],
+          parameters: { sampleCount: 2, aspectRatio, safetyFilterLevel: 'block_few' },
+        }),
+      }
+    )
+
+    if (!imagenRes.ok) {
+      const errText = await imagenRes.text()
+      log.error({ errText, status: imagenRes.status }, 'Imagen 3 erro')
+      res.status(500).json({ success: false, error: `Imagen API erro ${imagenRes.status}: ${errText.slice(0, 200)}` })
+      return
+    }
+
+    const imagenData = await imagenRes.json() as any
+    const images = (imagenData.predictions || []).map((p: any) => ({
+      base64: p.bytesBase64Encoded,
+      mimeType: p.mimeType || 'image/png',
+    }))
+
+    res.json({ success: true, images, prompt: imagePrompt })
+  } catch (err: any) { log.error({ err }, 'Erro ao gerar imagem'); res.status(500).json({ success: false, error: err.message }) }
+})
+
 // PATCH /trafico/campanha/:id/status — pausa/ativa
 traficoRouter.patch('/campanha/:id/status', async (req, res) => {
   try {
