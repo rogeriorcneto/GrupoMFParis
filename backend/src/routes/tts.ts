@@ -119,9 +119,10 @@ router.post('/', async (req: Request, res: Response) => {
   const elevenKey = process.env.ELEVENLABS_API_KEY
   const googleKey = process.env.GOOGLE_TTS_API_KEY
 
-  // Auto-select provider: prefer ElevenLabs if key exists, else Google
+  // Auto-select provider: prefer Google (no datacenter restrictions on free tier),
+  // fallback to ElevenLabs (requires paid plan when called from server IP)
   const selectedProvider = provider ||
-    (elevenKey ? 'elevenlabs' : googleKey ? 'google' : 'none')
+    (googleKey ? 'google' : elevenKey ? 'elevenlabs' : 'none')
 
   log.info({ provider: selectedProvider, chars: clean.length }, '🔊 TTS request')
 
