@@ -8,7 +8,7 @@ import {
   DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView, AssistenteIAView, OmieView
+  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -145,6 +145,8 @@ export default function AppRouter({
           } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
         }}
       />
+    case 'trafico':
+      return <TrafegoPagoView loggedUser={loggedUser} />
     case 'funil':
       return <FunilView 
         clientes={clientes}
