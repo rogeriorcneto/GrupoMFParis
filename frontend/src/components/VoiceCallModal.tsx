@@ -1,15 +1,18 @@
 /**
  * VoiceCallModal — Chamada de voz para a IA do CRM
  *
- * Usa Web Speech API (nativa no Chrome/Edge):
- *  - SpeechRecognition: converte voz → texto
- *  - SpeechSynthesis: fala as respostas da IA (voz pt-BR)
- *  - callAIFull: envia para Gemini com contexto completo do CRM
+ * Speech-to-Text: Web Speech API nativa (Chrome/Edge, pt-BR)
+ * Text-to-Speech: ElevenLabs ou Google TTS Neural via backend /api/tts
+ *                 Fallback automático para browser SpeechSynthesis
+ * AI:             Gemini com contexto completo do CRM
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { PhoneXMarkIcon, MicrophoneIcon, StopIcon } from '@heroicons/react/24/solid'
+import { PhoneXMarkIcon } from '@heroicons/react/24/solid'
 import { callAIFull } from '../lib/gemini'
+import { authFetch } from '../lib/botApi'
 import type { AIMessage } from '../lib/gemini'
+
+const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
 
 interface VoiceCallModalProps {
   systemPrompt: string
@@ -48,25 +51,54 @@ function stripMarkdown(text: string): string {
     .trim()
 }
 
-function speak(text: string, onEnd: () => void): SpeechSynthesisUtterance {
+/** Speak using neural TTS via backend; falls back to browser SpeechSynthesis */
+async function speakNeural(text: string, onEnd: () => void, audioRef: React.MutableRefObject<HTMLAudioElement | null>): Promise<void> {
+  const clean = stripMarkdown(text).slice(0, 700)
+
+  // Stop any current playback
+  if (audioRef.current) {
+    audioRef.current.pause()
+    audioRef.current.src = ''
+    audioRef.current = null
+  }
   window.speechSynthesis.cancel()
-  const utter = new SpeechSynthesisUtterance(stripMarkdown(text).slice(0, 500))
+
+  // Try neural TTS via backend
+  try {
+    const res = await authFetch(`${BOT_URL}/api/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: clean }),
+    })
+
+    if (res.ok) {
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audioRef.current = audio
+      audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
+      audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
+      await audio.play()
+      return
+    }
+
+    // If backend returns fallback:true, use browser TTS
+    const data = await res.json().catch(() => ({}))
+    if (!data?.fallback) throw new Error(`TTS ${res.status}`)
+  } catch {
+    // Silently fall through to browser TTS
+  }
+
+  // Browser fallback (robotic but always works)
+  const utter = new SpeechSynthesisUtterance(clean)
   utter.lang = 'pt-BR'
-  utter.rate = 1.05
-  utter.pitch = 1.0
-
-  // Prefer a pt-BR voice if available
+  utter.rate = 1.0
   const voices = window.speechSynthesis.getVoices()
-  const ptVoice =
-    voices.find(v => v.lang === 'pt-BR' && v.name.toLowerCase().includes('google')) ||
-    voices.find(v => v.lang === 'pt-BR') ||
-    voices.find(v => v.lang.startsWith('pt'))
+  const ptVoice = voices.find(v => v.lang === 'pt-BR') || voices.find(v => v.lang.startsWith('pt'))
   if (ptVoice) utter.voice = ptVoice
-
   utter.onend = onEnd
   utter.onerror = onEnd
   window.speechSynthesis.speak(utter)
-  return utter
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -81,6 +113,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
 
   const historyRef = useRef<AIMessage[]>([])
   const recRef = useRef<any>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const closingRef = useRef(false)
 
@@ -99,6 +132,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       closingRef.current = true
       window.speechSynthesis.cancel()
       recRef.current?.abort()
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
     }
   }, [])
 
@@ -129,7 +163,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         const bye = `Até logo, ${loggedUserName.split(' ')[0]}! Qualquer coisa pode abrir a chamada novamente.`
         setAiText(bye)
         setCallState('speaking')
-        speak(bye, () => { if (!closingRef.current) onClose() })
+        speakNeural(bye, () => { if (!closingRef.current) onClose() }, audioRef)
         return
       }
 
@@ -148,14 +182,14 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         setAiText(reply)
         setCallState('speaking')
 
-        speak(reply, () => {
+        speakNeural(reply, () => {
           if (!closingRef.current) startListening()
-        })
+        }, audioRef)
       } catch {
         const errMsg = 'Ocorreu um erro. Pode repetir?'
         setAiText(errMsg)
         setCallState('speaking')
-        speak(errMsg, () => { if (!closingRef.current) startListening() })
+        speakNeural(errMsg, () => { if (!closingRef.current) startListening() }, audioRef)
       }
     }
 
@@ -190,15 +224,9 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     historyRef.current.push({ role: 'assistant', content: greeting })
     setTurns([{ role: 'assistant', text: greeting }])
 
-    // Wait for voices to load (Chrome loads them async)
-    const doGreet = () => speak(greeting, () => { if (!closingRef.current) startListening() })
-    if (window.speechSynthesis.getVoices().length > 0) {
-      doGreet()
-    } else {
-      window.speechSynthesis.onvoiceschanged = () => { doGreet(); window.speechSynthesis.onvoiceschanged = null }
-      // Fallback if onvoiceschanged never fires
-      setTimeout(doGreet, 400)
-    }
+    // Neural TTS doesn't depend on browser voices loading
+    const doGreet = () => speakNeural(greeting, () => { if (!closingRef.current) startListening() }, audioRef)
+    doGreet()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── UI ──────────────────────────────────────────────────────────────────────
