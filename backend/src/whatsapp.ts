@@ -117,7 +117,19 @@ export async function connectWhatsApp(): Promise<void> {
 
   try {
     const { state, saveCreds } = await useSupabaseAuthState()
-    const { version } = await fetchLatestBaileysVersion()
+
+    // fetchLatestBaileysVersion faz request externo — usa fallback se falhar
+    let version: [number, number, number] = [2, 3000, 1019227548]
+    try {
+      const fetched = await Promise.race([
+        fetchLatestBaileysVersion(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10_000)),
+      ]) as { version: [number, number, number] }
+      version = fetched.version
+      log.info({ version }, 'Versão WA obtida da API')
+    } catch (vErr) {
+      log.warn({ vErr }, 'Falha ao buscar versão WA — usando fallback 2.3000.x')
+    }
 
     sock = makeWASocket({
       version,
@@ -128,6 +140,10 @@ export async function connectWhatsApp(): Promise<void> {
       logger: baileysLogger,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
+      browser: ['Chrome (Linux)', 'Chrome', '124.0.0.0'],
+      connectTimeoutMs: 60_000,
+      defaultQueryTimeoutMs: 30_000,
+      keepAliveIntervalMs: 25_000,
     })
 
     // QR Code event
