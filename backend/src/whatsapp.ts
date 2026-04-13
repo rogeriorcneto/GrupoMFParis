@@ -159,13 +159,23 @@ export async function connectWhatsApp(): Promise<void> {
       if (connection === 'close') {
         qrDataUrl = null
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
+        log.warn({ reason, lastDisconnect: lastDisconnect?.error?.message }, '🔌 WA connection closed')
 
         if (reason === DisconnectReason.loggedOut) {
-          log.info('🔴 WhatsApp deslogado pelo usuário')
+          log.info('🔴 WhatsApp deslogado — limpando sessão do Supabase para forçar novo QR')
           connectionStatus = 'disconnected'
           connectedNumber = null
           startTime = null
           reconnectAttempts = 0
+          // Limpa sessão corrompida para que próxima conexão gere novo QR
+          try {
+            const { clearSession } = await useSupabaseAuthState()
+            await clearSession()
+            log.info('🗑️ Sessão WA limpa do Supabase')
+          } catch (clearErr) {
+            log.error({ clearErr }, 'Erro ao limpar sessão WA')
+          }
+          return // Não reconecta automaticamente — aguarda clique manual
         } else if (reconnectAttempts < MAX_RECONNECT) {
           reconnectAttempts++
           log.info(`🔄 Reconectando... (tentativa ${reconnectAttempts}/${MAX_RECONNECT})`)
