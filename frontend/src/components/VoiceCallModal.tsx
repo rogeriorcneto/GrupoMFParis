@@ -8,11 +8,15 @@
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { PhoneXMarkIcon } from '@heroicons/react/24/solid'
-import { callAIFull } from '../lib/gemini'
-import { authFetch } from '../lib/botApi'
 import type { AIMessage } from '../lib/gemini'
+import { supabase } from '../lib/supabase'
 
-const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
+// Always use Railway backend directly for voice calls — Netlify functions have
+// a 10s timeout which is too short for AI + TTS combined
+const BOT_URL = (
+  (import.meta as any).env?.VITE_BOT_URL ||
+  'https://grupomfparis-production.up.railway.app'
+)
 
 interface VoiceCallModalProps {
   systemPrompt: string
@@ -51,6 +55,29 @@ function stripMarkdown(text: string): string {
     .trim()
 }
 
+/** Call Gemini directly via Railway backend (no Netlify function timeout) */
+async function callAIVoice(
+  messages: AIMessage[],
+  systemPrompt: string,
+): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Não autenticado')
+
+  const res = await fetch(`${BOT_URL}/api/gemini`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ messages, systemInstruction: systemPrompt }),
+  })
+
+  if (!res.ok) throw new Error(`Gemini ${res.status}`)
+  const data = await res.json()
+  return data.response || data.message || 'Entendido.'
+}
+
 /** Speak using neural TTS via backend; falls back to browser SpeechSynthesis */
 async function speakNeural(text: string, onEnd: () => void, audioRef: React.MutableRefObject<HTMLAudioElement | null>): Promise<void> {
   const clean = stripMarkdown(text).slice(0, 700)
@@ -65,9 +92,16 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
 
   // Try neural TTS via backend
   try {
-    const res = await authFetch(`${BOT_URL}/api/tts`, {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) throw new Error('no token')
+
+    const res = await fetch(`${BOT_URL}/api/tts`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
       body: JSON.stringify({ text: clean }),
     })
 
@@ -81,15 +115,11 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
       await audio.play()
       return
     }
-
-    // If backend returns fallback:true, use browser TTS
-    const data = await res.json().catch(() => ({}))
-    if (!data?.fallback) throw new Error(`TTS ${res.status}`)
   } catch {
-    // Silently fall through to browser TTS
+    // Fall through to browser TTS
   }
 
-  // Browser fallback (robotic but always works)
+  // Browser fallback
   const utter = new SpeechSynthesisUtterance(clean)
   utter.lang = 'pt-BR'
   utter.rate = 1.0
@@ -174,8 +204,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       setTurns(prev => [...prev, { role: 'user', text: said }])
 
       try {
-        const result = await callAIFull(historyRef.current, systemPrompt)
-        const reply = result.response || 'Entendido.'
+        const reply = await callAIVoice(historyRef.current, systemPrompt)
 
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
