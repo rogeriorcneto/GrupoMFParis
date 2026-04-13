@@ -326,7 +326,7 @@ const IntegracoesView: React.FC = () => {
           </div>
         )}
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           {!waStatus.connected ? (
             <button
               onClick={handleConnect}
@@ -342,6 +342,23 @@ const IntegracoesView: React.FC = () => {
               className="flex-1 px-4 py-2.5 bg-red-50 text-red-700 border-2 border-red-200 rounded-apple shadow-apple-sm font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
             >
               {waLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
+            </button>
+          )}
+          {(waStatus.status === 'connecting' || waStatus.status === 'qr') && !waStatus.connected && (
+            <button
+              onClick={async () => {
+                setWaLoading(true)
+                try {
+                  await authFetch(`${BOT_URL}/api/whatsapp/reset`, { method: 'POST' })
+                } catch { /* ignore */ } finally {
+                  setWaLoading(false)
+                }
+              }}
+              disabled={waLoading}
+              className="px-4 py-2.5 bg-orange-50 text-orange-700 border-2 border-orange-200 rounded-apple font-semibold hover:bg-orange-100 transition-colors disabled:opacity-50 text-sm"
+              title="Limpa a conexão travada e permite tentar novamente"
+            >
+              🔄 Resetar
             </button>
           )}
         </div>

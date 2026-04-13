@@ -3,7 +3,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import { rateLimit } from './middleware/rate-limit.js'
 import { CONFIG } from './config.js'
-import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, sendWhatsAppMessage } from './whatsapp.js'
+import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, sendWhatsAppMessage, forceResetWhatsApp } from './whatsapp.js'
 import {
   connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
@@ -298,6 +298,15 @@ app.post('/api/whatsapp/connect', requireAuth, requireGerente, rateLimit(5, 60_0
     res.json({ success: true, message: 'Conexão iniciada. Aguarde o QR code.' })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro ao conectar' })
+  }
+})
+
+app.post('/api/whatsapp/reset', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
+  try {
+    await forceResetWhatsApp()
+    res.json({ success: true, message: 'WhatsApp resetado. Clique em Conectar para gerar novo QR.' })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message })
   }
 })
 

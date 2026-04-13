@@ -24,6 +24,8 @@ let connectionStatus: 'disconnected' | 'connecting' | 'qr' | 'connected' = 'disc
 let startTime: number | null = null
 let reconnectAttempts = 0
 const MAX_RECONNECT = 5
+let connectingStartTime: number | null = null
+const CONNECTING_TIMEOUT_MS = 60_000 // 60s sem QR → reset automático
 
 export function getWhatsAppStatus() {
   return {
@@ -83,13 +85,34 @@ export async function sendWhatsAppMessage(number: string, text: string): Promise
   }
 }
 
+export async function forceResetWhatsApp(): Promise<void> {
+  log.info('🔄 Forçando reset da conexão WhatsApp...')
+  if (sock) {
+    try { sock.end(undefined) } catch { /* ignore */ }
+    sock = null
+  }
+  qrDataUrl = null
+  connectedNumber = null
+  connectionStatus = 'disconnected'
+  startTime = null
+  connectingStartTime = null
+  reconnectAttempts = 0
+}
+
 export async function connectWhatsApp(): Promise<void> {
+  // Se preso em 'connecting' por mais de 60s, força reset
+  if (connectionStatus === 'connecting' && connectingStartTime && Date.now() - connectingStartTime > CONNECTING_TIMEOUT_MS) {
+    log.warn('⚠️ WhatsApp preso em connecting há mais de 60s. Forçando reset...')
+    await forceResetWhatsApp()
+  }
+
   if (connectionStatus === 'connected' || connectionStatus === 'connecting') {
     log.warn('WhatsApp já está conectado ou conectando')
     return
   }
 
   connectionStatus = 'connecting'
+  connectingStartTime = Date.now()
   log.info('📱 Iniciando conexão WhatsApp...')
 
   try {
