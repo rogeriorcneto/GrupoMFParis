@@ -302,6 +302,20 @@ export async function fetchVendedores(): Promise<Vendedor[]> {
   return (data || []).map(vendedorFromDb)
 }
 
+export async function fetchVendedorById(id: number): Promise<Vendedor | null> {
+  const { data, error } = await supabase.from('vendedores').select('*').eq('id', id).single()
+  if (error || !data) return null
+  return vendedorFromDb(data)
+}
+
+export async function findVendedorByPhone(phone: string): Promise<Vendedor | null> {
+  const clean = phone.replace(/\D/g, '')
+  if (!clean) return null
+  const { data, error } = await supabase.from('vendedores').select('*').eq('telefone', clean).single()
+  if (error || !data) return null
+  return vendedorFromDb(data)
+}
+
 // ============================================
 // CLIENTES
 // ============================================

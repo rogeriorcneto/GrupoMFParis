@@ -22,6 +22,7 @@ import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from '.
 import { omieRouter } from './routes/omie.js'
 import { traficoRouter } from './routes/trafico.js'
 import twilioRouter from './routes/twilio.js'
+import twilioVoiceAiRouter from './routes/twilio-voice-ai.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
@@ -1050,6 +1051,8 @@ app.get('/api/twilio/recording/:callSid', requireAuth, (req, res, next) => twili
 app.post('/api/twilio/voice', (req, res, next) => twilioRouter(req, res, next))
 app.post('/api/twilio/recording-callback', (req, res, next) => twilioRouter(req, res, next))
 app.post('/api/twilio/status-callback', (req, res, next) => twilioRouter(req, res, next))
+// Voice AI — Twilio posts here when someone calls the number
+app.use('/api/twilio/voice-ai', twilioVoiceAiRouter)
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
