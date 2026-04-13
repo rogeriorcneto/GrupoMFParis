@@ -373,14 +373,14 @@ const Workspace: React.FC<WorkspaceProps> = ({
     setWaSending(false)
   }, [getWaChatNumber, selectedCliente, showToast, logAction])
 
-  // ── Phone Call + System Audio Recording ──
-  // Uses tel: link (Windows Phone Link) to make the call, then captures system audio for recording
+  // ── Phone Call + Microphone Recording ──
+  // Opens tel: link to initiate call via Phone Link / default dialer,
+  // and records microphone audio simultaneously.
 
   const startCall = useCallback(async () => {
     const num = getWaChatNumber()
     if (!num) { showToast?.('error', 'Sem número para ligar.'); return }
 
-    // Format number for tel: link
     let formattedNum = num.replace(/\D/g, '')
     if (!formattedNum.startsWith('55')) formattedNum = `55${formattedNum}`
 
@@ -390,52 +390,22 @@ const Workspace: React.FC<WorkspaceProps> = ({
     callChunksRef.current = []
 
     try {
-      // 1. Request system audio capture (screen share with audio)
-      // This prompts user to share a tab/window — they should pick "System audio" or the Phone Link window
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: 1, height: 1 }, // minimal video (required by API but we only want audio)
-        audio: true, // capture system audio
-      } as any)
-
-      // Check if audio track was captured
-      const audioTracks = stream.getAudioTracks()
-      if (audioTracks.length === 0) {
-        stream.getTracks().forEach(t => t.stop())
-        showToast?.('error', 'Selecione "Compartilhar áudio do sistema" na janela de compartilhamento.')
-        return
-      }
-
-      // Stop video tracks (we only need audio)
-      stream.getVideoTracks().forEach(t => t.stop())
-
-      // Also capture microphone for the vendedor's voice
-      try {
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const audioCtx = new AudioContext()
-        const dest = audioCtx.createMediaStreamDestination()
-        // Mix system audio + microphone
-        const systemSource = audioCtx.createMediaStreamSource(new MediaStream(audioTracks))
-        const micSource = audioCtx.createMediaStreamSource(micStream)
-        systemSource.connect(dest)
-        micSource.connect(dest)
-        callStreamRef.current = dest.stream
-        // Keep refs to stop later
-        ;(callStreamRef.current as any)._extraStreams = [stream, micStream]
-        ;(callStreamRef.current as any)._audioCtx = audioCtx
-      } catch {
-        // If mic fails, just record system audio
-        callStreamRef.current = new MediaStream(audioTracks)
-        ;(callStreamRef.current as any)._extraStreams = [stream]
-      }
+      // 1. Request microphone access
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 44100 },
+      })
+      callStreamRef.current = stream
 
       // 2. Start recording
-      const recorder = new MediaRecorder(callStreamRef.current, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm',
-      })
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+
+      const recorder = new MediaRecorder(stream, { mimeType })
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) callChunksRef.current.push(e.data)
       }
-      recorder.start(1000) // collect data every second
+      recorder.start(1000)
       callRecorderRef.current = recorder
 
       // 3. Start timer
@@ -446,16 +416,16 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
       setCallStatus('recording')
 
-      // 4. Open tel: link to initiate call via Phone Link
+      // 4. Open dialer — works via Phone Link (Windows) or mobile browser
       window.open(`tel:+${formattedNum}`, '_self')
 
-      showToast?.('success', 'Ligação iniciada! A gravação está ativa.')
+      showToast?.('success', 'Ligação iniciada! Gravando microfone...')
     } catch (err: any) {
       setCallStatus('error')
-      if (err?.name === 'NotAllowedError') {
-        setCallError('Permissão negada. Clique em "Ligar" e selecione compartilhar áudio do sistema.')
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        setCallError('Permissão do microfone negada. Habilite nas configurações do navegador e tente novamente.')
       } else {
-        setCallError(err?.message || 'Erro ao iniciar gravação.')
+        setCallError(err?.message || 'Erro ao acessar microfone.')
       }
     }
   }, [getWaChatNumber, showToast])
@@ -479,30 +449,55 @@ const Workspace: React.FC<WorkspaceProps> = ({
     callRecorderRef.current = null
 
     // Build audio blob
+    const num = getWaChatNumber() || ''
     if (callChunksRef.current.length > 0) {
       const blob = new Blob(callChunksRef.current, { type: 'audio/webm' })
-      const url = URL.createObjectURL(blob)
-      setCallRecordingUrl(url)
+      const localUrl = URL.createObjectURL(blob)
+      setCallRecordingUrl(localUrl)
 
-      // Save to Supabase Storage
       setCallSaving(true)
+      let arquivoUrl: string | null = null
+      let arquivoPath: string | null = null
+
+      // Upload to Supabase Storage
       try {
         const { supabase } = await import('../lib/supabase')
-        const fileName = `call_${Date.now()}_${selectedCliente?.id || 'unknown'}.webm`
-        const { error: uploadErr } = await supabase.storage
-          .from('call-recordings')
-          .upload(fileName, blob, { contentType: 'audio/webm' })
+        const vendedorFolder = loggedUser?.id || 'unknown'
+        const fileName = `call_${Date.now()}_${selectedCliente?.id || 'wa'}.webm`
+        const storagePath = `${vendedorFolder}/${fileName}`
 
-        if (!uploadErr) {
-          const { data: urlData } = supabase.storage.from('call-recordings').getPublicUrl(fileName)
-          if (urlData?.publicUrl) setCallRecordingUrl(urlData.publicUrl)
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('call-recordings')
+          .upload(storagePath, blob, { contentType: 'audio/webm', upsert: false })
+
+        if (!uploadErr && uploadData) {
+          arquivoPath = uploadData.path
+          const { data: urlData } = supabase.storage.from('call-recordings').getPublicUrl(uploadData.path)
+          arquivoUrl = urlData?.publicUrl || null
+          if (arquivoUrl) setCallRecordingUrl(arquivoUrl)
         }
-      } catch { /* storage may not be configured, local URL still works */ }
+      } catch { /* bucket pode não existir ainda — local URL ainda funciona */ }
+
+      // Save metadata to gravacoes_chamada table
+      try {
+        const { supabase } = await import('../lib/supabase')
+        await supabase.from('gravacoes_chamada').insert({
+          cliente_id: selectedCliente?.id || null,
+          vendedor_id: loggedUser?.id || null,
+          numero_telefone: num,
+          duracao_segundos: callDuration,
+          arquivo_url: arquivoUrl,
+          arquivo_path: arquivoPath,
+          tamanho_bytes: blob.size,
+          tipo_chamada: 'phone',
+          notas: null,
+        })
+      } catch { /* non-critical */ }
+
       setCallSaving(false)
     }
 
     // Log activity
-    const num = getWaChatNumber() || ''
     logAction('call', `Ligação para ${selectedCliente?.razaoSocial} (${num}) — ${Math.floor(callDuration / 60)}m${callDuration % 60}s`, selectedCliente?.razaoSocial)
     if (selectedCliente) {
       try {
