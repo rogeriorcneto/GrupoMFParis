@@ -215,10 +215,51 @@ export async function connectWhatsApp(): Promise<void> {
         const from = msg.key.remoteJid
         if (!from || from.endsWith('@g.us')) continue // Ignore group messages
 
-        const text =
+        let text =
           msg.message.conversation ||
           msg.message.extendedTextMessage?.text ||
           ''
+
+        // Transcrever áudio via Gemini se não houver texto
+        if (!text.trim() && msg.message.audioMessage) {
+          try {
+            const audioMsg = msg.message.audioMessage
+            const stream = await (sock as any).downloadMediaMessage(msg, 'buffer')
+            if (stream && stream.length > 0) {
+              const base64Audio = (stream as Buffer).toString('base64')
+              const mimeType = audioMsg.mimetype || 'audio/ogg; codecs=opus'
+              const apiKey = process.env.GEMINI_API_KEY
+              if (apiKey) {
+                const geminiRes = await fetch(
+                  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      contents: [{
+                        parts: [
+                          { inline_data: { mime_type: mimeType, data: base64Audio } },
+                          { text: 'Transcreva exatamente o que foi dito neste áudio em português do Brasil. Retorne apenas a transcrição, sem comentários.' },
+                        ],
+                      }],
+                      generationConfig: { temperature: 0.1, maxOutputTokens: 500 },
+                    }),
+                  }
+                )
+                if (geminiRes.ok) {
+                  const geminiData = await geminiRes.json() as any
+                  const transcribed = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+                  if (transcribed) {
+                    text = transcribed
+                    log.info({ senderNumber: from.replace('@s.whatsapp.net', ''), transcribed }, '🎤 Áudio transcrito')
+                  }
+                }
+              }
+            }
+          } catch (audioErr) {
+            log.error({ err: audioErr }, 'Erro ao transcrever áudio WhatsApp')
+          }
+        }
 
         if (!text.trim()) continue
 
