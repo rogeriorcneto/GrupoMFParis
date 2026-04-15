@@ -54,13 +54,15 @@ app.use(helmet())
 
 // ─── Health check ───
 app.get('/api/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    whatsapp: getWhatsAppStatus(),
-    email: getEmailStatus(),
-    activeSessions: getActiveSessions(),
-    uptime: process.uptime(),
-  })
+  try {
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    res.status(500).json({ status: 'error', error: error.message })
+  }
 })
 
 // ─── Gemini AI Route (protegido por auth) ───

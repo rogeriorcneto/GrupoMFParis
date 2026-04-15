@@ -1,6 +1,9 @@
 /**
  * TTS Optimized Endpoint - Fase 1 Otimização
  * 
+ * FIXED: generateTTS error - implementado Google TTS inline
+ * Version: 2.0 - Build Fix Applied
+ * 
  * Implementa cache de áudios comuns e otimizações para reduzir delay
  */
 
