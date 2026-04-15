@@ -174,10 +174,17 @@ async function callAIVoiceStream(
   onChunk: (chunk: string, accumulated: string) => void,
   onTTS: (sentence: string, isFinal?: boolean) => void
 ): Promise<string> {
+  console.log('[AI] Iniciando chamada de IA...')
+  
   const { data: { session } } = await supabase.auth.getSession()
   const token = session?.access_token
-  if (!token) throw new Error('Não autenticado')
+  if (!token) {
+    console.error('[AI] Usuário não autenticado')
+    throw new Error('Não autenticado')
+  }
 
+  console.log('[AI] Token obtido, tentando Edge Function...')
+  
   // Tentar Edge Function primeiro (Fase 3)
   let res: Response
   
@@ -195,21 +202,67 @@ async function callAIVoiceStream(
       }),
     })
 
-    if (!res.ok) throw new Error(`Edge Function ${res.status}`)
+    console.log('[AI] Edge Function response:', res.status, res.statusText)
+    
+    if (!res.ok) {
+      throw new Error(`Edge Function ${res.status}: ${res.statusText}`)
+    }
     console.log('🚀 Usando Gemini Edge Function (Fase 3)')
   } catch (edgeError) {
     console.warn('⚠️ Edge Function falhou, usando backend (Fase 2):', edgeError)
     
-    // Fallback para backend
-    res = await fetch(`${BOT_URL}/api/gemini-stream/stream-with-tts`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    })
+    // Fallback para backend streaming
+    try {
+      res = await fetch(`${BOT_URL}/api/gemini-stream/stream-with-tts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      })
 
-    if (!res.ok) throw new Error(`Backend Stream ${res.status}`)
+      console.log('[AI] Backend streaming response:', res.status, res.statusText)
+      
+      if (!res.ok) {
+        throw new Error(`Backend Stream ${res.status}: ${res.statusText}`)
+      }
+      console.log('🔄 Usando Backend Stream (Fase 2)')
+    } catch (backendError) {
+      console.warn('⚠️ Backend streaming falhou, usando API simples:', backendError)
+      
+      // Fallback final para API simples
+      res = await fetch(`${BOT_URL}/api/gemini`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          messages, 
+          systemInstruction: systemPrompt
+        }),
+      })
+
+      console.log('[AI] API simples response:', res.status, res.statusText)
+      
+      if (!res.ok) {
+        throw new Error(`API Simples ${res.status}: ${res.statusText}`)
+      }
+      
+      console.log('🔄 Usando API Simples (Fallback)')
+      
+      // Para API simples, processar resposta normal
+      const data = await res.json()
+      const response = data.response || data.message || 'Entendido.'
+      
+      console.log('[AI] Resposta da API simples:', response)
+      
+      // Simular chunks para compatibilidade
+      onChunk(response, response)
+      onTTS(response, true)
+      
+      return response
+    }
   }
 
   const reader = res.body?.getReader()
@@ -220,26 +273,39 @@ async function callAIVoiceStream(
   let sentenceBuffer = ''
 
   try {
+    console.log('[AI] Iniciando processamento do streaming...')
+    let chunkCount = 0
+    
     while (true) {
       const { done, value } = await reader.read()
       
-      if (done) break
+      if (done) {
+        console.log('[AI] Streaming concluído, chunks processados:', chunkCount)
+        break
+      }
 
       const chunk = decoder.decode(value, { stream: true })
+      chunkCount++
+      
+      console.log('[AI] Chunk recebido:', chunkCount, chunk.length, 'bytes')
+      
       const lines = chunk.split('\n')
 
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
             const data = JSON.parse(line.slice(6))
+            console.log('[AI] Data parsed:', { hasText: !!data.text, hasTTSTrigger: !!data.ttsTrigger, done: data.done, error: data.error })
             
             if (data.text) {
               accumulatedText += data.text
               sentenceBuffer += data.text
+              console.log('[AI] Chamando onChunk:', data.text)
               onChunk(data.text, accumulatedText)
             }
             
             if (data.ttsTrigger && data.sentence) {
+              console.log('[AI] Chamando onTTS:', data.sentence, data.final)
               onTTS(data.sentence, data.final)
               if (!data.final) {
                 sentenceBuffer = sentenceBuffer.replace(data.sentence, '')
@@ -247,22 +313,27 @@ async function callAIVoiceStream(
             }
             
             if (data.done) {
+              console.log('[AI] Streaming finalizado, texto acumulado:', accumulatedText.trim())
               return accumulatedText.trim()
             }
             
             if (data.error) {
+              console.error('[AI] Erro no streaming:', data.error)
               throw new Error(data.error)
             }
           } catch (e) {
+            console.warn('[AI] Erro ao parsear linha:', line, e)
             // Ignorar erros de parse
           }
         }
       }
     }
   } finally {
+    console.log('[AI] Liberando reader...')
     reader.releaseLock()
   }
 
+  console.log('[AI] Retornando texto acumulado:', accumulatedText.trim())
   return accumulatedText.trim()
 }
 
@@ -676,8 +747,12 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       setTurns(prev => [...prev, { role: 'user', text: interim }])
 
       try {
+        console.log('[Voice] Iniciando chamada da IA...')
+        
         // Streaming Fase 2: Resposta em tempo real
         const voicePrompt = systemPrompt + `\n\n## MODO VOZ ATIVA\nVocê está em uma conversa de VOZ agora. Regras OBRIGATÓRIAS:\n- Respostas CURTAS: máximo 2-3 frases. Nunca use listas ou tabelas.\n- NUNCA diga "Sou a assistente do CRM" ou se apresente novamente — já se apresentou.\n- Fale como colega de trabalho, natural e direto. Sem formalidade.\n- Números: fale por extenso ("mil quatrocentos" não "1400").\n- Se precisar de mais detalhes, faça UMA pergunta só.`
+        
+        console.log('[Voice] Voice prompt criado, chamando IA...')
         
         let fullResponse = ''
         let isFirstChunk = true
@@ -688,8 +763,10 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
           voicePrompt,
           // onChunk: feedback visual em tempo real
           (chunk, accumulated) => {
+            console.log('[Voice] onChunk chamado:', chunk, accumulated)
             fullResponse = accumulated
             if (isFirstChunk) {
+              console.log('[Voice] Primeiro chunk, definindo texto e estado')
               setAiText(accumulated)
               setCallState('speaking')
               isFirstChunk = false
@@ -699,11 +776,15 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
           },
           // onTTS: reproduzir frases conforme chegam
           async (sentence, isFinal) => {
+            console.log('[Voice] onTTS chamado:', sentence, isFinal)
             if (!hasSpoken || isFinal) {
               hasSpoken = true
               try {
+                console.log('[Voice] Iniciando TTS streaming...')
                 await speakNeuralStream(sentence, () => {
+                  console.log('[Voice] TTS finalizado, isFinal:', isFinal)
                   if (isFinal && !closingRef.current) {
+                    console.log('[Voice] Reiniciando listening após TTS')
                     startListening()
                   }
                 }, audioRef)
@@ -719,11 +800,14 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
           }
         )
 
+        console.log('[Voice] Resposta final da IA:', reply)
+        
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
         
         // Se não falhou nada, garantir que reinicia listening
         if (!hasSpoken && !closingRef.current) {
+          console.log('[Voice] Não falhou nada, reiniciando listening em 1s')
           setTimeout(() => startListening(), 1000)
         }
       } catch (error) {
