@@ -4,8 +4,6 @@
  * Netlify Function para TTS streaming com cache global
  */
 
-const fetch = require('node-fetch')
-
 // Cache edge para respostas comuns
 const edgeCache = new Map()
 const EDGE_CACHE_TTL = 10 * 60 * 1000 // 10 minutos

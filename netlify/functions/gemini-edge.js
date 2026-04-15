@@ -4,8 +4,6 @@
  * Netlify Function para Gemini streaming com cache global
  */
 
-const fetch = require('node-fetch')
-
 // Cache edge para contextos e respostas
 const contextCache = new Map()
 const responseCache = new Map()

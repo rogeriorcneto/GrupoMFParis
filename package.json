@@ -1,0 +1,28 @@
+{
+  "name": "mfparis-netlify-functions",
+  "version": "1.0.0",
+  "description": "Netlify Functions for MF Paris CRM - Voice Optimization Phases 1, 2, 3",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'No build needed for functions'",
+    "test": "echo 'No tests specified'"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "netlify",
+    "functions",
+    "crm",
+    "voice",
+    "optimization"
+  ],
+  "author": "MF Paris Team",
+  "license": "MIT"
+}
