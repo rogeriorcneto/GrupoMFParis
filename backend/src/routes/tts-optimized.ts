@@ -84,6 +84,119 @@ setInterval(() => {
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────────
 
+// Endpoint principal - redireciona para /optimized
+router.post('/', async (req: Request, res: Response) => {
+  const { text, useCache = true } = req.body
+
+  if (!text?.trim()) {
+    res.status(400).json({ error: 'text is required' })
+    return
+  }
+
+  const cleanText = text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`(.*?)`/g, '$1')
+    .replace(/#+\s/g, '')
+    .replace(/[_~[\]<>]/g, '')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, '. ')
+    .trim()
+    .slice(0, 800)
+
+  // Verificar cache primeiro
+  if (useCache) {
+    const cacheKey = Object.keys(COMMON_RESPONSES).find(key => 
+      cleanText.toLowerCase().includes(COMMON_RESPONSES[key as keyof typeof COMMON_RESPONSES].toLowerCase())
+    )
+    
+    if (cacheKey) {
+      const cached = audioCache.get(cacheKey)
+      if (cached) {
+        log.info({ cacheKey, text: cleanText.slice(0, 30) }, '🎯 Cache hit TTS')
+        res.set({
+          'Content-Type': cached.mimeType,
+          'Content-Length': cached.data.length,
+          'Cache-Control': 'public, max-age=600',
+          'X-Cache': 'HIT'
+        })
+        res.send(cached.data)
+        return
+      }
+    }
+  }
+
+  // Gerar áudio novo
+  const elevenKey = process.env.ELEVENLABS_API_KEY
+  if (!elevenKey) {
+    // Fallback para Google TTS
+    try {
+      const googleResponse = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + process.env.GOOGLE_TTS_API_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text: cleanText },
+          voice: { languageCode: 'pt-BR', name: 'pt-BR-Wavenet-B' },
+          audioConfig: { audioEncoding: 'MP3' }
+        })
+      })
+
+      if (googleResponse.ok) {
+        const audioData = await googleResponse.json()
+        const audioBuffer = Buffer.from(audioData.audioContent, 'base64')
+        
+        res.set({
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': audioBuffer.length,
+          'Cache-Control': 'public, max-age=600',
+          'X-Cache': 'MISS'
+        })
+        res.send(audioBuffer)
+        return
+      }
+    } catch (error) {
+      log.error({ error }, '❌ Google TTS fallback falhou')
+    }
+
+    res.status(500).json({ error: 'TTS service unavailable' })
+    return
+  }
+
+  try {
+    const VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'
+    
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': elevenKey,
+      },
+      body: JSON.stringify({
+        text: cleanText,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`ElevenLabs ${response.status}`)
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+    
+    res.set({
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': buffer.length,
+      'Cache-Control': 'public, max-age=600',
+      'X-Cache': 'MISS'
+    })
+    res.send(buffer)
+  } catch (error) {
+    log.error({ error }, '❌ Erro ao gerar áudio ElevenLabs')
+    res.status(500).json({ error: 'Failed to generate audio' })
+  }
+})
+
 router.post('/optimized', async (req: Request, res: Response) => {
   const { text, useCache = true } = req.body
 
