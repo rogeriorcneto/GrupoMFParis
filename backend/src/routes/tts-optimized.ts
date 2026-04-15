@@ -243,20 +243,41 @@ router.post('/optimized', async (req: Request, res: Response) => {
   if (!elevenKey) {
     // Fallback para Google TTS
     try {
-      const { generateTTS } = await import('./tts.js')
-      const audioBuffer = await generateTTS(cleanText, 'google')
-      res.set({
-        'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'no-cache',
-        'X-Cache': 'MISS'
+      const googleKey = process.env.GOOGLE_TTS_API_KEY
+      if (!googleKey) {
+        res.status(500).json({ error: 'TTS service unavailable - no API keys' })
+        return
+      }
+
+      const googleResponse = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + googleKey, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text: cleanText },
+          voice: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C' },
+          audioConfig: { audioEncoding: 'MP3' }
+        })
       })
-      res.send(audioBuffer)
-      return
+
+      if (googleResponse.ok) {
+        const audioData = await googleResponse.json()
+        const audioBuffer = Buffer.from(audioData.audioContent, 'base64')
+        
+        res.set({
+          'Content-Type': 'audio/mpeg',
+          'Content-Length': audioBuffer.length,
+          'Cache-Control': 'public, max-age=600',
+          'X-Cache': 'MISS'
+        })
+        res.send(audioBuffer)
+        return
+      }
     } catch (error) {
-      log.error({ error }, '❌ Falha no TTS fallback')
-      res.status(500).json({ error: 'TTS service unavailable' })
-      return
+      log.error({ error }, '❌ Google TTS fallback falhou')
     }
+
+    res.status(500).json({ error: 'TTS service unavailable' })
+    return
   }
 
   try {
@@ -294,20 +315,38 @@ router.post('/optimized', async (req: Request, res: Response) => {
   } catch (error) {
     log.error({ error, text: cleanText.slice(0, 30) }, '❌ Erro TTS ElevenLabs')
     
-    // Tentar fallback
+    // Tentar fallback para Google TTS
     try {
-      const { generateTTS } = await import('./tts.js')
-      const audioBuffer = await generateTTS(cleanText, 'google')
-      res.set({
-        'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'no-cache',
-        'X-Cache': 'FALLBACK'
-      })
-      res.send(audioBuffer)
+      const googleKey = process.env.GOOGLE_TTS_API_KEY
+      if (googleKey) {
+        const googleResponse = await fetch('https://texttospeech.googleapis.com/v1/text:synthesize?key=' + googleKey, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input: { text: cleanText },
+            voice: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C' },
+            audioConfig: { audioEncoding: 'MP3' }
+          })
+        })
+
+        if (googleResponse.ok) {
+          const audioData = await googleResponse.json()
+          const audioBuffer = Buffer.from(audioData.audioContent, 'base64')
+          
+          res.set({
+            'Content-Type': 'audio/mpeg',
+            'Cache-Control': 'no-cache',
+            'X-Cache': 'FALLBACK'
+          })
+          res.send(audioBuffer)
+          return
+        }
+      }
     } catch (fallbackError) {
-      log.error({ fallbackError }, '❌ Falha no TTS fallback')
-      res.status(500).json({ error: 'TTS service unavailable' })
+      log.error({ fallbackError }, '❌ Fallback TTS falhou também')
     }
+    
+    res.status(500).json({ error: 'TTS service completely unavailable' })
   }
 })
 
