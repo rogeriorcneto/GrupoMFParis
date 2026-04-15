@@ -564,7 +564,7 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
         const token = session?.access_token
         if (!token) throw new Error('no token')
 
-        const res = await fetch(`${BOT_URL}/api/tts-optimized/optimized`, {
+        const res = await fetch(`${BOT_URL}/api/tts-optimized`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ text: clean, useCache: true }),
@@ -846,17 +846,17 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       } else if (event.error === 'no-speech') {
         // User didn't say anything — just restart
         console.log('[Voice] Nenhuma fala detectada, reiniciando...')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 100)
+        setTimeout(() => { if (!closingRef.current) startListening() }, 500)
       } else if (event.error === 'not-allowed') {
         setError('Permissão do microfone negada. Habilite nas configurações do navegador.')
         setCallState('error')
       } else if (event.error === 'network') {
         console.error('[Voice] Erro de rede no reconhecimento')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
+        setTimeout(() => { if (!closingRef.current) startListening() }, 2000)
       } else {
         // Restart on other errors (mas não para 'aborted')
-        console.log('[Voice] Erro genérico, reiniciando em 500ms...')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 500)
+        console.log('[Voice] Erro genérico, reiniciando em 1s...')
+        setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
       }
     }
 

@@ -22,7 +22,7 @@ export async function listConversations(): Promise<Conversation[]> {
 
   const { data, error } = await supabase
     .from('ai_conversations')
-    .select('id, title, messages, created_at, updated_at')
+    .select('*')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
 
