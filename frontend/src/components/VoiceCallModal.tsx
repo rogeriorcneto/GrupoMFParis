@@ -28,6 +28,95 @@ type CallState = 'connecting' | 'listening' | 'thinking' | 'speaking' | 'error'
 
 interface Turn { role: 'user' | 'assistant'; text: string }
 
+// ── Cache de Contexto (Fase 1 Otimização) ───────────────────────────────────────
+
+interface CachedContext {
+  clienteData?: any
+  vendedorData?: any
+  timestamp: number
+}
+
+const contextCache = new Map<string, CachedContext>()
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+async function getCachedContext(key: string, loader: () => Promise<any>): Promise<any> {
+  const cached = contextCache.get(key)
+  const now = Date.now()
+  
+  if (cached && (now - cached.timestamp) < CACHE_TTL) {
+    return cached[key.includes('cliente') ? 'clienteData' : 'vendedorData']
+  }
+  
+  const data = await loader()
+  contextCache.set(key, {
+    [key.includes('cliente') ? 'clienteData' : 'vendedorData']: data,
+    timestamp: now
+  })
+  
+  return data
+}
+
+// ── Pré-buffering de Áudios Comuns (Fase 1 Otimização) ─────────────────────────────
+
+interface AudioBuffer {
+  loading: HTMLAudioElement | null
+  error: HTMLAudioElement | null
+  thinking: HTMLAudioElement | null
+}
+
+const commonAudioCache: AudioBuffer = {
+  loading: null,
+  error: null,
+  thinking: null
+}
+
+async function preloadCommonAudios(): Promise<void> {
+  const elevenKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY
+  if (!elevenKey) return
+
+  const commonTexts = {
+    loading: 'Processando...',
+    error: 'Ocorreu um erro. Pode repetir?',
+    thinking: 'Deixe-me pensar...'
+  }
+
+  for (const [key, text] of Object.entries(commonTexts)) {
+    try {
+      const VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'
+      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': elevenKey,
+        },
+        body: JSON.stringify({
+          text,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      })
+
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const audio = new Audio(url)
+        audio.preload = 'auto'
+        commonAudioCache[key as keyof AudioBuffer] = audio
+      }
+    } catch (e) {
+      console.warn(`[TTS] Failed to preload ${key}:`, e)
+    }
+  }
+}
+
+function playCachedAudio(key: keyof AudioBuffer): Promise<void> {
+  const audio = commonAudioCache[key]
+  if (audio) {
+    return audio.play()
+  }
+  return Promise.reject(new Error(`Audio ${key} not cached`))
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getSpeechRecognition(): any | null {
@@ -36,8 +125,8 @@ function getSpeechRecognition(): any | null {
   if (!SpeechRec) return null
   const rec = new SpeechRec()
   rec.lang = 'pt-BR'
-  rec.continuous = false
-  rec.interimResults = false
+  rec.continuous = true
+  rec.interimResults = true
   rec.maxAlternatives = 1
   return rec
 }
@@ -78,7 +167,253 @@ async function callAIVoice(
   return data.response || data.message || 'Entendido.'
 }
 
-/** Speak using neural TTS via backend; falls back to browser SpeechSynthesis */
+/** Call Gemini streaming (Fase 3) - Edge Functions com cache global */
+async function callAIVoiceStream(
+  messages: AIMessage[],
+  systemPrompt: string,
+  onChunk: (chunk: string, accumulated: string) => void,
+  onTTS: (sentence: string, isFinal?: boolean) => void
+): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Não autenticado')
+
+  // Tentar Edge Function primeiro (Fase 3)
+  let res: Response
+  
+  try {
+    res = await fetch('/api/gemini-edge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ 
+        messages, 
+        systemInstruction: systemPrompt,
+        useEdgeCache: true
+      }),
+    })
+
+    if (!res.ok) throw new Error(`Edge Function ${res.status}`)
+    console.log('🚀 Usando Gemini Edge Function (Fase 3)')
+  } catch (edgeError) {
+    console.warn('⚠️ Edge Function falhou, usando backend (Fase 2):', edgeError)
+    
+    // Fallback para backend
+    res = await fetch(`${BOT_URL}/api/gemini-stream/stream-with-tts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    })
+
+    if (!res.ok) throw new Error(`Backend Stream ${res.status}`)
+  }
+
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('Stream não disponível')
+
+  const decoder = new TextDecoder()
+  let accumulatedText = ''
+  let sentenceBuffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n')
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            
+            if (data.text) {
+              accumulatedText += data.text
+              sentenceBuffer += data.text
+              onChunk(data.text, accumulatedText)
+            }
+            
+            if (data.ttsTrigger && data.sentence) {
+              onTTS(data.sentence, data.final)
+              if (!data.final) {
+                sentenceBuffer = sentenceBuffer.replace(data.sentence, '')
+              }
+            }
+            
+            if (data.done) {
+              return accumulatedText.trim()
+            }
+            
+            if (data.error) {
+              throw new Error(data.error)
+            }
+          } catch (e) {
+            // Ignorar erros de parse
+          }
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  return accumulatedText.trim()
+}
+
+/** Speak using neural TTS streaming (Fase 2) - delay mínimo com WebSocket */
+async function speakNeuralStream(
+  text: string, 
+  onEnd: () => void, 
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>
+): Promise<void> {
+  const clean = stripMarkdown(text).slice(0, 700)
+
+  // Stop any current playback
+  if (audioRef.current) {
+    audioRef.current.pause()
+    audioRef.current.src = ''
+    audioRef.current = null
+  }
+  window.speechSynthesis.cancel()
+
+  // Verificar cache primeiro (Fase 1)
+  const cacheKey = Object.keys({
+    loading: 'Processando...',
+    error: 'Ocorreu um erro. Pode repetir?',
+    thinking: 'Deixe me pensar...',
+    thanks: 'Obrigado!',
+    bye: 'Até logo!',
+    welcome: 'Bem-vindo!',
+    ok: 'Entendido.',
+    oneMoment: 'Um momento, por favor.'
+  }).find(key => clean.toLowerCase().includes(key))
+
+  if (cacheKey) {
+    try {
+      await playCachedAudio(cacheKey as keyof AudioBuffer)
+      onEnd()
+      return
+    } catch (e) {
+      console.warn('[TTS] Cache miss, trying streaming')
+    }
+  }
+
+  // Tentar WebSocket streaming (Fase 2)
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) throw new Error('no token')
+
+    // Preparar conexão WebSocket
+    const ws = new WebSocket('ws://localhost:8080/tts-websocket')
+    
+    return new Promise<void>((resolve, reject) => {
+      const requestId = `tts_${Date.now()}_${Math.random()}`
+      let audioContext: AudioContext | null = null
+      let sourceNode: AudioBufferSourceNode | null = null
+
+      ws.onopen = () => {
+        console.log('[TTS] WebSocket conectado')
+        ws.send(JSON.stringify({
+          type: 'tts_request',
+          requestId,
+          text: clean,
+          voiceId: 'EXAVITQu4vr4xnSDxMaL'
+        }))
+      }
+
+      ws.onmessage = async (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.type === 'audio_chunk' && data.requestId === requestId) {
+            // Converter array de volta para Buffer
+            const audioData = new Uint8Array(data.data)
+            
+            // Criar AudioContext se necessário
+            if (!audioContext) {
+              audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+            }
+            
+            // Tentar decodificar e reproduzir áudio
+            try {
+              const audioBuffer = await audioContext.decodeAudioData(audioData.buffer)
+              
+              if (sourceNode) {
+                sourceNode.stop()
+                sourceNode.disconnect()
+              }
+              
+              sourceNode = audioContext.createBufferSource()
+              sourceNode.buffer = audioBuffer
+              sourceNode.connect(audioContext.destination)
+              sourceNode.onended = () => {
+                if (sourceNode) {
+                  sourceNode.disconnect()
+                  sourceNode = null
+                }
+              }
+              sourceNode.start()
+            } catch (decodeError) {
+              console.warn('[TTS] Erro ao decodificar áudio:', decodeError)
+            }
+          } else if (data.type === 'audio_complete' && data.requestId === requestId) {
+            console.log('[TTS] Streaming completo')
+            ws.close()
+            
+            // Pequeno delay para garantir que todo áudio foi reproduzido
+            setTimeout(() => {
+              if (audioContext) {
+                audioContext.close()
+              }
+              onEnd()
+              resolve()
+            }, 500)
+          } else if (data.type === 'error') {
+            console.error('[TTS] Erro no streaming:', data.message)
+            ws.close()
+            reject(new Error(data.message))
+          }
+        } catch (parseError) {
+          console.error('[TTS] Erro ao parsear mensagem:', parseError)
+        }
+      }
+
+      ws.onerror = (error) => {
+        console.error('[TTS] Erro WebSocket:', error)
+        reject(new Error('Erro na conexão WebSocket'))
+      }
+
+      ws.onclose = () => {
+        console.log('[TTS] WebSocket fechado')
+      }
+
+      // Timeout de segurança
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close()
+        }
+        if (audioContext) {
+          audioContext.close()
+        }
+        onEnd()
+        resolve()
+      }, 10000)
+    })
+  } catch (error) {
+    console.warn('[TTS] WebSocket falhou, usando fallback:', error)
+    // Fallback para TTS otimizado (Fase 1)
+    return speakNeural(text, onEnd, audioRef)
+  }
+}
+
+/** Speak using neural TTS Edge Function (Fase 3) - cache global máximo */
 async function speakNeural(text: string, onEnd: () => void, audioRef: React.MutableRefObject<HTMLAudioElement | null>): Promise<void> {
   const clean = stripMarkdown(text).slice(0, 700)
 
@@ -90,26 +425,121 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
   }
   window.speechSynthesis.cancel()
 
-  // Try ElevenLabs directly from browser (free tier works with residential IPs)
-  const elevenKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY
-  if (elevenKey) {
+  // Verificar se é resposta comum cacheada
+  const cacheKey = Object.keys({
+    loading: 'Processando...',
+    error: 'Ocorreu um erro. Pode repetir?',
+    thinking: 'Deixe me pensar...',
+    thanks: 'Obrigado!',
+    bye: 'Até logo!',
+    welcome: 'Bem-vindo!',
+    ok: 'Entendido.',
+    oneMoment: 'Um momento, por favor.'
+  }).find(key => clean.toLowerCase().includes(key))
+
+  if (cacheKey) {
     try {
-      const VOICE_ID = 'EXAVITQu4vr4xnSDxMaL' // Sarah - voz padrão free tier
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': elevenKey,
-        },
-        body: JSON.stringify({
-          text: clean,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-        }),
-      })
-      console.log('[TTS] ElevenLabs status:', res.status)
-      if (res.ok) {
-        const blob = await res.blob()
+      await playCachedAudio(cacheKey as keyof AudioBuffer)
+      onEnd()
+      return
+    } catch (e) {
+      console.warn('[TTS] Cache miss, trying backend')
+    }
+  }
+
+  // Paralelização: Tentar ElevenLabs direto + backend otimizado simultaneamente
+  const elevenKey = (import.meta as any).env?.VITE_ELEVENLABS_API_KEY
+  
+  const promises = []
+
+  // Promise 1: ElevenLabs direto (se tiver key)
+  if (elevenKey) {
+    promises.push(
+      (async () => {
+        try {
+          const VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'
+          const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'xi-api-key': elevenKey,
+            },
+            body: JSON.stringify({
+              text: clean,
+              model_id: 'eleven_multilingual_v2',
+              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            }),
+          })
+          if (res.ok) {
+            return { source: 'elevenlabs', blob: await res.blob() }
+          }
+        } catch (e) {
+          console.warn('[TTS] ElevenLabs falhou:', e)
+        }
+        return null
+      })()
+    )
+  }
+
+  // Promise 2: Backend otimizado
+  promises.push(
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) throw new Error('no token')
+
+        const res = await fetch(`${BOT_URL}/api/tts-optimized/optimized`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ text: clean, useCache: true }),
+        })
+
+        if (res.ok) {
+          const cacheHit = res.headers.get('X-Cache') === 'HIT'
+          console.log('[TTS] Backend cache:', cacheHit ? 'HIT' : 'MISS')
+          return { source: 'backend-optimized', blob: await res.blob(), cacheHit }
+        }
+      } catch (e) {
+        console.warn('[TTS] Backend otimizado falhou:', e)
+      }
+      return null
+    })()
+  )
+
+  // Promise 3: Backend fallback (se otimizado falhar)
+  promises.push(
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) throw new Error('no token')
+
+        const res = await fetch(`${BOT_URL}/api/tts`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ text: clean }),
+        })
+
+        if (res.ok) {
+          return { source: 'backend-fallback', blob: await res.blob() }
+        }
+      } catch (e) {
+        console.warn('[TTS] Backend fallback falhou:', e)
+      }
+      return null
+    })()
+  )
+
+  // Executar promises em paralelo e usar primeira resposta
+  try {
+    const results = await Promise.allSettled(promises)
+    
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        const { source, blob, cacheHit } = result.value
+        console.log(`[TTS] Usando: ${source}${cacheHit ? ' (cache hit)' : ''}`)
+        
         const url = URL.createObjectURL(blob)
         const audio = new Audio(url)
         audioRef.current = audio
@@ -118,41 +548,13 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
         await audio.play()
         return
       }
-      const errBody = await res.text().catch(() => '')
-      console.error('[TTS] ElevenLabs error:', res.status, errBody)
-    } catch (e) {
-      console.error('[TTS] ElevenLabs fetch error:', e)
     }
-  }
-
-  // Try Google TTS via backend
-  try {
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token
-    if (!token) throw new Error('no token')
-
-    const res = await fetch(`${BOT_URL}/api/tts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ text: clean }),
-    })
-
-    if (res.ok) {
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audioRef.current = audio
-      audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
-      audio.onerror = (e) => { console.error('[TTS] audio error', e); URL.revokeObjectURL(url); audioRef.current = null; onEnd() }
-      await audio.play()
-      return
-    }
-    console.error('[TTS] backend error:', res.status)
   } catch (e) {
-    console.error('[TTS] backend fetch error:', e)
+    console.error('[TTS] Todas as opções falharam:', e)
   }
 
-  // Browser fallback
+  // Browser fallback final
+  console.log('[TTS] Usando fallback browser')
   const utter = new SpeechSynthesisUtterance(clean)
   utter.lang = 'pt-BR'
   utter.rate = 1.0
@@ -214,14 +616,35 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     setTranscript('')
 
     rec.onresult = async (event) => {
-      const said = event.results[0]?.[0]?.transcript?.trim() || ''
-      if (!said) { startListening(); return }
+      const result = event.results[0]
+      if (!result) return
+      
+      const interim = result[0]?.transcript?.trim() || ''
+      const isFinal = result.isFinal
+      
+      // Feedback visual imediato com interim results
+      if (interim) {
+        setTranscript(interim + (isFinal ? '' : '...'))
+        
+        // Pré-processamento de intenções com interim results
+        if (!isFinal && interim.length > 5) {
+          const lower = interim.toLowerCase()
+          if (['tchau', 'encerrar', 'desligar', 'finalizar', 'até mais'].some(w => lower.includes(w))) {
+            // Preparar resposta de despedida antecipadamente
+            const bye = `Até logo, ${loggedUserName.split(' ')[0]}!`
+            setAiText(bye)
+          }
+        }
+      }
+      
+      // Processar apenas resultados finais
+      if (!isFinal || !interim) return
 
-      setTranscript(said)
+      setTranscript(interim)
       setCallState('thinking')
 
       // Detect hangup intent
-      const lower = said.toLowerCase()
+      const lower = interim.toLowerCase()
       if (['tchau', 'encerrar', 'desligar', 'finalizar', 'até mais'].some(w => lower.includes(w))) {
         const bye = `Até logo, ${loggedUserName.split(' ')[0]}! Qualquer coisa pode abrir a chamada novamente.`
         setAiText(bye)
@@ -231,24 +654,64 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       }
 
       // Add to history
-      historyRef.current.push({ role: 'user', content: said })
+      historyRef.current.push({ role: 'user', content: interim })
       if (historyRef.current.length > 20) historyRef.current = historyRef.current.slice(-20)
 
-      setTurns(prev => [...prev, { role: 'user', text: said }])
+      setTurns(prev => [...prev, { role: 'user', text: interim }])
 
       try {
-          const voicePrompt = systemPrompt + `\n\n## MODO VOZ ATIVA\nVocê está em uma conversa de VOZ agora. Regras OBRIGATÓRIAS:\n- Respostas CURTAS: máximo 2-3 frases. Nunca use listas ou tabelas.\n- NUNCA diga "Sou a assistente do CRM" ou se apresente novamente — já se apresentou.\n- Fale como colega de trabalho, natural e direto. Sem formalidade.\n- Números: fale por extenso ("mil quatrocentos" não "1400").\n- Se precisar de mais detalhes, faça UMA pergunta só.`
-        const reply = await callAIVoice(historyRef.current, voicePrompt)
+        // Streaming Fase 2: Resposta em tempo real
+        const voicePrompt = systemPrompt + `\n\n## MODO VOZ ATIVA\nVocê está em uma conversa de VOZ agora. Regras OBRIGATÓRIAS:\n- Respostas CURTAS: máximo 2-3 frases. Nunca use listas ou tabelas.\n- NUNCA diga "Sou a assistente do CRM" ou se apresente novamente — já se apresentou.\n- Fale como colega de trabalho, natural e direto. Sem formalidade.\n- Números: fale por extenso ("mil quatrocentos" não "1400").\n- Se precisar de mais detalhes, faça UMA pergunta só.`
+        
+        let fullResponse = ''
+        let isFirstChunk = true
+        let hasSpoken = false
+
+        const reply = await callAIVoiceStream(
+          historyRef.current, 
+          voicePrompt,
+          // onChunk: feedback visual em tempo real
+          (chunk, accumulated) => {
+            fullResponse = accumulated
+            if (isFirstChunk) {
+              setAiText(accumulated)
+              setCallState('speaking')
+              isFirstChunk = false
+            } else {
+              setAiText(accumulated)
+            }
+          },
+          // onTTS: reproduzir frases conforme chegam
+          async (sentence, isFinal) => {
+            if (!hasSpoken || isFinal) {
+              hasSpoken = true
+              try {
+                await speakNeuralStream(sentence, () => {
+                  if (isFinal && !closingRef.current) {
+                    startListening()
+                  }
+                }, audioRef)
+              } catch (error) {
+                console.warn('[TTS] Streaming falhou, usando fallback:', error)
+                await speakNeural(sentence, () => {
+                  if (isFinal && !closingRef.current) {
+                    startListening()
+                  }
+                }, audioRef)
+              }
+            }
+          }
+        )
 
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
-        setAiText(reply)
-        setCallState('speaking')
-
-        speakNeural(reply, () => {
-          if (!closingRef.current) startListening()
-        }, audioRef)
-      } catch {
+        
+        // Se não falhou nada, garantir que reinicia listening
+        if (!hasSpoken && !closingRef.current) {
+          setTimeout(() => startListening(), 1000)
+        }
+      } catch (error) {
+        console.error('[AI] Erro no streaming:', error)
         const errMsg = 'Ocorreu um erro. Pode repetir?'
         setAiText(errMsg)
         setCallState('speaking')
@@ -281,6 +744,9 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   // ── Greet on mount ──────────────────────────────────────────────────────────
 
   useEffect(() => {
+    // Pré-carregar áudios comuns (Fase 1 otimização)
+    preloadCommonAudios().catch(console.warn)
+
     const firstName = loggedUserName.split(' ')[0]
     const greetings = [
       `E aí, ${firstName}! O que tá rolando?`,

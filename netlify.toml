@@ -9,6 +9,58 @@
 [functions]
   directory = "netlify/functions"
 
+# Headers globais para cache edge
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache edge para assets estáticos
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Cache edge para áudios gerados - Fase 3
+[[headers]]
+  for = "/.netlify/functions/tts-edge"
+  [headers.values]
+    Cache-Control = "public, max-age=600, s-maxage=600"
+    Netlify-Vary = "query"
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+# Cache edge para streaming Gemini - Fase 3
+[[headers]]
+  for = "/.netlify/functions/gemini-edge"
+  [headers.values]
+    Cache-Control = "public, max-age=300, s-maxage=300"
+    Netlify-Vary = "query"
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+
+# Headers para funções serverless
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+
+# Redirects para Edge Functions - Fase 3
+[[redirects]]
+  from = "/api/tts-edge"
+  to = "/.netlify/functions/tts-edge"
+  status = 200
+
+[[redirects]]
+  from = "/api/gemini-edge"
+  to = "/.netlify/functions/gemini-edge"
+  status = 200
+
 # SPA fallback - Netlify functions at /.netlify/functions/* are handled automatically
 [[redirects]]
   from = "/*"

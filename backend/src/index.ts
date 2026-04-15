@@ -24,6 +24,9 @@ import { traficoRouter } from './routes/trafico.js'
 import twilioRouter from './routes/twilio.js'
 import twilioVoiceAiRouter from './routes/twilio-voice-ai.js'
 import ttsRouter from './routes/tts.js'
+import ttsOptimizedRouter from './routes/tts-optimized.js'
+import geminiStreamRouter from './routes/gemini-stream.js'
+import ttsWebSocketRouter from './routes/tts-websocket.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
@@ -1058,6 +1061,18 @@ app.use('/api/twilio/voice-ai', twilioVoiceAiRouter)
 // ─── TTS (Text-to-Speech neural) ───
 // GET /api/tts/status é público; POST /api/tts requer auth (verificado internamente)
 app.use('/api/tts', ttsRouter)
+
+// ─── TTS Otimizado (Fase 1) ───
+// Cache de áudios comuns e otimizações para reduzir delay
+app.use('/api/tts-optimized', requireAuth, ttsOptimizedRouter)
+
+// ─── Gemini Streaming (Fase 2) ───
+// Streaming de respostas para reduzir delay ainda mais
+app.use('/api/gemini-stream', requireAuth, geminiStreamRouter)
+
+// ─── TTS WebSocket (Fase 2) ───
+// Streaming de áudio via WebSocket para delay mínimo
+app.use('/api/tts-websocket', requireAuth, ttsWebSocketRouter)
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)

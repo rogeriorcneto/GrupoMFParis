@@ -17,6 +17,46 @@ interface GeminiRequest {
 
 const MAX_FUNCTION_CALLS = 5 // Safety limit to prevent infinite loops
 
+// ── Cache de Contexto (Fase 1 Otimização) ───────────────────────────────────────
+
+interface CachedVendedorData {
+  vendedor: any
+  clientes: any[]
+  timestamp: number
+}
+
+const vendedorCache = new Map<number, CachedVendedorData>()
+const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+async function getCachedVendedorData(userId: string): Promise<CachedVendedorData> {
+  const cached = vendedorCache.get(Number(userId))
+  const now = Date.now()
+  
+  if (cached && (now - cached.timestamp) < CACHE_TTL) {
+    return cached
+  }
+  
+  // Carregar dados do vendedor e clientes relacionados
+  const vendedor = await getVendedorByAuthId(userId)
+  const { fetchClientesByVendedor } = await import('./database.js')
+  const clientes = vendedor ? await fetchClientesByVendedor(vendedor.id) : []
+  
+  const data = {
+    vendedor,
+    clientes,
+    timestamp: now
+  }
+  
+  vendedorCache.set(Number(userId), data)
+  
+  // Cleanup automático
+  setTimeout(() => {
+    vendedorCache.delete(Number(userId))
+  }, CACHE_TTL)
+  
+  return data
+}
+
 /**
  * Call Gemini API with optional tools (function calling)
  */
@@ -94,9 +134,21 @@ export async function geminiHandler(req: Request, res: Response): Promise<void> 
       return
     }
 
-    // Get logged-in vendedor for permission checks
+    // Get logged-in vendedor for permission checks (Fase 1 otimização)
     const userId = (req as any).userId
-    const vendedor = userId ? await getVendedorByAuthId(userId) : null
+    let vendedor = null
+    let cachedData = null
+    
+    if (userId) {
+      // Usar cache para dados do vendedor
+      try {
+        cachedData = await getCachedVendedorData(userId)
+        vendedor = cachedData.vendedor
+      } catch (e) {
+        // Fallback para consulta direta
+        vendedor = await getVendedorByAuthId(userId)
+      }
+    }
 
     // Build tools array with function declarations
     const tools = vendedor ? [{ functionDeclarations: FUNCTION_DECLARATIONS }] : []
