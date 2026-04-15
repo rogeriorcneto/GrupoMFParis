@@ -1,5 +1,8 @@
 /**
  * VoiceCallModal — Chamada de voz para a IA do CRM
+ * 
+ * Version: 2.1 - Critical Fixes Applied
+ * Fixed: TTS endpoint, Supabase query, recognition errors
  *
  * Speech-to-Text: Web Speech API nativa (Chrome/Edge, pt-BR)
  * Text-to-Speech: ElevenLabs ou Google TTS Neural via backend /api/tts
@@ -21,6 +24,7 @@ const BOT_URL = (
 // Verificação de ambiente
 console.log('[Environment] BOT_URL:', BOT_URL)
 console.log('[Environment] VITE_BOT_URL:', (import.meta as any).env?.VITE_BOT_URL)
+console.log('[Version] VoiceCallModal v2.1 - Critical Fixes Applied')
 
 interface VoiceCallModalProps {
   systemPrompt: string
