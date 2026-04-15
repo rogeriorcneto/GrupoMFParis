@@ -61,7 +61,8 @@ app.get('/api/health', (_req, res) => {
       timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    res.status(500).json({ status: 'error', error: error.message })
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    res.status(500).json({ status: 'error', error: errorMessage })
   }
 })
 
