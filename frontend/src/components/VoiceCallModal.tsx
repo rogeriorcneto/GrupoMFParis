@@ -777,47 +777,98 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         let isFirstChunk = true
         let hasSpoken = false
 
-        const reply = await callAIVoiceStream(
-          historyRef.current, 
-          voicePrompt,
-          // onChunk: feedback visual em tempo real
-          (chunk, accumulated) => {
-            console.log('[Voice] onChunk chamado:', chunk, accumulated)
-            fullResponse = accumulated
-            if (isFirstChunk) {
-              console.log('[Voice] Primeiro chunk, definindo texto e estado')
-              setAiText(accumulated)
-              setCallState('speaking')
-              isFirstChunk = false
-            } else {
-              setAiText(accumulated)
-            }
-          },
-          // onTTS: reproduzir frases conforme chegam
-          async (sentence, isFinal) => {
-            console.log('[Voice] onTTS chamado:', sentence, isFinal)
-            if (!hasSpoken || isFinal) {
-              hasSpoken = true
-              try {
-                console.log('[Voice] Iniciando TTS streaming...')
-                await speakNeuralStream(sentence, () => {
-                  console.log('[Voice] TTS finalizado, isFinal:', isFinal)
-                  if (isFinal && !closingRef.current) {
-                    console.log('[Voice] Reiniciando listening após TTS')
-                    startListening()
-                  }
-                }, audioRef)
-              } catch (error) {
-                console.warn('[TTS] Streaming falhou, usando fallback:', error)
-                await speakNeural(sentence, () => {
-                  if (isFinal && !closingRef.current) {
-                    startListening()
-                  }
-                }, audioRef)
+        let reply = ''
+        
+        try {
+          reply = await callAIVoiceStream(
+            historyRef.current, 
+            voicePrompt,
+            // onChunk: feedback visual em tempo real
+            (chunk, accumulated) => {
+              console.log('[Voice] onChunk chamado:', chunk, accumulated)
+              fullResponse = accumulated
+              if (isFirstChunk) {
+                console.log('[Voice] Primeiro chunk, definindo texto e estado')
+                setAiText(accumulated)
+                setCallState('speaking')
+                isFirstChunk = false
+              } else {
+                setAiText(accumulated)
+              }
+            },
+            // onTTS: reproduzir frases conforme chegam
+            async (sentence, isFinal) => {
+              console.log('[Voice] onTTS chamado:', sentence, isFinal)
+              if (!hasSpoken || isFinal) {
+                hasSpoken = true
+                try {
+                  console.log('[Voice] Iniciando TTS streaming...')
+                  await speakNeuralStream(sentence, () => {
+                    console.log('[Voice] TTS finalizado, isFinal:', isFinal)
+                    if (isFinal && !closingRef.current) {
+                      console.log('[Voice] Reiniciando listening após TTS')
+                      startListening()
+                    }
+                  }, audioRef)
+                } catch (error) {
+                  console.warn('[TTS] Streaming falhou, usando fallback:', error)
+                  await speakNeural(sentence, () => {
+                    if (isFinal && !closingRef.current) {
+                      startListening()
+                    }
+                  }, audioRef)
+                }
               }
             }
+          )
+        } catch (streamError) {
+          console.error('[Voice] Streaming falhou completamente, usando fallback:', streamError)
+          
+          // Fallback direto para API simples
+          try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const token = session?.access_token
+            
+            if (token) {
+              const res = await fetch(`${BOT_URL}/api/gemini`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ 
+                  messages: historyRef.current, 
+                  systemInstruction: voicePrompt
+                }),
+              })
+
+              if (res.ok) {
+                const data = await res.json()
+                reply = data.response || data.message || 'Entendido.'
+                console.log('[Voice] Fallback API simples funcionou:', reply)
+                
+                // Simular resposta para UI
+                setAiText(reply)
+                setCallState('speaking')
+                await speakNeural(reply, () => {
+                  if (!closingRef.current) startListening()
+                }, audioRef)
+              } else {
+                throw new Error(`API simples falhou: ${res.status}`)
+              }
+            }
+          } catch (fallbackError) {
+            console.error('[Voice] Fallback também falhou:', fallbackError)
+            
+            // Resposta de emergência
+            reply = 'Desculpe, estou com dificuldades técnicas. Pode repetir?'
+            setAiText(reply)
+            setCallState('speaking')
+            await speakNeural(reply, () => {
+              if (!closingRef.current) startListening()
+            }, audioRef)
           }
-        )
+        }
 
         console.log('[Voice] Resposta final da IA:', reply)
         
