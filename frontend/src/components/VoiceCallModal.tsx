@@ -18,6 +18,10 @@ const BOT_URL = (
   'https://grupomfparis-production.up.railway.app'
 )
 
+// Verificação de ambiente
+console.log('[Environment] BOT_URL:', BOT_URL)
+console.log('[Environment] VITE_BOT_URL:', (import.meta as any).env?.VITE_BOT_URL)
+
 interface VoiceCallModalProps {
   systemPrompt: string
   loggedUserName: string
@@ -682,6 +686,17 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       return
     }
     
+    // Abortar instância anterior se existir
+    if (recRef.current) {
+      console.log('[Voice] Abortando instância anterior...')
+      try {
+        recRef.current.abort()
+      } catch (e) {
+        console.warn('[Voice] Erro ao abortar instância anterior:', e)
+      }
+      recRef.current = null
+    }
+    
     const rec = getSpeechRecognition()
     if (!rec) {
       console.error('[Voice] Navegador não suporta reconhecimento de voz')
@@ -824,7 +839,11 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       
       console.error('[Voice] Erro no reconhecimento:', { error: event.error, message: event.message })
       
-      if (event.error === 'no-speech') {
+      if (event.error === 'aborted') {
+        // Não reiniciar se foi abortado propositalmente
+        console.log('[Voice] Reconhecimento abortado, não reiniciando...')
+        return
+      } else if (event.error === 'no-speech') {
         // User didn't say anything — just restart
         console.log('[Voice] Nenhuma fala detectada, reiniciando...')
         setTimeout(() => { if (!closingRef.current) startListening() }, 100)
@@ -835,7 +854,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         console.error('[Voice] Erro de rede no reconhecimento')
         setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
       } else {
-        // Restart on other errors
+        // Restart on other errors (mas não para 'aborted')
         console.log('[Voice] Erro genérico, reiniciando em 500ms...')
         setTimeout(() => { if (!closingRef.current) startListening() }, 500)
       }
@@ -846,10 +865,16 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       // (handles cases where recognition ended without result or error)
       if (closingRef.current) return
       
+      // Não reiniciar se o reconhecimento foi abortado
+      if (recRef.current === null) {
+        console.log('[Voice] Reconhecimento foi abortado, não reiniciando...')
+        return
+      }
+      
       // Reiniciar listening se ainda está no estado 'listening'
       // Isso garante continuidade do reconhecimento
       setTimeout(() => {
-        if (!closingRef.current && callState === 'listening') {
+        if (!closingRef.current && callState === 'listening' && recRef.current !== null) {
           console.log('[Voice] Reconhecimento terminou, reiniciando...')
           startListening()
         }
