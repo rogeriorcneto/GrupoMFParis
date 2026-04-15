@@ -604,13 +604,22 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   // ── Core: listen → think → speak loop ──────────────────────────────────────
 
   const startListening = useCallback(() => {
-    if (closingRef.current) return
+    console.log('[Voice] Iniciando reconhecimento de voz...')
+    
+    if (closingRef.current) {
+      console.log('[Voice] Cancelando - componente fechando')
+      return
+    }
+    
     const rec = getSpeechRecognition()
     if (!rec) {
+      console.error('[Voice] Navegador não suporta reconhecimento de voz')
       setError('Seu navegador não suporta reconhecimento de voz. Use Chrome ou Edge.')
       setCallState('error')
       return
     }
+    
+    console.log('[Voice] SpeechRecognition criado, configurando eventos...')
     recRef.current = rec
     setCallState('listening')
     setTranscript('')
@@ -621,6 +630,8 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       
       const interim = result[0]?.transcript?.trim() || ''
       const isFinal = result.isFinal
+      
+      console.log('[Voice] Resultado recebido:', { interim, isFinal, resultIndex: event.resultIndex })
       
       // Feedback visual imediato com interim results
       if (interim) {
@@ -638,7 +649,12 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       }
       
       // Processar apenas resultados finais
-      if (!isFinal || !interim) return
+      if (!isFinal || !interim) {
+        console.log('[Voice] Aguardando resultado final...')
+        return
+      }
+      
+      console.log('[Voice] Processando resultado final:', interim)
 
       setTranscript(interim)
       setCallState('thinking')
@@ -721,14 +737,22 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
 
     rec.onerror = (event) => {
       if (closingRef.current) return
+      
+      console.error('[Voice] Erro no reconhecimento:', { error: event.error, message: event.message })
+      
       if (event.error === 'no-speech') {
         // User didn't say anything — just restart
-        startListening()
+        console.log('[Voice] Nenhuma fala detectada, reiniciando...')
+        setTimeout(() => { if (!closingRef.current) startListening() }, 100)
       } else if (event.error === 'not-allowed') {
         setError('Permissão do microfone negada. Habilite nas configurações do navegador.')
         setCallState('error')
+      } else if (event.error === 'network') {
+        console.error('[Voice] Erro de rede no reconhecimento')
+        setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
       } else {
         // Restart on other errors
+        console.log('[Voice] Erro genérico, reiniciando em 500ms...')
         setTimeout(() => { if (!closingRef.current) startListening() }, 500)
       }
     }
@@ -736,6 +760,16 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     rec.onend = () => {
       // If still in 'listening' state and didn't get result, restart
       // (handles cases where recognition ended without result or error)
+      if (closingRef.current) return
+      
+      // Reiniciar listening se ainda está no estado 'listening'
+      // Isso garante continuidade do reconhecimento
+      setTimeout(() => {
+        if (!closingRef.current && callState === 'listening') {
+          console.log('[Voice] Reconhecimento terminou, reiniciando...')
+          startListening()
+        }
+      }, 100)
     }
 
     rec.start()
