@@ -7,7 +7,7 @@ import { fetchPropostasByCliente } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
 
-function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
+function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
@@ -21,6 +21,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [lockProcessing, setLockProcessing] = useState(false)
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
   const [syncing, setSyncing] = useState(false)
+  const [showNovosCiclos, setShowNovosCiclos] = useState(false)
 
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
   const amostraLockedClients = useMemo(() => {
@@ -322,6 +323,20 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     })
     return m
   }, [clientesFiltrados, displayedStages])
+
+  // Clientes em follow_up que podem iniciar novo ciclo de compra (cards virtuais em Proposta)
+  const clientesNovoCiclo = useMemo(() => {
+    const base = clientesFiltradosVendedor.filter(c => c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente')
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      return base.filter(c =>
+        c.razaoSocial.toLowerCase().includes(q) ||
+        (c.nomeFantasia || '').toLowerCase().includes(q) ||
+        (c.contatoNome || '').toLowerCase().includes(q)
+      )
+    }
+    return base
+  }, [clientesFiltradosVendedor, search])
 
   // Memoized metrics using stageMap (no re-filtering)
   const { totalPipeline, receitaPonderada, taxaConversao, tempoMedio, activeCount } = useMemo(() => {
@@ -656,13 +671,26 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
             const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
+            const isProposta = stage.key === 'proposta'
+            const novoCicloCount = isProposta ? clientesNovoCiclo.length : 0
             return (
               <div key={stage.key} className="flex-1 min-w-[260px] max-w-[380px] flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
                 {/* Column header */}
                 <div className="px-3 py-2.5 bg-white border-b border-gray-200 flex-shrink-0">
                   <div className="flex items-center justify-between gap-1">
                     <h3 className="font-bold text-gray-800 text-xs truncate leading-none">{stage.icon} {stage.title}</h3>
-                    <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
+                    <div className="flex items-center gap-1.5">
+                      {isProposta && novoCicloCount > 0 && (
+                        <button
+                          onClick={() => setShowNovosCiclos(v => !v)}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${showNovosCiclos ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'}`}
+                          title={showNovosCiclos ? 'Ocultar clientes em novo ciclo (Follow-up)' : `Mostrar ${novoCicloCount} cliente(s) prontos para novo ciclo`}
+                        >
+                          🔄 {novoCicloCount}
+                        </button>
+                      )}
+                      <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-[11px] text-gray-500 font-medium">R$ {stageValor.toLocaleString('pt-BR')}</span>
@@ -811,7 +839,81 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                       </div>
                     )
                   })}
-                  {stageClientes.length === 0 && <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>}
+                  {stageClientes.length === 0 && !showNovosCiclos && <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>}
+
+                  {/* Cards virtuais: clientes em Follow-up prontos para novo ciclo */}
+                  {isProposta && showNovosCiclos && clientesNovoCiclo.length > 0 && (
+                    <>
+                      {stageClientes.length > 0 && (
+                        <div className="flex items-center gap-2 py-1">
+                          <div className="flex-1 h-px bg-blue-200" />
+                          <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wide whitespace-nowrap">🔄 Novos Ciclos ({clientesNovoCiclo.length})</span>
+                          <div className="flex-1 h-px bg-blue-200" />
+                        </div>
+                      )}
+                      {clientesNovoCiclo.map((cliente) => {
+                        const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
+                        const historico = propostasPorCliente.get(cliente.id) || []
+                        const ultimaProposta = historico[0]
+                        return (
+                          <div
+                            key={`ciclo-${cliente.id}`}
+                            onClick={() => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)}
+                            className="p-3 rounded-lg bg-white cursor-pointer hover:shadow-md transition-all duration-150 group border-l-[3px] border-l-blue-400 border border-blue-100"
+                            title="Cliente em Follow-up — clique para criar nova proposta"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className="text-[10px] font-bold text-gray-400">{cliente.score}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                              {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                            </div>
+                            <div className="flex gap-1 mt-2 flex-wrap">
+                              {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                                <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
+                              )}
+                              {cliente.contatoEmail && (
+                                <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
+                              )}
+                              <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-600 rounded-md font-medium border border-blue-100">🔄 Novo ciclo</span>
+                            </div>
+                            {historico.length > 0 && (
+                              <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <span className="text-[10px] font-semibold text-purple-800">💰 Propostas ({historico.length})</span>
+                                </div>
+                                <div className="space-y-1">
+                                  {historico.slice(0, 2).map((p, i) => (
+                                    <div key={p.id || i} className="flex items-center justify-between text-[9px]">
+                                      <span className="text-gray-600 truncate max-w-[70px]">{p.numero}</span>
+                                      <span className="font-medium text-purple-700">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
+                                      <span className="text-gray-400">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                    </div>
+                                  ))}
+                                  {historico.length > 2 && <p className="text-[9px] text-purple-600 text-center">+{historico.length - 2} mais</p>}
+                                </div>
+                                {ultimaProposta?.frete && <p className="text-[9px] text-gray-500 mt-1">🚚 {ultimaProposta.frete}</p>}
+                              </div>
+                            )}
+                            {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
+                            {cliente.produtosInteresse && cliente.produtosInteresse.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {cliente.produtosInteresse.slice(0, 3).map(p => (<span key={p} className="px-1.5 py-0.5 text-[9px] bg-primary-50 text-primary-700 rounded-full border border-primary-100 truncate max-w-[100px]">{p}</span>))}
+                                {cliente.produtosInteresse.length > 3 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 3}</span>}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+                  {isProposta && showNovosCiclos && clientesNovoCiclo.length === 0 && stageClientes.length === 0 && (
+                    <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>
+                  )}
                 </div>
               </div>
             )

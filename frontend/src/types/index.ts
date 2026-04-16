@@ -307,7 +307,7 @@ export interface Pedido {
   vendedorId: number
   itens: ItemPedido[]
   observacoes: string
-  status: 'rascunho' | 'enviado' | 'confirmado' | 'cancelado'
+  status: 'rascunho' | 'enviado' | 'confirmado' | 'cancelado' | 'cancelamento_solicitado'
   dataCriacao: string
   dataEnvio?: string
   dataAprovacao?: string
@@ -345,6 +345,7 @@ export interface FunilViewProps {
   isGerente?: boolean
   onImportNegocios?: (updates: { clienteId: number; changes: Partial<Cliente> }[], novos: Omit<Cliente, 'id'>[]) => void
   moverCliente?: (clienteId: number, toStage: string, extras?: Partial<Cliente>) => void
+  onNovoCiclo?: (cliente: Cliente) => void
 }
 
 export interface ClientesViewProps {

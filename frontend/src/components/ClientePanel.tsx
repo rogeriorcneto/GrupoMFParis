@@ -30,7 +30,9 @@ interface ClientePanelProps {
   setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
   produtos?: Produto[]
+  pedidos?: Pedido[]
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
+  onSolicitarCancelamentoPedido?: (pedidoId: number, motivo: string) => Promise<void>
 }
 
 const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
@@ -76,7 +78,7 @@ export default function ClientePanel({
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda,
   setInteracoes, setClientes, setTarefas, addNotificacao,
-  produtos, onAddPedido
+  produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido
 }: ClientePanelProps) {
   const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | ''>('')
@@ -130,6 +132,12 @@ export default function ClientePanel({
   const [editPropostaPagamento, setEditPropostaPagamento] = useState(DEFAULT_PAYMENT_TERM)
   const [editPropostaObs, setEditPropostaObs] = useState('')
   const [editPropostaSaving, setEditPropostaSaving] = useState(false)
+
+  // Modal cancelamento de pedido
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelPedidoId, setCancelPedidoId] = useState<number | null>(null)
+  const [cancelMotivo, setCancelMotivo] = useState('')
+  const [cancelSaving, setCancelSaving] = useState(false)
 
   // Gravações de ligação
   const [gravacoes, setGravacoes] = useState<any[]>([])
@@ -501,12 +509,14 @@ export default function ClientePanel({
                             formaPagamento: ultimaProposta.pagamento || DEFAULT_PAYMENT_TERM,
                             tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB') || undefined,
                           })
-                          addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${ultimaProposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação`, c.id)
+                          addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${ultimaProposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
                         } catch {
                           addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
                         }
+                      } else {
+                        addNotificacao('info', 'Sem proposta', 'Crie uma proposta com itens antes de marcar como Ganhou', c.id)
                       }
-                      onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
+                      onMoverCliente(c.id, 'negociacao', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
                       onClose()
                     }}
                     className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
@@ -516,6 +526,30 @@ export default function ClientePanel({
                   <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>
               )}
+              {c.etapa === 'follow_up' && (() => {
+                const pedidoCancelavel = (todosPedidos || []).find(p => p.clienteId === c.id && (p.status === 'confirmado' || p.status === 'enviado') && !['faturado', 'expedido', 'entregue'].includes(p.omieStatus || ''))
+                if (!pedidoCancelavel) return null
+                const jaSolicitado = pedidoCancelavel.status === 'cancelamento_solicitado'
+                return (
+                  <button
+                    onClick={() => {
+                      if (jaSolicitado) return
+                      setCancelPedidoId(pedidoCancelavel.id)
+                      setCancelMotivo('')
+                      setShowCancelModal(true)
+                    }}
+                    disabled={jaSolicitado}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-apple border ${
+                      jaSolicitado
+                        ? 'bg-orange-50 text-orange-600 border-orange-200 cursor-not-allowed opacity-70'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                    title={jaSolicitado ? 'Cancelamento já solicitado — aguardando aprovação do gerente' : 'Solicitar cancelamento do pedido (requer aprovação do gerente)'}
+                  >
+                    {jaSolicitado ? '⏳ Cancelamento Solicitado' : '🚫 Cancelar Pedido'}
+                  </button>
+                )
+              })()}
               {['negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
                 <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
               )}
@@ -1452,6 +1486,46 @@ export default function ClientePanel({
                   ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Gerando...</>
                   : '📄 Gerar Nova Versão PDF'
                 }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Solicitar Cancelamento de Pedido */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onClick={() => setShowCancelModal(false)}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">🚫 Solicitar Cancelamento de Pedido</h2>
+            <p className="text-sm text-gray-500 mb-4">A solicitação será enviada para aprovação do gerente. O pedido só será cancelado após confirmação.</p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Motivo do cancelamento <span className="text-red-500">*</span></label>
+            <textarea
+              value={cancelMotivo}
+              onChange={e => setCancelMotivo(e.target.value)}
+              rows={3}
+              placeholder="Descreva o motivo do cancelamento..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-red-500 mb-4 text-sm resize-none"
+            />
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowCancelModal(false)} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Voltar</button>
+              <button
+                disabled={!cancelMotivo.trim() || cancelSaving}
+                onClick={async () => {
+                  if (!cancelPedidoId || !cancelMotivo.trim()) return
+                  setCancelSaving(true)
+                  try {
+                    await onSolicitarCancelamentoPedido?.(cancelPedidoId, cancelMotivo.trim())
+                    addNotificacao('info', 'Cancelamento solicitado', `Aguardando aprovação do gerente para cancelar o pedido de ${c.razaoSocial}.`, c.id)
+                    setShowCancelModal(false)
+                  } catch {
+                    addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento. Tente novamente.', c.id)
+                  } finally {
+                    setCancelSaving(false)
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-apple hover:bg-red-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cancelSaving ? '⏳ Enviando...' : 'Solicitar Cancelamento'}
               </button>
             </div>
           </div>

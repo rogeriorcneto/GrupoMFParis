@@ -280,12 +280,25 @@ function App() {
     showModalAmostra, setShowModalAmostra, modalAmostraData, setModalAmostraData, confirmAmostra,
     showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
     selectedClientePanel, setSelectedClientePanel,
+
     transicaoInvalida, pendingDrop, setPendingDrop,
   } = useFunilActions({
+
     clientes, setClientes, interacoes, setInteracoes, loggedUser,
     setAtividades, addNotificacao, jobs, setJobs, campanhas, setCampanhas,
     cadencias, tarefas, setTarefas, loadAllData
   })
+
+  const [isNovoCiclo, setIsNovoCiclo] = React.useState(false)
+
+  const handleNovoCiclo = React.useCallback((cliente: Cliente) => {
+    const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any
+    setDraggedItem({ cliente, fromStage: 'follow_up' })
+    setPendingDrop({ e: fakeE, toStage: 'negociacao' })
+    setModalPropostaValor('')
+    setIsNovoCiclo(true)
+    setShowModalProposta(true)
+  }, [setDraggedItem, setPendingDrop, setModalPropostaValor, setShowModalProposta])
 
   // Dashboard Metrics Calculation (memoized)
   const dashboardMetrics = useMemo((): DashboardMetrics => {
@@ -403,6 +416,7 @@ function App() {
                 handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
                 moverCliente={moverCliente}
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
+                onNovoCiclo={handleNovoCiclo}
               />
               <PersistentViews
                 activeView={activeView}
@@ -426,107 +440,114 @@ function App() {
         </div>
       </div>
 
-      {/* Modal Novo Cliente */}
-      <ClienteFormModal
-        showModal={showModal} setShowModal={setShowModal}
-        editingCliente={editingCliente} formData={formData} setFormData={setFormData}
-        handleInputChange={handleInputChange} handleSubmit={handleSubmit}
-        isSaving={isSaving} isLoadingCep={isLoadingCep} isLoadingCnpj={isLoadingCnpj}
-        buscarCep={buscarCep} buscarCnpj={buscarCnpj}
-        produtos={produtos} vendedores={vendedores}
-      />
+        {/* Modal Novo Cliente */}
+        <ClienteFormModal
+          showModal={showModal} setShowModal={setShowModal}
+          editingCliente={editingCliente} formData={formData} setFormData={setFormData}
+          handleInputChange={handleInputChange} handleSubmit={handleSubmit}
+          isSaving={isSaving} isLoadingCep={isLoadingCep} isLoadingCnpj={isLoadingCnpj}
+          buscarCep={buscarCep} buscarCnpj={buscarCnpj}
+          produtos={produtos} vendedores={vendedores}
+        />
 
-      {/* Modal Assistente IA */}
-      <AIModal show={showAIModal} onClose={() => setShowAIModal(false)} clientes={clientes} pedidos={pedidos} vendedores={vendedores} interacoes={interacoes} />
+        {/* Modal Assistente IA */}
+        <AIModal show={showAIModal} onClose={() => setShowAIModal(false)} clientes={clientes} pedidos={pedidos} vendedores={vendedores} interacoes={interacoes} />
 
-      {/* Painel lateral do cliente */}
-      {selectedClientePanel && (
-        <ClientePanel
-          cliente={clientes.find(x => x.id === selectedClientePanel.id) || selectedClientePanel}
-          interacoes={interacoes}
-          tarefas={tarefas}
-          vendedores={vendedores}
+        {/* Painel lateral do cliente */}
+        {selectedClientePanel && (
+          <ClientePanel
+            cliente={clientes.find(x => x.id === selectedClientePanel.id) || selectedClientePanel}
+            interacoes={interacoes}
+            tarefas={tarefas}
+            vendedores={vendedores}
+            loggedUser={loggedUser}
+            onClose={() => setSelectedClientePanel(null)}
+            onEditCliente={handleEditCliente}
+            onMoverCliente={moverCliente}
+            onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'prospecção' }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}
+            onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
+            onTriggerPerda={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'perdido' }); setShowMotivoPerda(true) }}
+            setInteracoes={setInteracoes}
+            setClientes={setClientes}
+            setTarefas={setTarefas}
+            addNotificacao={addNotificacao}
+            produtos={produtos}
+            pedidos={pedidos}
+            onAddPedido={async (p) => {
+              const saved = await db.insertPedido(p)
+              setPedidos(prev => [...prev, saved])
+            }}
+            onSolicitarCancelamentoPedido={async (pedidoId, motivo) => {
+              await db.solicitarCancelamentoPedido(pedidoId, motivo)
+              setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, status: 'cancelamento_solicitado', motivoRecusa: motivo } : p))
+            }}
+          />
+        )}
+
+        {/* Toast transição inválida */}
+        {transicaoInvalida && (
+          <div className="fixed top-4 right-4 z-50 bg-red-600 text-white px-5 py-3 rounded-apple shadow-apple-lg max-w-md animate-pulse">
+            <p className="text-sm font-medium">⛔ {transicaoInvalida}</p>
+          </div>
+        )}
+
+        {/* Modais do Funil (Perda, Amostra, Proposta) */}
+        <FunilModals
+          showMotivoPerda={showMotivoPerda} setShowMotivoPerda={setShowMotivoPerda}
+          motivoPerdaTexto={motivoPerdaTexto} setMotivoPerdaTexto={setMotivoPerdaTexto}
+          categoriaPerdaSel={categoriaPerdaSel} setCategoriaPerdaSel={setCategoriaPerdaSel}
+          confirmPerda={confirmPerda}
+          showModalAmostra={showModalAmostra} setShowModalAmostra={setShowModalAmostra}
+          modalAmostraData={modalAmostraData} setModalAmostraData={setModalAmostraData}
+          confirmAmostra={confirmAmostra}
+          showModalProposta={showModalProposta} setShowModalProposta={setShowModalProposta}
+          modalPropostaValor={modalPropostaValor} setModalPropostaValor={setModalPropostaValor}
+          confirmProposta={confirmProposta}
+          draggedItem={draggedItem} setDraggedItem={setDraggedItem} setPendingDrop={setPendingDrop}
           loggedUser={loggedUser}
-          onClose={() => setSelectedClientePanel(null)}
-          onEditCliente={handleEditCliente}
-          onMoverCliente={moverCliente}
-          onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'prospecção' }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}
-          onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
-          onTriggerPerda={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'perdido' }); setShowMotivoPerda(true) }}
-          setInteracoes={setInteracoes}
-          setClientes={setClientes}
-          setTarefas={setTarefas}
-          addNotificacao={addNotificacao}
           produtos={produtos}
+          clientes={clientes}
           onAddPedido={async (p) => {
             const saved = await db.insertPedido(p)
             setPedidos(prev => [...prev, saved])
           }}
+          showToast={showToast}
+          isNovoCiclo={isNovoCiclo}
+          onCloseNovoCiclo={() => { setIsNovoCiclo(false); setDraggedItem(null); setPendingDrop(null) }}
         />
-      )}
 
-      {/* Toast transição inválida */}
-      {transicaoInvalida && (
-        <div className="fixed top-4 right-4 z-50 bg-red-600 text-white px-5 py-3 rounded-apple shadow-apple-lg max-w-md animate-pulse">
-          <p className="text-sm font-medium">⛔ {transicaoInvalida}</p>
-        </div>
-      )}
+        {/* Busca Global */}
+        <GlobalSearch
+          isOpen={showGlobalSearch}
+          onClose={() => setShowGlobalSearch(false)}
+          clientes={clientes}
+          tarefas={tarefas}
+          pedidos={pedidos}
+          onSelectCliente={(c) => { setSelectedClientePanel(c); setShowGlobalSearch(false) }}
+          onNavigate={(view) => { setActiveView(view); setShowGlobalSearch(false) }}
+        />
 
-      {/* Modais do Funil (Perda, Amostra, Proposta) */}
-      <FunilModals
-        showMotivoPerda={showMotivoPerda} setShowMotivoPerda={setShowMotivoPerda}
-        motivoPerdaTexto={motivoPerdaTexto} setMotivoPerdaTexto={setMotivoPerdaTexto}
-        categoriaPerdaSel={categoriaPerdaSel} setCategoriaPerdaSel={setCategoriaPerdaSel}
-        confirmPerda={confirmPerda}
-        showModalAmostra={showModalAmostra} setShowModalAmostra={setShowModalAmostra}
-        modalAmostraData={modalAmostraData} setModalAmostraData={setModalAmostraData}
-        confirmAmostra={confirmAmostra}
-        showModalProposta={showModalProposta} setShowModalProposta={setShowModalProposta}
-        modalPropostaValor={modalPropostaValor} setModalPropostaValor={setModalPropostaValor}
-        confirmProposta={confirmProposta}
-        draggedItem={draggedItem} setDraggedItem={setDraggedItem} setPendingDrop={setPendingDrop}
-        loggedUser={loggedUser}
-        produtos={produtos}
-        clientes={clientes}
-        onAddPedido={async (p) => {
-          const saved = await db.insertPedido(p)
-          setPedidos(prev => [...prev, saved])
-        }}
-        showToast={showToast}
-      />
+        {/* Toast global de feedback */}
+        <Toast toastMsg={toastMsg} />
 
-      {/* Busca Global */}
-      <GlobalSearch
-        isOpen={showGlobalSearch}
-        onClose={() => setShowGlobalSearch(false)}
-        clientes={clientes}
-        tarefas={tarefas}
-        pedidos={pedidos}
-        onSelectCliente={(c) => { setSelectedClientePanel(c); setShowGlobalSearch(false) }}
-        onNavigate={(view) => { setActiveView(view); setShowGlobalSearch(false) }}
-      />
-
-      {/* Toast global de feedback */}
-      <Toast toastMsg={toastMsg} />
-
-      {/* Banner de nova versão disponível */}
-      {newVersionAvailable && (
-        <div className="fixed bottom-4 right-4 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-apple shadow-2xl max-w-md animate-slide-in-right">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 text-2xl">🎉</div>
-            <div className="flex-1">
-              <p className="font-semibold text-sm mb-1">Nova versão disponível!</p>
-              <p className="text-xs text-white/90 mb-3">Uma atualização do CRM está pronta. Recarregue a página para obter as últimas melhorias.</p>
-              <button
-                onClick={reloadApp}
-                className="w-full px-4 py-2 bg-white text-blue-600 rounded-apple text-sm font-semibold hover:bg-blue-50 transition-colors"
-              >
-                🔄 Recarregar Agora
-              </button>
+        {/* Banner de nova versão disponível */}
+        {newVersionAvailable && (
+          <div className="fixed bottom-4 right-4 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-apple shadow-2xl max-w-md animate-slide-in-right">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 text-2xl">🎉</div>
+              <div className="flex-1">
+                <p className="font-semibold text-sm mb-1">Nova versão disponível!</p>
+                <p className="text-xs text-white/90 mb-3">Uma atualização do CRM está pronta. Recarregue a página para obter as últimas melhorias.</p>
+                <button
+                  onClick={reloadApp}
+                  className="w-full px-4 py-2 bg-white text-blue-600 rounded-apple text-sm font-semibold hover:bg-blue-50 transition-colors"
+                >
+                  🔄 Recarregar Agora
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   )
 }

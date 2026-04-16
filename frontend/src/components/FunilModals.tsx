@@ -39,6 +39,8 @@ interface FunilModalsProps {
   clientes?: Cliente[]
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
   showToast?: (tipo: 'success' | 'error', texto: string) => void
+  isNovoCiclo?: boolean
+  onCloseNovoCiclo?: () => void
 }
 
 const perdaCategorias: { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[] = [
@@ -56,7 +58,8 @@ export default function FunilModals({
   showModalAmostra, setShowModalAmostra, modalAmostraData, setModalAmostraData, confirmAmostra,
   showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
   draggedItem, setDraggedItem, setPendingDrop,
-  produtos = [], clientes = [], onAddPedido, showToast
+  produtos = [], clientes = [], onAddPedido, showToast,
+  isNovoCiclo = false, onCloseNovoCiclo
 }: FunilModalsProps) {
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
@@ -162,15 +165,22 @@ export default function FunilModals({
         // histórico falhou silenciosamente, não bloqueia o fluxo
       }
 
-      const extras: Partial<Cliente> = { valorProposta: valorFinal }
-      if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)
-      const notasParts: string[] = []
-      if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
-      if (propostaPagamento && propostaPagamento !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${propostaPagamento}`)
-      if (propostaObs.trim()) notasParts.push(propostaObs.trim())
-      if (notasParts.length > 0) extras.notas = notasParts.join(' | ')
-      confirmProposta(extras)
-      showToast?.('success', `Proposta ${numero} gerada e salva!`)
+      if (isNovoCiclo) {
+        // Novo ciclo: só salvar proposta, NÃO mover cliente de etapa
+        setShowModalProposta(false)
+        onCloseNovoCiclo?.()
+        showToast?.('success', `Proposta ${numero} gerada para novo ciclo!`)
+      } else {
+        const extras: Partial<Cliente> = { valorProposta: valorFinal }
+        if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)
+        const notasParts: string[] = []
+        if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
+        if (propostaPagamento && propostaPagamento !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${propostaPagamento}`)
+        if (propostaObs.trim()) notasParts.push(propostaObs.trim())
+        if (notasParts.length > 0) extras.notas = notasParts.join(' | ')
+        confirmProposta(extras)
+        showToast?.('success', `Proposta ${numero} gerada e salva!`)
+      }
     } finally {
       setPropostaSaving(false)
     }
@@ -249,7 +259,7 @@ export default function FunilModals({
 
   const cancelPerda = () => { setShowMotivoPerda(false); setDraggedItem(null); setPendingDrop(null); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro') }
   const cancelAmostra = () => { setShowModalAmostra(false); setDraggedItem(null); setPendingDrop(null) }
-  const cancelProposta = () => { setShowModalProposta(false); setDraggedItem(null); setPendingDrop(null); setModalPropostaValor('') }
+  const cancelProposta = () => { setShowModalProposta(false); setDraggedItem(null); setPendingDrop(null); setModalPropostaValor(''); if (isNovoCiclo) onCloseNovoCiclo?.() }
 
   return (
     <>
@@ -401,8 +411,9 @@ export default function FunilModals({
           <div className="bg-white rounded-apple shadow-apple-lg w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900">💰 Nova Negociação</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{isNovoCiclo ? '� Nova Proposta — Novo Ciclo' : '�💰 Nova Negociação'}</h2>
               <p className="text-sm text-gray-500 mt-0.5">Cliente: <span className="font-medium text-gray-800">{draggedItem?.cliente.razaoSocial}</span></p>
+              {isNovoCiclo && <p className="text-xs text-blue-600 mt-1 font-medium">A proposta será salva sem alterar a etapa do cliente no funil.</p>}
             </div>
 
             {/* Body — duas colunas */}

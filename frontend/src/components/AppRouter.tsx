@@ -55,13 +55,16 @@ interface AppRouterProps {
   startCampanha: (id: number) => void
   runJobNow: (id: number) => void
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
+  onNovoCiclo?: (cliente: Cliente) => void
 }
 
 export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
   const isAmostraFlow = pedido.tipo === 'bonificacao' || cliente?.etapa === 'amostra' || cliente?.etapa === 'amostra_perdida'
   if (isAmostraFlow) return false
   if (!cliente) return false
-  return cliente.etapa !== 'follow_up' && cliente.etapa !== 'perdido'
+  // Move to follow_up only from negociacao when awaiting gerente approval
+  if (cliente.etapa === 'negociacao' && cliente.statusFollowUp === 'aguardando_aprovacao_gerente') return true
+  return false
 }
 
 export default function AppRouter({
@@ -72,7 +75,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, handleQuickAction,
-  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao
+  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -120,7 +123,7 @@ export default function AppRouter({
               setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusAmostra: 'liberada' } : c))
               try { await db.updateCliente(pedido.clienteId, { statusAmostra: 'liberada' }) } catch { /* non-critical */ }
             }
-            // Se cliente está em follow_up aguardando aprovação, atualizar para pedido aprovado
+            // Se cliente já está em follow_up aguardando aprovação, atualizar para pedido aprovado
             if (cliAprov?.etapa === 'follow_up' && cliAprov?.statusFollowUp === 'aguardando_aprovacao_gerente') {
               try { 
                 await db.updateCliente(pedido.clienteId, { statusFollowUp: 'pedido_aprovado' })
@@ -144,6 +147,20 @@ export default function AppRouter({
             }
           } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
         }}
+        onConfirmarCancelamento={async (pedido) => {
+          try {
+            await db.confirmarCancelamentoPedido(pedido.id)
+            setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
+            addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)
+          } catch (err) { logger.error('Erro ao confirmar cancelamento:', err); throw err }
+        }}
+        onRejeitarCancelamento={async (pedido) => {
+          try {
+            await db.rejeitarCancelamentoPedido(pedido.id)
+            setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'confirmado', motivoRecusa: undefined } : p))
+            addNotificacao('info', 'Cancelamento rejeitado', `Pedido ${pedido.numero} mantido. Cancelamento rejeitado pelo gerente.`, pedido.clienteId)
+          } catch (err) { logger.error('Erro ao rejeitar cancelamento:', err); throw err }
+        }}
       />
     case 'trafico':
       return <TrafegoPagoView loggedUser={loggedUser} />
@@ -161,6 +178,7 @@ export default function AppRouter({
         onClickCliente={(c) => setSelectedClientePanel(c)}
         isGerente={loggedUser?.cargo === 'gerente'}
         moverCliente={moverCliente}
+        onNovoCiclo={onNovoCiclo}
         onImportNegocios={async (updates, novos) => {
           try {
             if (updates.length > 0) {
@@ -222,11 +240,17 @@ export default function AppRouter({
                 if (match) existente = match
               }
 
+              const ETAPAS_PROPOSTA_OU_POSTERIOR = ['proposta', 'negociacao', 'follow_up']
               if (existente) {
-                // Cliente já existe → atualizar vendedorId para o vendedor que importou
-                await db.updateCliente(existente.id, { vendedorId: vendedorId })
-                setClientes(prev => prev.map(c => c.id === existente!.id ? { ...c, vendedorId } : c))
-                atualizados++
+                if (ETAPAS_PROPOSTA_OU_POSTERIOR.includes(existente.etapa)) {
+                  // Cliente em Proposta ou posterior: permitir duplicata (novo lead em amostra)
+                  realmente_novos.push(novoCliente as Omit<Cliente, 'id'>)
+                } else {
+                  // Cliente já existe em etapa anterior → atualizar vendedorId
+                  await db.updateCliente(existente.id, { vendedorId: vendedorId })
+                  setClientes(prev => prev.map(c => c.id === existente!.id ? { ...c, vendedorId } : c))
+                  atualizados++
+                }
               } else {
                 realmente_novos.push(novoCliente as Omit<Cliente, 'id'>)
               }
