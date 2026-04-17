@@ -931,8 +931,14 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       console.error('[Voice] Erro no reconhecimento:', { error: event.error, message: event.message })
       
       if (event.error === 'aborted') {
-        // Não reiniciar se foi abortado propositalmente
-        console.log('[Voice] Reconhecimento abortado, não reiniciando...')
+        // Se abortado propositalmente (recRef === null), não reiniciar
+        // Se abortado pelo browser/acidental, reiniciar
+        if (recRef.current === null) {
+          console.log('[Voice] Reconhecimento abortado propositalmente, não reiniciando...')
+          return
+        }
+        console.log('[Voice] Reconhecimento abortado pelo browser, reiniciando...')
+        setTimeout(() => { if (!closingRef.current) startListening() }, 500)
         return
       } else if (event.error === 'no-speech') {
         // User didn't say anything — just restart
