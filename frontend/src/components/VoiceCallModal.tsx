@@ -227,6 +227,7 @@ async function callAIVoiceStream(
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ messages, systemInstruction: systemPrompt }),
       })
 
       console.log('[AI] Backend streaming response:', res.status, res.statusText)
@@ -383,7 +384,18 @@ async function speakNeuralStream(
     }
   }
 
-  // Tentar WebSocket streaming (Fase 2)
+  // Tentar WebSocket streaming (Fase 2) — apenas em localhost
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  if (!isLocalhost) {
+    // Em produção, pular WebSocket e ir direto para speakNeural
+    try {
+      return await speakNeural(text, onEnd, audioRef)
+    } catch (e) {
+      console.error('[TTS] speakNeural falhou em produção:', e)
+      onEnd()
+      return
+    }
+  }
   try {
     const { data: { session } } = await supabase.auth.getSession()
     const token = session?.access_token
@@ -634,15 +646,24 @@ async function speakNeural(text: string, onEnd: () => void, audioRef: React.Muta
 
   // Browser fallback final
   console.log('[TTS] Usando fallback browser')
-  const utter = new SpeechSynthesisUtterance(clean)
-  utter.lang = 'pt-BR'
-  utter.rate = 1.0
-  const voices = window.speechSynthesis.getVoices()
-  const ptVoice = voices.find(v => v.lang === 'pt-BR') || voices.find(v => v.lang.startsWith('pt'))
-  if (ptVoice) utter.voice = ptVoice
-  utter.onend = onEnd
-  utter.onerror = onEnd
-  window.speechSynthesis.speak(utter)
+  try {
+    const utter = new SpeechSynthesisUtterance(clean)
+    utter.lang = 'pt-BR'
+    utter.rate = 1.0
+    const voices = window.speechSynthesis.getVoices()
+    const ptVoice = voices.find(v => v.lang === 'pt-BR') || voices.find(v => v.lang.startsWith('pt'))
+    if (ptVoice) utter.voice = ptVoice
+    let ended = false
+    const safeEnd = () => { if (!ended) { ended = true; onEnd() } }
+    utter.onend = safeEnd
+    utter.onerror = safeEnd
+    window.speechSynthesis.speak(utter)
+    // Safety net: se browser TTS também travar, forçar onEnd após 15s
+    setTimeout(safeEnd, 15000)
+  } catch (e) {
+    console.error('[TTS] Browser fallback error:', e)
+    onEnd()
+  }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -875,10 +896,25 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
         
-        // Se não falhou nada, garantir que reinicia listening
+        // Safety net: se TTS não completar em 20s, forçar restart
+        // Isso evita que o loop trave indefinidamente
+        setTimeout(() => {
+          if (!closingRef.current && !['listening'].includes(callState)) {
+            console.warn('[Voice] Safety timeout: TTS não completou em 20s, reiniciando listening')
+            startListening()
+          }
+        }, 20000)
+
+        // Se o TTS nunca foi chamado (ex: onTTS nunca disparou), reiniciar imediatamente
         if (!hasSpoken && !closingRef.current) {
-          console.log('[Voice] Não falhou nada, reiniciando listening em 1s')
-          setTimeout(() => startListening(), 1000)
+          console.log('[Voice] TTS nunca disparou, tentando falar e reiniciar...')
+          if (reply) {
+            setAiText(reply)
+            setCallState('speaking')
+            speakNeural(reply, () => { if (!closingRef.current) startListening() }, audioRef)
+          } else {
+            setTimeout(() => startListening(), 1000)
+          }
         }
       } catch (error) {
         console.error('[AI] Erro no streaming:', error)
