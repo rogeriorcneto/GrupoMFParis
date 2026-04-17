@@ -119,11 +119,18 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     }
 
     // Verificar CNPJ duplicado antes de salvar
+    // Regra: bloquear duplicata EXCETO se o cliente existente estiver em Proposta ou etapa posterior
+    // (proposta, negociacao, follow_up) — nesse caso um novo lead pode entrar em Amostra.
+    const ETAPAS_PROPOSTA_OU_POSTERIOR = ['proposta', 'negociacao', 'follow_up']
     if (cnpjDigits.length === 14) {
       try {
         const duplicado = await db.checkCnpjDuplicado(formData.cnpj, editingCliente?.id)
         if (duplicado) {
-          showToast('error', `CNPJ já cadastrado para "${duplicado.razaoSocial}". Não é possível duplicar.`)
+          if (ETAPAS_PROPOSTA_OU_POSTERIOR.includes(duplicado.etapa)) {
+            showToast('error', `"${duplicado.razaoSocial}" já está em ${duplicado.etapa === 'proposta' ? 'Proposta' : duplicado.etapa === 'negociacao' ? 'Negociação' : 'Follow-up'}. Para duplicar, use a importação de Amostra diretamente no funil.`)
+            return
+          }
+          showToast('error', `CNPJ já cadastrado para "${duplicado.razaoSocial}" (${duplicado.etapa}). Não é possível duplicar.`)
           return
         }
       } catch (err) {

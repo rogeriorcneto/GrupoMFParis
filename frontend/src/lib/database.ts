@@ -921,6 +921,29 @@ export async function recusarPedido(id: number, motivoRecusa: string): Promise<v
   if (error) throw error
 }
 
+export async function solicitarCancelamentoPedido(id: number, motivo: string): Promise<void> {
+  const { error } = await supabase.from('pedidos').update({
+    status: 'cancelamento_solicitado',
+    motivo_recusa: motivo,
+  }).eq('id', id)
+  if (error) throw error
+}
+
+export async function confirmarCancelamentoPedido(id: number): Promise<void> {
+  const { error } = await supabase.from('pedidos').update({
+    status: 'cancelado',
+  }).eq('id', id)
+  if (error) throw error
+}
+
+export async function rejeitarCancelamentoPedido(id: number): Promise<void> {
+  const { error } = await supabase.from('pedidos').update({
+    status: 'confirmado',
+    motivo_recusa: null,
+  }).eq('id', id)
+  if (error) throw error
+}
+
 // ============================================
 // TEMPLATES
 // ============================================

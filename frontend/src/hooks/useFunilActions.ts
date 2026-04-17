@@ -229,6 +229,7 @@ export function useFunilActions({
     if (toStage === 'follow_up') {
       tarefaDefs.push({ titulo: `Acompanhar logística — ${nome}`, descricao: 'Pedido aprovado. Acompanhar produção e entrega.', data: dataDaqui(7), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
       tarefaDefs.push({ titulo: `Coletar satisfação — ${nome}`, descricao: 'Após entrega, avaliar satisfação do cliente.', data: dataDaqui(30), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
+      tarefaDefs.push({ titulo: `Preparar proposta comercial — ${nome}`, descricao: 'Cliente em Follow-up. Preparar nova proposta para próximo ciclo de compra.', data: dataDaqui(15), hora: '09:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
     }
     if (toStage === 'amostra_perdida') {
       tarefaDefs.push({ titulo: `Avaliar 2ª tentativa amostra — ${nome}`, descricao: 'Amostra reprovada. Avaliar se vale tentar novamente.', data: dataDaqui(3), hora: '10:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })

@@ -605,13 +605,16 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   // Parcelas baseadas na forma de pagamento
   const totalPedido = itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
   
-  // Só enviar lista_parcelas se for usar parcelas customizadas (código 999)
-  if (usarListaParcelas) {
+  // Sempre enviar lista_parcelas com datas explícitas para garantir vencimentos corretos no Omie.
+  // Exceção: à vista (codigo '000') — o Omie resolve sozinho.
+  if (codigoParcela === '000') {
+    log.info({ pedidoId, formaPagamento, codigoParcela }, '✅ À vista — sem lista_parcelas')
+  } else {
     const parcelas = gerarParcelas(formaPagamento, totalPedido, dataPrevisao)
     omiePedido.lista_parcelas = { parcela: parcelas }
-    log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas customizadas geradas para Omie')
-  } else {
-    log.info({ pedidoId, formaPagamento, codigoParcela }, '✅ Usando parcela pré-cadastrada do Omie')
+    // Quando enviamos lista_parcelas, usar código 999 para o Omie não sobrescrever as datas
+    cabecalho.codigo_parcela = '999'
+    log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas com datas explícitas enviadas para Omie')
   }
 
   // Observações do CRM

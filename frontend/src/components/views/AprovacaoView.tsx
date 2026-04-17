@@ -44,6 +44,8 @@ interface AprovacaoViewProps {
   loggedUser: Vendedor
   onAprovar: (pedido: Pedido) => Promise<void>
   onRecusar: (pedido: Pedido, motivo: string) => Promise<void>
+  onConfirmarCancelamento?: (pedido: Pedido) => Promise<void>
+  onRejeitarCancelamento?: (pedido: Pedido) => Promise<void>
   showToast: (tipo: 'success' | 'error', texto: string) => void
 }
 
@@ -56,14 +58,16 @@ const catLabel: Record<string, string> = {
 }
 
 export default function AprovacaoView({
-  pedidos, clientes, vendedores, loggedUser, onAprovar, onRecusar, showToast,
+  pedidos, clientes, vendedores, loggedUser, onAprovar, onRecusar,
+  onConfirmarCancelamento, onRejeitarCancelamento, showToast,
 }: AprovacaoViewProps) {
   const [loadingId, setLoadingId] = useState<number | null>(null)
   const [recusandoId, setRecusandoId] = useState<number | null>(null)
   const [motivoRecusa, setMotivoRecusa] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [filtroVendedor, setFiltroVendedor] = useState<number | ''>('')
-  const [activeTab, setActiveTab] = useState<'pendentes' | 'historico' | 'parametros'>('pendentes')
+  const [activeTab, setActiveTab] = useState<'pendentes' | 'cancelamentos' | 'historico' | 'parametros'>('pendentes')
+  const [loadingCancelId, setLoadingCancelId] = useState<number | null>(null)
 
   // Parâmetros de auto-aprovação
   const [params, setParams] = useState<ParametrosAprovacao>(() => getParametrosAprovacao())
@@ -104,6 +108,15 @@ export default function AprovacaoView({
     pedidos
       .filter(p =>
         p.status === 'enviado' &&
+        (filtroVendedor === '' || p.vendedorId === filtroVendedor)
+      )
+      .sort((a, b) => new Date(a.dataCriacao).getTime() - new Date(b.dataCriacao).getTime())
+  , [pedidos, filtroVendedor])
+
+  const cancelamentosPendentes = useMemo(() =>
+    pedidos
+      .filter(p =>
+        p.status === 'cancelamento_solicitado' &&
         (filtroVendedor === '' || p.vendedorId === filtroVendedor)
       )
       .sort((a, b) => new Date(a.dataCriacao).getTime() - new Date(b.dataCriacao).getTime())
@@ -402,6 +415,12 @@ export default function AprovacaoView({
             ⏳ Aguardando {totalPendente > 0 && <span className="ml-1.5 bg-white text-amber-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{totalPendente}</span>}
           </button>
           <button
+            onClick={() => setActiveTab('cancelamentos')}
+            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'cancelamentos' ? 'bg-red-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          >
+            🚫 Cancelamentos {cancelamentosPendentes.length > 0 && <span className="ml-1.5 bg-white text-red-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{cancelamentosPendentes.length}</span>}
+          </button>
+          <button
             onClick={() => setActiveTab('historico')}
             className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'historico' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
@@ -562,6 +581,90 @@ export default function AprovacaoView({
             </ul>
           </div>
         </div>
+      )}
+
+      {/* Tab: Cancelamentos Pendentes */}
+      {activeTab === 'cancelamentos' && (
+        <>
+          {cancelamentosPendentes.length === 0 ? (
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-16 text-center">
+              <CheckCircleIcon className="h-16 w-16 text-green-300 mx-auto mb-4" />
+              <p className="text-lg font-semibold text-gray-700">Nenhuma solicitação de cancelamento pendente</p>
+              <p className="text-sm text-gray-400 mt-1">Quando um vendedor solicitar cancelamento de pedido, aparecerá aqui.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">{cancelamentosPendentes.length} solicitação(ões) de cancelamento aguardando aprovação</p>
+              {cancelamentosPendentes.map(pedido => {
+                const cliente = clienteMap.get(pedido.clienteId)
+                const vendedor = vendedorMap.get(pedido.vendedorId)
+                const isLoading = loadingCancelId === pedido.id
+                return (
+                  <div key={pedido.id} className="bg-white rounded-apple shadow-apple-sm border-2 border-red-300 p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-base font-bold text-gray-900">{pedido.numero}</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full border border-red-200 animate-pulse">🚫 Cancelamento Solicitado</span>
+                        </div>
+                        <div className="mt-1 space-y-0.5">
+                          <p className="text-sm font-medium text-gray-800">{cliente?.razaoSocial || '—'}</p>
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                            {vendedor && <span>👤 {vendedor.nome}</span>}
+                            <span>·</span>
+                            <span>📅 {new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-4">
+                        <p className="text-xl font-bold text-red-500">R$ {pedido.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-xs text-gray-400">{pedido.itens.length} produto(s)</p>
+                      </div>
+                    </div>
+                    {pedido.motivoRecusa && (
+                      <div className="mb-3 p-3 bg-red-50 rounded-apple border border-red-200">
+                        <p className="text-xs font-semibold text-red-700 mb-0.5">Motivo do cancelamento:</p>
+                        <p className="text-sm text-red-800">{pedido.motivoRecusa}</p>
+                      </div>
+                    )}
+                    <div className="flex gap-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={async () => {
+                          setLoadingCancelId(pedido.id)
+                          try {
+                            await onConfirmarCancelamento?.(pedido)
+                            showToast('success', `Pedido ${pedido.numero} cancelado com sucesso.`)
+                          } catch {
+                            showToast('error', 'Erro ao confirmar cancelamento.')
+                          } finally { setLoadingCancelId(null) }
+                        }}
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
+                      >
+                        {isLoading ? '⏳ Processando...' : '✅ Confirmar Cancelamento'}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setLoadingCancelId(pedido.id)
+                          try {
+                            await onRejeitarCancelamento?.(pedido)
+                            showToast('success', `Cancelamento do pedido ${pedido.numero} rejeitado. Pedido restaurado.`)
+                          } catch {
+                            showToast('error', 'Erro ao rejeitar cancelamento.')
+                          } finally { setLoadingCancelId(null) }
+                        }}
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-60 text-gray-700 border border-gray-300 text-sm font-semibold rounded-apple transition-colors"
+                      >
+                        ↩ Rejeitar (Manter Pedido)
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Lista pedidos pendentes */}
