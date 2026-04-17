@@ -166,10 +166,23 @@ export default function FunilModals({
       }
 
       if (isNovoCiclo) {
-        // Novo ciclo: só salvar proposta, NÃO mover cliente de etapa
+        // Novo ciclo: salvar proposta E mover cliente de follow_up para negociacao
+        // para iniciar novo ciclo de vendas
+        const extras: Partial<Cliente> = {
+          valorProposta: valorFinal,
+          dataProposta: new Date().toISOString().split('T')[0],
+          statusFollowUp: 'novo_ciclo_iniciado' // marca que iniciou novo ciclo
+        }
+        if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)
+        const notasParts: string[] = ['🔄 Novo ciclo de vendas iniciado']
+        if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
+        if (propostaPagamento && propostaPagamento !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${propostaPagamento}`)
+        if (propostaObs.trim()) notasParts.push(propostaObs.trim())
+        extras.notas = notasParts.join(' | ')
+        confirmProposta(extras)
         setShowModalProposta(false)
         onCloseNovoCiclo?.()
-        showToast?.('success', `Proposta ${numero} gerada para novo ciclo!`)
+        showToast?.('success', `Proposta ${numero} gerada e cliente movido para Negociação!`)
       } else {
         const extras: Partial<Cliente> = { valorProposta: valorFinal }
         if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)

@@ -327,8 +327,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   // Clientes em follow_up que podem iniciar novo ciclo de compra (cards virtuais em Proposta)
   const clientesNovoCiclo = useMemo(() => {
     const base = clientesFiltradosVendedor.filter(c => c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente')
-    // DEBUG: remover após confirmar funcionamento
-    console.log('[DEBUG] clientesNovoCiclo:', base.length, 'clientes em follow_up sem aguardar aprovação')
     if (search.trim()) {
       const q = search.toLowerCase()
       return base.filter(c =>
