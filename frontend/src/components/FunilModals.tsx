@@ -216,6 +216,15 @@ export default function FunilModals({
     }
   }
 
+  const handleRefazerPedido = (p: PropostaHistorico) => {
+    // Copiar itens da proposta histórica para a nova proposta
+    setPropostaItens(p.itens.map(i => ({ ...i })))
+    if (p.frete) setPropostaFrete(p.frete as 'CIF' | 'FOB')
+    if (p.pagamento) setPropostaPagamento(p.pagamento)
+    if (p.observacoes) setPropostaObs(p.observacoes)
+    showToast?.('success', `Itens da ${p.numero} copiados para nova proposta!`)
+  }
+
   const pedidoTotal = pedidoItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
   const filteredProdutos = produtos.filter(p => {
     if (!pedidoSearch.trim()) return false
@@ -559,12 +568,21 @@ export default function FunilModals({
                           </div>
                           <div className="flex flex-col items-end gap-1 flex-shrink-0">
                             <span className="text-xs font-bold text-purple-700">R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            <button
-                              onClick={() => handleDownloadPropostaHistorico(p)}
-                              className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-semibold rounded-apple transition-colors"
-                            >
-                              ⬇ PDF
-                            </button>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleRefazerPedido(p)}
+                                className="flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-semibold rounded-apple transition-colors"
+                                title="Copiar itens desta proposta para a nova proposta"
+                              >
+                                🔄 Refazer
+                              </button>
+                              <button
+                                onClick={() => handleDownloadPropostaHistorico(p)}
+                                className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-semibold rounded-apple transition-colors"
+                              >
+                                ⬇ PDF
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>

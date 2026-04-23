@@ -62,8 +62,9 @@ export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente
   const isAmostraFlow = pedido.tipo === 'bonificacao' || cliente?.etapa === 'amostra' || cliente?.etapa === 'amostra_perdida'
   if (isAmostraFlow) return false
   if (!cliente) return false
-  // Move to follow_up only from negociacao when awaiting gerente approval
-  if (cliente.etapa === 'negociacao' && cliente.statusFollowUp === 'aguardando_aprovacao_gerente') return true
+  // Move to follow_up from negociacao when awaiting gerente approval OR when novo ciclo was started
+  if (cliente.etapa === 'negociacao' && 
+      (cliente.statusFollowUp === 'aguardando_aprovacao_gerente' || cliente.statusFollowUp === 'novo_ciclo_iniciado')) return true
   return false
 }
 
