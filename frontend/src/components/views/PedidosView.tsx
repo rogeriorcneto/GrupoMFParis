@@ -18,7 +18,12 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 }) {
   const isGerente = loggedUser.cargo === 'gerente'
   const [tab, setTab] = React.useState<'novo' | 'historico'>('novo')
-  const clientesDisponiveis = (isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser.id)).filter(c => c.etapa !== 'perdido' && c.etapa !== 'inativo')
+  // DEBUG: Log clientes disponíveis
+  console.log('[Pedidos] Total clientes:', clientes.length)
+  console.log('[Pedidos] isGerente:', isGerente)
+  // Mostrar todos clientes para gerente (incluir perdido/inativo na busca, mas indicar visualmente)
+  const clientesDisponiveis = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser.id).filter(c => c.etapa !== 'perdido' && c.etapa !== 'inativo')
+  console.log('[Pedidos] Clientes disponíveis:', clientesDisponiveis.length, clientesDisponiveis.slice(0, 3).map(c => c.razaoSocial))
   const produtosAtivos = produtos.filter(p => p.ativo)
   const [selectedClienteId, setSelectedClienteId] = React.useState<number | ''>(clientesDisponiveis[0]?.id ?? '')
   const [itensPedido, setItensPedido] = React.useState<ItemPedido[]>([])
@@ -236,15 +241,22 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 max-h-40 overflow-y-auto">
                           {(() => {
                             const q = searchCliente.toLowerCase().trim()
-                            const filtrados = clientesDisponiveis.filter(c =>
-                              c.razaoSocial?.toLowerCase().includes(q) ||
-                              c.nomeFantasia?.toLowerCase().includes(q) ||
-                              c.contatoNome?.toLowerCase().includes(q) ||
-                              c.cnpj?.includes(q) ||
-                              c.whatsapp?.includes(q) ||
-                              c.contatoCelular?.includes(q) ||
-                              c.contatoTelefone?.includes(q)
-                            )
+                            console.log('[Pedidos] Buscando por:', q)
+                            console.log('[Pedidos] Total clientes disponíveis:', clientesDisponiveis.length)
+                            const filtrados = clientesDisponiveis.filter(c => {
+                              const match = c.razaoSocial?.toLowerCase().includes(q) ||
+                                c.nomeFantasia?.toLowerCase().includes(q) ||
+                                c.contatoNome?.toLowerCase().includes(q) ||
+                                c.cnpj?.includes(q) ||
+                                c.whatsapp?.includes(q) ||
+                                c.contatoCelular?.includes(q) ||
+                                c.contatoTelefone?.includes(q)
+                              if (q && c.razaoSocial?.toLowerCase().includes('batist')) {
+                                console.log('[Pedidos] Batistelli match:', match, c)
+                              }
+                              return match
+                            })
+                            console.log('[Pedidos] Filtrados:', filtrados.length)
                             if (filtrados.length === 0) return <p className="px-3 py-2 text-xs text-gray-400">Nenhum resultado</p>
                             return filtrados.map(c => (
                               <button key={c.id} onClick={() => { setSelectedClienteId(c.id); setSearchCliente(c.razaoSocial); setShowClienteDropdown(false) }}
