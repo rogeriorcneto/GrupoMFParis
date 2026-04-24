@@ -491,8 +491,13 @@ export default function ClientePanel({
                 <>
                   <button
                     onClick={async () => {
+                      console.log('[DEBUG Ganhou] Clicked!')
                       const hoje = new Date().toISOString().split('T')[0]
+                      console.log('[DEBUG Ganhou] onAddPedido:', onAddPedido)
+                      console.log('[DEBUG Ganhou] ultimaProposta:', ultimaProposta)
+                      console.log('[DEBUG Ganhou] ultimaProposta?.itens:', ultimaProposta?.itens)
                       if (onAddPedido && ultimaProposta && ultimaProposta.itens.length > 0) {
+                        console.log('[DEBUG Ganhou] Criando pedido...')
                         try {
                           const numero = `PED-${Date.now().toString().slice(-6)}`
                           await onAddPedido({
@@ -510,13 +515,17 @@ export default function ClientePanel({
                             tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB') || undefined,
                           })
                           addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${ultimaProposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
-                        } catch {
+                        } catch (err) {
+                          console.error('[DEBUG Ganhou] Erro ao criar pedido:', err)
                           addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
                         }
                       } else {
+                        console.log('[DEBUG Ganhou] Sem proposta ou itens, mostrando notificacao')
                         addNotificacao('info', 'Sem proposta', 'Crie uma proposta com itens antes de marcar como Ganhou', c.id)
                       }
+                      console.log('[DEBUG Ganhou] Movendo cliente...')
                       onMoverCliente(c.id, 'negociacao', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
+                      console.log('[DEBUG Ganhou] Fechando panel...')
                       onClose()
                     }}
                     className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
