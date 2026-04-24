@@ -13,12 +13,13 @@ const router = Router()
 // ── WebSocket Server Setup ─────────────────────────────────────────────────────
 
 let wss: WebSocketServer | null = null
+const TTS_WS_PORT = parseInt(process.env.TTS_WS_PORT || '3002', 10)
 
 function initializeWebSocketServer() {
   if (wss) return wss
 
   wss = new WebSocketServer({ 
-    port: 8080,
+    port: TTS_WS_PORT,
     path: '/tts-websocket'
   })
 
@@ -58,7 +59,7 @@ function initializeWebSocketServer() {
     }))
   })
 
-  log.info('🌐 Servidor WebSocket TTS iniciado na porta 8080')
+  log.info(`🌐 Servidor WebSocket TTS iniciado na porta ${TTS_WS_PORT}`)
   return wss
 }
 
@@ -164,7 +165,7 @@ router.post('/stream', async (req: Request, res: Response) => {
     // Retornar informações de conexão WebSocket
     res.json({
       success: true,
-      websocketUrl: `ws://localhost:8080/tts-websocket`,
+      websocketUrl: `ws://localhost:${TTS_WS_PORT}/tts-websocket`,
       voiceId: voiceId || process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL',
       text: text.trim().slice(0, 800) // Limitar texto
     })
@@ -180,7 +181,7 @@ router.get('/status', (_req: Request, res: Response) => {
   res.json({
     websocketServer: {
       running: !!wss,
-      port: 8080,
+      port: TTS_WS_PORT,
       path: '/tts-websocket',
       connectedClients: wss ? wss.clients.size : 0
     },
