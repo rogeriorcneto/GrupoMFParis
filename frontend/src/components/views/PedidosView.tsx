@@ -3,6 +3,7 @@ import { PaperAirplaneIcon, ShoppingCartIcon, PhotoIcon, CloudArrowUpIcon, Docum
 import type { Pedido, Cliente, Produto, Vendedor, ItemPedido } from '../../types'
 import { enviarPedidoOmie } from '../../lib/botApi'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
+import { savePropostaHistorico } from '../../lib/database'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../../constants/paymentTerms'
 
 function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, onMoverCliente, showToast }: {
@@ -152,7 +153,25 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     }
     try {
       await onAddPedido(novoPedido)
-      if (status === 'enviado') setPedidoEnviado({ ...novoPedido, id: 0 } as Pedido)
+      // Criar proposta no histórico automaticamente
+      if (status === 'enviado') {
+        try {
+          await savePropostaHistorico({
+            numero: `PROP-${numero.replace('PED-', '')}`,
+            clienteId: Number(selectedClienteId),
+            vendedorNome: loggedUser.nome,
+            itens: itensPedido,
+            observacoes: observacoes.trim(),
+            frete: tipoFrete,
+            pagamento: formaPagamento,
+            totalValor: totalPedido,
+            criadoEm: new Date().toISOString()
+          })
+        } catch (e) {
+          console.error('Erro ao salvar proposta:', e)
+        }
+        setPedidoEnviado({ ...novoPedido, id: 0 } as Pedido)
+      }
       resetForm()
     } catch { /* handled upstream */ } finally { setIsSaving(false) }
   }
