@@ -156,12 +156,12 @@ export async function omieBuscarPedido(termo: string): Promise<{ success: boolea
 // ─── Consultar Entrega ───
 
 export interface EntregaOmieResult {
-  etapa: string
-  dataPrevisao: string
-  codigoRastreio: string
-  nf: string
-  dataFaturamento: string
-  statusDescricao: string
+  etapa?: string
+  dataPrevisao?: string
+  codigoRastreio?: string
+  nf?: string
+  dataFaturamento?: string
+  statusDescricao?: string
 }
 
 export async function omieConsultarEntrega(pedidoId: number): Promise<{ success: boolean; data?: EntregaOmieResult; error?: string }> {

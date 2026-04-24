@@ -728,27 +728,43 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
             ) : entregaModal.data ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-gray-500">Etapa</p>
-                    <p className="font-semibold text-gray-900">{entregaModal.data.statusDescricao || entregaModal.data.etapa || '—'}</p>
+                  <div className="col-span-2 bg-blue-50 rounded-apple p-3">
+                    <p className="text-xs text-blue-600 mb-1">Status Omie</p>
+                    <p className="font-bold text-blue-900 text-lg">{entregaModal.data.statusDescricao || '—'}</p>
+                    {entregaModal.data.etapa && (
+                      <p className="text-xs text-blue-500 mt-1">Etapa: {entregaModal.data.etapa}</p>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Previsão de Entrega</p>
                     <p className="font-semibold text-gray-900">{entregaModal.data.dataPrevisao || '—'}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-gray-500">Data Faturamento</p>
+                    <p className="font-semibold text-gray-900">{entregaModal.data.dataFaturamento || '—'}</p>
+                  </div>
+                  <div>
                     <p className="text-xs text-gray-500">Nota Fiscal</p>
                     <p className="font-semibold text-gray-900">{entregaModal.data.nf || '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500">Data Faturamento</p>
-                    <p className="font-semibold text-gray-900">{entregaModal.data.dataFaturamento || '—'}</p>
-                  </div>
-                  <div className="col-span-2">
                     <p className="text-xs text-gray-500">Código de Rastreio</p>
-                    <p className="font-semibold text-gray-900 font-mono">{entregaModal.data.codigoRastreio || '—'}</p>
+                    <p className="font-semibold text-gray-900 font-mono text-xs">{entregaModal.data.codigoRastreio || '—'}</p>
                   </div>
                 </div>
+                {entregaModal.data.codigoRastreio && (
+                  <div className="mt-3 p-3 bg-green-50 rounded-apple">
+                    <p className="text-xs text-green-600 mb-1">Rastreamento</p>
+                    <a 
+                      href={`https://www.google.com/search?q=${encodeURIComponent(entregaModal.data.codigoRastreio)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-green-700 hover:text-green-900 underline"
+                    >
+                      Buscar código no Google →
+                    </a>
+                  </div>
+                )}
               </div>
             ) : null}
 

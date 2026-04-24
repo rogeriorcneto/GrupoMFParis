@@ -718,17 +718,30 @@ export async function consultarEntregaOmie(pedidoId: number): Promise<EntregaOmi
     { credentials: creds }
   )
 
+  log.info({ codigoPedido, result }, 'Omie ConsultarPedido resposta')
+
   const cab = result?.cabecalho || {}
   const infoCad = result?.infoCadastro || {}
   const transporte = result?.transporte || {}
 
+  // Log all available fields for debugging
+  log.info({ cab, infoCad, transporte }, 'Omie pedido detalhes extraídos')
+
+  // Try multiple possible field names that Omie might return
+  const etapa = cab.etapa || infoCad.cEtapa || cab.codigo_etapa || ''
+  const dataPrevisao = cab.data_previsao || cab.data_entrega || transporte.data_previsao_entrega || ''
+  const codigoRastreio = transporte.codigo_rastreio || transporte.codigo_rastreamento || transporte.numero_rastreamento || ''
+  const nf = infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : (cab.numero_nf || infoCad.numero_nf || '')
+  const dataFaturamento = infoCad.dDataFaturamento || infoCad.dDtFat || cab.data_faturamento || ''
+  const statusDescricao = cab.descricao_etapa || infoCad.cDescEtapa || cab.etapa_descricao || ''
+
   return {
-    etapa: cab.etapa || infoCad.cEtapa || '',
-    dataPrevisao: cab.data_previsao || '',
-    codigoRastreio: transporte.codigo_rastreio || '',
-    nf: infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : '',
-    dataFaturamento: infoCad.dDataFaturamento || infoCad.dDtFat || '',
-    statusDescricao: cab.descricao_etapa || infoCad.cDescEtapa || '',
+    etapa,
+    dataPrevisao,
+    codigoRastreio,
+    nf,
+    dataFaturamento,
+    statusDescricao,
   }
 }
 
