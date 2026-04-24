@@ -451,3 +451,78 @@ export async function cancelBulkBatch(batchId: string): Promise<{ success: boole
 
 /** Get bot URL for direct use */
 export { BOT_URL }
+
+// ─── Google Maps Prospecção ───
+
+export interface GooglePlace {
+  place_id: string
+  name: string
+  vicinity?: string
+  formatted_address?: string
+  geometry: {
+    location: { lat: number; lng: number }
+  }
+  rating?: number
+  user_ratings_total?: number
+  types?: string[]
+  business_status?: string
+  formatted_phone_number?: string
+  international_phone_number?: string
+  website?: string
+}
+
+export interface ProspecaoSearchResult {
+  results: GooglePlace[]
+  next_page_token?: string
+  status: string
+}
+
+/** Buscar empresas no Google Maps (Places API) */
+export async function buscarEmpresasGoogleMaps(
+  query: string,
+  location?: { lat: number; lng: number },
+  radius?: number,
+  tipo?: string
+): Promise<ProspecaoSearchResult & { error?: string }> {
+  try {
+    const params = new URLSearchParams()
+    params.set('query', query)
+    if (location) {
+      params.set('location', `${location.lat},${location.lng}`)
+      params.set('radius', String(radius || 5000))
+    }
+    if (tipo) params.set('type', tipo)
+
+    const res = await authFetch(`${BOT_URL}/api/maps/buscar?${params.toString()}`)
+    return await res.json()
+  } catch (err: any) {
+    return { results: [], status: 'ERROR', error: err.message }
+  }
+}
+
+/** Obter detalhes completos de um lugar */
+export async function obterDetalhesLugar(placeId: string): Promise<GooglePlace & { error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/maps/detalhes?placeId=${encodeURIComponent(placeId)}`)
+    return await res.json()
+  } catch (err: any) {
+    return { place_id: placeId, name: '', geometry: { location: { lat: 0, lng: 0 } }, error: err.message }
+  }
+}
+
+/** Importar lugar como lead no CRM */
+export async function importarLugarComoLead(
+  place: GooglePlace,
+  vendedorId?: number
+): Promise<{ success: boolean; clienteId?: number; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/maps/importar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ place, vendedorId }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err.message }
+  }
+}

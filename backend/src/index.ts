@@ -1192,6 +1192,165 @@ app.post('/api/pedidos/:id/cancelar', requireAuth, async (req, res) => {
   }
 })
 
+// ─── Google Maps API - Prospecção ───
+
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY
+
+app.get('/api/maps/buscar', requireAuth, async (req, res) => {
+  if (!GOOGLE_MAPS_API_KEY) {
+    res.status(503).json({ success: false, error: 'GOOGLE_MAPS_API_KEY não configurada' })
+    return
+  }
+
+  const { query, location, radius, type, pageToken } = req.query
+  if (!query && !pageToken) {
+    res.status(400).json({ success: false, error: 'Query ou pageToken é obrigatório' })
+    return
+  }
+
+  try {
+    let url: string
+    if (pageToken) {
+      // Paginação - usa textsearch com pagetoken
+      url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(String(pageToken))}&key=${GOOGLE_MAPS_API_KEY}`
+    } else {
+      // Busca nova
+      const params = new URLSearchParams()
+      params.set('query', String(query))
+      params.set('key', GOOGLE_MAPS_API_KEY)
+      if (location) params.set('location', String(location))
+      if (radius) params.set('radius', String(radius))
+      if (type) params.set('type', String(type))
+      url = `https://maps.googleapis.com/maps/api/place/textsearch/json?${params.toString()}`
+    }
+
+    const googleRes = await fetch(url)
+    const data = await googleRes.json()
+
+    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      log.error({ status: data.status, error: data.error_message }, 'Erro na API do Google Maps')
+      res.status(502).json({ success: false, error: data.error_message || data.status })
+      return
+    }
+
+    res.json({
+      success: true,
+      results: data.results || [],
+      next_page_token: data.next_page_token,
+      status: data.status,
+    })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar no Google Maps')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+app.get('/api/maps/detalhes', requireAuth, async (req, res) => {
+  if (!GOOGLE_MAPS_API_KEY) {
+    res.status(503).json({ success: false, error: 'GOOGLE_MAPS_API_KEY não configurada' })
+    return
+  }
+
+  const { placeId } = req.query
+  if (!placeId) {
+    res.status(400).json({ success: false, error: 'placeId é obrigatório' })
+    return
+  }
+
+  try {
+    const fields = 'name,formatted_address,geometry,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,types,business_status,place_id'
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(String(placeId))}&fields=${fields}&key=${GOOGLE_MAPS_API_KEY}`
+
+    const googleRes = await fetch(url)
+    const data = await googleRes.json()
+
+    if (data.status !== 'OK') {
+      res.status(502).json({ success: false, error: data.error_message || data.status })
+      return
+    }
+
+    res.json({ success: true, ...data.result })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar detalhes no Google Maps')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+app.post('/api/maps/importar', requireAuth, async (req, res) => {
+  const vendedor = (req as any).vendedor
+  const { place, vendedorId } = req.body
+
+  if (!place || !place.place_id) {
+    res.status(400).json({ success: false, error: 'Dados do lugar são obrigatórios' })
+    return
+  }
+
+  try {
+    // Verificar se já existe cliente com mesmo place_id ou nome similar
+    const { data: existente } = await supabase
+      .from('clientes')
+      .select('id')
+      .or(`razao_social.ilike.${place.name},google_place_id.eq.${place.place_id}`)
+      .maybeSingle()
+
+    if (existente) {
+      res.status(409).json({ success: false, error: 'Lead já existe no CRM', clienteId: existente.id })
+      return
+    }
+
+    // Extrair dados do endereço
+    const endereco = place.formatted_address || place.vicinity || ''
+    const parts = endereco.split(',').map((p: string) => p.trim())
+    const cidade = parts.length > 1 ? parts[parts.length - 2] : ''
+    const estado = parts.length > 0 ? parts[parts.length - 1].split(' ')[0] : ''
+
+    // Criar cliente
+    const { data: novoCliente, error } = await supabase
+      .from('clientes')
+      .insert({
+        razao_social: place.name,
+        nome_fantasia: place.name,
+        cnpj: '', // Place não tem CNPJ
+        contato_nome: '',
+        contato_telefone: place.formatted_phone_number || '',
+        contato_celular: place.international_phone_number || place.formatted_phone_number || '',
+        contato_email: '',
+        endereco: endereco,
+        endereco_cidade: cidade,
+        endereco_estado: estado,
+        etapa: 'prospeccao',
+        vendedor_id: vendedorId || vendedor?.id,
+        origem_lead: 'google_maps',
+        google_place_id: place.place_id,
+        google_rating: place.rating,
+        google_reviews: place.user_ratings_total,
+        website: place.website || '',
+        data_entrada_etapa: new Date().toISOString().split('T')[0],
+        score: 50,
+      })
+      .select('id')
+      .single()
+
+    if (error) {
+      res.status(500).json({ success: false, error: error.message })
+      return
+    }
+
+    // Registrar atividade
+    await supabase.from('atividades').insert({
+      vendedor_id: vendedor?.id,
+      tipo: 'criacao',
+      descricao: `[Prospecção Google Maps] Lead importado: ${place.name}`,
+      cliente_id: novoCliente.id,
+    })
+
+    res.json({ success: true, clienteId: novoCliente.id })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao importar lugar como lead')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 // ─── Start server ───
 
 async function start() {
