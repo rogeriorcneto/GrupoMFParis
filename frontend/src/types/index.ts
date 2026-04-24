@@ -83,6 +83,8 @@ export interface Cliente {
   whatsappValido?: boolean | null
   whatsappJid?: string
   whatsappValidadoEm?: string
+  novoCiclo?: boolean
+  cicloNumero?: number
 }
 
 export interface FormData {

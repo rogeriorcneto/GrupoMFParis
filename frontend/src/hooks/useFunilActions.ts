@@ -315,7 +315,7 @@ export function useFunilActions({
     setDraggedItem(null)
   }
 
-  const confirmPerda = () => {
+  const confirmPerda = async () => {
     if (draggedItem) {
       const extras: Partial<Cliente> = {
         motivoPerda: motivoPerdaTexto.trim() || `Perdido por: ${categoriaPerdaSel}`,
@@ -326,7 +326,35 @@ export function useFunilActions({
       if (draggedItem.fromStage === 'negociacao') {
         extras.statusFollowUp = 'perdido_negociacao'
       }
-      moverCliente(draggedItem.cliente.id, 'perdido', extras)
+      await moverCliente(draggedItem.cliente.id, 'perdido', extras)
+      
+      // Se veio de negociação, cria um novo ciclo (duplica o cliente em proposta)
+      if (draggedItem.fromStage === 'negociacao') {
+        const clienteOriginal = draggedItem.cliente
+        const novoCliente: Omit<Cliente, 'id'> = {
+          ...clienteOriginal,
+          etapa: 'proposta',
+          etapaAnterior: 'perdido',
+          novoCiclo: true,
+          cicloNumero: (clienteOriginal.cicloNumero || 1) + 1,
+          statusFollowUp: undefined,
+          motivoPerda: undefined,
+          categoriaPerda: undefined,
+          dataPerda: undefined,
+          valorEstimado: undefined,
+          dataProposta: undefined,
+          dataEntradaEtapa: new Date().toISOString(),
+          historicoEtapas: [],
+          vendedorId: loggedUser?.id || clienteOriginal.vendedorId
+        }
+        try {
+          const clienteCriado = await db.insertCliente(novoCliente)
+          setClientes(prev => [...prev, clienteCriado])
+          addNotificacao('info', 'Novo ciclo criado', `Cliente ${clienteOriginal.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas`, clienteCriado.id)
+        } catch (e) {
+          console.error('Erro ao criar novo ciclo:', e)
+        }
+      }
     }
     setDraggedItem(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
   }

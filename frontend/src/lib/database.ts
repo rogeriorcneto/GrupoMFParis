@@ -88,6 +88,8 @@ export function clienteFromDb(row: any): Cliente {
     whatsappValido: row.whatsapp_valido ?? null,
     whatsappJid: row.whatsapp_jid || '',
     whatsappValidadoEm: row.whatsapp_validado_em || '',
+    novoCiclo: row.novo_ciclo ?? undefined,
+    cicloNumero: row.ciclo_numero ?? undefined,
     historicoEtapas: [],
   }
 }
@@ -168,6 +170,8 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.whatsappValido !== undefined) row.whatsapp_valido = c.whatsappValido
   if (c.whatsappJid !== undefined) row.whatsapp_jid = c.whatsappJid
   if (c.whatsappValidadoEm !== undefined) row.whatsapp_validado_em = c.whatsappValidadoEm
+  if (c.novoCiclo !== undefined) row.novo_ciclo = c.novoCiclo
+  if (c.cicloNumero !== undefined) row.ciclo_numero = c.cicloNumero
   return row
 }
 

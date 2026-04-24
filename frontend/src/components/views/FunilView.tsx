@@ -12,7 +12,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState('')
-  const [hidePerdidos, setHidePerdidos] = React.useState(false)
+  const [hidePerdidos, setHidePerdidos] = React.useState(true)
   const [hideInativos, setHideInativos] = React.useState(true)
   const [hideAmostraPerdida, setHideAmostraPerdida] = React.useState(true)
   const [filterSegmento, setFilterSegmento] = React.useState('')
@@ -318,11 +318,20 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     const m = new Map<string, Cliente[]>()
     displayedStages.forEach(s => m.set(s.key, []))
     clientesFiltrados.forEach(c => {
+      // Não incluir clientes de novo ciclo na lista normal de proposta
+      if (c.etapa === 'proposta' && c.novoCiclo) return
       const arr = m.get(c.etapa)
       if (arr) arr.push(c)
     })
     return m
   }, [clientesFiltrados, displayedStages])
+
+  // Clientes em proposta que são novos ciclos (duplicados de perdidos)
+  const clientesNovoCicloProposta = useMemo(() => {
+    return clientesFiltradosVendedor.filter(c => 
+      c.etapa === 'proposta' && c.novoCiclo === true
+    )
+  }, [clientesFiltradosVendedor])
 
   // Clientes em follow_up OU perdidos vindo de negociação que podem iniciar novo ciclo
   const clientesNovoCiclo = useMemo(() => {
@@ -678,7 +687,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             const isProposta = stage.key === 'proposta'
-            const novoCicloCount = isProposta ? clientesNovoCiclo.length : 0
+            const novoCicloCount = isProposta ? clientesNovoCiclo.length + clientesNovoCicloProposta.length : 0
             return (
               <div key={stage.key} className="flex-1 min-w-[260px] max-w-[380px] flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
                 {/* Column header */}
@@ -922,7 +931,52 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                       })}
                     </>
                   )}
-                  {isProposta && showNovosCiclos && clientesNovoCiclo.length === 0 && stageClientes.length === 0 && (
+
+                  {/* Cards virtuais: clientes em Proposta que são novos ciclos (vindos de perdidos) */}
+                  {isProposta && showNovosCiclos && clientesNovoCicloProposta.length > 0 && (
+                    <>
+                      {(stageClientes.length > 0 || clientesNovoCiclo.length > 0) && (
+                        <div className="flex items-center gap-2 py-1">
+                          <div className="flex-1 h-px bg-purple-200" />
+                          <span className="text-[9px] font-bold text-purple-500 uppercase tracking-wide whitespace-nowrap">🆕 Novos Ciclos Proposta ({clientesNovoCicloProposta.length})</span>
+                          <div className="flex-1 h-px bg-purple-200" />
+                        </div>
+                      )}
+                      {clientesNovoCicloProposta.map((cliente) => {
+                        const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
+                        return (
+                          <div
+                            key={`novo-ciclo-proposta-${cliente.id}`}
+                            onClick={() => onClickCliente?.(cliente)}
+                            className="p-3 rounded-lg bg-white cursor-pointer hover:shadow-md transition-all duration-150 group border-l-[3px] border-l-purple-400 border-purple-100 border"
+                            title={`🆕 Novo ciclo #${cliente.cicloNumero || 2} - Cliente duplicado de perda em Negociação`}
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className="text-[10px] font-bold text-purple-600">#{cliente.cicloNumero || 2}°</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                              <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                              {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                            </div>
+                            <div className="flex gap-1 mt-2 flex-wrap">
+                              {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                                <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
+                              )}
+                              {cliente.contatoEmail && (
+                                <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
+                              )}
+                              <span className="px-2 py-0.5 text-[9px] bg-purple-50 text-purple-600 rounded-md font-medium border border-purple-100">🆕 Novo ciclo</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {isProposta && showNovosCiclos && clientesNovoCiclo.length === 0 && clientesNovoCicloProposta.length === 0 && stageClientes.length === 0 && (
                     <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>
                   )}
                 </div>
