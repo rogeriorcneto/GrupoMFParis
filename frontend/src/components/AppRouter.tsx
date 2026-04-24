@@ -183,6 +183,16 @@ export default function AppRouter({
             }
             await db.confirmarCancelamentoPedido(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
+            // Mover cliente de volta para negociacao no funil
+            const cli = clientes.find(c => c.id === pedido.clienteId)
+            if (cli && cli.etapa === 'follow_up') {
+              try {
+                await moverCliente(pedido.clienteId, 'negociacao', { statusFollowUp: undefined })
+                addNotificacao('info', 'Cliente movido', `Cliente ${cli.razaoSocial} voltou para Negociação após cancelamento.`, pedido.clienteId)
+              } catch (moveErr) {
+                logger.error('Erro ao mover cliente após cancelamento:', moveErr)
+              }
+            }
             addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)
           } catch (err) { logger.error('Erro ao confirmar cancelamento:', err); throw err }
         }}
