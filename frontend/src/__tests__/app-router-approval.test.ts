@@ -52,9 +52,23 @@ describe('shouldMoveToFollowUpOnApproval', () => {
     expect(shouldMoveToFollowUpOnApproval(pedido, cliente)).toBe(false)
   })
 
-  it('move para follow_up em pedido de venda fora de amostra', () => {
+  it('não move quando cliente está em proposta (não negociacao)', () => {
+    const pedido = makePedido({ tipo: 'venda' })
+    const cliente = makeCliente({ etapa: 'proposta' })
+
+    expect(shouldMoveToFollowUpOnApproval(pedido, cliente)).toBe(false)
+  })
+
+  it('move para follow_up quando cliente está em negociacao', () => {
     const pedido = makePedido({ tipo: 'venda' })
     const cliente = makeCliente({ etapa: 'negociacao' })
+
+    expect(shouldMoveToFollowUpOnApproval(pedido, cliente)).toBe(true)
+  })
+
+  it('move para follow_up em negociacao independente do statusFollowUp', () => {
+    const pedido = makePedido({ tipo: 'venda' })
+    const cliente = makeCliente({ etapa: 'negociacao', statusFollowUp: undefined })
 
     expect(shouldMoveToFollowUpOnApproval(pedido, cliente)).toBe(true)
   })
