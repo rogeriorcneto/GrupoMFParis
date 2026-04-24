@@ -13,7 +13,7 @@ import {
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
-import { aprovarPedidoComOmie } from '../lib/botApi'
+import { aprovarPedidoComOmie, cancelarPedidoOmie } from '../lib/botApi'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -138,6 +138,20 @@ export default function AppRouter({
         }}
         onRecusar={async (pedido, motivo) => {
           try {
+            // Cancelar no Omie primeiro (se tiver omie_codigo)
+            if (pedido.omieCodigo) {
+              try {
+                const cancelResult = await cancelarPedidoOmie(pedido.id, motivo)
+                if (cancelResult.success) {
+                  addNotificacao('success', 'Pedido cancelado no Omie', `Pedido ${pedido.numero} cancelado no Omie com sucesso.`, pedido.clienteId)
+                } else {
+                  addNotificacao('warning', 'Pedido recusado — Omie com erro', `Pedido ${pedido.numero} recusado, mas Omie retornou erro: ${cancelResult.error || 'erro desconhecido'}`, pedido.clienteId)
+                }
+              } catch (omieErr) {
+                logger.error('Erro ao cancelar pedido no Omie:', omieErr)
+                addNotificacao('warning', 'Pedido recusado — Omie não cancelado', `Pedido ${pedido.numero} recusado no CRM, mas não foi possível cancelar no Omie.`, pedido.clienteId)
+              }
+            }
             await db.recusarPedido(pedido.id, motivo)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
             addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
@@ -150,6 +164,20 @@ export default function AppRouter({
         }}
         onConfirmarCancelamento={async (pedido) => {
           try {
+            // Cancelar no Omie primeiro (se tiver omie_codigo)
+            if (pedido.omieCodigo) {
+              try {
+                const cancelResult = await cancelarPedidoOmie(pedido.id, 'Cancelamento confirmado')
+                if (cancelResult.success) {
+                  addNotificacao('success', 'Pedido cancelado no Omie', `Pedido ${pedido.numero} cancelado no Omie com sucesso.`, pedido.clienteId)
+                } else {
+                  addNotificacao('warning', 'Cancelamento confirmado — Omie com erro', `Cancelamento confirmado, mas Omie retornou erro: ${cancelResult.error || 'erro desconhecido'}`, pedido.clienteId)
+                }
+              } catch (omieErr) {
+                logger.error('Erro ao cancelar pedido no Omie:', omieErr)
+                addNotificacao('warning', 'Cancelamento confirmado — Omie não cancelado', `Cancelamento confirmado no CRM, mas não foi possível cancelar no Omie.`, pedido.clienteId)
+              }
+            }
             await db.confirmarCancelamentoPedido(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
             addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)

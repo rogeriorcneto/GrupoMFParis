@@ -368,6 +368,16 @@ export async function consultarStatusOmie(pedidoId: number): Promise<{ success: 
   return await res.json()
 }
 
+/** Cancelar pedido no CRM e no Omie */
+export async function cancelarPedidoOmie(pedidoId: number, motivo?: string): Promise<{ success: boolean; omie?: any; error?: string }> {
+  const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/cancelar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ motivo: motivo || 'Cancelado pelo usuário' }),
+  })
+  return await res.json()
+}
+
 // ─── Bulk Dispatch (disparo em massa) ───
 
 export interface BulkTarget {

@@ -234,14 +234,28 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setShowClienteDropdown(false)} />
                         <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 max-h-40 overflow-y-auto">
-                          {clientesDisponiveis.filter(c => c.razaoSocial.toLowerCase().includes(searchCliente.toLowerCase())).length === 0 ? (
-                            <p className="px-3 py-2 text-xs text-gray-400">Nenhum resultado</p>
-                          ) : clientesDisponiveis.filter(c => c.razaoSocial.toLowerCase().includes(searchCliente.toLowerCase())).map(c => (
-                            <button key={c.id} onClick={() => { setSelectedClienteId(c.id); setSearchCliente(c.razaoSocial); setShowClienteDropdown(false) }}
-                              className={`w-full px-3 py-1.5 text-xs text-left hover:bg-primary-50 ${selectedClienteId === c.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700'}`}>
-                              {c.razaoSocial} {c.contatoNome && <span className="text-gray-400">| {c.contatoNome}</span>}
-                            </button>
-                          ))}
+                          {(() => {
+                            const q = searchCliente.toLowerCase().trim()
+                            const filtrados = clientesDisponiveis.filter(c =>
+                              c.razaoSocial?.toLowerCase().includes(q) ||
+                              c.nomeFantasia?.toLowerCase().includes(q) ||
+                              c.contatoNome?.toLowerCase().includes(q) ||
+                              c.cnpj?.includes(q) ||
+                              c.whatsapp?.includes(q) ||
+                              c.contatoCelular?.includes(q) ||
+                              c.contatoTelefone?.includes(q)
+                            )
+                            if (filtrados.length === 0) return <p className="px-3 py-2 text-xs text-gray-400">Nenhum resultado</p>
+                            return filtrados.map(c => (
+                              <button key={c.id} onClick={() => { setSelectedClienteId(c.id); setSearchCliente(c.razaoSocial); setShowClienteDropdown(false) }}
+                                className={`w-full px-3 py-1.5 text-xs text-left hover:bg-primary-50 ${selectedClienteId === c.id ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700'}`}>
+                                <span className="font-medium">{c.razaoSocial}</span>
+                                {c.nomeFantasia && c.nomeFantasia !== c.razaoSocial && <span className="text-gray-500"> ({c.nomeFantasia})</span>}
+                                <span className="text-gray-400"> | {c.etapa}</span>
+                                {c.contatoNome && <span className="text-gray-400"> | {c.contatoNome}</span>}
+                              </button>
+                            ))
+                          })()}
                         </div>
                       </>
                     )}

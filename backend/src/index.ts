@@ -27,7 +27,7 @@ import ttsRouter from './routes/tts.js'
 import ttsOptimizedRouter from './routes/tts-optimized.js'
 import geminiStreamRouter from './routes/gemini-stream.js'
 import ttsWebSocketRouter from './routes/tts-websocket.js'
-import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie } from './omie/pedidos.js'
+import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie, cancelarPedidoOmie } from './omie/pedidos.js'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
 import { log } from './logger.js'
@@ -1171,6 +1171,23 @@ app.get('/api/pedidos/:id/status-omie', requireAuth, async (req, res) => {
     const status = await consultarPedidoOmie(pedidoId)
     res.json({ success: true, status })
   } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Cancelar pedido no CRM e no Omie ───
+
+app.post('/api/pedidos/:id/cancelar', requireAuth, async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  const motivo = req.body?.motivo || 'Cancelado pelo usuário'
+
+  try {
+    const result = await cancelarPedidoOmie(pedidoId, motivo)
+    res.json(result)
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao cancelar pedido')
     res.status(500).json({ success: false, error: err.message })
   }
 })

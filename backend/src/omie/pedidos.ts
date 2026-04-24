@@ -1176,3 +1176,58 @@ export async function onPedidoAprovado(pedidoId: number): Promise<{ success: boo
     }
   }
 }
+
+// ============================================
+// Cancelar pedido no Omie
+// ============================================
+
+export async function cancelarPedidoOmie(pedidoId: number, motivo?: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Buscar pedido no CRM
+    const { data: pedido, error: pedidoErr } = await supabase
+      .from('pedidos')
+      .select('omie_codigo, numero')
+      .eq('id', pedidoId)
+      .single()
+
+    if (pedidoErr || !pedido) {
+      return { success: false, error: 'Pedido não encontrado no CRM' }
+    }
+
+    if (!pedido.omie_codigo) {
+      return { success: false, error: 'Pedido não tem código Omie vinculado' }
+    }
+
+    const omieCodigoPedido = parseInt(pedido.omie_codigo, 10)
+    log.info({ pedidoId, omieCodigo: omieCodigoPedido }, '🛑 Cancelando pedido no Omie...')
+
+    // Chamar API do Omie para cancelar pedido
+    // Método: CancelarPedidoVenda (documentação Omie)
+    const creds = await getOmieCredentials()
+    if (!creds) {
+      return { success: false, error: 'Credenciais Omie não configuradas' }
+    }
+
+    const response = await omieCall<any>(
+      '/produtos/pedidovenda/',
+      'CancelarPedidoVenda',
+      [{
+        codigo_pedido: omieCodigoPedido,
+        motivo_cancelamento: motivo || 'Cancelado pelo CRM',
+      }],
+      { credentials: creds }
+    )
+
+    log.info({ pedidoId, omieCodigo: omieCodigoPedido, response }, '✅ Pedido cancelado no Omie')
+
+    return {
+      success: true,
+    }
+  } catch (err: any) {
+    log.error({ err, pedidoId }, '❌ Erro ao cancelar pedido no Omie')
+    return {
+      success: false,
+      error: err.message || 'Erro desconhecido ao cancelar no Omie',
+    }
+  }
+}

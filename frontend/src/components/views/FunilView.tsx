@@ -324,9 +324,15 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     return m
   }, [clientesFiltrados, displayedStages])
 
-  // Clientes em follow_up que podem iniciar novo ciclo de compra (cards virtuais em Proposta)
+  // Clientes em follow_up OU perdidos vindo de negociação que podem iniciar novo ciclo
   const clientesNovoCiclo = useMemo(() => {
-    const base = clientesFiltradosVendedor.filter(c => c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente')
+    const base = clientesFiltradosVendedor.filter(c => {
+      // Clientes em follow-up normais (não aguardando aprovação)
+      if (c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente') return true
+      // Clientes perdidos que vieram de negociação (podem ser revividos)
+      if (c.etapa === 'perdido' && c.etapaAnterior === 'negociacao' && (c.statusFollowUp as string) === 'perdido_negociacao') return true
+      return false
+    })
     if (search.trim()) {
       const q = search.toLowerCase()
       return base.filter(c =>
@@ -855,12 +861,13 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
                         const historico = propostasPorCliente.get(cliente.id) || []
                         const ultimaProposta = historico[0]
+                        const isReviver = cliente.etapa === 'perdido' && cliente.etapaAnterior === 'negociacao'
                         return (
                           <div
                             key={`ciclo-${cliente.id}`}
                             onClick={() => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)}
-                            className="p-3 rounded-lg bg-white cursor-pointer hover:shadow-md transition-all duration-150 group border-l-[3px] border-l-blue-400 border border-blue-100"
-                            title="Cliente em Follow-up — clique para criar nova proposta"
+                            className={`p-3 rounded-lg bg-white cursor-pointer hover:shadow-md transition-all duration-150 group border-l-[3px] ${isReviver ? 'border-l-orange-400 border-orange-100' : 'border-l-blue-400 border-blue-100'} border`}
+                            title={isReviver ? `⚠️ Cliente perdido em Negociação — ${cliente.motivoPerda || 'Clique para tentar novo ciclo'}` : 'Cliente em Follow-up — clique para criar nova proposta'}
                           >
                             <div className="flex items-start justify-between gap-1.5">
                               <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
@@ -879,7 +886,11 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                               {cliente.contatoEmail && (
                                 <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
                               )}
-                              <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-600 rounded-md font-medium border border-blue-100">🔄 Novo ciclo</span>
+                              {isReviver ? (
+                                <span className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-600 rounded-md font-medium border border-orange-100">⚡ Reviver</span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-600 rounded-md font-medium border border-blue-100">🔄 Novo ciclo</span>
+                              )}
                             </div>
                             {historico.length > 0 && (
                               <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">

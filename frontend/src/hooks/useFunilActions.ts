@@ -317,11 +317,16 @@ export function useFunilActions({
 
   const confirmPerda = () => {
     if (draggedItem) {
-      moverCliente(draggedItem.cliente.id, 'perdido', {
+      const extras: Partial<Cliente> = {
         motivoPerda: motivoPerdaTexto.trim() || `Perdido por: ${categoriaPerdaSel}`,
         categoriaPerda: categoriaPerdaSel || 'outro',
         dataPerda: new Date().toISOString().split('T')[0]
-      })
+      }
+      // Se veio de negociação, marca para poder reviver como novo ciclo
+      if (draggedItem.fromStage === 'negociacao') {
+        extras.statusFollowUp = 'perdido_negociacao'
+      }
+      moverCliente(draggedItem.cliente.id, 'perdido', extras)
     }
     setDraggedItem(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
   }
