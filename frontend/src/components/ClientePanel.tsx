@@ -491,6 +491,7 @@ export default function ClientePanel({
                 <>
                   <button
                     onClick={async () => {
+                      alert('DEBUG: Botão Ganhou clicado!')
                       console.log('[DEBUG Ganhou] Clicked!')
                       const hoje = new Date().toISOString().split('T')[0]
                       console.log('[DEBUG Ganhou] onAddPedido:', onAddPedido)
