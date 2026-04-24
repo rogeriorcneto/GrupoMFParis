@@ -116,11 +116,8 @@ export default function AppRouter({
               addNotificacao('warning', 'Pedido aprovado — Omie com erro', `Pedido ${pedido.numero} foi aprovado, mas o Omie rejeitou: ${result.omie?.error || 'erro desconhecido'}`, pedido.clienteId)
             }
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, ...omieUpdate } : p))
-            // Auto-move client to follow_up only for clear sales orders - DEBUG v3
-            alert(`DEBUG: Aprovando pedido ${pedido.id}, cliente ${pedido.clienteId}`)
-            console.log(`[Aprovar] Iniciando. pedido.id=${pedido.id}, clienteId=${pedido.clienteId}`)
+            // Auto-move client to follow_up only for clear sales orders
             const cliAprov = clientes.find(c => c.id === pedido.clienteId)
-            console.log(`[Aprovar] Cliente encontrado:`, cliAprov)
             const isAmostraFlow = pedido.tipo === 'bonificacao' || cliAprov?.etapa === 'amostra' || cliAprov?.etapa === 'amostra_perdida'
             if (isAmostraFlow && cliAprov && cliAprov.statusAmostra !== 'liberada') {
               setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusAmostra: 'liberada' } : c))
@@ -134,15 +131,11 @@ export default function AppRouter({
               } catch { /* non-critical */ }
             }
             if (shouldMoveToFollowUpOnApproval(pedido, cliAprov)) {
-              console.log(`[Aprovar] Movendo cliente ${pedido.clienteId} de ${cliAprov?.etapa} para follow_up`)
               try { 
                 await moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
-                console.log(`[Aprovar] Cliente ${pedido.clienteId} movido com sucesso`)
               } catch (err) { 
-                console.error(`[Aprovar] Erro ao mover cliente:`, err)
+                logger.error('Erro ao mover cliente para follow_up:', err)
               }
-            } else {
-              console.log(`[Aprovar] Não vai mover. tipo=${pedido.tipo}, etapa=${cliAprov?.etapa}, shouldMove=${shouldMoveToFollowUpOnApproval(pedido, cliAprov)}`)
             }
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
         }}

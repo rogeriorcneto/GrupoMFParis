@@ -1511,13 +1511,22 @@ export default function ClientePanel({
               <button
                 disabled={!cancelMotivo.trim() || cancelSaving}
                 onClick={async () => {
-                  if (!cancelPedidoId || !cancelMotivo.trim()) return
+                  if (!cancelPedidoId || !cancelMotivo.trim()) {
+                    addNotificacao('error', 'Erro', 'Informe o motivo do cancelamento.', c.id)
+                    return
+                  }
+                  if (!onSolicitarCancelamentoPedido) {
+                    addNotificacao('error', 'Erro', 'Função de cancelamento não disponível.', c.id)
+                    console.error('onSolicitarCancelamentoPedido is undefined')
+                    return
+                  }
                   setCancelSaving(true)
                   try {
-                    await onSolicitarCancelamentoPedido?.(cancelPedidoId, cancelMotivo.trim())
+                    await onSolicitarCancelamentoPedido(cancelPedidoId, cancelMotivo.trim())
                     addNotificacao('info', 'Cancelamento solicitado', `Aguardando aprovação do gerente para cancelar o pedido de ${c.razaoSocial}.`, c.id)
                     setShowCancelModal(false)
-                  } catch {
+                  } catch (err) {
+                    console.error('Erro ao solicitar cancelamento:', err)
                     addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento. Tente novamente.', c.id)
                   } finally {
                     setCancelSaving(false)
