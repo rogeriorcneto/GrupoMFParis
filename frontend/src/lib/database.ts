@@ -90,6 +90,12 @@ export function clienteFromDb(row: any): Cliente {
     whatsappValidadoEm: row.whatsapp_validado_em || '',
     novoCiclo: row.novo_ciclo ?? undefined,
     cicloNumero: row.ciclo_numero ?? undefined,
+    googlePlaceId: row.google_place_id ?? undefined,
+    googleRating: row.google_rating != null ? Number(row.google_rating) : undefined,
+    googleReviews: row.google_reviews ?? undefined,
+    website: row.website ?? undefined,
+    latitude: row.latitude != null ? Number(row.latitude) : undefined,
+    longitude: row.longitude != null ? Number(row.longitude) : undefined,
     historicoEtapas: [],
   }
 }
@@ -172,6 +178,12 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.whatsappValidadoEm !== undefined) row.whatsapp_validado_em = c.whatsappValidadoEm
   if (c.novoCiclo !== undefined) row.novo_ciclo = c.novoCiclo
   if (c.cicloNumero !== undefined) row.ciclo_numero = c.cicloNumero
+  if (c.googlePlaceId !== undefined) row.google_place_id = c.googlePlaceId
+  if (c.googleRating !== undefined) row.google_rating = c.googleRating
+  if (c.googleReviews !== undefined) row.google_reviews = c.googleReviews
+  if (c.website !== undefined) row.website = c.website
+  if (c.latitude !== undefined) row.latitude = c.latitude
+  if (c.longitude !== undefined) row.longitude = c.longitude
   return row
 }
 

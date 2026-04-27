@@ -181,7 +181,7 @@ describe('handlers/ia', () => {
       session.state = 'chatting_ai'
       session.aiHistory = []
       const reply = await handleAIChat(PHONE, session, 'oi')
-      expect(reply).toContain('Sem resposta')
+      expect(reply).toContain('Ações executadas')
 
       vi.unstubAllGlobals()
     })

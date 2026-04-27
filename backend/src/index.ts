@@ -1280,6 +1280,11 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
   const vendedor = (req as any).vendedor
   const { place, vendedorId } = req.body
 
+  if (!vendedor && !vendedorId) {
+    res.status(401).json({ success: false, error: 'Vendedor não autenticado' })
+    return
+  }
+
   if (!place || !place.place_id) {
     res.status(400).json({ success: false, error: 'Dados do lugar são obrigatórios' })
     return
@@ -1290,7 +1295,7 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
     const { data: existente } = await supabase
       .from('clientes')
       .select('id')
-      .or(`razao_social.ilike.${place.name},google_place_id.eq.${place.place_id}`)
+      .or(`razao_social.ilike.${place.name.replace(/[%_\\]/g, '\\$&')},google_place_id.eq.${place.place_id}`)
       .maybeSingle()
 
     if (existente) {
@@ -1318,13 +1323,15 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
         endereco: endereco,
         endereco_cidade: cidade,
         endereco_estado: estado,
-        etapa: 'prospeccao',
+        etapa: 'prospecção',
         vendedor_id: vendedorId || vendedor?.id,
         origem_lead: 'google_maps',
         google_place_id: place.place_id,
-        google_rating: place.rating,
-        google_reviews: place.user_ratings_total,
+        google_rating: place.rating ?? null,
+        google_reviews: place.user_ratings_total ?? null,
         website: place.website || '',
+        latitude: place.geometry?.location?.lat ?? null,
+        longitude: place.geometry?.location?.lng ?? null,
         data_entrada_etapa: new Date().toISOString().split('T')[0],
         score: 50,
       })

@@ -27,10 +27,11 @@ const COMMON_RESPONSES = {
 }
 
 // Headers para cache edge
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://mfparis.netlify.app'
 const CACHE_HEADERS = {
   'Cache-Control': 'public, max-age=600, s-maxage=600', // 10 minutos cache
   'Netlify-Vary': 'query', // Variar por query params
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'Content-Type, Authorization'
 }
 
@@ -40,10 +41,20 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 200,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
       }
+    }
+  }
+
+  // Auth validation
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || ''
+  if (!authHeader.startsWith('Bearer ')) {
+    return {
+      statusCode: 401,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Unauthorized' })
     }
   }
 

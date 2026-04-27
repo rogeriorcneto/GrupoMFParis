@@ -681,6 +681,8 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const closingRef = useRef(false)
+  const intentionalAbortRef = useRef(false)
+  const callStateRef = useRef<CallState>('connecting')
 
   // ── Timer ──
   useEffect(() => {
@@ -714,6 +716,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     // Abortar instância anterior se existir
     if (recRef.current) {
       console.log('[Voice] Abortando instância anterior...')
+      intentionalAbortRef.current = true
       try {
         recRef.current.abort()
       } catch (e) {
@@ -732,6 +735,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     
     console.log('[Voice] SpeechRecognition criado, configurando eventos...')
     recRef.current = rec
+    callStateRef.current = 'listening'
     setCallState('listening')
     setTranscript('')
 
@@ -768,6 +772,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       console.log('[Voice] Processando resultado final:', interim)
 
       setTranscript(interim)
+      callStateRef.current = 'thinking'
       setCallState('thinking')
 
       // Detect hangup intent
@@ -775,6 +780,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       if (['tchau', 'encerrar', 'desligar', 'finalizar', 'até mais'].some(w => lower.includes(w))) {
         const bye = `Até logo, ${loggedUserName.split(' ')[0]}! Qualquer coisa pode abrir a chamada novamente.`
         setAiText(bye)
+        callStateRef.current = 'speaking'
         setCallState('speaking')
         speakNeural(bye, () => { if (!closingRef.current) onClose() }, audioRef)
         return
@@ -931,14 +937,15 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       console.error('[Voice] Erro no reconhecimento:', { error: event.error, message: event.message })
       
       if (event.error === 'aborted') {
-        // Se abortado propositalmente (recRef === null), não reiniciar
-        // Se abortado pelo browser/acidental, reiniciar
-        if (recRef.current === null) {
+        // Verificar se o abort foi intencional (pelo nosso próprio código)
+        if (intentionalAbortRef.current) {
+          intentionalAbortRef.current = false
           console.log('[Voice] Reconhecimento abortado propositalmente, não reiniciando...')
           return
         }
-        console.log('[Voice] Reconhecimento abortado pelo browser, reiniciando...')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 500)
+        // Abort acidental do browser — aguardar mais antes de reiniciar
+        console.log('[Voice] Reconhecimento abortado pelo browser, aguardando 1s...')
+        setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
         return
       } else if (event.error === 'no-speech') {
         // User didn't say anything — just restart
@@ -958,24 +965,21 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     }
 
     rec.onend = () => {
-      // If still in 'listening' state and didn't get result, restart
-      // (handles cases where recognition ended without result or error)
       if (closingRef.current) return
       
-      // Não reiniciar se o reconhecimento foi abortado
-      if (recRef.current === null) {
-        console.log('[Voice] Reconhecimento foi abortado, não reiniciando...')
+      // Não reiniciar se o abort foi intencional
+      if (intentionalAbortRef.current) {
+        console.log('[Voice] onend após abort intencional, ignorando...')
         return
       }
       
-      // Reiniciar listening se ainda está no estado 'listening'
-      // Isso garante continuidade do reconhecimento
+      // Reiniciar listening apenas se ainda estamos ouvindo (sem resultado processado)
       setTimeout(() => {
-        if (!closingRef.current && callState === 'listening' && recRef.current !== null) {
-          console.log('[Voice] Reconhecimento terminou, reiniciando...')
+        if (!closingRef.current && callStateRef.current === 'listening') {
+          console.log('[Voice] Reconhecimento terminou sem resultado, reiniciando...')
           startListening()
         }
-      }, 100)
+      }, 200)
     }
 
     rec.start()

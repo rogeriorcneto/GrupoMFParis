@@ -85,6 +85,12 @@ export interface Cliente {
   whatsappValidadoEm?: string
   novoCiclo?: boolean
   cicloNumero?: number
+  googlePlaceId?: string
+  googleRating?: number
+  googleReviews?: number
+  website?: string
+  latitude?: number
+  longitude?: number
 }
 
 export interface FormData {

@@ -14,8 +14,8 @@ const defaultDbRow = {
   omie_app_secret: '',
 }
 
-// Factory-based mock: creates fresh chain every call so vi.clearAllMocks() doesn't break it
-const mockSupabaseFrom = vi.fn().mockImplementation(() => {
+// Factory padrão extraída para poder restaurar no beforeEach
+function defaultSupabaseFactory() {
   const chain: any = {}
   chain.select = vi.fn().mockReturnValue(chain)
   chain.eq = vi.fn().mockReturnValue(chain)
@@ -29,7 +29,9 @@ const mockSupabaseFrom = vi.fn().mockImplementation(() => {
     eq: vi.fn().mockResolvedValue({ error: null }),
   })
   return chain
-})
+}
+
+const mockSupabaseFrom = vi.fn().mockImplementation(defaultSupabaseFactory)
 
 vi.mock('../supabase.js', () => ({
   supabase: { from: (...args: any[]) => mockSupabaseFrom(...args) },
@@ -37,7 +39,10 @@ vi.mock('../supabase.js', () => ({
 
 vi.mock('../crypto.js', () => ({
   encrypt: vi.fn((v: string) => `enc_${v}`),
-  decrypt: vi.fn((v: string) => v.startsWith('enc_') ? v.slice(4) : v),
+  decrypt: vi.fn((v: string | undefined | null) => {
+    if (!v) return ''
+    return v.startsWith('enc_') ? v.slice(4) : v
+  }),
 }))
 
 vi.mock('../logger.js', () => ({
@@ -82,11 +87,11 @@ import { reloadEmail, sendEmail, isEmailConfigured, getEmailStatus, testEmailCon
 
 describe('Email Flow — Config to Send', () => {
   beforeEach(() => {
-    // Reset call counts without clearing implementations
     mockSendMail.mockClear()
     mockVerify.mockClear()
     mockCreateTransport.mockClear()
-    mockSupabaseFrom.mockClear()
+    mockSupabaseFrom.mockReset()
+    mockSupabaseFrom.mockImplementation(defaultSupabaseFactory)
     mockSendMail.mockResolvedValue({ messageId: 'test-id-123' })
     mockVerify.mockResolvedValue(true)
     invalidateConfigCache()

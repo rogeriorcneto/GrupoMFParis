@@ -377,14 +377,14 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                         <span className="font-medium">Assunto:</span> {subject.replace(/\{nome\}/g, 'João').replace(/\{empresa\}/g, 'Empresa X')}
                       </div>
                     )}
-                    <div className="text-xs text-gray-800 whitespace-pre-wrap" dangerouslySetInnerHTML={{
-                      __html: body
-                        .replace(/\{\{?nome\}?\}/g, '<strong>João</strong>')
-                        .replace(/\{\{?empresa\}?\}/g, '<strong>Empresa X</strong>')
-                        .replace(/\{\{?contato\}?\}/g, '<strong>Maria</strong>')
-                        .replace(/\{\{?vendedor\}?\}/g, `<strong>${loggedUser?.nome || 'Vendedor'}</strong>`)
-                        .replace(/\{\{?etapa\}?\}/g, '<strong>Negociação</strong>')
-                    }} />
+                    <div className="text-xs text-gray-800 whitespace-pre-wrap">
+                      {body
+                        .replace(/\{\{?nome\}?\}/g, 'João')
+                        .replace(/\{\{?empresa\}?\}/g, 'Empresa X')
+                        .replace(/\{\{?contato\}?\}/g, 'Maria')
+                        .replace(/\{\{?vendedor\}?\}/g, loggedUser?.nome || 'Vendedor')
+                        .replace(/\{\{?etapa\}?\}/g, 'Negociação')}
+                    </div>
                   </div>
                 )}
 

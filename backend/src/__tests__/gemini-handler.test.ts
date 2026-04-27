@@ -132,14 +132,15 @@ describe('geminiHandler', () => {
     const [url, opts] = mockFetch.mock.calls[0]
     expect(url).toContain('test-key')
     const body = JSON.parse(opts.body)
-    // First: system instruction as user, then model ack, then messages
-    expect(body.contents[0].parts[0].text).toBe('system-ctx')
+    // systemInstruction é campo separado, não dentro de contents
+    expect(body.systemInstruction.parts[0].text).toBe('system-ctx')
+    // messages mapeadas: user/assistant → user/model
+    expect(body.contents[0].role).toBe('user')
+    expect(body.contents[0].parts[0].text).toBe('msg1')
     expect(body.contents[1].role).toBe('model')
-    // User messages mapped: assistant → model
-    expect(body.contents[2].parts[0].text).toBe('msg1')
-    expect(body.contents[3].role).toBe('model')
-    expect(body.contents[3].parts[0].text).toBe('resp1')
-    expect(body.contents[4].parts[0].text).toBe('msg2')
+    expect(body.contents[1].parts[0].text).toBe('resp1')
+    expect(body.contents[2].role).toBe('user')
+    expect(body.contents[2].parts[0].text).toBe('msg2')
     expect(body.generationConfig.temperature).toBe(0.7)
   })
 

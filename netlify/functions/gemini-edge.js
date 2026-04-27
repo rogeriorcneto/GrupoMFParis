@@ -10,10 +10,11 @@ const responseCache = new Map()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
 
 // Headers para cache edge
+const ALLOWED_ORIGIN = process.env.FRONTEND_URL || 'https://mfparis.netlify.app'
 const CACHE_HEADERS = {
   'Cache-Control': 'public, max-age=300, s-maxage=300', // 5 minutos
   'Netlify-Vary': 'query',
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'Content-Type, Authorization'
 }
 
@@ -23,10 +24,20 @@ exports.handler = async (event, context) => {
     return {
       statusCode: 200,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
       }
+    }
+  }
+
+  // Auth validation
+  const authHeader = event.headers?.authorization || event.headers?.Authorization || ''
+  if (!authHeader.startsWith('Bearer ')) {
+    return {
+      statusCode: 401,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Unauthorized' })
     }
   }
 
@@ -133,7 +144,7 @@ function generateContextKey(messages, systemInstruction) {
 // Chamar Gemini streaming
 async function callGeminiStream(apiKey, messages, systemInstruction) {
   const model = 'gemini-2.5-flash'
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`
   
   const contents = messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
@@ -151,7 +162,7 @@ async function callGeminiStream(apiKey, messages, systemInstruction) {
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify(body)
   })
 

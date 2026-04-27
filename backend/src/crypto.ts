@@ -10,6 +10,9 @@ import { log } from './logger.js'
 const ALGO = 'aes-256-gcm'
 
 function getKey(): Buffer {
+  if (!process.env.ENCRYPTION_KEY && process.env.SUPABASE_ANON_KEY) {
+    log.warn('ENCRYPTION_KEY não definida — usando SUPABASE_ANON_KEY como fallback de encriptação. Defina ENCRYPTION_KEY em produção.')
+  }
   const secret = process.env.ENCRYPTION_KEY || process.env.SUPABASE_ANON_KEY || ''
   if (!secret) throw new Error('ENCRYPTION_KEY ou SUPABASE_ANON_KEY necessária para encriptação')
   return crypto.createHash('sha256').update(secret).digest()

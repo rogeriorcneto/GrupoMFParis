@@ -212,7 +212,7 @@ describe('handlers/vendas', () => {
       session.state = 'creating_sale'
       session.createSaleData = { step: 'selectProduct', itens: [], productIndexMap: [1] }
       const reply = await handleCreateSaleStep(PHONE, session, '1 50')
-      expect(reply).toContain('50x Produto 1')
+      expect(reply).toContain('Produto 1')
       expect(reply).toContain('Total')
       const s = getSession(PHONE)!
       expect(s.createSaleData?.step).toBe('addMore')

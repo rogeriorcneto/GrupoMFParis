@@ -1,40 +1,73 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 
-// Mock supabase com tracking de chamadas
-const mockSelect = vi.fn()
-const mockEq = vi.fn()
-const mockSingle = vi.fn()
-const mockUpsert = vi.fn()
-const mockFrom = vi.fn()
+// Estado compartilhado via objeto (referência única — funciona com hoisting do vi.mock)
+const _state = {
+  data: null as any,
+  error: null as any,
+  upsertError: null as any,
+  upsertArgs: [] as any[],
+  fromCalls: [] as string[],
+}
 
 function setupMockChain(data: any, error: any = null) {
-  mockSingle.mockResolvedValue({ data, error })
-  mockEq.mockReturnValue({ single: mockSingle })
-  mockSelect.mockReturnValue({ eq: mockEq })
-  mockUpsert.mockResolvedValue({ error: null })
-  mockFrom.mockReturnValue({ select: mockSelect, upsert: mockUpsert })
+  _state.data = data
+  _state.error = error
+  _state.upsertError = null
 }
 
 vi.mock('../supabase.js', () => ({
-  supabase: { from: (...args: any[]) => mockFrom(...args) },
+  supabase: {
+    from: (table: string) => {
+      _state.fromCalls.push(table)
+      return {
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({ data: _state.data, error: _state.error }),
+          }),
+        }),
+        upsert: (data: any) => {
+          _state.upsertArgs.splice(0, _state.upsertArgs.length, data)
+          return Promise.resolve({ error: _state.upsertError })
+        },
+      }
+    },
+  },
 }))
+
+const upsertArgs = _state.upsertArgs
+const fromCalls = _state.fromCalls
+
 
 vi.mock('../crypto.js', () => ({
   encrypt: (text: string) => text ? `ENC:${text}` : '',
-  decrypt: (text: string) => text.startsWith('ENC:') ? text.slice(4) : text,
+  decrypt: (text: string | undefined | null) => {
+    if (!text) return ''
+    return text.startsWith('ENC:') ? text.slice(4) : text
+  },
 }))
 
 vi.mock('../logger.js', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 describe('Config Store — Full Coverage', () => {
+  let mod: typeof import('../config-store.js')
+
+  beforeAll(async () => {
+    mod = await import('../config-store.js')
+  })
+
   beforeEach(() => {
-    vi.resetModules()
     vi.clearAllMocks()
     process.env.EMAIL_HOST = ''
     process.env.EMAIL_USER = ''
     process.env.EMAIL_PASS = ''
     process.env.EMAIL_PORT = ''
     process.env.EMAIL_FROM = ''
+    _state.data = null
+    _state.error = null
+    _state.upsertError = null
+    _state.upsertArgs.splice(0)
+    _state.fromCalls.splice(0)
+    mod.invalidateConfigCache()
   })
 
   describe('loadConfig', () => {
@@ -51,7 +84,6 @@ describe('Config Store — Full Coverage', () => {
         omie_app_secret: 'ENC:appsecret',
       })
 
-      const mod = await import('../config-store.js')
       const config = await mod.loadConfig()
 
       expect(config.emailHost).toBe('smtp.gmail.com')
@@ -82,7 +114,6 @@ describe('Config Store — Full Coverage', () => {
         omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       const config = await mod.loadConfig()
 
       expect(config.emailHost).toBe('env-smtp.test.com')
@@ -93,7 +124,6 @@ describe('Config Store — Full Coverage', () => {
     it('usa defaults quando bot_config não existe no DB', async () => {
       setupMockChain(null, { message: 'No rows' })
 
-      const mod = await import('../config-store.js')
       const config = await mod.loadConfig()
 
       expect(config.emailHost).toBe('')
@@ -107,7 +137,6 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       const a = await mod.loadConfig()
       const b = await mod.loadConfig()
       expect(a).toEqual(b)
@@ -131,8 +160,6 @@ describe('Config Store — Full Coverage', () => {
       })
       const customClient = { from: customFrom } as any
 
-      const mod = await import('../config-store.js')
-      // Force cache reset by re-importing
       const config = await mod.loadConfig(customClient)
       // Note: since cache is already loaded from previous call,
       // the custom client will only be used on first load
@@ -148,7 +175,6 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
       const sync = mod.loadConfigSync()
       expect(sync.emailHost).toBe('sync-test.com')
@@ -161,7 +187,6 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
       const a = mod.loadConfigSync()
       const b = mod.loadConfigSync()
@@ -178,17 +203,11 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
       await mod.saveConfig({ emailHost: 'new.com' })
 
-      expect(mockFrom).toHaveBeenCalledWith('bot_config')
-      expect(mockUpsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 1,
-          email_host: 'new.com',
-        })
-      )
+      expect(fromCalls).toContain('bot_config')
+      expect(upsertArgs[0]).toMatchObject({ id: 1, email_host: 'new.com' })
     })
 
     it('encripta emailPass ao salvar', async () => {
@@ -198,15 +217,10 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
       await mod.saveConfig({ emailPass: 'mypassword' })
 
-      expect(mockUpsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          email_pass: 'ENC:mypassword',
-        })
-      )
+      expect(upsertArgs[0]).toMatchObject({ email_pass: 'ENC:mypassword' })
     })
 
     it('encripta omieAppKey e omieAppSecret ao salvar', async () => {
@@ -216,16 +230,10 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
       await mod.saveConfig({ omieAppKey: 'key123', omieAppSecret: 'sec456' })
 
-      expect(mockUpsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          omie_app_key: 'ENC:key123',
-          omie_app_secret: 'ENC:sec456',
-        })
-      )
+      expect(upsertArgs[0]).toMatchObject({ omie_app_key: 'ENC:key123', omie_app_secret: 'ENC:sec456' })
     })
 
     it('atualiza cache local após salvar', async () => {
@@ -235,7 +243,6 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
       await mod.saveConfig({ emailHost: 'after.com' })
 
@@ -250,10 +257,9 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       await mod.loadConfig()
 
-      mockUpsert.mockResolvedValueOnce({ error: { message: 'DB error' } })
+      _state.upsertError = { message: 'DB error' }
 
       await expect(mod.saveConfig({ emailHost: 'fail.com' })).rejects.toThrow('DB error')
     })
@@ -265,8 +271,6 @@ describe('Config Store — Full Coverage', () => {
         whatsapp_numero: '55', omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
-      mod.invalidateConfigCache()
       await mod.loadConfig()
       const result = await mod.saveConfig({ emailUser: 'newuser' })
 
@@ -286,8 +290,6 @@ describe('Config Store — Full Coverage', () => {
         omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
-      mod.invalidateConfigCache()
       const emailCfg = await mod.getEmailConfig()
 
       expect(emailCfg).not.toBeNull()
@@ -306,7 +308,6 @@ describe('Config Store — Full Coverage', () => {
         omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       const emailCfg = await mod.getEmailConfig()
       expect(emailCfg).toBeNull()
     })
@@ -319,7 +320,6 @@ describe('Config Store — Full Coverage', () => {
         omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
       const emailCfg = await mod.getEmailConfig()
       expect(emailCfg).toBeNull()
     })
@@ -332,8 +332,6 @@ describe('Config Store — Full Coverage', () => {
         omie_app_key: '', omie_app_secret: '',
       })
 
-      const mod = await import('../config-store.js')
-      mod.invalidateConfigCache()
       const emailCfg = await mod.getEmailConfig()
       expect(emailCfg!.from).toBe('user@test.com')
     })

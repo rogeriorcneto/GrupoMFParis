@@ -54,6 +54,12 @@ export interface Cliente {
   whatsappValido?: boolean | null
   whatsappJid?: string
   whatsappValidadoEm?: string
+  googlePlaceId?: string
+  googleRating?: number
+  googleReviews?: number
+  website?: string
+  latitude?: number
+  longitude?: number
 }
 
 export interface Tarefa {
@@ -163,6 +169,12 @@ function clienteFromDb(row: any): Cliente {
     whatsappValido: row.whatsapp_valido ?? null,
     whatsappJid: row.whatsapp_jid || '',
     whatsappValidadoEm: row.whatsapp_validado_em || '',
+    googlePlaceId: row.google_place_id ?? undefined,
+    googleRating: row.google_rating != null ? Number(row.google_rating) : undefined,
+    googleReviews: row.google_reviews ?? undefined,
+    website: row.website ?? undefined,
+    latitude: row.latitude != null ? Number(row.latitude) : undefined,
+    longitude: row.longitude != null ? Number(row.longitude) : undefined,
   }
 }
 
@@ -189,6 +201,12 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.whatsappValido !== undefined) row.whatsapp_valido = c.whatsappValido
   if (c.whatsappJid !== undefined) row.whatsapp_jid = c.whatsappJid
   if (c.whatsappValidadoEm !== undefined) row.whatsapp_validado_em = c.whatsappValidadoEm
+  if (c.googlePlaceId !== undefined) row.google_place_id = c.googlePlaceId
+  if (c.googleRating !== undefined) row.google_rating = c.googleRating
+  if (c.googleReviews !== undefined) row.google_reviews = c.googleReviews
+  if (c.website !== undefined) row.website = c.website
+  if (c.latitude !== undefined) row.latitude = c.latitude
+  if (c.longitude !== undefined) row.longitude = c.longitude
   return row
 }
 
