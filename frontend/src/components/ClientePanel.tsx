@@ -139,6 +139,11 @@ export default function ClientePanel({
   const [cancelMotivo, setCancelMotivo] = useState('')
   const [cancelSaving, setCancelSaving] = useState(false)
 
+  // Modal aprovação por item de amostra
+  const [showAvaliarAmostra, setShowAvaliarAmostra] = useState(false)
+  type AvaliacaoItem = { aprovado: boolean | null; motivo: string }
+  const [avaliacaoItens, setAvaliacaoItens] = useState<Record<number, AvaliacaoItem>>({})
+
   // Gravações de ligação
   const [gravacoes, setGravacoes] = useState<any[]>([])
   const [gravacoesPorData, setGravacoesPorData] = useState<Map<string, any>>(new Map())
@@ -466,14 +471,25 @@ export default function ClientePanel({
                 </div>
               )}
               {c.etapa === 'prospecção' && (
-                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
+                <>
+                  <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
+                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { etapaAnterior: 'prospecção', dataEntradaEtapa: new Date().toISOString() }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-apple hover:bg-indigo-700">📋 Ir para Proposta</button>
+                </>
               )}
               {c.etapa === 'amostra' && (
                 <>
                   {c.statusAmostra === 'entregue' && (
                     <>
-                      <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700">✅ Aprovar</button>
-                      <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-apple hover:bg-orange-700">🚫 Reprovar</button>
+                      <button
+                        onClick={() => {
+                          const pedidoAmostra = (todosPedidos || []).find(p => p.clienteId === c.id && p.tipo === 'bonificacao')
+                          const initMap: Record<number, AvaliacaoItem> = {}
+                          ;(pedidoAmostra?.itens || []).forEach((_, idx) => { initMap[idx] = { aprovado: null, motivo: '' } })
+                          setAvaliacaoItens(initMap)
+                          setShowAvaliarAmostra(true)
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
+                      >🧪 Avaliar Itens</button>
                     </>
                   )}
                   {!['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(c.statusAmostra || '') && (
@@ -663,6 +679,37 @@ export default function ClientePanel({
               )}
             </div>
           </div>
+
+          {/* === PRODUTOS HOMOLOGADOS === */}
+          {(() => {
+            const pedidosCliente = (todosPedidos || []).filter(p => p.clienteId === c.id)
+            const statusAprovados = new Set(['confirmado', 'faturado', 'expedido', 'entregue'])
+            const nomesHomologados = new Set<string>()
+            for (const p of pedidosCliente) {
+              const isAmostraAprovada = p.tipo === 'bonificacao' && c.resultadoAmostra === 'aprovada'
+              const isVendaConfirmada = p.tipo !== 'bonificacao' && statusAprovados.has(p.status)
+              if (isAmostraAprovada || isVendaConfirmada) {
+                for (const item of (p.itens || [])) {
+                  if (item.nomeProduto) nomesHomologados.add(item.nomeProduto)
+                }
+              }
+            }
+            const lista = Array.from(nomesHomologados)
+            return (
+              <div className="bg-green-50 rounded-apple border border-green-200 p-4 space-y-2">
+                <h3 className="text-sm font-semibold text-green-900">✅ Produtos Homologados</h3>
+                {lista.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {lista.map(nome => (
+                      <span key={nome} className="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full border border-green-300 font-medium">{nome}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-green-700 opacity-70">Nenhum produto homologado ainda.</p>
+                )}
+              </div>
+            )
+          })()}
 
           {/* === PRODUTOS DE INTERESSE === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
@@ -1073,7 +1120,7 @@ export default function ClientePanel({
                             <div key={p.id} className={`flex items-center gap-2 p-2 rounded-apple border transition-colors ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'}`}>
                               <div className="flex-1 min-w-0">
                                 <p className="text-[11px] font-medium text-gray-900 truncate">{p.nome}</p>
-                                <p className="text-[10px] text-gray-400">{p.unidade.toUpperCase()}{pedidoTipo === 'venda' ? ` · R$ ${p.preco.toFixed(2).replace('.', ',')}` : ''}</p>
+                                <p className="text-[10px] text-gray-400">KG{pedidoTipo === 'venda' ? ` · R$ ${p.preco.toFixed(2).replace('.', ',')}` : ''}</p>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 <button onClick={() => setPedidoItemQtd(p, Math.max(0, qtd - 1))} className="w-5 h-5 rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 text-xs font-bold flex items-center justify-center">−</button>
@@ -1381,7 +1428,7 @@ export default function ClientePanel({
                     <div key={item.produtoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-apple border border-gray-200">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">{item.nomeProduto}</p>
-                        <p className="text-[10px] text-gray-400">{item.unidade?.toUpperCase()}</p>
+                        <p className="text-[10px] text-gray-400">KG</p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div className="flex flex-col items-center gap-0.5">
@@ -1437,7 +1484,7 @@ export default function ClientePanel({
                     >
                       <option value="">+ Selecionar produto para adicionar...</option>
                       {produtos.filter(p => p.ativo).map(p => (
-                        <option key={p.id} value={p.id}>{p.nome} — R$ {p.preco.toFixed(2).replace('.', ',')}/{p.unidade}</option>
+                        <option key={p.id} value={p.id}>{p.nome} — R$ {p.preco.toFixed(2).replace('.', ',')}/KG</option>
                       ))}
                     </select>
                   </div>
@@ -1550,6 +1597,116 @@ export default function ClientePanel({
           </div>
         </div>
       )}
+
+      {/* Modal: Avaliação por Item de Amostra */}
+      {showAvaliarAmostra && (() => {
+        const pedidoAmostra = (todosPedidos || []).find(p => p.clienteId === c.id && p.tipo === 'bonificacao')
+        const itens = pedidoAmostra?.itens || []
+        const todosAvaliados = itens.length > 0 && itens.every((_, idx) => avaliacaoItens[idx]?.aprovado !== null && avaliacaoItens[idx]?.aprovado !== undefined)
+        const todosAprovados = itens.every((_, idx) => avaliacaoItens[idx]?.aprovado === true)
+        const algumReprovado = itens.some((_, idx) => avaliacaoItens[idx]?.aprovado === false)
+        const reprovadoSemMotivo = itens.some((_, idx) => avaliacaoItens[idx]?.aprovado === false && !avaliacaoItens[idx]?.motivo?.trim())
+
+        const handleConfirmar = () => {
+          const hoje = new Date().toISOString().split('T')[0]
+          if (todosAprovados) {
+            onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje })
+          } else {
+            const motivosReprovados = itens
+              .map((item, idx) => avaliacaoItens[idx]?.aprovado === false
+                ? `${item.nomeProduto}: ${avaliacaoItens[idx]?.motivo || ''}`
+                : null
+              )
+              .filter(Boolean)
+              .join('; ')
+            onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: hoje, motivoReprovacao: motivosReprovados })
+          }
+          setShowAvaliarAmostra(false)
+          onClose()
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4" onClick={() => setShowAvaliarAmostra(false)}>
+            <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">🧪 Avaliação de Amostra por Item</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{c.razaoSocial} — Aprove ou reprove cada produto individualmente</p>
+              </div>
+
+              {itens.length === 0 ? (
+                <div className="text-center py-6 text-gray-400 text-sm">
+                  <p>Nenhum item encontrado no pedido de amostra.</p>
+                  <p className="text-xs mt-1">Use os botões de Aprovar / Reprovar gerais.</p>
+                  <div className="flex gap-3 justify-center mt-4">
+                    <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Aprovar</button>
+                    <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-orange-600 text-white rounded-apple text-sm hover:bg-orange-700">🚫 Reprovar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                  {itens.map((item, idx) => {
+                    const av = avaliacaoItens[idx] || { aprovado: null, motivo: '' }
+                    return (
+                      <div key={idx} className={`rounded-apple border p-3 space-y-2 transition-colors ${av.aprovado === true ? 'border-green-300 bg-green-50' : av.aprovado === false ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{item.nomeProduto}</p>
+                            <p className="text-xs text-gray-500">{item.quantidade} KG</p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <button
+                              onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { aprovado: true, motivo: '' } }))}
+                              className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === true ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'}`}
+                            >✅ OK</button>
+                            <button
+                              onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], aprovado: false, motivo: prev[idx]?.motivo || '' } }))}
+                              className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === false ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-700 border-orange-300 hover:bg-orange-50'}`}
+                            >🚫 Reprovar</button>
+                          </div>
+                        </div>
+                        {av.aprovado === false && (
+                          <input
+                            type="text"
+                            value={av.motivo}
+                            onChange={e => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], motivo: e.target.value } }))}
+                            placeholder="Motivo da reprovação (obrigatório)..."
+                            className="w-full px-2 py-1.5 border border-orange-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                            autoFocus
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {itens.length > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  {todosAvaliados && (
+                    <p className="text-xs text-gray-500 mb-3">
+                      {todosAprovados
+                        ? '✅ Todos aprovados — cliente será movido para Proposta'
+                        : algumReprovado && !todosAprovados
+                          ? '⚠️ Aprovação parcial — cliente será movido para Amostra Perdida com motivos registrados'
+                          : '🚫 Todos reprovados — cliente será movido para Amostra Perdida'}
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => setShowAvaliarAmostra(false)} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
+                    <button
+                      disabled={!todosAvaliados || reprovadoSemMotivo}
+                      onClick={handleConfirmar}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Confirmar Avaliação
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

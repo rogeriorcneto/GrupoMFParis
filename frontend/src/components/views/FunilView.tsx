@@ -260,10 +260,10 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10, gerenteOnly: false },
     { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25, gerenteOnly: false },
     { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🚫', prob: 0.05, gerenteOnly: false },
-    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
-    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '💰', prob: 0.60, gerenteOnly: false },
-    { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
-    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10, gerenteOnly: true },
+    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '�', prob: 0.10, gerenteOnly: true },
+    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '�', prob: 0.40, gerenteOnly: false },
+    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '�', prob: 0.60, gerenteOnly: false },
+    { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '�', prob: 0.80, gerenteOnly: false },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: true }
   ]
 
@@ -808,7 +808,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                 </span>
                                 {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}
                               </div>
-                              {p.numero && <p className="text-[10px] text-gray-500">📋 #{p.numero}</p>}
+                              {(p.omieNumero || p.numero) && <p className="text-[10px] text-gray-500">📋 #{p.omieNumero || p.numero}</p>}
                               {p.totalValor > 0 && <p className="text-[10px] font-semibold text-gray-700">💰 R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>}
                               {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
                             </div>

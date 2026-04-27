@@ -41,6 +41,7 @@ interface FunilModalsProps {
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   isNovoCiclo?: boolean
   onCloseNovoCiclo?: () => void
+  onClickCliente?: (c: Cliente) => void
 }
 
 const perdaCategorias: { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[] = [
@@ -59,7 +60,7 @@ export default function FunilModals({
   showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
   draggedItem, setDraggedItem, setPendingDrop,
   produtos = [], clientes = [], onAddPedido, showToast,
-  isNovoCiclo = false, onCloseNovoCiclo
+  isNovoCiclo = false, onCloseNovoCiclo, onClickCliente
 }: FunilModalsProps) {
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
@@ -222,6 +223,7 @@ export default function FunilModals({
     if (p.frete) setPropostaFrete(p.frete as 'CIF' | 'FOB')
     if (p.pagamento) setPropostaPagamento(p.pagamento)
     if (p.observacoes) setPropostaObs(p.observacoes)
+    setPropostaTab('itens')
     showToast?.('success', `Itens da ${p.numero} copiados para nova proposta!`)
   }
 
@@ -361,7 +363,7 @@ export default function FunilModals({
                       <div key={p.id} className={`flex items-center gap-3 p-2.5 rounded-apple border transition-colors ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'}`}>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-gray-900 truncate">{p.nome}</p>
-                          <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / {p.unidade.toUpperCase()}</p>
+                          <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / KG</p>
                         </div>
                         <input type="number" min={0} value={qtd || ''} onChange={e => setPedidoItemQtd(p, Math.max(0, parseInt(e.target.value || '0', 10) || 0))} placeholder="Qtd" className="w-16 px-2 py-1 border border-gray-300 rounded-apple text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary-500" />
                       </div>
@@ -394,7 +396,7 @@ export default function FunilModals({
                             placeholder="0,00"
                             className="flex-1 px-1.5 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
                           />
-                          <span className="text-[10px] text-gray-400 flex-shrink-0">/{item.unidade?.toUpperCase()}</span>
+                          <span className="text-[10px] text-gray-400 flex-shrink-0">/KG</span>
                         </div>
                       </div>
                       {item.preco > 0 && (
@@ -433,8 +435,12 @@ export default function FunilModals({
           <div className="bg-white rounded-apple shadow-apple-lg w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900">{isNovoCiclo ? '� Nova Proposta — Novo Ciclo' : '�💰 Nova Negociação'}</h2>
-              <p className="text-sm text-gray-500 mt-0.5">Cliente: <span className="font-medium text-gray-800">{draggedItem?.cliente.razaoSocial}</span></p>
+              <h2 className="text-lg font-semibold text-gray-900">{isNovoCiclo ? '🔄 Nova Proposta — Novo Ciclo' : '💰 Nova Negociação'}</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Cliente: <button
+                  onClick={() => draggedItem?.cliente && onClickCliente?.(draggedItem.cliente)}
+                  className="font-semibold text-indigo-700 hover:text-indigo-900 hover:underline transition-colors"
+                  title="Abrir cadastro do cliente"
+                >{draggedItem?.cliente.razaoSocial}</button></p>
               {isNovoCiclo && <p className="text-xs text-blue-600 mt-1 font-medium">A proposta será salva sem alterar a etapa do cliente no funil.</p>}
             </div>
 
@@ -474,7 +480,7 @@ export default function FunilModals({
                       <div key={p.id} className={`flex items-center gap-3 p-2.5 rounded-apple border transition-colors ${qtd > 0 ? 'border-primary-300 bg-primary-50' : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'}`}>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-gray-900 truncate">{p.nome}</p>
-                          <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / {p.unidade.toUpperCase()}</p>
+                          <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / KG</p>
                         </div>
                         <input type="number" min={0} value={qtd || ''} onChange={e => setPropostaItemQtd(p, Math.max(0, parseInt(e.target.value || '0', 10) || 0))} placeholder="Qtd" className="w-16 px-2 py-1 border border-gray-300 rounded-apple text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary-500" />
                       </div>
@@ -523,7 +529,7 @@ export default function FunilModals({
                                 placeholder="0,00"
                                 className="flex-1 px-1.5 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
                               />
-                              <span className="text-[10px] text-gray-400 flex-shrink-0">/{item.unidade?.toUpperCase()}</span>
+                              <span className="text-[10px] text-gray-400 flex-shrink-0">/KG</span>
                             </div>
                           </div>
                           {item.preco > 0 && (

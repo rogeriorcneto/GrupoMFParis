@@ -514,6 +514,7 @@ function App() {
           showToast={showToast}
           isNovoCiclo={isNovoCiclo}
           onCloseNovoCiclo={() => { setIsNovoCiclo(false); setDraggedItem(null); setPendingDrop(null) }}
+          onClickCliente={handleEditCliente}
         />
 
         {/* Busca Global */}
