@@ -683,6 +683,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   const closingRef = useRef(false)
   const processingRef = useRef(false)  // true enquanto pensa/fala — evita restart prematuro
   const callStateRef = useRef<CallState>('connecting')
+  const listenSessionRef = useRef(0)    // incrementado a cada nova sessão de escuta
 
   // ── Timer ──
   useEffect(() => {
@@ -708,9 +709,13 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   const startListening = useCallback(() => {
     if (closingRef.current || processingRef.current) return
 
-    // Descartar instância anterior sem disparar onerror
+    // Incrementar session ID — qualquer callback de instância anterior com session ID antigo é ignorado
+    const sessionId = listenSessionRef.current + 1
+    listenSessionRef.current = sessionId
+
+    // Abortar instância anterior silenciosamente
     if (recRef.current) {
-      try { recRef.current.onresult = null; recRef.current.onerror = null; recRef.current.onend = null; recRef.current.abort() } catch (_) {}
+      try { recRef.current.abort() } catch (_) {}
       recRef.current = null
     }
 
@@ -727,6 +732,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     setTranscript('')
 
     rec.onresult = async (event: any) => {
+      if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       const result = event.results[0]
       if (!result) return
       const text = result[0]?.transcript?.trim() || ''
@@ -893,6 +899,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     }
 
     rec.onerror = (event: any) => {
+      if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       if (closingRef.current) return
       const err = event.error
       console.warn('[Voice] onerror:', err)
@@ -901,19 +908,23 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         setCallState('error')
         return
       }
-      // aborted, no-speech, network, audio-capture — reiniciar apenas se não estiver processando
+      // no-speech: ouviu silêncio — reiniciar normalmente
+      // aborted: esta instância foi abortada por nós mesmos no próximo startListening — NÃO reiniciar
+      if (err === 'aborted') return
       if (!processingRef.current) {
-        const delay = err === 'network' ? 2000 : err === 'aborted' ? 800 : 500
-        setTimeout(() => { if (!closingRef.current && !processingRef.current) startListening() }, delay)
+        const delay = err === 'network' ? 2000 : 500
+        setTimeout(() => {
+          if (listenSessionRef.current === sessionId && !closingRef.current && !processingRef.current) startListening()
+        }, delay)
       }
     }
 
     rec.onend = () => {
+      if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       if (closingRef.current) return
-      // Reiniciar apenas se não estiver processando (thinking/speaking)
       if (!processingRef.current) {
         setTimeout(() => {
-          if (!closingRef.current && !processingRef.current) startListening()
+          if (listenSessionRef.current === sessionId && !closingRef.current && !processingRef.current) startListening()
         }, 300)
       }
     }
