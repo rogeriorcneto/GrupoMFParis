@@ -203,17 +203,25 @@ export default function AppRouter({
             }
             await db.confirmarCancelamentoPedido(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
-            // Mover cliente para perdido + criar novo card em Proposta
+            addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)
+            // Mover cliente para perdido + criar novo card em Proposta (direto via db, sem lock)
             const cli = clientes.find(c => c.id === pedido.clienteId)
             if (cli) {
               try {
+                const now = new Date().toISOString()
+                const today = now.split('T')[0]
+                // 1) Mover para perdido diretamente no banco
                 if (cli.etapa !== 'perdido') {
-                  await moverCliente(pedido.clienteId, 'perdido', {
-                    motivoPerda: `Pedido ${pedido.numero} cancelado`,
-                    categoriaPerda: 'outro',
-                    dataPerda: new Date().toISOString().split('T')[0],
-                  })
+                  await db.moverClienteAtomico(
+                    pedido.clienteId, 'perdido', cli.etapa, now,
+                    { motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
+                  )
+                  setClientes(prev => prev.map(c => c.id === pedido.clienteId
+                    ? { ...c, etapa: 'perdido', etapaAnterior: c.etapa, motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
+                    : c
+                  ))
                 }
+                // 2) Criar novo card em Proposta
                 const novoCard: Omit<Cliente, 'id'> = {
                   ...cli,
                   etapa: 'proposta',
@@ -230,7 +238,7 @@ export default function AppRouter({
                   valorEstimado: undefined,
                   valorProposta: undefined,
                   dataProposta: undefined,
-                  dataEntradaEtapa: new Date().toISOString(),
+                  dataEntradaEtapa: now,
                   historicoEtapas: [],
                   vendedorId: cli.vendedorId,
                 }
@@ -241,7 +249,6 @@ export default function AppRouter({
                 logger.error('Erro ao processar cancelamento no funil:', moveErr)
               }
             }
-            addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)
           } catch (err) { logger.error('Erro ao confirmar cancelamento:', err); throw err }
         }}
         onRejeitarCancelamento={async (pedido) => {
