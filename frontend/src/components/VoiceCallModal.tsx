@@ -133,8 +133,8 @@ function getSpeechRecognition(): any | null {
   if (!SpeechRec) return null
   const rec = new SpeechRec()
   rec.lang = 'pt-BR'
-  rec.continuous = false      // Uma utterance por vez — evita loop 'aborted' no Chrome/HTTPS
-  rec.interimResults = false  // Apenas resultado final — mais estável
+  rec.continuous = true       // Continua ouvindo — o timeout de silêncio controla o fim
+  rec.interimResults = true   // Recebe palavras intermediárias para detectar pausas
   rec.maxAlternatives = 1
   return rec
 }
@@ -684,6 +684,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   const processingRef = useRef(false)  // true enquanto pensa/fala — evita restart prematuro
   const callStateRef = useRef<CallState>('connecting')
   const listenSessionRef = useRef(0)    // incrementado a cada nova sessão de escuta
+  const interimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // timer de silêncio 1.5s
 
   // ── Timer ──
   useEffect(() => {
@@ -699,6 +700,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     return () => {
       closingRef.current = true
       window.speechSynthesis.cancel()
+      if (interimTimerRef.current) { clearTimeout(interimTimerRef.current); interimTimerRef.current = null }
       recRef.current?.abort()
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
     }
@@ -712,6 +714,9 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     // Incrementar session ID — qualquer callback de instância anterior com session ID antigo é ignorado
     const sessionId = listenSessionRef.current + 1
     listenSessionRef.current = sessionId
+
+    // Limpar timer de silêncio pendente da sessão anterior
+    if (interimTimerRef.current) { clearTimeout(interimTimerRef.current); interimTimerRef.current = null }
 
     // Abortar instância anterior: usar flag local para que o onerror('aborted') dela seja silenciado
     if (recRef.current) {
@@ -733,14 +738,59 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     setCallState('listening')
     setTranscript('')
 
-    rec.onresult = async (event: any) => {
+    // Acumula texto de todas as partes intermediárias da frase atual
+    let interimAccumulated = ''
+
+    const processText = async (text: string) => {
+      if (!text || processingRef.current) return
+      if (listenSessionRef.current !== sessionId) return
+      processingRef.current = true
+      callStateRef.current = 'thinking'
+      setCallState('thinking')
+      // Parar de ouvir enquanto processa
+      try { rec.stop() } catch (_) {}
+      await handleVoiceText(text)
+    }
+
+    rec.onresult = (event: any) => {
       if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
-      const result = event.results[0]
-      if (!result) return
-      const text = result[0]?.transcript?.trim() || ''
+      if (processingRef.current) return  // já processando, ignorar
+
+      // Acumular todos os resultados (finais e intermediários)
+      let fullTranscript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0]?.transcript || ''
+      }
+      const text = fullTranscript.trim()
       if (!text) return
 
-      console.log('[Voice] Fala reconhecida:', text)
+      interimAccumulated = text
+      setTranscript(text)  // mostrar em tempo real na UI
+
+      // Verificar se o Chrome já marcou como final
+      const lastResult = event.results[event.results.length - 1]
+      if (lastResult?.isFinal) {
+        if (interimTimerRef.current) { clearTimeout(interimTimerRef.current); interimTimerRef.current = null }
+        console.log('[Voice] Resultado final do Chrome:', text)
+        processText(text)
+        return
+      }
+
+      // Resultado intermediário: resetar o timer de silêncio de 1.5s
+      if (interimTimerRef.current) clearTimeout(interimTimerRef.current)
+      interimTimerRef.current = setTimeout(() => {
+        interimTimerRef.current = null
+        const captured = interimAccumulated
+        if (captured) {
+          console.log('[Voice] Timeout de silêncio 1.5s, processando:', captured)
+          processText(captured)
+        }
+      }, 1500)
+    }
+
+    // handleVoiceText: lógica central separada (texto já validado)
+    const handleVoiceText = async (text: string) => {
+      console.log('[Voice] Processando fala:', text)
       setTranscript(text)
       processingRef.current = true
       callStateRef.current = 'thinking'
@@ -836,9 +886,11 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     }
 
     rec.onend = () => {
+      if ((rec as any)._abortedByUs) return  // abortado por nós mesmos, ignorar
       if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       if (closingRef.current) return
-      // Reiniciar escuta somente se não estiver processando (IA pensando/falando)
+      // Com continuous:true, onend só dispara após stop() (que chamamos ao processar)
+      // ou por erro — não reiniciar se já estamos processando
       if (!processingRef.current) {
         setTimeout(() => {
           if (listenSessionRef.current === sessionId && !closingRef.current && !processingRef.current) startListening()

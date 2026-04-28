@@ -271,6 +271,72 @@ async function testNetlifyEdge(token: string | null) {
   }
 }
 
+// ── 7. Lógica de interim results (simulação unitária) ─────────────────────────
+async function testInterimResultsLogic() {
+  section('7. Interim Results — Simulação da lógica de timeout')
+
+  // Simula o comportamento esperado: timer reseta a cada interim, dispara após 1.5s de silêncio
+  const SILENCE_MS = 1500
+
+  let finalTextSent = ''
+  let timerFiredCount = 0
+  let interimCount = 0
+
+  const simulateInterimStream = (): Promise<string> => {
+    return new Promise((resolve) => {
+      let silenceTimer: ReturnType<typeof setTimeout> | null = null
+      let accumulated = ''
+
+      const onInterim = (word: string) => {
+        interimCount++
+        accumulated += word + ' '
+        // Resetar timer a cada interim
+        if (silenceTimer) clearTimeout(silenceTimer)
+        silenceTimer = setTimeout(() => {
+          timerFiredCount++
+          finalTextSent = accumulated.trim()
+          resolve(finalTextSent)
+        }, SILENCE_MS)
+      }
+
+      // Simular palavras chegando com 300ms de intervalo (fala normal)
+      const words = ['Olá', 'quero', 'saber', 'sobre', 'os', 'clientes']
+      words.forEach((w, i) => setTimeout(() => onInterim(w), i * 300))
+      // Após as palavras, silêncio de 1.5s deve disparar o timer
+    })
+  }
+
+  const t0 = Date.now()
+  const result = await simulateInterimStream()
+  const elapsed = Date.now() - t0
+  const expectedMin = (5 * 300) + SILENCE_MS  // última palavra + silêncio
+  const expectedMax = expectedMin + 200        // tolerância
+
+  if (result === 'Olá quero saber sobre os clientes') {
+    pass('Texto acumulado correto', `"${result}"`)
+  } else {
+    fail('Texto acumulado', `esperado "Olá quero saber sobre os clientes", recebido "${result}"`)
+  }
+
+  if (timerFiredCount === 1) {
+    pass('Timer disparou exatamente 1 vez')
+  } else {
+    fail('Timer count', `esperado 1, recebido ${timerFiredCount}`)
+  }
+
+  if (elapsed >= expectedMin && elapsed <= expectedMax) {
+    pass(`Timing correto`, `${elapsed}ms (esperado ${expectedMin}-${expectedMax}ms)`)
+  } else {
+    fail('Timing', `${elapsed}ms fora do esperado ${expectedMin}-${expectedMax}ms`)
+  }
+
+  if (interimCount === 6) {
+    pass(`Interims recebidos`, `${interimCount} palavras`)
+  } else {
+    fail('Interim count', `esperado 6, recebido ${interimCount}`)
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════')
@@ -286,6 +352,7 @@ async function main() {
   await testGemini(token)
   await testGeminiStream(token)
   await testNetlifyEdge(token)
+  await testInterimResultsLogic()
 
   console.log('\n═══════════════════════════════════════════')
   console.log('  Teste concluído.')
