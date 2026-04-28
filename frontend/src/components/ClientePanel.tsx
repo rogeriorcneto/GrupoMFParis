@@ -589,7 +589,7 @@ export default function ClientePanel({
               {c.etapa === 'amostra_perdida' && (c.tentativaAmostra || 0) < 2 && (
                 <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">🔄 2ª Tentativa Amostra</button>
               )}
-              {(c.etapa === 'inativo' || c.etapa === 'perdido') && (
+              {c.etapa === 'inativo' && (
                 <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">🔄 Reativar</button>
               )}
             </div>

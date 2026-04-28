@@ -207,18 +207,42 @@ export default function AppRouter({
             }
             await db.confirmarCancelamentoPedido(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
-            // Mover cliente para perdido no funil (pedido cancelado = venda perdida)
+            // Mover cliente para perdido + criar novo card em Proposta
             const cli = clientes.find(c => c.id === pedido.clienteId)
-            if (cli && cli.etapa !== 'perdido') {
+            if (cli) {
               try {
-                await moverCliente(pedido.clienteId, 'perdido', {
-                  motivoPerda: `Pedido ${pedido.numero} cancelado`,
-                  categoriaPerda: 'outro',
-                  dataPerda: new Date().toISOString().split('T')[0],
-                })
-                addNotificacao('info', 'Cliente movido', `Cliente ${cli.razaoSocial} foi para Perdido após cancelamento do pedido.`, pedido.clienteId)
+                if (cli.etapa !== 'perdido') {
+                  await moverCliente(pedido.clienteId, 'perdido', {
+                    motivoPerda: `Pedido ${pedido.numero} cancelado`,
+                    categoriaPerda: 'outro',
+                    dataPerda: new Date().toISOString().split('T')[0],
+                  })
+                }
+                const novoCard: Omit<Cliente, 'id'> = {
+                  ...cli,
+                  etapa: 'proposta',
+                  etapaAnterior: 'perdido',
+                  novoCiclo: true,
+                  cicloNumero: (cli.cicloNumero || 1) + 1,
+                  statusFollowUp: undefined,
+                  statusAmostra: undefined,
+                  statusEntrega: undefined,
+                  statusFaturamento: undefined,
+                  motivoPerda: undefined,
+                  categoriaPerda: undefined,
+                  dataPerda: undefined,
+                  valorEstimado: undefined,
+                  valorProposta: undefined,
+                  dataProposta: undefined,
+                  dataEntradaEtapa: new Date().toISOString(),
+                  historicoEtapas: [],
+                  vendedorId: cli.vendedorId,
+                }
+                const cardCriado = await db.insertCliente(novoCard)
+                setClientes(prev => [...prev, cardCriado])
+                addNotificacao('info', '🔄 Novo ciclo criado', `Pedido cancelado — card de ${cli.razaoSocial} criado em Proposta para novo ciclo.`, cardCriado.id)
               } catch (moveErr) {
-                logger.error('Erro ao mover cliente após cancelamento:', moveErr)
+                logger.error('Erro ao processar cancelamento no funil:', moveErr)
               }
             }
             addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)
@@ -504,10 +528,18 @@ export default function AppRouter({
               try {
                 const omieResult = await aprovarPedidoComOmie(saved.id)
                 setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
-                // Auto-move client to negociacao when sale is approved
+                // Auto-move client to negociacao when sale is approved (or create new cycle if lost)
                 const cli = clientes.find(c => c.id === p.clienteId)
-                if (cli && cli.etapa !== 'negociacao' && cli.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
+                if (cli) {
+                  try {
+                    if (cli.etapa === 'perdido') {
+                      const novoCard: Omit<Cliente, 'id'> = { ...cli, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const cardCriado = await db.insertCliente(novoCard)
+                      setClientes(prev => [...prev, cardCriado])
+                    } else if (cli.etapa !== 'negociacao') {
+                      moverCliente(p.clienteId, 'negociacao')
+                    }
+                  } catch { /* non-critical */ }
                 }
                 if (omieResult.omie?.success) {
                   showToast('success', `Pedido ${saved.numero} aprovado e enviado ao Omie! ✅`)
@@ -517,10 +549,18 @@ export default function AppRouter({
               } catch {
                 await db.aprovarPedido(saved.id, loggedUser?.id || 0)
                 setPedidos(prev => [...prev, { ...saved, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id }])
-                // Auto-move client to negociacao when sale is approved
+                // Auto-move client to negociacao when sale is approved (or create new cycle if lost)
                 const cli2 = clientes.find(c => c.id === p.clienteId)
-                if (cli2 && cli2.etapa !== 'negociacao' && cli2.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
+                if (cli2) {
+                  try {
+                    if (cli2.etapa === 'perdido') {
+                      const novoCard: Omit<Cliente, 'id'> = { ...cli2, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const cardCriado = await db.insertCliente(novoCard)
+                      setClientes(prev => [...prev, cardCriado])
+                    } else if (cli2.etapa !== 'negociacao') {
+                      moverCliente(p.clienteId, 'negociacao')
+                    }
+                  } catch { /* non-critical */ }
                 }
                 showToast('success', `Pedido ${saved.numero} aprovado automaticamente! ✅ (Omie offline)`)
               }
@@ -542,10 +582,18 @@ export default function AppRouter({
               try {
                 const result = await aprovarPedidoComOmie(p.id)
                 setPedidos(prev => prev.map(x => x.id === p.id ? { ...p, status: 'confirmado', dataAprovacao: new Date().toISOString(), aprovadoPor: loggedUser?.id } : x))
-                // Auto-move client to negociacao when sale is approved
+                // Auto-move client to negociacao when sale is approved (or create new cycle if lost)
                 const cliApproved = clientes.find(c => c.id === p.clienteId)
-                if (cliApproved && cliApproved.etapa !== 'negociacao' && cliApproved.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
+                if (cliApproved) {
+                  try {
+                    if (cliApproved.etapa === 'perdido') {
+                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const cardCriado = await db.insertCliente(novoCard)
+                      setClientes(prev => [...prev, cardCriado])
+                    } else if (cliApproved.etapa !== 'negociacao') {
+                      moverCliente(p.clienteId, 'negociacao')
+                    }
+                  } catch { /* non-critical */ }
                 }
                 if (result.omie?.success) {
                   showToast('success', `Pedido ${p.numero} aprovado e enviado ao Omie! ✅`)
@@ -555,10 +603,18 @@ export default function AppRouter({
               } catch {
                 await db.aprovarPedido(p.id, loggedUser?.id || 0)
                 setPedidos(prev => prev.map(x => x.id === p.id ? { ...p, status: 'confirmado' } : x))
-                // Auto-move client to negociacao when sale is approved
+                // Auto-move client to negociacao when sale is approved (or create new cycle if lost)
                 const cliApproved2 = clientes.find(c => c.id === p.clienteId)
-                if (cliApproved2 && cliApproved2.etapa !== 'negociacao' && cliApproved2.etapa !== 'perdido') {
-                  try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
+                if (cliApproved2) {
+                  try {
+                    if (cliApproved2.etapa === 'perdido') {
+                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved2, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const cardCriado = await db.insertCliente(novoCard)
+                      setClientes(prev => [...prev, cardCriado])
+                    } else if (cliApproved2.etapa !== 'negociacao') {
+                      moverCliente(p.clienteId, 'negociacao')
+                    }
+                  } catch { /* non-critical */ }
                 }
                 showToast('success', `Pedido ${p.numero} aprovado! (Omie offline)`)
               }
