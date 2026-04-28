@@ -257,8 +257,9 @@ export function useFunilActions({
     }
 
     // Gerente movendo fora do fluxo normal: mover direto sem modal
+    // EXCETO para 'perdido' — sempre abre o modal para registrar motivo e criar novo ciclo
     const isOutOfFlow = !permitidas.includes(toStage)
-    if (isGerente && isOutOfFlow) {
+    if (isGerente && isOutOfFlow && toStage !== 'perdido') {
       moverCliente(draggedItem.cliente.id, toStage, {})
       setDraggedItem(null)
       return

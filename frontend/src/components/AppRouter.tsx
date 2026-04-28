@@ -207,16 +207,16 @@ export default function AppRouter({
             }
             await db.confirmarCancelamentoPedido(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
-            // Mover cliente de volta para negociacao no funil
+            // Mover cliente para perdido no funil (pedido cancelado = venda perdida)
             const cli = clientes.find(c => c.id === pedido.clienteId)
-            const etapasParaVoltar = ['follow_up', 'negociacao']
-            if (cli && etapasParaVoltar.includes(cli.etapa)) {
+            if (cli && cli.etapa !== 'perdido') {
               try {
-                await moverCliente(pedido.clienteId, 'negociacao', {})
-                // Limpar status_follow_up diretamente no banco (a RPC não cobre esse campo)
-                await db.updateCliente(pedido.clienteId, { status_follow_up: null } as any)
-                setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, etapa: 'negociacao', statusFollowUp: undefined } : c))
-                addNotificacao('info', 'Cliente movido', `Cliente ${cli.razaoSocial} voltou para Negociação após cancelamento.`, pedido.clienteId)
+                await moverCliente(pedido.clienteId, 'perdido', {
+                  motivoPerda: `Pedido ${pedido.numero} cancelado`,
+                  categoriaPerda: 'outro',
+                  dataPerda: new Date().toISOString().split('T')[0],
+                })
+                addNotificacao('info', 'Cliente movido', `Cliente ${cli.razaoSocial} foi para Perdido após cancelamento do pedido.`, pedido.clienteId)
               } catch (moveErr) {
                 logger.error('Erro ao mover cliente após cancelamento:', moveErr)
               }
