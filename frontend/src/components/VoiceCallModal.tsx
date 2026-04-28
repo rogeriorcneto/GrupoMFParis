@@ -713,9 +713,13 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     const sessionId = listenSessionRef.current + 1
     listenSessionRef.current = sessionId
 
-    // NÃO chamar abort() — isso dispara onerror('aborted') no Chrome/HTTPS
-    // Simplesmente descartar a referência; o sessionId rejeitará qualquer evento tardio
-    recRef.current = null
+    // Abortar instância anterior: usar flag local para que o onerror('aborted') dela seja silenciado
+    if (recRef.current) {
+      const old = recRef.current
+      ;(old as any)._abortedByUs = true
+      try { old.abort() } catch (_) {}
+      recRef.current = null
+    }
 
     const rec = getSpeechRecognition()
     if (!rec) {
@@ -897,12 +901,15 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     }
 
     rec.onerror = (event: any) => {
+      // Se esta instância foi abortada por nós mesmos, ignorar o onerror('aborted') resultante
+      if ((rec as any)._abortedByUs) return
       if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       if (closingRef.current) return
       const err = event.error
-      // 'aborted' é disparado pelo Chrome/HTTPS em condições normais (silêncio, fim de utterance)
-      // NÃO reiniciar por aborted — o onend já cuida do restart
-      if (err === 'aborted' || err === 'no-speech') return
+      // 'no-speech' é normal — onend já reinicia
+      if (err === 'no-speech') return
+      // 'aborted' inesperado (não foi nós): logar mas não reiniciar em loop
+      if (err === 'aborted') return
       if (err === 'not-allowed') {
         setError('Permissão do microfone negada. Habilite nas configurações do navegador.')
         setCallState('error')
