@@ -741,11 +741,21 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       if (!text) return
 
       console.log('[Voice] Fala reconhecida:', text)
-
       setTranscript(text)
       processingRef.current = true
       callStateRef.current = 'thinking'
       setCallState('thinking')
+
+      const sayAndListen = (reply: string) => {
+        if (closingRef.current) return
+        setAiText(reply)
+        callStateRef.current = 'speaking'
+        setCallState('speaking')
+        speakNeural(reply, () => {
+          processingRef.current = false
+          if (!closingRef.current) startListening()
+        }, audioRef)
+      }
 
       // Detect hangup intent
       const lower = text.toLowerCase()
@@ -758,146 +768,48 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         return
       }
 
-      // Add to history
       historyRef.current.push({ role: 'user', content: text })
       if (historyRef.current.length > 20) historyRef.current = historyRef.current.slice(-20)
-
       setTurns(prev => [...prev, { role: 'user', text }])
 
-      try {
-        console.log('[Voice] Iniciando chamada da IA...')
-        
-        // Streaming Fase 2: Resposta em tempo real
-        const voicePrompt = systemPrompt + `\n\n## MODO VOZ ATIVA\nVocê está em uma conversa de VOZ agora. Regras OBRIGATÓRIAS:\n- Respostas CURTAS: máximo 2-3 frases. Nunca use listas ou tabelas.\n- NUNCA diga "Sou a assistente do CRM" ou se apresente novamente — já se apresentou.\n- Fale como colega de trabalho, natural e direto. Sem formalidade.\n- Números: fale por extenso ("mil quatrocentos" não "1400").\n- Se precisar de mais detalhes, faça UMA pergunta só.`
-        
-        console.log('[Voice] Voice prompt criado, chamando IA...')
-        
-        let fullResponse = ''
-        let isFirstChunk = true
-        let hasSpoken = false
+      const voicePrompt = systemPrompt + '\n\n## MODO VOZ\nRespostas CURTAS (2-3 frases). Sem listas. Fale natural e direto.'
 
-        let reply = ''
-        
-        try {
-          reply = await callAIVoiceStream(
-            historyRef.current, 
-            voicePrompt,
-            // onChunk: feedback visual em tempo real
-            (chunk, accumulated) => {
-              console.log('[Voice] onChunk chamado:', chunk, accumulated)
-              fullResponse = accumulated
-              if (isFirstChunk) {
-                console.log('[Voice] Primeiro chunk, definindo texto e estado')
-                setAiText(accumulated)
-                setCallState('speaking')
-                isFirstChunk = false
-              } else {
-                setAiText(accumulated)
-              }
-            },
-            // onTTS: reproduzir frases conforme chegam
-            async (sentence, isFinal) => {
-              if (!hasSpoken || isFinal) {
-                hasSpoken = true
-                const afterSpeak = () => {
-                  if (isFinal && !closingRef.current) {
-                    processingRef.current = false
-                    startListening()
-                  }
-                }
-                try {
-                  await speakNeuralStream(sentence, afterSpeak, audioRef)
-                } catch (_) {
-                  await speakNeural(sentence, afterSpeak, audioRef)
-                }
-              }
-            }
-          )
-        } catch (streamError) {
-          console.error('[Voice] Streaming falhou completamente, usando fallback:', streamError)
-          
-          // Fallback direto para API simples
-          try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const token = session?.access_token
-            
-            if (token) {
-              const res = await fetch(`${BOT_URL}/api/gemini`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({ 
-                  messages: historyRef.current, 
-                  systemInstruction: voicePrompt
-                }),
-              })
-
-              if (res.ok) {
-                const data = await res.json()
-                reply = data.response || data.message || 'Entendido.'
-                console.log('[Voice] Fallback API simples funcionou:', reply)
-                setAiText(reply)
-                callStateRef.current = 'speaking'
-                setCallState('speaking')
-                await speakNeural(reply, () => {
-                  processingRef.current = false
-                  if (!closingRef.current) startListening()
-                }, audioRef)
-              } else {
-                throw new Error(`API simples falhou: ${res.status}`)
-              }
-            }
-          } catch (fallbackError) {
-            console.error('[Voice] Fallback também falhou:', fallbackError)
-            
-            // Resposta de emergência
-            reply = 'Desculpe, estou com dificuldades técnicas. Pode repetir?'
-            setAiText(reply)
-            callStateRef.current = 'speaking'
-            setCallState('speaking')
-            await speakNeural(reply, () => {
-              processingRef.current = false
-              if (!closingRef.current) startListening()
-            }, audioRef)
-          }
+      const safetyTimer = setTimeout(() => {
+        if (!closingRef.current && processingRef.current) {
+          console.warn('[Voice] Safety timeout 30s')
+          processingRef.current = false
+          startListening()
         }
+      }, 30000)
 
-        console.log('[Voice] Resposta final da IA:', reply)
-        
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) throw new Error('sem token')
+
+        console.log('[Voice] Chamando Gemini Railway...')
+        const res = await fetch(`${BOT_URL}/api/gemini`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ messages: historyRef.current, systemInstruction: voicePrompt }),
+          signal: AbortSignal.timeout(15000),
+        })
+        if (!res.ok) throw new Error(`Gemini ${res.status}`)
+        const data = await res.json()
+        const reply = (data.response || data.message || '').trim() || 'Entendido.'
+        console.log('[Voice] Resposta da IA:', reply)
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
-
-        // Safety net: se TTS não completar em 25s, liberar
-        setTimeout(() => {
-          if (!closingRef.current && processingRef.current) {
-            console.warn('[Voice] Safety timeout 25s, reiniciando')
-            processingRef.current = false
-            startListening()
-          }
-        }, 25000)
-
-        // Se onTTS nunca disparou (fallback sem streaming), falar agora
-        if (!hasSpoken && !closingRef.current) {
-          if (reply) {
-            callStateRef.current = 'speaking'
-            setCallState('speaking')
-            speakNeural(reply, () => { processingRef.current = false; if (!closingRef.current) startListening() }, audioRef)
-          } else {
-            processingRef.current = false
-            setTimeout(() => startListening(), 500)
-          }
-        }
-      } catch (error) {
-        console.error('[AI] Erro no streaming:', error)
-        const errMsg = 'Ocorreu um erro. Pode repetir?'
-        setAiText(errMsg)
-        callStateRef.current = 'speaking'
-        setCallState('speaking')
-        processingRef.current = true
-        speakNeural(errMsg, () => { processingRef.current = false; if (!closingRef.current) startListening() }, audioRef)
+        clearTimeout(safetyTimer)
+        sayAndListen(reply)
+        return
+      } catch (err) {
+        console.error('[Voice] Erro ao chamar IA:', err)
+        clearTimeout(safetyTimer)
+        sayAndListen('Desculpe, não consegui responder. Pode repetir?')
+        return
       }
+
     }
 
     rec.onerror = (event: any) => {
