@@ -404,7 +404,7 @@ export default function ClientePanel({
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
+            <h2 onClick={() => { onEditCliente(c); onClose() }} className="text-lg font-bold text-gray-900 truncate cursor-pointer hover:text-primary-600 hover:underline transition-colors" title="Clique para editar">{c.razaoSocial}</h2>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[c.etapa] || 'bg-gray-100 text-gray-800'}`}>{etapaLabels[c.etapa] || c.etapa}</span>
               <span className="text-xs text-gray-500">Há {diasNaEtapa}d nesta etapa</span>
