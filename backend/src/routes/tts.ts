@@ -24,7 +24,7 @@ const router = Router()
 // For pt-BR use voice_id of a cloned/multilingual voice.
 // Recommended free voices that speak pt-BR well:
 const ELEVENLABS_VOICE_ID =
-  process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL' // "Sarah" - multilingual, natural pt-BR
+  process.env.ELEVENLABS_VOICE_ID || 'mPDAoQyGzxBSkE0OAOKw' // voz customizada pt-BR
 
 // Google TTS: pt-BR Neural2-A (female) or Neural2-B (male)
 const GOOGLE_VOICE_NAME = process.env.GOOGLE_TTS_VOICE || 'pt-BR-Neural2-C' // warm female voice
