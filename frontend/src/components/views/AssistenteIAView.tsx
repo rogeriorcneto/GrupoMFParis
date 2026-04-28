@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon, PhoneIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon, PhoneIcon, StopIcon } from '@heroicons/react/24/outline'
 import VoiceCallModal from '../VoiceCallModal'
 import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
 import type { Tarefa } from '../../types'
@@ -134,6 +134,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const audioTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Fetch extra AI context data on mount
   useEffect(() => {
@@ -329,7 +330,8 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
       const userContent = text.trim() || (attachments.some(a => a.mimeType.startsWith('image')) ? 'Analise esta imagem.' : 'Transcreva e analise este áudio.')
       history.push({ role: 'user', content: userContent, attachments })
 
-      const result = await callAIFull(history, systemPrompt)
+      abortControllerRef.current = new AbortController()
+      const result = await callAIFull(history, systemPrompt, abortControllerRef.current.signal)
 
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -361,8 +363,13 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
         handleUIActions(result.uiActions)
       }
     } catch (err: any) {
-      setError(err?.message || 'Erro ao conectar com a IA. Verifique sua conexão.')
+      if (err?.name === 'AbortError') {
+        // cancelado pelo usuário — não mostrar erro
+      } else {
+        setError(err?.message || 'Erro ao conectar com a IA. Verifique sua conexão.')
+      }
     } finally {
+      abortControllerRef.current = null
       setLoading(false)
     }
   }
@@ -381,6 +388,12 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   }
 
   const clearChat = () => startNewConversation()
+
+  const stopGeneration = () => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    setLoading(false)
+  }
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
@@ -717,13 +730,23 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
                 t.style.height = Math.min(t.scrollHeight, 120) + 'px'
               }}
             />
-            <button
-              onClick={() => sendMessage(input)}
-              disabled={(!input.trim() && pendingAttachments.length === 0) || loading}
-              className="flex-shrink-0 w-11 h-11 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
-            >
-              <PaperAirplaneIcon className="h-5 w-5" />
-            </button>
+            {loading ? (
+              <button
+                onClick={stopGeneration}
+                title="Parar geração"
+                className="flex-shrink-0 w-11 h-11 bg-red-500 hover:bg-red-600 text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
+              >
+                <StopIcon className="h-5 w-5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim() && pendingAttachments.length === 0}
+                className="flex-shrink-0 w-11 h-11 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
+              >
+                <PaperAirplaneIcon className="h-5 w-5" />
+              </button>
+            )}
           </div>
           <p className="text-[10px] text-gray-400 mt-1.5 text-center">
             Rogério Cassiano · Software Engineer · Os dados do CRM são processados a cada mensagem

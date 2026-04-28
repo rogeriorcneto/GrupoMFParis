@@ -35,7 +35,8 @@ export async function callAI(
 
 export async function callAIFull(
   messages: AIMessage[],
-  systemInstruction: string
+  systemInstruction: string,
+  signal?: AbortSignal
 ): Promise<AIResponse> {
   const body = {
     messages: messages.map(m => ({
@@ -60,6 +61,7 @@ export async function callAIFull(
     method: 'POST',
     headers,
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!res.ok) {
