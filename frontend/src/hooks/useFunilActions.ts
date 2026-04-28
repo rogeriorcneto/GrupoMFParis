@@ -348,20 +348,33 @@ export function useFunilActions({
 
   const confirmPerda = async () => {
     if (draggedItem) {
+      const clienteOriginal = draggedItem.cliente
+      const fromStage = draggedItem.fromStage
+      const now = new Date().toISOString()
+      const today = now.split('T')[0]
+      const motivo = motivoPerdaTexto.trim() || `Perdido por: ${categoriaPerdaSel}`
       const extras: Partial<Cliente> = {
-        motivoPerda: motivoPerdaTexto.trim() || `Perdido por: ${categoriaPerdaSel}`,
+        motivoPerda: motivo,
         categoriaPerda: categoriaPerdaSel || 'outro',
-        dataPerda: new Date().toISOString().split('T')[0]
+        dataPerda: today,
+        ...(fromStage === 'negociacao' ? { statusFollowUp: 'perdido_negociacao' } : {}),
       }
-      // Se veio de negociação, marca para poder reviver como novo ciclo
-      if (draggedItem.fromStage === 'negociacao') {
-        extras.statusFollowUp = 'perdido_negociacao'
+
+      // Mover para perdido direto via db (sem movingRef lock)
+      try {
+        await db.moverClienteAtomico(clienteOriginal.id, 'perdido', fromStage, now, extras)
+        setClientes(prev => prev.map(c => c.id === clienteOriginal.id
+          ? { ...c, etapa: 'perdido', etapaAnterior: fromStage, ...extras, dataEntradaEtapa: now }
+          : c
+        ))
+      } catch (e) {
+        logger.error('Erro ao mover para perdido:', e)
+        setDraggedItem(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
+        return
       }
-      await moverCliente(draggedItem.cliente.id, 'perdido', extras)
-      
-      // Se veio de negociação, cria um novo ciclo (duplica o cliente em proposta)
-      if (draggedItem.fromStage === 'negociacao') {
-        const clienteOriginal = draggedItem.cliente
+
+      // Sempre cria novo ciclo em Proposta ao perder de negociação
+      if (fromStage === 'negociacao') {
         const novoCliente: Omit<Cliente, 'id'> = {
           ...clienteOriginal,
           etapa: 'proposta',
@@ -373,17 +386,18 @@ export function useFunilActions({
           categoriaPerda: undefined,
           dataPerda: undefined,
           valorEstimado: undefined,
+          valorProposta: undefined,
           dataProposta: undefined,
-          dataEntradaEtapa: new Date().toISOString(),
+          dataEntradaEtapa: now,
           historicoEtapas: [],
-          vendedorId: loggedUser?.id || clienteOriginal.vendedorId
+          vendedorId: loggedUser?.id || clienteOriginal.vendedorId,
         }
         try {
           const clienteCriado = await db.insertCliente(novoCliente)
           setClientes(prev => [...prev, clienteCriado])
-          addNotificacao('info', 'Novo ciclo criado', `Cliente ${clienteOriginal.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas`, clienteCriado.id)
+          addNotificacao('info', '🔄 Novo ciclo criado', `${clienteOriginal.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, clienteCriado.id)
         } catch (e) {
-          console.error('Erro ao criar novo ciclo:', e)
+          logger.error('Erro ao criar novo ciclo:', e)
         }
       }
     }
