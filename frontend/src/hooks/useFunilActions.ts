@@ -29,7 +29,9 @@ export function useFunilActions({
   setAtividades, addNotificacao, jobs, setJobs, campanhas, setCampanhas,
   cadencias, tarefas, setTarefas, loadAllData
 }: UseFunilActionsParams) {
-  const [draggedItem, setDraggedItem] = useState<DragItem | null>(null)
+  const draggedItemRef = useRef<DragItem | null>(null)
+  const [draggedItem, setDraggedItemState] = useState<DragItem | null>(null)
+  const setDraggedItem = (v: DragItem | null) => { draggedItemRef.current = v; setDraggedItemState(v) }
   const [pendingDrop, setPendingDrop] = useState<{ e: React.DragEvent, toStage: string } | null>(null)
   const [showMotivoPerda, setShowMotivoPerda] = useState(false)
   const [motivoPerdaTexto, setMotivoPerdaTexto] = useState('')
@@ -347,9 +349,10 @@ export function useFunilActions({
   }
 
   const confirmPerda = async () => {
-    if (draggedItem) {
-      const clienteOriginal = draggedItem.cliente
-      const fromStage = draggedItem.fromStage
+    const item = draggedItemRef.current
+    if (item) {
+      const clienteOriginal = item.cliente
+      const fromStage = item.fromStage
       const now = new Date().toISOString()
       const today = now.split('T')[0]
       const motivo = motivoPerdaTexto.trim() || `Perdido por: ${categoriaPerdaSel}`
@@ -369,7 +372,7 @@ export function useFunilActions({
         ))
       } catch (e) {
         logger.error('Erro ao mover para perdido:', e)
-        setDraggedItem(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
+        draggedItemRef.current = null; setDraggedItemState(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
         return
       }
 
@@ -401,7 +404,7 @@ export function useFunilActions({
         }
       }
     }
-    setDraggedItem(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
+    draggedItemRef.current = null; setDraggedItemState(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
   }
 
   const confirmAmostra = () => {
