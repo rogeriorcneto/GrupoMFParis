@@ -713,11 +713,9 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     const sessionId = listenSessionRef.current + 1
     listenSessionRef.current = sessionId
 
-    // Abortar instância anterior silenciosamente
-    if (recRef.current) {
-      try { recRef.current.abort() } catch (_) {}
-      recRef.current = null
-    }
+    // NÃO chamar abort() — isso dispara onerror('aborted') no Chrome/HTTPS
+    // Simplesmente descartar a referência; o sessionId rejeitará qualquer evento tardio
+    recRef.current = null
 
     const rec = getSpeechRecognition()
     if (!rec) {
@@ -902,15 +900,14 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
       if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       if (closingRef.current) return
       const err = event.error
-      console.warn('[Voice] onerror:', err)
+      // 'aborted' é disparado pelo Chrome/HTTPS em condições normais (silêncio, fim de utterance)
+      // NÃO reiniciar por aborted — o onend já cuida do restart
+      if (err === 'aborted' || err === 'no-speech') return
       if (err === 'not-allowed') {
         setError('Permissão do microfone negada. Habilite nas configurações do navegador.')
         setCallState('error')
         return
       }
-      // no-speech: ouviu silêncio — reiniciar normalmente
-      // aborted: esta instância foi abortada por nós mesmos no próximo startListening — NÃO reiniciar
-      if (err === 'aborted') return
       if (!processingRef.current) {
         const delay = err === 'network' ? 2000 : 500
         setTimeout(() => {
@@ -922,10 +919,11 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
     rec.onend = () => {
       if (listenSessionRef.current !== sessionId) return  // instância obsoleta, ignorar
       if (closingRef.current) return
+      // Reiniciar escuta somente se não estiver processando (IA pensando/falando)
       if (!processingRef.current) {
         setTimeout(() => {
           if (listenSessionRef.current === sessionId && !closingRef.current && !processingRef.current) startListening()
-        }, 300)
+        }, 400)
       }
     }
 
