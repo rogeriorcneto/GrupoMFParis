@@ -132,6 +132,7 @@ export default function ClientePanel({
   const [editPropostaPagamento, setEditPropostaPagamento] = useState(DEFAULT_PAYMENT_TERM)
   const [editPropostaObs, setEditPropostaObs] = useState('')
   const [editPropostaSaving, setEditPropostaSaving] = useState(false)
+  const [editPropostaProdSearch, setEditPropostaProdSearch] = useState('')
 
   // Modal cancelamento de pedido
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -501,7 +502,10 @@ export default function ClientePanel({
                 <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
               )}
               {c.etapa === 'proposta' && (
-                <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
+                <>
+                  <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">📦 Enviar Amostra</button>
+                  <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
+                </>
               )}
               {c.etapa === 'negociacao' && (
                 <>
@@ -1394,7 +1398,7 @@ export default function ClientePanel({
                 <h2 className="text-base font-bold text-gray-900">📝 Editar Proposta</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta.numero} · {new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}</p>
               </div>
-              <button onClick={() => setShowEditProposta(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
+              <button onClick={() => { setShowEditProposta(false); setEditPropostaProdSearch('') }} className="p-1.5 hover:bg-gray-100 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
             </div>
 
             {/* Body */}
@@ -1467,26 +1471,46 @@ export default function ClientePanel({
 
                 {/* Adicionar produto */}
                 {produtos && produtos.length > 0 && (
-                  <div className="mt-3">
+                  <div className="mt-3 relative">
                     <p className="text-[10px] text-gray-500 mb-1">Adicionar produto:</p>
-                    <select
-                      onChange={e => {
-                        const p = produtos.find(pr => pr.id === Number(e.target.value))
-                        if (!p) return
-                        setEditPropostaItens(prev => {
-                          if (prev.find(it => it.produtoId === p.id)) return prev
-                          return [...prev, { produtoId: p.id, nomeProduto: p.nome, sku: p.omieCodigo || p.sku || '', unidade: p.unidade, preco: p.preco, quantidade: 1 }]
-                        })
-                        e.target.value = ''
-                      }}
+                    <input
+                      type="text"
+                      placeholder="🔍 Buscar produto para adicionar..."
+                      value={editPropostaProdSearch}
+                      onChange={e => setEditPropostaProdSearch(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                      defaultValue=""
-                    >
-                      <option value="">+ Selecionar produto para adicionar...</option>
-                      {produtos.filter(p => p.ativo).map(p => (
-                        <option key={p.id} value={p.id}>{p.nome} — R$ {p.preco.toFixed(2).replace('.', ',')}/KG</option>
-                      ))}
-                    </select>
+                    />
+                    {editPropostaProdSearch.trim() && (
+                      <div className="absolute z-10 left-0 right-0 bg-white border border-gray-200 rounded-apple shadow-lg mt-1 max-h-52 overflow-y-auto">
+                        {produtos
+                          .filter(p => p.ativo && p.nome.toLowerCase().includes(editPropostaProdSearch.toLowerCase()))
+                          .slice(0, 20)
+                          .map(p => {
+                            const jaAdicionado = editPropostaItens.some(it => it.produtoId === p.id)
+                            return (
+                              <button
+                                key={p.id}
+                                disabled={jaAdicionado}
+                                onClick={() => {
+                                  if (jaAdicionado) return
+                                  setEditPropostaItens(prev => [...prev, { produtoId: p.id, nomeProduto: p.nome, sku: p.omieCodigo || p.sku || '', unidade: p.unidade, preco: p.preco, quantidade: 1 }])
+                                  setEditPropostaProdSearch('')
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm border-b border-gray-100 last:border-0 transition-colors ${
+                                  jaAdicionado ? 'text-gray-300 cursor-not-allowed bg-gray-50' : 'hover:bg-indigo-50 text-gray-800'
+                                }`}
+                              >
+                                <span className="font-medium">{p.nome}</span>
+                                <span className="text-xs text-gray-400 ml-2">R$ {p.preco.toFixed(2).replace('.', ',')}/KG</span>
+                                {jaAdicionado && <span className="text-xs text-gray-300 ml-1">(já adicionado)</span>}
+                              </button>
+                            )
+                          })}
+                        {produtos.filter(p => p.ativo && p.nome.toLowerCase().includes(editPropostaProdSearch.toLowerCase())).length === 0 && (
+                          <p className="text-xs text-gray-400 text-center py-3">Nenhum produto encontrado</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1514,7 +1538,7 @@ export default function ClientePanel({
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0">
-              <button onClick={() => setShowEditProposta(false)} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
+              <button onClick={() => { setShowEditProposta(false); setEditPropostaProdSearch('') }} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
               <button
                 disabled={editPropostaSaving || editPropostaItens.length === 0}
                 onClick={async () => {
@@ -1531,6 +1555,7 @@ export default function ClientePanel({
                     })
                     setUltimaProposta(saved)
                     setShowEditProposta(false)
+                    setEditPropostaProdSearch('')
                   } catch {
                     alert('Erro ao gerar proposta.')
                   } finally {
@@ -1607,10 +1632,35 @@ export default function ClientePanel({
         const algumReprovado = itens.some((_, idx) => avaliacaoItens[idx]?.aprovado === false)
         const reprovadoSemMotivo = itens.some((_, idx) => avaliacaoItens[idx]?.aprovado === false && !avaliacaoItens[idx]?.motivo?.trim())
 
-        const handleConfirmar = () => {
+        const criarNovoCicloEmProposta = async () => {
+          if (c.etapaAnterior !== 'proposta') return
+          try {
+            const novoCard: Omit<Cliente, 'id'> = {
+              ...c,
+              etapa: 'proposta',
+              etapaAnterior: 'amostra',
+              novoCiclo: true,
+              cicloNumero: (c.cicloNumero || 1) + 1,
+              statusAmostra: undefined,
+              dataEnvioAmostra: undefined,
+              resultadoAmostra: undefined,
+              dataResultadoAmostra: undefined,
+              dataEntradaEtapa: new Date().toISOString(),
+              historicoEtapas: [],
+            }
+            const saved = await db.insertCliente(novoCard)
+            setClientes(prev => [saved, ...prev])
+            addNotificacao('info', 'Novo card criado', `Card de ${c.razaoSocial} criado em Proposta após amostra aprovada.`, saved.id)
+          } catch (err) {
+            logger.error('Erro ao criar card em proposta após amostra:', err)
+          }
+        }
+
+        const handleConfirmar = async () => {
           const hoje = new Date().toISOString().split('T')[0]
           if (todosAprovados) {
             onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje })
+            await criarNovoCicloEmProposta()
           } else {
             const motivosReprovados = itens
               .map((item, idx) => avaliacaoItens[idx]?.aprovado === false
@@ -1638,7 +1688,7 @@ export default function ClientePanel({
                   <p>Nenhum item encontrado no pedido de amostra.</p>
                   <p className="text-xs mt-1">Use os botões de Aprovar / Reprovar gerais.</p>
                   <div className="flex gap-3 justify-center mt-4">
-                    <button onClick={() => { onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Aprovar</button>
+                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); await criarNovoCicloEmProposta(); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Aprovar</button>
                     <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-orange-600 text-white rounded-apple text-sm hover:bg-orange-700">🚫 Reprovar</button>
                   </div>
                 </div>
@@ -1685,7 +1735,9 @@ export default function ClientePanel({
                   {todosAvaliados && (
                     <p className="text-xs text-gray-500 mb-3">
                       {todosAprovados
-                        ? '✅ Todos aprovados — cliente será movido para Proposta'
+                        ? c.etapaAnterior === 'proposta'
+                          ? '✅ Todos aprovados — cliente volta para Proposta e novo card será criado em Proposta'
+                          : '✅ Todos aprovados — cliente será movido para Proposta'
                         : algumReprovado && !todosAprovados
                           ? '⚠️ Aprovação parcial — cliente será movido para Amostra Perdida com motivos registrados'
                           : '🚫 Todos reprovados — cliente será movido para Amostra Perdida'}

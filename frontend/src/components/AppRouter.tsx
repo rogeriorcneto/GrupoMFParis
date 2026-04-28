@@ -136,6 +136,30 @@ export default function AppRouter({
               } catch (err) { 
                 logger.error('Erro ao mover cliente para follow_up:', err)
               }
+              // Criar card clone em negociacao para o próximo ciclo
+              if (cliAprov) {
+                try {
+                  const clienteOriginal = clientes.find(c => c.id === pedido.clienteId) || cliAprov
+                  const novoCliente: Omit<Cliente, 'id'> = {
+                    ...clienteOriginal,
+                    etapa: 'negociacao',
+                    etapaAnterior: 'follow_up',
+                    novoCiclo: true,
+                    cicloNumero: (clienteOriginal.cicloNumero || 1) + 1,
+                    statusFollowUp: undefined,
+                    motivoPerda: undefined,
+                    categoriaPerda: undefined,
+                    dataPerda: undefined,
+                    dataEntradaEtapa: new Date().toISOString(),
+                    historicoEtapas: [],
+                  }
+                  const saved = await db.insertCliente(novoCliente)
+                  setClientes(prev => [saved, ...prev])
+                  addNotificacao('info', 'Novo ciclo criado', `Card de ${clienteOriginal.razaoSocial} criado em Negociação para o próximo ciclo.`, saved.id)
+                } catch (cicloErr) {
+                  logger.error('Erro ao criar novo ciclo em negociacao:', cicloErr)
+                }
+              }
             }
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
         }}
@@ -185,9 +209,13 @@ export default function AppRouter({
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
             // Mover cliente de volta para negociacao no funil
             const cli = clientes.find(c => c.id === pedido.clienteId)
-            if (cli && cli.etapa === 'follow_up') {
+            const etapasParaVoltar = ['follow_up', 'negociacao']
+            if (cli && etapasParaVoltar.includes(cli.etapa)) {
               try {
-                await moverCliente(pedido.clienteId, 'negociacao', { statusFollowUp: undefined })
+                await moverCliente(pedido.clienteId, 'negociacao', {})
+                // Limpar status_follow_up diretamente no banco (a RPC não cobre esse campo)
+                await db.updateCliente(pedido.clienteId, { status_follow_up: null } as any)
+                setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, etapa: 'negociacao', statusFollowUp: undefined } : c))
                 addNotificacao('info', 'Cliente movido', `Cliente ${cli.razaoSocial} voltou para Negociação após cancelamento.`, pedido.clienteId)
               } catch (moveErr) {
                 logger.error('Erro ao mover cliente após cancelamento:', moveErr)

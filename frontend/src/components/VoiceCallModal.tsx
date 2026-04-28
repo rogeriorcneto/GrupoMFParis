@@ -133,8 +133,8 @@ function getSpeechRecognition(): any | null {
   if (!SpeechRec) return null
   const rec = new SpeechRec()
   rec.lang = 'pt-BR'
-  rec.continuous = true
-  rec.interimResults = true
+  rec.continuous = false      // Uma utterance por vez — evita loop 'aborted' no Chrome/HTTPS
+  rec.interimResults = false  // Apenas resultado final — mais estável
   rec.maxAlternatives = 1
   return rec
 }
@@ -681,7 +681,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const closingRef = useRef(false)
-  const intentionalAbortRef = useRef(false)
+  const processingRef = useRef(false)  // true enquanto pensa/fala — evita restart prematuro
   const callStateRef = useRef<CallState>('connecting')
 
   // ── Timer ──
@@ -706,91 +706,55 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
   // ── Core: listen → think → speak loop ──────────────────────────────────────
 
   const startListening = useCallback(() => {
-    console.log('[Voice] Iniciando reconhecimento de voz...')
-    
-    if (closingRef.current) {
-      console.log('[Voice] Cancelando - componente fechando')
-      return
-    }
-    
-    // Abortar instância anterior se existir
+    if (closingRef.current || processingRef.current) return
+
+    // Descartar instância anterior sem disparar onerror
     if (recRef.current) {
-      console.log('[Voice] Abortando instância anterior...')
-      intentionalAbortRef.current = true
-      try {
-        recRef.current.abort()
-      } catch (e) {
-        console.warn('[Voice] Erro ao abortar instância anterior:', e)
-      }
+      try { recRef.current.onresult = null; recRef.current.onerror = null; recRef.current.onend = null; recRef.current.abort() } catch (_) {}
       recRef.current = null
     }
-    
+
     const rec = getSpeechRecognition()
     if (!rec) {
-      console.error('[Voice] Navegador não suporta reconhecimento de voz')
       setError('Seu navegador não suporta reconhecimento de voz. Use Chrome ou Edge.')
       setCallState('error')
       return
     }
-    
-    console.log('[Voice] SpeechRecognition criado, configurando eventos...')
+
     recRef.current = rec
     callStateRef.current = 'listening'
     setCallState('listening')
     setTranscript('')
 
-    rec.onresult = async (event) => {
+    rec.onresult = async (event: any) => {
       const result = event.results[0]
       if (!result) return
-      
-      const interim = result[0]?.transcript?.trim() || ''
-      const isFinal = result.isFinal
-      
-      console.log('[Voice] Resultado recebido:', { interim, isFinal, resultIndex: event.resultIndex })
-      
-      // Feedback visual imediato com interim results
-      if (interim) {
-        setTranscript(interim + (isFinal ? '' : '...'))
-        
-        // Pré-processamento de intenções com interim results
-        if (!isFinal && interim.length > 5) {
-          const lower = interim.toLowerCase()
-          if (['tchau', 'encerrar', 'desligar', 'finalizar', 'até mais'].some(w => lower.includes(w))) {
-            // Preparar resposta de despedida antecipadamente
-            const bye = `Até logo, ${loggedUserName.split(' ')[0]}!`
-            setAiText(bye)
-          }
-        }
-      }
-      
-      // Processar apenas resultados finais
-      if (!isFinal || !interim) {
-        console.log('[Voice] Aguardando resultado final...')
-        return
-      }
-      
-      console.log('[Voice] Processando resultado final:', interim)
+      const text = result[0]?.transcript?.trim() || ''
+      if (!text) return
 
-      setTranscript(interim)
+      console.log('[Voice] Fala reconhecida:', text)
+
+      setTranscript(text)
+      processingRef.current = true
       callStateRef.current = 'thinking'
       setCallState('thinking')
 
       // Detect hangup intent
-      const lower = interim.toLowerCase()
+      const lower = text.toLowerCase()
       if (['tchau', 'encerrar', 'desligar', 'finalizar', 'até mais'].some(w => lower.includes(w))) {
         const bye = `Até logo, ${loggedUserName.split(' ')[0]}! Qualquer coisa pode abrir a chamada novamente.`
         setAiText(bye)
         callStateRef.current = 'speaking'
         setCallState('speaking')
-        speakNeural(bye, () => { if (!closingRef.current) onClose() }, audioRef)
+        speakNeural(bye, () => { processingRef.current = false; if (!closingRef.current) onClose() }, audioRef)
         return
       }
 
       // Add to history
-      historyRef.current.push({ role: 'user', content: interim })
+      historyRef.current.push({ role: 'user', content: text })
       if (historyRef.current.length > 20) historyRef.current = historyRef.current.slice(-20)
 
-      setTurns(prev => [...prev, { role: 'user', text: interim }])
+      setTurns(prev => [...prev, { role: 'user', text }])
 
       try {
         console.log('[Voice] Iniciando chamada da IA...')
@@ -825,25 +789,18 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
             },
             // onTTS: reproduzir frases conforme chegam
             async (sentence, isFinal) => {
-              console.log('[Voice] onTTS chamado:', sentence, isFinal)
               if (!hasSpoken || isFinal) {
                 hasSpoken = true
+                const afterSpeak = () => {
+                  if (isFinal && !closingRef.current) {
+                    processingRef.current = false
+                    startListening()
+                  }
+                }
                 try {
-                  console.log('[Voice] Iniciando TTS streaming...')
-                  await speakNeuralStream(sentence, () => {
-                    console.log('[Voice] TTS finalizado, isFinal:', isFinal)
-                    if (isFinal && !closingRef.current) {
-                      console.log('[Voice] Reiniciando listening após TTS')
-                      startListening()
-                    }
-                  }, audioRef)
-                } catch (error) {
-                  console.warn('[TTS] Streaming falhou, usando fallback:', error)
-                  await speakNeural(sentence, () => {
-                    if (isFinal && !closingRef.current) {
-                      startListening()
-                    }
-                  }, audioRef)
+                  await speakNeuralStream(sentence, afterSpeak, audioRef)
+                } catch (_) {
+                  await speakNeural(sentence, afterSpeak, audioRef)
                 }
               }
             }
@@ -873,11 +830,11 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
                 const data = await res.json()
                 reply = data.response || data.message || 'Entendido.'
                 console.log('[Voice] Fallback API simples funcionou:', reply)
-                
-                // Simular resposta para UI
                 setAiText(reply)
+                callStateRef.current = 'speaking'
                 setCallState('speaking')
                 await speakNeural(reply, () => {
+                  processingRef.current = false
                   if (!closingRef.current) startListening()
                 }, audioRef)
               } else {
@@ -890,8 +847,10 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
             // Resposta de emergência
             reply = 'Desculpe, estou com dificuldades técnicas. Pode repetir?'
             setAiText(reply)
+            callStateRef.current = 'speaking'
             setCallState('speaking')
             await speakNeural(reply, () => {
+              processingRef.current = false
               if (!closingRef.current) startListening()
             }, audioRef)
           }
@@ -901,85 +860,62 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
         
         historyRef.current.push({ role: 'assistant', content: reply })
         setTurns(prev => [...prev, { role: 'assistant', text: reply }])
-        
-        // Safety net: se TTS não completar em 20s, forçar restart
-        // Isso evita que o loop trave indefinidamente
+
+        // Safety net: se TTS não completar em 25s, liberar
         setTimeout(() => {
-          if (!closingRef.current && !['listening'].includes(callState)) {
-            console.warn('[Voice] Safety timeout: TTS não completou em 20s, reiniciando listening')
+          if (!closingRef.current && processingRef.current) {
+            console.warn('[Voice] Safety timeout 25s, reiniciando')
+            processingRef.current = false
             startListening()
           }
-        }, 20000)
+        }, 25000)
 
-        // Se o TTS nunca foi chamado (ex: onTTS nunca disparou), reiniciar imediatamente
+        // Se onTTS nunca disparou (fallback sem streaming), falar agora
         if (!hasSpoken && !closingRef.current) {
-          console.log('[Voice] TTS nunca disparou, tentando falar e reiniciar...')
           if (reply) {
-            setAiText(reply)
+            callStateRef.current = 'speaking'
             setCallState('speaking')
-            speakNeural(reply, () => { if (!closingRef.current) startListening() }, audioRef)
+            speakNeural(reply, () => { processingRef.current = false; if (!closingRef.current) startListening() }, audioRef)
           } else {
-            setTimeout(() => startListening(), 1000)
+            processingRef.current = false
+            setTimeout(() => startListening(), 500)
           }
         }
       } catch (error) {
         console.error('[AI] Erro no streaming:', error)
         const errMsg = 'Ocorreu um erro. Pode repetir?'
         setAiText(errMsg)
+        callStateRef.current = 'speaking'
         setCallState('speaking')
-        speakNeural(errMsg, () => { if (!closingRef.current) startListening() }, audioRef)
+        processingRef.current = true
+        speakNeural(errMsg, () => { processingRef.current = false; if (!closingRef.current) startListening() }, audioRef)
       }
     }
 
-    rec.onerror = (event) => {
+    rec.onerror = (event: any) => {
       if (closingRef.current) return
-      
-      console.error('[Voice] Erro no reconhecimento:', { error: event.error, message: event.message })
-      
-      if (event.error === 'aborted') {
-        // Verificar se o abort foi intencional (pelo nosso próprio código)
-        if (intentionalAbortRef.current) {
-          intentionalAbortRef.current = false
-          console.log('[Voice] Reconhecimento abortado propositalmente, não reiniciando...')
-          return
-        }
-        // Abort acidental do browser — aguardar mais antes de reiniciar
-        console.log('[Voice] Reconhecimento abortado pelo browser, aguardando 1s...')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
-        return
-      } else if (event.error === 'no-speech') {
-        // User didn't say anything — just restart
-        console.log('[Voice] Nenhuma fala detectada, reiniciando...')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 500)
-      } else if (event.error === 'not-allowed') {
+      const err = event.error
+      console.warn('[Voice] onerror:', err)
+      if (err === 'not-allowed') {
         setError('Permissão do microfone negada. Habilite nas configurações do navegador.')
         setCallState('error')
-      } else if (event.error === 'network') {
-        console.error('[Voice] Erro de rede no reconhecimento')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 2000)
-      } else {
-        // Restart on other errors (mas não para 'aborted')
-        console.log('[Voice] Erro genérico, reiniciando em 1s...')
-        setTimeout(() => { if (!closingRef.current) startListening() }, 1000)
+        return
+      }
+      // aborted, no-speech, network, audio-capture — reiniciar apenas se não estiver processando
+      if (!processingRef.current) {
+        const delay = err === 'network' ? 2000 : err === 'aborted' ? 800 : 500
+        setTimeout(() => { if (!closingRef.current && !processingRef.current) startListening() }, delay)
       }
     }
 
     rec.onend = () => {
       if (closingRef.current) return
-      
-      // Não reiniciar se o abort foi intencional
-      if (intentionalAbortRef.current) {
-        console.log('[Voice] onend após abort intencional, ignorando...')
-        return
+      // Reiniciar apenas se não estiver processando (thinking/speaking)
+      if (!processingRef.current) {
+        setTimeout(() => {
+          if (!closingRef.current && !processingRef.current) startListening()
+        }, 300)
       }
-      
-      // Reiniciar listening apenas se ainda estamos ouvindo (sem resultado processado)
-      setTimeout(() => {
-        if (!closingRef.current && callStateRef.current === 'listening') {
-          console.log('[Voice] Reconhecimento terminou sem resultado, reiniciando...')
-          startListening()
-        }
-      }, 200)
     }
 
     rec.start()
