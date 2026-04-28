@@ -2,6 +2,9 @@ import React from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Produto, Vendedor, FormData } from '../types'
 
+const etapaLabels: Record<string, string> = { 'lead': 'Lead', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Am. Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativo', 'perdido': 'Perdido' }
+const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
+
 interface ClienteFormModalProps {
   showModal: boolean
   setShowModal: (v: boolean) => void
@@ -17,14 +20,32 @@ interface ClienteFormModalProps {
   buscarCnpj: (cnpj: string) => void
   produtos: Produto[]
   vendedores: Vendedor[]
+  clientes?: Cliente[]
+  onClickNegocio?: (c: Cliente) => void
 }
 
 export default function ClienteFormModal({
   showModal, setShowModal, editingCliente, formData, setFormData,
   handleInputChange, handleSubmit, isSaving,
   isLoadingCep, isLoadingCnpj, buscarCep, buscarCnpj,
-  produtos, vendedores
+  produtos, vendedores, clientes = [], onClickNegocio
 }: ClienteFormModalProps) {
+  const [activeTab, setActiveTab] = React.useState<'dados' | 'negocios'>('dados')
+
+  React.useEffect(() => { if (showModal) setActiveTab('dados') }, [showModal])
+
+  // Busca todos os cards do mesmo cliente (mesmo CNPJ ou mesma razão social)
+  const negocios = React.useMemo(() => {
+    if (!editingCliente) return []
+    const cnpjDigits = editingCliente.cnpj?.replace(/\D/g, '') || ''
+    return clientes
+      .filter(c => {
+        if (cnpjDigits.length === 14) return c.cnpj?.replace(/\D/g, '') === cnpjDigits
+        return c.razaoSocial?.trim().toLowerCase() === editingCliente.razaoSocial?.trim().toLowerCase()
+      })
+      .sort((a, b) => (b.cicloNumero || 1) - (a.cicloNumero || 1))
+  }, [editingCliente, clientes])
+
   if (!showModal) return null
 
   return (
@@ -51,8 +72,51 @@ export default function ClienteFormModal({
             </button>
           </div>
 
+          {/* Tabs — só aparecem no modo edição */}
+          {editingCliente && (
+            <div className="flex border-b border-gray-200 px-4 sm:px-6">
+              <button type="button" onClick={() => setActiveTab('dados')} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${ activeTab === 'dados' ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700' }`}>📋 Dados</button>
+              <button type="button" onClick={() => setActiveTab('negocios')} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${ activeTab === 'negocios' ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700' }`}>
+                💼 Negócios
+                {negocios.length > 0 && <span className="bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">{negocios.length}</span>}
+              </button>
+            </div>
+          )}
+
+          {/* Aba Negócios */}
+          {activeTab === 'negocios' && editingCliente && (
+            <div className="px-4 sm:px-6 py-4 space-y-2 max-h-[65vh] overflow-y-auto">
+              {negocios.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">Nenhum negócio encontrado.</p>
+              ) : (
+                negocios.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => { if (onClickNegocio) { setShowModal(false); onClickNegocio(n) } }}
+                    className={`border border-gray-200 rounded-apple p-3 space-y-1.5 transition-colors ${ onClickNegocio ? 'cursor-pointer hover:border-primary-400 hover:bg-primary-50' : '' } ${ n.id === editingCliente.id ? 'border-primary-400 bg-primary-50' : 'bg-white' }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-400">Ciclo {n.cicloNumero || 1}</span>
+                        {n.id === editingCliente.id && <span className="text-xs bg-primary-100 text-primary-700 font-semibold px-1.5 py-0.5 rounded-full">atual</span>}
+                      </div>
+                      <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[n.etapa] || 'bg-gray-100 text-gray-700'}`}>{etapaLabels[n.etapa] || n.etapa}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-gray-600">
+                      {n.valorProposta != null && <span>💰 R$ {n.valorProposta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
+                      {n.dataEntradaEtapa && <span>📅 {new Date(n.dataEntradaEtapa).toLocaleDateString('pt-BR')}</span>}
+                      {n.vendedorId && <span>👤 {vendedores.find(v => v.id === n.vendedorId)?.nome || `Vendedor #${n.vendedorId}`}</span>}
+                      {n.motivoPerda && <span className="col-span-2 text-red-500">❌ {n.motivoPerda}</span>}
+                      {n.statusFollowUp && <span>📊 {n.statusFollowUp}</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Form */}
-          <form onSubmit={handleSubmit} className="px-4 sm:px-6 py-4">
+          <form onSubmit={handleSubmit} className={`px-4 sm:px-6 py-4 ${ activeTab !== 'dados' ? 'hidden' : '' }`}>
             <div className="space-y-5">
 
               {/* ── Empresa ── */}

@@ -448,6 +448,8 @@ function App() {
           isSaving={isSaving} isLoadingCep={isLoadingCep} isLoadingCnpj={isLoadingCnpj}
           buscarCep={buscarCep} buscarCnpj={buscarCnpj}
           produtos={produtos} vendedores={vendedores}
+          clientes={clientes}
+          onClickNegocio={(c) => { setShowModal(false); setSelectedClientePanel(c) }}
         />
 
         {/* Modal Assistente IA */}
