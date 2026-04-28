@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+﻿import React, { useEffect, useMemo, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
