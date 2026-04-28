@@ -240,6 +240,36 @@ export function useFunilActions({
         setTarefas(prev => [...savedTarefas, ...prev])
       } catch (err) { logger.error('Erro ao criar tarefas automáticas:', err) }
     }
+
+    // Novo ciclo automático: ao concluir o follow-up, duplicar card em Proposta
+    if (extras.statusFollowUp === 'concluido') {
+      const clienteAtualizado = { ...cliente, ...extras, etapa: toStage }
+      const novoCard: Omit<Cliente, 'id'> = {
+        ...clienteAtualizado,
+        etapa: 'proposta',
+        etapaAnterior: 'follow_up',
+        novoCiclo: true,
+        cicloNumero: (clienteAtualizado.cicloNumero || 1) + 1,
+        statusFollowUp: undefined,
+        statusAmostra: undefined,
+        statusEntrega: undefined,
+        statusFaturamento: undefined,
+        statusSatisfacao: undefined,
+        valorEstimado: undefined,
+        valorProposta: undefined,
+        dataProposta: undefined,
+        dataEntradaEtapa: new Date().toISOString(),
+        historicoEtapas: [],
+        vendedorId: loggedUser?.id || clienteAtualizado.vendedorId,
+      }
+      try {
+        const cardCriado = await db.insertCliente(novoCard)
+        setClientes(prev => [...prev, cardCriado])
+        addNotificacao('info', '🔄 Novo ciclo criado', `Card de ${cliente.razaoSocial} criado em Proposta para o próximo ciclo de vendas.`, cardCriado.id)
+      } catch (e) {
+        logger.error('Erro ao criar novo ciclo automático:', e)
+      }
+    }
     } finally { movingRef.current = false }
   }
 

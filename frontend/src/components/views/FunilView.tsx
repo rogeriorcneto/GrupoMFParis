@@ -1113,7 +1113,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         onClick={() => {
                           if (!moverCliente) return
                           setLockProcessing(true)
-                          moverCliente(c.id, 'proposta', {
+                          // Marcar ciclo como concluído — o hook criará automaticamente um novo card em Proposta
+                          moverCliente(c.id, 'follow_up', {
                             statusFollowUp: 'concluido',
                             ultimaInteracao: new Date().toISOString().split('T')[0],
                             totalCompras: (c.totalCompras || 0) + 1,
