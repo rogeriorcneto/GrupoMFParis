@@ -9,3 +9,6 @@ afterEach(() => {
 
 // Mock import.meta.env
 vi.stubGlobal('import', { meta: { env: { DEV: true, VITE_SUPABASE_URL: 'https://test.supabase.co', VITE_SUPABASE_ANON_KEY: 'test-key', VITE_BOT_URL: 'http://localhost:3001' } } })
+
+// jsdom doesn't implement scrollIntoView — mock globally
+window.HTMLElement.prototype.scrollIntoView = vi.fn()

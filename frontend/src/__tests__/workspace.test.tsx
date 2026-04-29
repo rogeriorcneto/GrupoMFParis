@@ -42,6 +42,14 @@ vi.mock('../lib/aiConversations', () => ({
   loadConversation: vi.fn().mockResolvedValue([]),
   saveConversation: vi.fn().mockResolvedValue(undefined),
   clearConversation: vi.fn().mockResolvedValue(undefined),
+  loadConversationByChannel: vi.fn().mockResolvedValue([]),
+  saveConversationByChannel: vi.fn().mockResolvedValue(undefined),
+  clearConversationByChannel: vi.fn().mockResolvedValue(undefined),
+  listConversations: vi.fn().mockResolvedValue([]),
+  createConversation: vi.fn().mockResolvedValue(null),
+  renameConversation: vi.fn().mockResolvedValue(undefined),
+  deleteConversation: vi.fn().mockResolvedValue(undefined),
+  generateTitle: vi.fn().mockReturnValue('Nova conversa'),
 }))
 
 import Workspace from '../components/Workspace'

@@ -4,7 +4,7 @@ import type {
   Cliente, Interacao, Tarefa, Produto, Pedido, Vendedor,
   Template, TemplateMsg, Cadencia, CadenciaStep, Campanha,
   JobAutomacao, Atividade, Notificacao, HistoricoEtapa, ItemPedido,
-  PropostaHistorico
+  PropostaHistorico, ChatMensagem
 } from '../types'
 
 // ============================================
@@ -1175,4 +1175,63 @@ function propostaFromDb(row: any): PropostaHistorico {
     totalValor: Number(row.total_valor) || 0,
     criadoEm: row.criado_em,
   }
+}
+
+// ============================================
+// Chat Interno
+// ============================================
+
+function chatMensagemFromDb(row: any): ChatMensagem {
+  return {
+    id: row.id,
+    senderId: row.sender_id,
+    receiverId: row.receiver_id,
+    content: row.content,
+    readAt: row.read_at ?? null,
+    createdAt: row.created_at,
+  }
+}
+
+export async function fetchChatMensagens(myId: number, otherId: number, limit = 100): Promise<ChatMensagem[]> {
+  const { data, error } = await supabase
+    .from('chat_mensagens')
+    .select('*')
+    .or(`and(sender_id.eq.${myId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${myId})`)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return (data || []).map(chatMensagemFromDb)
+}
+
+export async function insertChatMensagem(senderId: number, receiverId: number, content: string): Promise<ChatMensagem> {
+  const { data, error } = await supabase
+    .from('chat_mensagens')
+    .insert({ sender_id: senderId, receiver_id: receiverId, content })
+    .select()
+    .single()
+  if (error) throw error
+  return chatMensagemFromDb(data)
+}
+
+export async function markChatMensagensRead(myId: number, otherId: number): Promise<void> {
+  await supabase
+    .from('chat_mensagens')
+    .update({ read_at: new Date().toISOString() })
+    .eq('receiver_id', myId)
+    .eq('sender_id', otherId)
+    .is('read_at', null)
+}
+
+export async function fetchUnreadCounts(myId: number): Promise<Record<number, number>> {
+  const { data, error } = await supabase
+    .from('chat_mensagens')
+    .select('sender_id')
+    .eq('receiver_id', myId)
+    .is('read_at', null)
+  if (error) return {}
+  const counts: Record<number, number> = {}
+  for (const row of data || []) {
+    counts[row.sender_id] = (counts[row.sender_id] || 0) + 1
+  }
+  return counts
 }

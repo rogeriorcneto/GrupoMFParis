@@ -33,8 +33,8 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['lead']).toEqual(['prospecção'])
   })
 
-  it('prospecção só pode ir para amostra ou perdido', () => {
-    expect(transicoesPermitidas['prospecção']).toEqual(['amostra', 'perdido'])
+  it('prospecção pode ir para lead (retrocesso), amostra ou perdido', () => {
+    expect(transicoesPermitidas['prospecção']).toEqual(['lead', 'amostra', 'perdido'])
   })
 
   it('amostra pode ir para proposta ou amostra_perdida', () => {

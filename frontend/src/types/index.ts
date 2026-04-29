@@ -367,3 +367,12 @@ export interface ClientesViewProps {
   onDeleteCliente: (id: number) => void
   onDeleteAll?: () => Promise<void>
 }
+
+export interface ChatMensagem {
+  id: number
+  senderId: number
+  receiverId: number
+  content: string
+  readAt: string | null
+  createdAt: string
+}

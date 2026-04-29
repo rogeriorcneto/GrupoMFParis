@@ -799,6 +799,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando Aprov. Gerência', confirmado: 'Confirmado', cancelado: 'Cancelado' }
                           return (
                             <div className="mt-1.5 p-2 bg-gray-50 rounded-md border border-gray-100 space-y-1">
+                              {/* Tipo + Status */}
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
                                   {p.tipo === 'bonificacao' ? '🧪 Amostra' : '🛒 Venda'}
@@ -808,8 +809,31 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                 </span>
                                 {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}
                               </div>
-                              {(p.omieNumero || p.numero) && <p className="text-[10px] text-gray-500">📋 #{p.omieNumero || p.numero}</p>}
-                              {p.totalValor > 0 && <p className="text-[10px] font-semibold text-gray-700">💰 R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>}
+                              {/* Número */}
+                              <p className="text-[10px] text-gray-500 font-medium">📋 #{p.omieNumero || p.numero}</p>
+                              {/* Itens */}
+                              {p.itens && p.itens.length > 0 && (
+                                <div className="space-y-0.5">
+                                  {p.itens.map((item, idx) => (
+                                    <p key={idx} className="text-[10px] text-gray-600 leading-snug truncate">
+                                      • {item.nomeProduto} <span className="font-semibold">×{item.quantidade}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Frete + Pgto */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {p.tipoFrete && (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-700">{p.tipoFrete}</span>
+                                )}
+                                {p.formaPagamento && (
+                                  <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-gray-100 text-gray-600 truncate max-w-[110px]">{p.formaPagamento}</span>
+                                )}
+                              </div>
+                              {/* Valor total */}
+                              {p.totalValor > 0 && (
+                                <p className="text-[11px] font-bold text-gray-800">💰 R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                              )}
                               {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
                             </div>
                           )

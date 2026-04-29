@@ -93,6 +93,8 @@ describe('useFunilActions', () => {
     it('rejeita transição inválida (prospecção → negociacao)', () => {
       vi.useFakeTimers()
       const params = defaultParams()
+      // Gerente pode fazer qualquer transição — usar vendedor para testar rejeição
+      params.loggedUser = sampleVendedor({ cargo: 'vendedor' })
       const { result } = renderHook(() => useFunilActions(params))
       const fakeEvent = { preventDefault: vi.fn(), dataTransfer: { effectAllowed: 'move' } } as any
 
@@ -242,8 +244,8 @@ describe('useFunilActions', () => {
         await result.current.moverCliente(4, 'follow_up')
       })
 
-      // 2 tarefas: acompanhar logística + coletar satisfação
-      expect(db.insertTarefa).toHaveBeenCalledTimes(2)
+      // 3 tarefas: acompanhar logística + coletar satisfação + preparar proposta comercial
+      expect(db.insertTarefa).toHaveBeenCalledTimes(3)
     })
 
     it('faz rollback se persistência falhar', async () => {
