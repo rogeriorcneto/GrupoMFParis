@@ -30,9 +30,9 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'templates', 'produtos', 'pedidos', 'ia'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'templates', 'produtos', 'pedidos', 'ia'],
   vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
-  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'tarefas', 'templates', 'pedidos'],
+  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
@@ -48,6 +48,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'templates', icon: DocumentTextIcon, label: 'Templates' },
   { id: 'automacoes', icon: PaperAirplaneIcon, label: 'Automações' },
   { id: 'prospeccao', icon: MagnifyingGlassIcon, label: 'Prospecção' },
+  { id: 'baseleads', icon: BeakerIcon, label: '🍦 Base de Leads RF' },
   { id: 'social', icon: MagnifyingGlassIcon, label: 'Busca Social' },
   { id: 'integracoes', icon: SparklesIcon, label: 'Integrações' },
   { id: 'equipe', icon: UserGroupIcon, label: 'Equipe' },

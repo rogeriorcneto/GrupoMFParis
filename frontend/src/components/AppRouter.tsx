@@ -8,7 +8,7 @@ import {
   DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView
+  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -627,6 +627,13 @@ export default function AppRouter({
             }
           } catch (err) { logger.error('Erro ao atualizar pedido:', err) }
         }}
+      />
+    case 'baseleads':
+      return <BaseLeadsView
+        loggedUser={loggedUser}
+        clientes={clientes}
+        setClientes={setClientes}
+        showToast={showToast}
       />
     case 'omie':
       // Renderizado abaixo como componente persistente

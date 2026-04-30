@@ -7,6 +7,77 @@ import { fetchPropostasByCliente } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
 
+// Função para abreviar nomes de produtos
+function abreviarProduto(nome: string): string {
+  const abreviacoes: Record<string, string> = {
+    'COMPOSTO LACTEO COM LEITE HORIZONTE': 'Comp. Horizonte',
+    'COMPOSTO LACTEO': 'Comp.',
+    'LEITE HORIZONTE': 'L. Horizonte',
+    'AÇAÍ': 'Açaí',
+    'AÇAI': 'Açaí',
+    'LPI': 'LPI',
+    'CREME DE LEITE': 'Creme Leite',
+    'CREME LEITE': 'Creme Leite',
+    'LEITE CONDENSADO': 'Leite Cond.',
+    'LEITE PO': 'Leite Pó',
+    'LEITE EM PO': 'Leite Pó',
+    'MUCILON': 'Mucilon',
+    'ACHOCOLATADO': 'Achocol.',
+    'CHOCOLATE': 'Choc.',
+    'MORANGO': 'Morango',
+    'BAUNILHA': 'Baunilha',
+    'CHOCOLATE AO LEITE': 'Choc. Leite',
+    'CHOCOLATE MEIO AMARGO': 'Choc. M.A.',
+    'BISCOITO': 'Bisc.',
+    'BOLACHA': 'Bol.',
+    'SORVETE': 'Sorv.',
+    'PICOLÉ': 'Picolé',
+    'PICOLE': 'Picolé',
+    'CALDA': 'Calda',
+    'COBERTURA': 'Cob.',
+    'RECHEIO': 'Recheio',
+    'EMULSIFICANTE': 'Emuls.',
+    'ESTABILIZANTE': 'Estab.',
+    'BASE': 'Base',
+    'PO': 'Pó',
+    'LATA': 'Lt',
+    'LITRO': 'L',
+    'KILO': 'kg',
+    'QUILO': 'kg',
+    'GRAMA': 'g',
+    'MILILITRO': 'ml',
+    'LITROS': 'L',
+    'KILOS': 'kg',
+    'QUILOS': 'kg',
+    'GRAMAS': 'g',
+  }
+  
+  let abreviado = nome
+  
+  // Tenta encontrar substituições exatas primeiro
+  for (const [original, abrev] of Object.entries(abreviacoes)) {
+    const regex = new RegExp(`\\b${original}\\b`, 'gi')
+    abreviado = abreviado.replace(regex, abrev)
+  }
+  
+  // Remove palavras comuns desnecessárias
+  const palavrasRemover = ['DE', 'DA', 'DO', 'DAS', 'DOS', 'COM', 'PARA', 'EM', 'E', 'O', 'A', 'OS', 'AS']
+  const palavras = abreviado.split(' ')
+  const filtradas = palavras.filter((p, i) => {
+    const upper = p.toUpperCase()
+    // Mantém primeira e última palavra, remove conectores do meio
+    if (i === 0 || i === palavras.length - 1) return true
+    return !palavrasRemover.includes(upper)
+  })
+  
+  // Limita a 3-4 palavras principais
+  if (filtradas.length > 4) {
+    return filtradas.slice(0, 3).join(' ') + '...'
+  }
+  
+  return filtradas.join(' ')
+}
+
 function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
@@ -815,10 +886,27 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                               {p.itens && p.itens.length > 0 && (
                                 <div className="space-y-0.5">
                                   {p.itens.map((item, idx) => (
-                                    <p key={idx} className="text-[10px] text-gray-600 leading-snug truncate">
-                                      • {item.nomeProduto} <span className="font-semibold">×{item.quantidade}</span>
-                                    </p>
+                                    <div key={idx} className="flex items-center justify-between text-[10px]">
+                                      <span className="text-gray-700 truncate flex-1" title={item.nomeProduto}>
+                                        • {abreviarProduto(item.nomeProduto)}
+                                      </span>
+                                      <span className="font-bold text-gray-900 ml-2">
+                                        ×{item.quantidade}
+                                      </span>
+                                      <span className="text-gray-500 ml-1">
+                                        ({(item.preco * item.quantidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+                                      </span>
+                                    </div>
                                   ))}
+                                  {/* Total de itens e valor */}
+                                  <div className="flex items-center justify-between pt-1 mt-1 border-t border-gray-200">
+                                    <span className="text-[9px] text-gray-500">
+                                      {p.itens.length} item{p.itens.length > 1 ? 's' : ''}
+                                    </span>
+                                    <span className="text-[11px] font-bold text-green-700">
+                                      Total: {p.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                  </div>
                                 </div>
                               )}
                               {/* Frete + Pgto */}
