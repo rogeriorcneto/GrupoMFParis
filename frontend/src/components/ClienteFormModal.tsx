@@ -22,13 +22,14 @@ interface ClienteFormModalProps {
   vendedores: Vendedor[]
   clientes?: Cliente[]
   onClickNegocio?: (c: Cliente) => void
+  onInativarCliente?: (clienteId: number) => void
 }
 
 export default function ClienteFormModal({
   showModal, setShowModal, editingCliente, formData, setFormData,
   handleInputChange, handleSubmit, isSaving,
   isLoadingCep, isLoadingCnpj, buscarCep, buscarCnpj,
-  produtos, vendedores, clientes = [], onClickNegocio
+  produtos, vendedores, clientes = [], onClickNegocio, onInativarCliente
 }: ClienteFormModalProps) {
   const [activeTab, setActiveTab] = React.useState<'dados' | 'negocios'>('dados')
 
@@ -394,21 +395,42 @@ export default function ClienteFormModal({
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 transition-colors duration-200"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 transition-colors duration-200 shadow-apple-sm disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Salvando...' : 'Salvar Cliente'}
-              </button>
+            <div className="flex justify-between items-center mt-6">
+              {/* Botão Inativar - só aparece no modo edição */}
+              {editingCliente && onInativarCliente && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('Tem certeza que deseja inativar este cliente?')) {
+                      onInativarCliente(editingCliente.id)
+                      setShowModal(false)
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="px-4 py-2 text-gray-600 bg-gray-100 border border-gray-300 rounded-apple hover:bg-gray-200 hover:text-gray-800 transition-colors duration-200 text-sm font-medium"
+                  title="Mover cliente para etapa Inativo"
+                >
+                  💤 Inativar
+                </button>
+              )}
+              {!editingCliente && <div /> /* Spacer quando não tem botão de inativar */}
+              
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 transition-colors duration-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 transition-colors duration-200 shadow-apple-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isSaving ? 'Salvando...' : 'Salvar Cliente'}
+                </button>
+              </div>
             </div>
           </form>
         </div>

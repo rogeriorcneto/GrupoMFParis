@@ -453,6 +453,10 @@ function App() {
           produtos={produtos} vendedores={vendedores}
           clientes={clientes}
           onClickNegocio={(c) => { setShowModal(false); setSelectedClientePanel(c) }}
+          onInativarCliente={(clienteId) => {
+            moverCliente(clienteId, 'inativo', {})
+            showToast('success', 'Cliente inativado com sucesso!')
+          }}
         />
 
         {/* Modal Assistente IA */}
