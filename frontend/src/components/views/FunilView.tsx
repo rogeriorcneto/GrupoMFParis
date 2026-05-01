@@ -93,6 +93,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
   const [syncing, setSyncing] = useState(false)
   const [showNovosCiclos, setShowNovosCiclos] = useState(false)
+  const [novoCicloEscondidos, setNovoCicloEscondidos] = useState<Set<number>>(new Set())
 
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
   const amostraLockedClients = useMemo(() => {
@@ -978,7 +979,9 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           <div className="flex-1 h-px bg-blue-200" />
                         </div>
                       )}
-                      {clientesNovoCiclo.map((cliente) => {
+                      {clientesNovoCiclo
+                        .filter(c => !novoCicloEscondidos.has(c.id))
+                        .map((cliente) => {
                         const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
                         const historico = propostasPorCliente.get(cliente.id) || []
                         const ultimaProposta = historico[0]
@@ -986,33 +989,44 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         return (
                           <div
                             key={`ciclo-${cliente.id}`}
-                            onClick={() => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)}
-                            className={`p-3 rounded-lg bg-white cursor-pointer hover:shadow-md transition-all duration-150 group border-l-[3px] ${isReviver ? 'border-l-orange-400 border-orange-100' : 'border-l-blue-400 border-blue-100'} border`}
+                            className={`p-3 rounded-lg bg-white hover:shadow-md transition-all duration-150 group border-l-[3px] ${isReviver ? 'border-l-orange-400 border-orange-100' : 'border-l-blue-400 border-blue-100'} border relative`}
                             title={isReviver ? `⚠️ Cliente perdido em Negociação — ${cliente.motivoPerda || 'Clique para tentar novo ciclo'}` : 'Cliente em Follow-up — clique para criar nova proposta'}
                           >
-                            <div className="flex items-start justify-between gap-1.5">
-                              <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <span className="text-[10px] font-bold text-gray-400">{cliente.score}</span>
+                            {/* Botão esconder */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setNovoCicloEscondidos(prev => new Set([...prev, cliente.id]))
+                              }}
+                              className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                              title="Esconder este card"
+                            >
+                              🙈
+                            </button>
+                            <div onClick={() => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)} className="cursor-pointer">
+                              <div className="flex items-start justify-between gap-1.5 pr-6">
+                                <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span className="text-[10px] font-bold text-gray-400">{cliente.score}</span>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
-                              {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
-                            </div>
-                            <div className="flex gap-1 mt-2 flex-wrap">
-                              {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
-                              )}
-                              {cliente.contatoEmail && (
-                                <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
-                              )}
-                              {isReviver ? (
-                                <span className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-600 rounded-md font-medium border border-orange-100">⚡ Reviver</span>
-                              ) : (
-                                <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-600 rounded-md font-medium border border-blue-100">🔄 Novo ciclo</span>
-                              )}
-                            </div>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                                {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                              </div>
+                              <div className="flex gap-1 mt-2 flex-wrap">
+                                {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                                  <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
+                                )}
+                                {cliente.contatoEmail && (
+                                  <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
+                                )}
+                                {isReviver ? (
+                                  <span className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-600 rounded-md font-medium border border-orange-100">⚡ Reviver</span>
+                                ) : (
+                                  <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-600 rounded-md font-medium border border-blue-100">🔄 Novo ciclo</span>
+                                )}
+                              </div>
                             {historico.length > 0 && (
                               <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">
                                 <div className="flex items-center gap-1 mb-1">
@@ -1038,6 +1052,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                 {cliente.produtosInteresse.length > 3 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 3}</span>}
                               </div>
                             )}
+                            </div>
                           </div>
                         )
                       })}
@@ -1054,33 +1069,47 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           <div className="flex-1 h-px bg-purple-200" />
                         </div>
                       )}
-                      {clientesNovoCicloProposta.map((cliente) => {
+                      {clientesNovoCicloProposta
+                        .filter(c => !novoCicloEscondidos.has(c.id))
+                        .map((cliente) => {
                         const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
                         return (
                           <div
                             key={`novo-ciclo-proposta-${cliente.id}`}
-                            onClick={() => onClickCliente?.(cliente)}
-                            className="p-3 rounded-lg bg-white cursor-pointer hover:shadow-md transition-all duration-150 group border-l-[3px] border-l-purple-400 border-purple-100 border"
+                            className="p-3 rounded-lg bg-white hover:shadow-md transition-all duration-150 group border-l-[3px] border-l-purple-400 border-purple-100 border relative"
                             title={`🆕 Novo ciclo #${cliente.cicloNumero || 2} - Cliente duplicado de perda em Negociação`}
                           >
-                            <div className="flex items-start justify-between gap-1.5">
-                              <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                <span className="text-[10px] font-bold text-purple-600">#{cliente.cicloNumero || 2}°</span>
+                            {/* Botão esconder */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setNovoCicloEscondidos(prev => new Set([...prev, cliente.id]))
+                              }}
+                              className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Esconder este card"
+                            >
+                              🙈
+                            </button>
+                            <div onClick={() => onClickCliente?.(cliente)} className="cursor-pointer">
+                              <div className="flex items-start justify-between gap-1.5 pr-6">
+                                <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span className="text-[10px] font-bold text-purple-600">#{cliente.cicloNumero || 2}°</span>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center justify-between mt-1">
-                              <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
-                              {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
-                            </div>
-                            <div className="flex gap-1 mt-2 flex-wrap">
-                              {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
-                              )}
-                              {cliente.contatoEmail && (
-                                <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
-                              )}
-                              <span className="px-2 py-0.5 text-[9px] bg-purple-50 text-purple-600 rounded-md font-medium border border-purple-100">🆕 Novo ciclo</span>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                                {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                              </div>
+                              <div className="flex gap-1 mt-2 flex-wrap">
+                                {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                                  <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
+                                )}
+                                {cliente.contatoEmail && (
+                                  <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
+                                )}
+                                <span className="px-2 py-0.5 text-[9px] bg-purple-50 text-purple-600 rounded-md font-medium border border-purple-100">🆕 Novo ciclo</span>
+                              </div>
                             </div>
                           </div>
                         )
