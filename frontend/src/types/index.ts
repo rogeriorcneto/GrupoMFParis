@@ -91,6 +91,8 @@ export interface Cliente {
   website?: string
   latitude?: number
   longitude?: number
+  statusCliente?: 'ativo' | 'em_risco' | 'inativo' | 'prospecto' | 'descartado' | 'bloqueado'
+  grupoEconomicoId?: number
 }
 
 export interface FormData {
@@ -124,6 +126,8 @@ export interface FormData {
   produtosInteresse: string
   produtosQuantidades: Record<string, number>
   vendedorId?: string
+  statusCliente?: string
+  grupoEconomicoId?: string
 }
 
 export interface Interacao {

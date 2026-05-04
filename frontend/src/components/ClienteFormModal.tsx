@@ -25,6 +25,15 @@ interface ClienteFormModalProps {
   onInativarCliente?: (clienteId: number) => void
 }
 
+const STATUS_CLIENTE_OPTIONS = [
+  { value: 'ativo', label: 'Ativo', color: 'text-green-700 bg-green-50 border-green-200' },
+  { value: 'em_risco', label: 'Em Risco', color: 'text-orange-700 bg-orange-50 border-orange-200' },
+  { value: 'inativo', label: 'Inativo', color: 'text-gray-600 bg-gray-50 border-gray-200' },
+  { value: 'prospecto', label: 'Prospecto', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { value: 'descartado', label: 'Descartado', color: 'text-red-700 bg-red-50 border-red-200' },
+  { value: 'bloqueado', label: 'Bloqueado', color: 'text-purple-700 bg-purple-50 border-purple-200' },
+]
+
 export default function ClienteFormModal({
   showModal, setShowModal, editingCliente, formData, setFormData,
   handleInputChange, handleSubmit, isSaving,
@@ -32,6 +41,44 @@ export default function ClienteFormModal({
   produtos, vendedores, clientes = [], onClickNegocio, onInativarCliente
 }: ClienteFormModalProps) {
   const [activeTab, setActiveTab] = React.useState<'dados' | 'negocios'>('dados')
+  const [isSearchingGrupo, setIsSearchingGrupo] = React.useState(false)
+  const [grupoCnpjInput, setGrupoCnpjInput] = React.useState('')
+  const [grupoSearchResult, setGrupoSearchResult] = React.useState<{ id: number; razaoSocial: string } | null>(null)
+  const [grupoSearchError, setGrupoSearchError] = React.useState('')
+
+  React.useEffect(() => {
+    if (!showModal) {
+      setGrupoCnpjInput('')
+      setGrupoSearchResult(null)
+      setGrupoSearchError('')
+    } else {
+      const linked = clientes.find(c => c.id === Number(formData.grupoEconomicoId))
+      if (linked) setGrupoSearchResult({ id: linked.id, razaoSocial: linked.razaoSocial })
+    }
+  }, [showModal])
+
+  const buscarClientePorCnpj = () => {
+    const digits = grupoCnpjInput.replace(/\D/g, '')
+    if (digits.length < 14) { setGrupoSearchError('Informe um CNPJ válido (14 dígitos).'); return }
+    setIsSearchingGrupo(true)
+    setGrupoSearchError('')
+    setGrupoSearchResult(null)
+    const found = clientes.find(c => c.cnpj?.replace(/\D/g, '') === digits && c.id !== editingCliente?.id)
+    setIsSearchingGrupo(false)
+    if (found) {
+      setGrupoSearchResult({ id: found.id, razaoSocial: found.razaoSocial })
+      setFormData(prev => ({ ...prev, grupoEconomicoId: found.id.toString() }))
+    } else {
+      setGrupoSearchError('Nenhum cliente encontrado com este CNPJ.')
+    }
+  }
+
+  const removerGrupo = () => {
+    setGrupoSearchResult(null)
+    setGrupoCnpjInput('')
+    setGrupoSearchError('')
+    setFormData(prev => ({ ...prev, grupoEconomicoId: '' }))
+  }
 
   React.useEffect(() => { if (showModal) setActiveTab('dados') }, [showModal])
 
@@ -120,6 +167,30 @@ export default function ClienteFormModal({
           <form onSubmit={handleSubmit} className={`px-4 sm:px-6 py-4 ${ activeTab !== 'dados' ? 'hidden' : '' }`}>
             <div className="space-y-5">
 
+              {/* ── Responsável + Status ── */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Vendedor Responsável</label>
+                  <select name="vendedorId" value={formData.vendedorId || ''} onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
+                    <option value="">Sem vendedor</option>
+                    {vendedores.filter(v => v.ativo).map(v => (
+                      <option key={v.id} value={v.id}>{v.nome} ({v.cargo === 'gerente' ? 'Gerente' : v.cargo === 'sdr' ? 'SDR' : 'Vendedor'})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Status de Cliente</label>
+                  <select name="statusCliente" value={formData.statusCliente || ''} onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
+                    <option value="">Não definido</option>
+                    {STATUS_CLIENTE_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* ── Empresa ── */}
               <div>
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Empresa</p>
@@ -139,11 +210,31 @@ export default function ClienteFormModal({
                       </div>
                     </div>
                   </div>
+                  {/* ── Grupo Econômico ── */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ 2 (opcional)</label>
-                    <input type="text" name="cnpj2" value={formData.cnpj2} onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                      placeholder="00.000.000/0000-00" />
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Grupo Econômico</label>
+                    {grupoSearchResult ? (
+                      <div className="flex items-center gap-2 px-3 py-2 border border-green-300 bg-green-50 rounded-apple">
+                        <span className="text-xs font-medium text-green-800 flex-1 truncate">🔗 {grupoSearchResult.razaoSocial}</span>
+                        <button type="button" onClick={removerGrupo} className="text-gray-400 hover:text-red-500 text-xs font-bold">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={grupoCnpjInput}
+                          onChange={e => { setGrupoCnpjInput(e.target.value); setGrupoSearchError('') }}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscarClientePorCnpj() } }}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="CNPJ do cliente matriz/filial" />
+                        <button type="button" onClick={buscarClientePorCnpj} disabled={isSearchingGrupo}
+                          className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-xs font-medium disabled:opacity-50 whitespace-nowrap">
+                          {isSearchingGrupo ? '⏳' : '🔗 Linkar'}
+                        </button>
+                      </div>
+                    )}
+                    {grupoSearchError && <p className="text-xs text-red-500 mt-1">{grupoSearchError}</p>}
+                    <p className="text-xs text-gray-400 mt-1">Informe o CNPJ de outro cadastro para indicar que são a mesma empresa.</p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social *</label>
@@ -381,17 +472,6 @@ export default function ClienteFormModal({
                 </div>
               </div>
 
-              {/* ── Vendedor ── */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Vendedor Responsável</label>
-                <select name="vendedorId" value={formData.vendedorId || ''} onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
-                  <option value="">Sem vendedor</option>
-                  {vendedores.filter(v => v.ativo).map(v => (
-                    <option key={v.id} value={v.id}>{v.nome} ({v.cargo === 'gerente' ? 'Gerente' : v.cargo === 'sdr' ? 'SDR' : 'Vendedor'})</option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             {/* Actions */}

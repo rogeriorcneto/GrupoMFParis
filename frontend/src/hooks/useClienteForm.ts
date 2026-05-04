@@ -16,7 +16,8 @@ const emptyForm: FormData = {
   cnaePrimario: '', cnaeSecundario: '',
   redesSociais: '',
   valorEstimado: '',
-  produtosInteresse: '', produtosQuantidades: {}, vendedorId: ''
+  produtosInteresse: '', produtosQuantidades: {}, vendedorId: '',
+  statusCliente: '', grupoEconomicoId: ''
 }
 
 interface UseClienteFormParams {
@@ -144,13 +145,15 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
 
     const enderecoCompleto = buildEnderecoCompleto(formData)
 
-    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, valorEstimado: _ve, ...restForm } = formData
+    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, ...restForm } = formData
 
     const clienteFields: Partial<Cliente> = {
       ...restForm,
       endereco: enderecoCompleto,
       vendedorId: vIdStr ? Number(vIdStr) : undefined,
       produtosInteresse: produtosArray,
+      statusCliente: (_sc || undefined) as Cliente['statusCliente'],
+      grupoEconomicoId: _gei ? Number(_gei) : undefined,
     }
 
     setIsSaving(true)
@@ -227,7 +230,9 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       produtosInteresse: cliente.produtosInteresse?.join(', ') || '',
       produtosQuantidades: {},
       valorEstimado: cliente.valorEstimado?.toString() || '',
-      vendedorId: cliente.vendedorId?.toString() || ''
+      vendedorId: cliente.vendedorId?.toString() || '',
+      statusCliente: cliente.statusCliente || '',
+      grupoEconomicoId: cliente.grupoEconomicoId?.toString() || ''
     })
     setShowModal(true)
   }

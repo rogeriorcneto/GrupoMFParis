@@ -96,6 +96,8 @@ export function clienteFromDb(row: any): Cliente {
     website: row.website ?? undefined,
     latitude: row.latitude != null ? Number(row.latitude) : undefined,
     longitude: row.longitude != null ? Number(row.longitude) : undefined,
+    statusCliente: row.status_cliente ?? undefined,
+    grupoEconomicoId: row.grupo_economico_id ?? undefined,
     historicoEtapas: [],
   }
 }
@@ -184,6 +186,8 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.website !== undefined) row.website = c.website
   if (c.latitude !== undefined) row.latitude = c.latitude
   if (c.longitude !== undefined) row.longitude = c.longitude
+  if (c.statusCliente !== undefined) row.status_cliente = c.statusCliente ?? null
+  if (c.grupoEconomicoId !== undefined) row.grupo_economico_id = c.grupoEconomicoId ?? null
   return row
 }
 
