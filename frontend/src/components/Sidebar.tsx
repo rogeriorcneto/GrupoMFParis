@@ -15,6 +15,7 @@ import {
   BeakerIcon,
   ClipboardDocumentCheckIcon,
   CloudArrowUpIcon,
+  BuildingLibraryIcon,
 } from '@heroicons/react/24/outline'
 import type { ViewType, Vendedor } from '../types'
 
@@ -30,7 +31,7 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'templates', 'produtos', 'pedidos', 'ia'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'produtos', 'pedidos', 'ia'],
   vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
   sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'pedidos'],
 }
@@ -55,6 +56,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'relatorios', icon: ChartBarIcon, label: 'Relatórios' },
   { id: 'omie', icon: CloudArrowUpIcon, label: 'Omie ERP' },
   { id: 'trafico', icon: ChartBarIcon, label: '📊 Tráfego Pago' },
+  { id: 'licitacoes', icon: BuildingLibraryIcon, label: '🏛️ Licitações' },
 ]
 
 export { viewsPermitidas }

@@ -414,7 +414,18 @@ function App() {
                 setClientes={setClientes} setInteracoes={setInteracoes} setVendedores={setVendedores}
                 setTarefas={setTarefas} setTemplates={setTemplates} setTemplatesMsgs={setTemplatesMsgs}
                 setCampanhas={setCampanhas} setProdutos={setProdutos} setPedidos={setPedidos}
-                showToast={showToast} openModal={openModal} handleEditCliente={handleEditCliente}
+                showToast={showToast} openModal={openModal}
+                openModalComDados={(dados) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    razaoSocial: dados.razaoSocial ?? '',
+                    cnpj: dados.cnpj ?? '',
+                    enderecoCidade: dados.enderecoCidade ?? '',
+                    enderecoEstado: dados.enderecoEstado ?? '',
+                  }))
+                  openModal()
+                }}
+                handleEditCliente={handleEditCliente}
                 handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDrop={handleDrop}
                 handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
                 moverCliente={moverCliente}

@@ -8,7 +8,7 @@ import {
   DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView
+  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -45,6 +45,7 @@ interface AppRouterProps {
   // Actions
   showToast: (tipo: 'success' | 'error', texto: string) => void
   openModal: () => void
+  openModalComDados?: (dados: Partial<{ razaoSocial: string; cnpj: string; enderecoCidade: string; enderecoEstado: string }>) => void
   handleEditCliente: (c: Cliente) => void
   handleDragStart: (e: React.DragEvent, cliente: Cliente, fromStage: string) => void
   handleDragOver: (e: React.DragEvent) => void
@@ -73,7 +74,7 @@ export default function AppRouter({
   templatesMsgs, cadencias, campanhas, jobs, produtos, pedidos, dashboardMetrics,
   setClientes, setInteracoes, setVendedores, setTarefas, setTemplates,
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
-  showToast, openModal, handleEditCliente,
+  showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, handleQuickAction,
   setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo
 }: AppRouterProps) {
@@ -261,6 +262,24 @@ export default function AppRouter({
       />
     case 'trafico':
       return <TrafegoPagoView loggedUser={loggedUser} />
+    case 'licitacoes':
+      return <LicitacoesView
+        clientes={clientes}
+        vendedores={vendedores}
+        loggedUser={loggedUser}
+        onNovoCliente={(dados) => {
+          if (openModalComDados) {
+            openModalComDados({
+              razaoSocial: dados.razaoSocial,
+              cnpj: dados.cnpj,
+              enderecoCidade: dados.enderecoCidade,
+              enderecoEstado: dados.enderecoEstado,
+            })
+          } else {
+            openModal()
+          }
+        }}
+      />
     case 'funil':
       return <FunilView 
         clientes={clientes}

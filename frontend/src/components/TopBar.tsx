@@ -23,6 +23,7 @@ const viewTitles: Record<ViewType, string> = {
   omie: 'Omie ERP',
   trafico: 'Tráfego Pago',
   baseleads: '🍦 Base de Leads RF',
+  licitacoes: '🏛️ Licitações Públicas',
 }
 
 interface TopBarProps {
