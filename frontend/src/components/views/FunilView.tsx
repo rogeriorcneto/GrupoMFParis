@@ -641,34 +641,46 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden">
-      {/* KPI bar — inline compacta */}
-      <div className="flex items-center gap-3 px-1 py-2 flex-shrink-0">
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
-          <span className="text-[10px] text-gray-400 uppercase font-semibold">Pipeline</span>
-          <span className="text-sm font-bold text-gray-900">R$ {totalPipeline.toLocaleString('pt-BR')}</span>
-          <span className="text-[10px] text-gray-400">({activeCount})</span>
+      {/* KPI bar — cards com mais destaque */}
+      <div className="flex items-center gap-2 px-1 py-2 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-primary-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Pipeline</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-none mt-0.5">R$ {totalPipeline.toLocaleString('pt-BR')}</p>
+          </div>
+          <span className="text-[10px] text-gray-400 ml-1">({activeCount})</span>
         </div>
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
-          <span className="text-[10px] text-gray-400 uppercase font-semibold">Prevista</span>
-          <span className="text-sm font-bold text-green-600">R$ {Math.round(receitaPonderada).toLocaleString('pt-BR')}</span>
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Prevista</p>
+            <p className="text-sm font-bold text-green-600 dark:text-green-400 leading-none mt-0.5">R$ {Math.round(receitaPonderada).toLocaleString('pt-BR')}</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
-          <span className="text-[10px] text-gray-400 uppercase font-semibold">Conversão</span>
-          <span className="text-sm font-bold text-primary-600">{taxaConversao}%</span>
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-blue-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Conversão</p>
+            <p className="text-sm font-bold text-primary-600 dark:text-primary-400 leading-none mt-0.5">{taxaConversao}%</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm">
-          <span className="text-[10px] text-gray-400 uppercase font-semibold">Ciclo</span>
-          <span className="text-sm font-bold text-purple-600">{tempoMedio}d</span>
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-purple-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Ciclo Médio</p>
+            <p className="text-sm font-bold text-purple-600 dark:text-purple-400 leading-none mt-0.5">{tempoMedio} dias</p>
+          </div>
         </div>
         {alertCount > 0 && (
-          <div className="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5 shadow-sm ml-auto">
-            <span className="text-xs">🚨</span>
-            <span className="text-xs font-bold text-red-700">{alertCount} vencendo</span>
+          <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-xl px-4 py-2 shadow-sm ml-auto">
+            <span className="text-sm">🚨</span>
+            <span className="text-xs font-bold text-red-700 dark:text-red-400">{alertCount} vencendo</span>
           </div>
         )}
       </div>
 
-      {/* Toolbar — 1 linha */}
+      {/* Toolbar */}
       <div className="flex items-center gap-2 px-1 pb-2 flex-shrink-0 flex-wrap">
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
@@ -676,26 +688,26 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar..."
-            className="w-full pl-7 pr-6 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
+            placeholder="Buscar cliente..."
+            className="w-full pl-7 pr-6 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-400"
           />
           {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-[10px]">✕</button>}
         </div>
         {isGerente && (
-          <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500">
+          <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-400">
             <option value="">Todos vendedores</option>
             {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
           </select>
         )}
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-2 py-1 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-500">
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-400">
           <option value="urgencia">Urgência</option>
           <option value="score">Score</option>
           <option value="valor">Valor</option>
           <option value="antigo">Mais antigo</option>
           <option value="recente">Mais recente</option>
         </select>
-        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
-        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1 border border-gray-300 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-primary-500" />
+        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-24 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-24 focus:outline-none focus:ring-2 focus:ring-primary-400" />
 
         <div className="h-5 w-px bg-gray-300" />
         <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
@@ -751,41 +763,53 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         )}
       </div>
 
-      {/* Kanban columns — scroll horizontal com colunas de largura fixa igual */}
+      {/* Kanban columns */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 290}px` }}>
+        <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 300}px` }}>
           {displayedStages.map((stage) => {
             const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
             const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             const isProposta = stage.key === 'proposta'
             const novoCicloCount = isProposta ? clientesNovoCiclo.length + clientesNovoCicloProposta.length : 0
+            // Cor do header de cada coluna
+            const colHeaderColor: Record<string, string> = {
+              lead: 'border-t-2 border-t-emerald-400',
+              'prospecção': 'border-t-2 border-t-sky-400',
+              amostra: 'border-t-2 border-t-amber-400',
+              amostra_perdida: 'border-t-2 border-t-orange-400',
+              inativo: 'border-t-2 border-t-gray-400',
+              proposta: 'border-t-2 border-t-indigo-400',
+              negociacao: 'border-t-2 border-t-purple-400',
+              follow_up: 'border-t-2 border-t-blue-400',
+              perdido: 'border-t-2 border-t-red-400',
+            }
             return (
-              <div key={stage.key} className="flex-1 min-w-[260px] max-w-[380px] flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
+              <div key={stage.key} className={`flex-1 min-w-[270px] max-w-[380px] flex flex-col bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden ${colHeaderColor[stage.key] || ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
                 {/* Column header */}
-                <div className="px-3 py-2.5 bg-white border-b border-gray-200 flex-shrink-0">
+                <div className="px-3 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                   <div className="flex items-center justify-between gap-1">
-                    <h3 className="font-bold text-gray-800 text-xs truncate leading-none">{stage.icon} {stage.title}</h3>
+                    <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm truncate leading-none">{stage.icon} {stage.title}</h3>
                     <div className="flex items-center gap-1.5">
                       {isProposta && novoCicloCount > 0 && (
                         <button
                           onClick={() => setShowNovosCiclos(v => !v)}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${showNovosCiclos ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'}`}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${showNovosCiclos ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-blue-50 hover:text-blue-600'}`}
                           title={showNovosCiclos ? 'Ocultar clientes em novo ciclo (Follow-up)' : `Mostrar ${novoCicloCount} cliente(s) prontos para novo ciclo`}
                         >
                           🔄 {novoCicloCount}
                         </button>
                       )}
-                      <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
+                      <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
-                    <span className="text-[11px] text-gray-500 font-medium">R$ {stageValor.toLocaleString('pt-BR')}</span>
-                    {stage.prob > 0 && <span className="text-[10px] text-gray-400">{Math.round(stage.prob * 100)}%</span>}
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">R$ {stageValor.toLocaleString('pt-BR')}</span>
+                    {stage.prob > 0 && <span className="text-[10px] text-gray-400">{Math.round(stage.prob * 100)}% prob.</span>}
                   </div>
                 </div>
 
-                {/* Cards area — scroll vertical */}
+                {/* Cards area */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {stageClientes.map((cliente) => {
                     const urgencia = getCardUrgencia(cliente)
@@ -794,25 +818,25 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     return (
                       <div
                         key={cliente.id}
-                        className={`p-3 rounded-lg bg-white ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-md transition-all duration-150 group ${
-                          urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-red-100' :
-                          urgencia === 'atencao' ? 'border-l-[3px] border-l-yellow-400 border border-yellow-100' :
-                          'border border-gray-200 hover:border-gray-300'
+                        className={`p-3 rounded-xl bg-white dark:bg-gray-800 ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-lg dark:hover:shadow-gray-900/50 transition-all duration-150 group ${
+                          urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-red-100 dark:border-red-900/50' :
+                          urgencia === 'atencao' ? 'border-l-[3px] border-l-yellow-400 border border-yellow-100 dark:border-yellow-900/50' :
+                          'border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                         }`}
                         draggable={isGerente}
                         onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
                         onClick={() => onClickCliente?.(cliente)}
                       >
                         <div className="flex items-start justify-between gap-1.5">
-                          <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                          <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             {urgencia !== 'normal' && <span className="text-xs">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
-                            {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400">{cliente.score}</span>}
+                            {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 rounded-full">{cliente.score}</span>}
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
-                          {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.contatoNome}</span>
+                          {vendedor && <span className="text-[10px] text-primary-500 dark:text-primary-400 font-semibold flex-shrink-0 bg-primary-50 dark:bg-primary-900/30 px-1.5 py-0.5 rounded-full">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
                         {/* Ações rápidas — sempre visíveis no topo */}
                         <div className="flex gap-1 mt-2 flex-wrap">
@@ -967,7 +991,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                       </div>
                     )
                   })}
-                  {stageClientes.length === 0 && !showNovosCiclos && <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>}
+                  {stageClientes.length === 0 && !showNovosCiclos && <div className="p-6 text-center text-gray-400 dark:text-gray-600 text-xs">Arraste clientes aqui</div>}
 
                   {/* Cards virtuais: clientes em Follow-up prontos para novo ciclo */}
                   {isProposta && showNovosCiclos && clientesNovoCiclo.length > 0 && (

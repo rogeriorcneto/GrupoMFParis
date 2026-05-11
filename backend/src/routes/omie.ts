@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
 import { getSyncDiff, syncPullClientes, syncPushClientes, syncPushSingleCliente, associarClientesPorCnpj } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
-import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado } from '../omie/pedidos.js'
+import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
@@ -200,6 +200,18 @@ omieRouter.post('/pedidos/:id/enviar', rateLimit(10, 60_000), async (req, res) =
     }
   } catch (err: any) {
     log.error({ err, pedidoId }, 'Erro ao enviar pedido para Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Sincronizar Números de Pedido Omie ───
+
+omieRouter.post('/sync/numeros-pedido', rateLimit(3, 60_000), async (_req, res) => {
+  try {
+    const result = await syncOmieNumeros()
+    res.json({ success: true, data: result })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao sincronizar números de pedido Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

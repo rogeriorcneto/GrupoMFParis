@@ -12,6 +12,7 @@ import { useRealtimeSubscription } from './hooks/useRealtimeSubscription'
 import { useVersionCheck } from './hooks/useVersionCheck'
 import ClientePanel from './components/ClientePanel'
 import { useAutoRules } from './hooks/useAutoRules'
+import { useDarkMode } from './hooks/useDarkMode'
 import { useClienteForm } from './hooks/useClienteForm'
 import { useFunilActions } from './hooks/useFunilActions'
 import { logger } from './utils/logger'
@@ -29,6 +30,7 @@ import ChatInterno from './components/ChatInterno'
 
 function App() {
   const { newVersionAvailable, reloadApp } = useVersionCheck()
+  const { dark, toggleDark } = useDarkMode()
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
   const [loginUsuario, setLoginUsuario] = useState('')
   const [loginSenha, setLoginSenha] = useState('')
@@ -363,7 +365,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className="h-screen flex bg-gray-50 dark:bg-gray-950">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
@@ -392,10 +394,11 @@ function App() {
           notificacoes={notificacoes} showNotifications={showNotifications}
           setShowNotifications={setShowNotifications} markAllRead={markAllRead} markRead={markRead}
           onOpenSearch={() => setShowGlobalSearch(true)}
+          dark={dark} onToggleDark={toggleDark}
         />
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto p-3 sm:p-6 pb-0">
+        <div className="flex-1 overflow-auto p-3 sm:p-6 pb-0 bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">

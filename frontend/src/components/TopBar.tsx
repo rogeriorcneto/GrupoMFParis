@@ -1,5 +1,5 @@
 import React from 'react'
-import { BellIcon, MagnifyingGlassIcon, WifiIcon } from '@heroicons/react/24/outline'
+import { BellIcon, MagnifyingGlassIcon, WifiIcon, MoonIcon, SunIcon } from '@heroicons/react/24/outline'
 import type { ViewType, Notificacao } from '../types'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
 
@@ -24,6 +24,7 @@ const viewTitles: Record<ViewType, string> = {
   trafico: 'Tráfego Pago',
   baseleads: '🍦 Base de Leads RF',
   licitacoes: '🏛️ Licitações Públicas',
+  treinamento: '🎓 Academia de Vendas',
 }
 
 interface TopBarProps {
@@ -35,11 +36,14 @@ interface TopBarProps {
   markAllRead: () => void
   markRead: (id: number) => void
   onOpenSearch?: () => void
+  dark?: boolean
+  onToggleDark?: () => void
 }
 
 export default function TopBar({
   activeView, setSidebarOpen, notificacoes,
-  showNotifications, setShowNotifications, markAllRead, markRead, onOpenSearch
+  showNotifications, setShowNotifications, markAllRead, markRead, onOpenSearch,
+  dark, onToggleDark
 }: TopBarProps) {
   const unreadCount = notificacoes.filter(n => !n.lida).length
   const isOnline = useNetworkStatus()
@@ -52,7 +56,7 @@ export default function TopBar({
         Sem conexão — dados podem estar desatualizados. Verifique sua internet.
       </div>
     )}
-    <div className="h-14 sm:h-16 bg-white border-gray-200 border-b flex items-center justify-between px-3 sm:px-6">
+    <div className="h-14 sm:h-16 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-b flex items-center justify-between px-3 sm:px-6">
       <div className="flex items-center gap-3">
         <button
           onClick={() => setSidebarOpen(true)}
@@ -60,12 +64,21 @@ export default function TopBar({
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
         </button>
-        <h2 className="text-base sm:text-lg font-semibold truncate text-gray-900">
+        <h2 className="text-base sm:text-lg font-semibold truncate text-gray-900 dark:text-gray-100">
           {viewTitles[activeView] || 'Visão Geral'}
         </h2>
       </div>
       
       <div className="flex items-center space-x-1 sm:space-x-3">
+        {onToggleDark && (
+          <button
+            onClick={onToggleDark}
+            className="p-2 rounded-xl transition-all text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+            title={dark ? 'Modo claro' : 'Modo escuro'}
+          >
+            {dark ? <SunIcon className="h-5 w-5 text-amber-400" /> : <MoonIcon className="h-5 w-5" />}
+          </button>
+        )}
         {onOpenSearch && (
           <button
             onClick={onOpenSearch}

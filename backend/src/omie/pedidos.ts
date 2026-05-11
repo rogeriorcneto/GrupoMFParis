@@ -635,11 +635,18 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   log.info({ pedidoId, omieResponse: response }, '✅ Pedido criado no Omie')
 
   // 11. Salvar código Omie no pedido do CRM
+  // Fallback: se numero_pedido não veio, usa codigo_pedido formatado
+  const omieNumero = response.numero_pedido 
+    ? String(response.numero_pedido)
+    : response.codigo_pedido 
+      ? String(response.codigo_pedido)
+      : ''
+  
   await supabase
     .from('pedidos')
     .update({
       omie_codigo: String(response.codigo_pedido || ''),
-      omie_numero: String(response.numero_pedido || ''),
+      omie_numero: omieNumero,
       omie_status: 'enviado',
     })
     .eq('id', pedidoId)
@@ -1243,4 +1250,81 @@ export async function cancelarPedidoOmie(pedidoId: number, motivo?: string): Pro
       error: err.message || 'Erro desconhecido ao cancelar no Omie',
     }
   }
+}
+
+// ============================================
+// Sincronizar omie_numero dos pedidos existentes
+// ============================================
+
+export interface SyncOmieNumeroResult {
+  atualizados: number
+  erros: { pedidoId: number; erro: string }[]
+}
+
+/**
+ * Sincroniza o omie_numero de pedidos que têm omie_codigo mas não têm omie_numero.
+ * Busca os pedidos no Omie e atualiza o número correto.
+ */
+export async function syncOmieNumeros(): Promise<SyncOmieNumeroResult> {
+  const creds = await getOmieCredentials()
+  if (!creds) {
+    throw new Error('Credenciais Omie não configuradas')
+  }
+
+  // Buscar pedidos que têm omie_codigo mas não têm omie_numero
+  const { data: pedidos, error } = await supabase
+    .from('pedidos')
+    .select('id, omie_codigo, numero')
+    .not('omie_codigo', 'is', null)
+    .or('omie_numero.is.null,omie_numero.eq.""')
+
+  if (error) {
+    throw new Error(`Erro ao buscar pedidos: ${error.message}`)
+  }
+
+  if (!pedidos || pedidos.length === 0) {
+    return { atualizados: 0, erros: [] }
+  }
+
+  log.info({ total: pedidos.length }, 'Sincronizando omie_numero para pedidos')
+
+  const erros: { pedidoId: number; erro: string }[] = []
+  let atualizados = 0
+
+  for (const pedido of pedidos) {
+    try {
+      // Consultar pedido no Omie para pegar o numero_pedido
+      const result = await omieCall<any>(
+        '/produtos/pedido/',
+        'ConsultarPedido',
+        [{ codigo_pedido: parseInt(pedido.omie_codigo, 10) }],
+        { credentials: creds }
+      )
+
+      const cab = result?.cabecalho || {}
+      const numeroPedido = cab.numero_pedido || cab.codigo_pedido
+
+      if (numeroPedido) {
+        // Atualizar o omie_numero no CRM
+        const { error: updateError } = await supabase
+          .from('pedidos')
+          .update({ omie_numero: String(numeroPedido) })
+          .eq('id', pedido.id)
+
+        if (updateError) {
+          erros.push({ pedidoId: pedido.id, erro: `Erro ao atualizar: ${updateError.message}` })
+        } else {
+          atualizados++
+          log.info({ pedidoId: pedido.id, omieNumero: numeroPedido }, 'omie_numero atualizado')
+        }
+      } else {
+        erros.push({ pedidoId: pedido.id, erro: 'numero_pedido não encontrado na resposta do Omie' })
+      }
+    } catch (err: any) {
+      erros.push({ pedidoId: pedido.id, erro: err.message || 'Erro desconhecido' })
+    }
+  }
+
+  log.info({ atualizados, erros: erros.length }, 'Sincronização de omie_numero concluída')
+  return { atualizados, erros }
 }

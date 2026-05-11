@@ -1,5 +1,13 @@
-import React from 'react'
-import { XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon, ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon } from '@heroicons/react/24/outline'
+import React, { useMemo, useState, useCallback } from 'react'
+import {
+  XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon,
+  ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon,
+  CheckCircleIcon, ClockIcon, FireIcon, CalendarDaysIcon,
+  ChevronDownIcon, ChevronUpIcon, FunnelIcon, BoltIcon,
+  ExclamationTriangleIcon, ArrowPathIcon, UserCircleIcon,
+  EllipsisHorizontalIcon, InboxIcon
+} from '@heroicons/react/24/outline'
+import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../../types'
 import { logger } from '../../utils/logger'
 import { formatBrazilianPhone } from '../../utils/validators'
@@ -8,6 +16,223 @@ import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
 
+// ─── Sub-componente: TarefaCard ───────────────────────────────────────────────
+const TIPO_CONFIG: Record<string, { icon: string; label: string; color: string; ring: string }> = {
+  ligacao:   { icon: '📞', label: 'Ligação',   color: 'bg-violet-50 border-violet-200', ring: 'ring-violet-400' },
+  reuniao:   { icon: '🤝', label: 'Reunião',   color: 'bg-blue-50 border-blue-200',    ring: 'ring-blue-400' },
+  email:     { icon: '📧', label: 'E-mail',    color: 'bg-sky-50 border-sky-200',      ring: 'ring-sky-400' },
+  whatsapp:  { icon: '💬', label: 'WhatsApp',  color: 'bg-green-50 border-green-200',  ring: 'ring-green-400' },
+  'follow-up':{ icon: '🔄', label: 'Follow-up', color: 'bg-amber-50 border-amber-200', ring: 'ring-amber-400' },
+  outro:     { icon: '📋', label: 'Outro',     color: 'bg-gray-50 border-gray-200',    ring: 'ring-gray-400' },
+}
+
+const PRIORIDADE_CONFIG = {
+  alta:  { label: 'Urgente', dot: 'bg-red-500',    text: 'text-red-600',    badge: 'bg-red-100 text-red-700 border-red-200' },
+  media: { label: 'Normal',  dot: 'bg-amber-400',  text: 'text-amber-600',  badge: 'bg-amber-100 text-amber-700 border-amber-200' },
+  baixa: { label: 'Baixa',   dot: 'bg-gray-300',   text: 'text-gray-500',   badge: 'bg-gray-100 text-gray-600 border-gray-200' },
+}
+
+interface TarefaCardProps {
+  tarefa: Tarefa
+  cliente?: Cliente
+  vendedor?: Vendedor
+  isGerente: boolean
+  onToggle: (t: Tarefa) => void
+  onWhatsApp: (c: Cliente) => void
+  onBot: (c: Cliente) => void
+  onEmail: (c: Cliente) => void
+  onCall: (c: Cliente) => void
+  isOverdue: boolean
+  isToday: boolean
+}
+
+const TarefaCard: React.FC<TarefaCardProps> = ({
+  tarefa, cliente, vendedor, isGerente,
+  onToggle, onWhatsApp, onBot, onEmail, onCall,
+  isOverdue, isToday
+}) => {
+  const [expanded, setExpanded] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const cfg = TIPO_CONFIG[tarefa.tipo] || TIPO_CONFIG.outro
+  const pri = PRIORIDADE_CONFIG[tarefa.prioridade]
+  const done = tarefa.status === 'concluida'
+
+  const handleToggle = async () => {
+    if (done) { onToggle(tarefa); return }
+    setCompleting(true)
+    setTimeout(() => {
+      onToggle(tarefa)
+      setCompleting(false)
+    }, 400)
+  }
+
+  return (
+    <div
+      className={`
+        group relative rounded-2xl border transition-all duration-300 overflow-hidden
+        ${done
+          ? 'bg-gray-50 border-gray-200 opacity-60'
+          : isOverdue
+            ? 'bg-red-50 border-red-300 shadow-sm shadow-red-100'
+            : cfg.color + ' shadow-sm hover:shadow-md'
+        }
+        ${completing ? 'scale-95 opacity-50' : 'scale-100 opacity-100'}
+      `}
+    >
+      {/* Barra lateral de prioridade */}
+      {!done && (
+        <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl ${
+          isOverdue ? 'bg-red-500' : tarefa.prioridade === 'alta' ? 'bg-red-400' : tarefa.prioridade === 'media' ? 'bg-amber-400' : 'bg-gray-300'
+        }`} />
+      )}
+
+      <div className="pl-4 pr-4 pt-4 pb-3">
+        {/* Linha principal */}
+        <div className="flex items-start gap-3">
+          {/* Checkbox animado */}
+          <button
+            onClick={handleToggle}
+            className={`
+              mt-0.5 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center
+              transition-all duration-300 hover:scale-110 active:scale-95
+              ${done
+                ? 'bg-green-500 border-green-500'
+                : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
+              }
+            `}
+          >
+            {done && <CheckCircleSolid className="h-5 w-5 text-white" />}
+          </button>
+
+          {/* Conteúdo */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                {/* Tipo + título */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-base">{cfg.icon}</span>
+                  <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'line-through text-gray-400' : ''}`}>
+                    {tarefa.titulo}
+                  </h4>
+                  {isOverdue && !done && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full border border-red-200">
+                      <ExclamationTriangleIcon className="h-3 w-3" />
+                      Atrasada
+                    </span>
+                  )}
+                </div>
+
+                {/* Meta info em linha */}
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                  {tarefa.hora && (
+                    <span className={`flex items-center gap-1 text-xs font-semibold ${isOverdue && !done ? 'text-red-600' : 'text-gray-600'}`}>
+                      <ClockIcon className="h-3.5 w-3.5" />
+                      {tarefa.hora}
+                    </span>
+                  )}
+                  {cliente && (
+                    <span className="flex items-center gap-1 text-xs text-gray-500 truncate max-w-[160px]">
+                      <UserCircleIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                      {cliente.razaoSocial}
+                    </span>
+                  )}
+                  {isGerente && vendedor && (
+                    <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                      {vendedor.nome}
+                    </span>
+                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${pri.badge}`}>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${pri.dot}`} />
+                    {pri.label}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botão expandir */}
+              {(tarefa.descricao || cliente) && (
+                <button
+                  onClick={() => setExpanded(e => !e)}
+                  className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-white/70 transition-colors"
+                >
+                  {expanded
+                    ? <ChevronUpIcon className="h-4 w-4" />
+                    : <ChevronDownIcon className="h-4 w-4" />
+                  }
+                </button>
+              )}
+            </div>
+
+            {/* Área expandida */}
+            {expanded && (
+              <div className="mt-3 pt-3 border-t border-black/5 space-y-2 animate-in slide-in-from-top-1 duration-200">
+                {tarefa.descricao && (
+                  <p className="text-sm text-gray-600 leading-relaxed">{tarefa.descricao}</p>
+                )}
+                {cliente && (
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+                    {cliente.contatoNome && <span>👤 {cliente.contatoNome}</span>}
+                    {(cliente.contatoTelefone || cliente.contatoCelular) && (
+                      <span>📱 {cliente.contatoTelefone || cliente.contatoCelular}</span>
+                    )}
+                    {cliente.contatoEmail && <span className="col-span-2">✉️ {cliente.contatoEmail}</span>}
+                    {cliente.etapa && (
+                      <span className="col-span-2">📍 Etapa: <strong>{cliente.etapa}</strong></span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Botões de ação rápida */}
+            {!done && cliente && (
+              <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                  <>
+                    <button
+                      onClick={() => onWhatsApp(cliente)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-500 hover:bg-green-600 text-white rounded-xl transition-all hover:shadow-sm active:scale-95"
+                    >
+                      <DevicePhoneMobileIcon className="h-3.5 w-3.5" />
+                      WhatsApp
+                    </button>
+                    <button
+                      onClick={() => onBot(cliente)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-green-50 text-green-700 border border-green-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
+                    >
+                      <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
+                      Bot
+                    </button>
+                  </>
+                )}
+                {cliente.contatoEmail && (
+                  <button
+                    onClick={() => onEmail(cliente)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
+                  >
+                    <EnvelopeIcon className="h-3.5 w-3.5" />
+                    E-mail
+                  </button>
+                )}
+                {(cliente.contatoTelefone || cliente.contatoCelular) && (
+                  <a
+                    href={`tel:+${formatBrazilianPhone(cliente.contatoTelefone || cliente.contatoCelular || '')}`}
+                    onClick={() => onCall(cliente)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
+                  >
+                    <PhoneIcon className="h-3.5 w-3.5" />
+                    Ligar
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 const TarefasView: React.FC<{
   tarefas: Tarefa[]
   clientes: Cliente[]
@@ -20,14 +245,14 @@ const TarefasView: React.FC<{
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
   showToast?: (tipo: 'success' | 'error', texto: string) => void
 }> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast }) => {
-  const [showModal, setShowModal] = React.useState(false)
-  const [commCliente, setCommCliente] = React.useState<Cliente | null>(null)
-  const [filterStatus, setFilterStatus] = React.useState<'todas' | 'pendente' | 'concluida'>('pendente')
-  const [importStatus, setImportStatus] = React.useState<string | null>(null)
-  const [showWhatsApp, setShowWhatsApp] = React.useState(false)
-  const [waCliente, setWaCliente] = React.useState<Cliente | null>(null)
-  const [showWorkspace, setShowWorkspace] = React.useState(false)
-  const [wsCliente, setWsCliente] = React.useState<Cliente | null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [commCliente, setCommCliente] = useState<Cliente | null>(null)
+  const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
+  const [importStatus, setImportStatus] = useState<string | null>(null)
+  const [showWhatsApp, setShowWhatsApp] = useState(false)
+  const [waCliente, setWaCliente] = useState<Cliente | null>(null)
+  const [showWorkspace, setShowWorkspace] = useState(false)
+  const [wsCliente, setWsCliente] = useState<Cliente | null>(null)
 
   const handleImportTarefas = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -153,22 +378,24 @@ const TarefasView: React.FC<{
     }
     reader.readAsText(file, 'UTF-8')
   }
-  const [newTitulo, setNewTitulo] = React.useState('')
-  const [newDescricao, setNewDescricao] = React.useState('')
-  const [newData, setNewData] = React.useState(new Date().toISOString().split('T')[0])
-  const [newHora, setNewHora] = React.useState('')
-  const [newTipo, setNewTipo] = React.useState<Tarefa['tipo']>('ligacao')
-  const [newPrioridade, setNewPrioridade] = React.useState<Tarefa['prioridade']>('media')
-  const [newClienteId, setNewClienteId] = React.useState<number | ''>('')
-  const [newVendedorId, setNewVendedorId] = React.useState<number | ''>(loggedUser?.id ?? '')
-  const [clienteSearch, setClienteSearch] = React.useState('')
-  const [showClienteList, setShowClienteList] = React.useState(false)
+  const [newTitulo, setNewTitulo] = useState('')
+  const [newDescricao, setNewDescricao] = useState('')
+  const [newData, setNewData] = useState(new Date().toISOString().split('T')[0])
+  const [newHora, setNewHora] = useState('')
+  const [newTipo, setNewTipo] = useState<Tarefa['tipo']>('ligacao')
+  const [newPrioridade, setNewPrioridade] = useState<Tarefa['prioridade']>('media')
+  const [newClienteId, setNewClienteId] = useState<number | ''>('')
+  const [newVendedorId, setNewVendedorId] = useState<number | ''>(loggedUser?.id ?? '')
+  const [clienteSearch, setClienteSearch] = useState('')
+  const [showClienteList, setShowClienteList] = useState(false)
+  const [filterTipo, setFilterTipo] = useState<string>('todos')
+  const [showConcluidas, setShowConcluidas] = useState(false)
   const isGerente = loggedUser?.cargo === 'gerente'
 
   const hoje = new Date().toISOString().split('T')[0]
+  const amanha = new Date(Date.now() + 86400000).toISOString().split('T')[0]
 
-  // Registrar ligação no banco ao clicar em "Ligar"
-  const registerCall = async (cliente: Cliente) => {
+  const registerCall = useCallback(async (cliente: Cliente) => {
     const numero = cliente.contatoTelefone || cliente.contatoCelular || ''
     try {
       await insertInteracao({
@@ -189,26 +416,55 @@ const TarefasView: React.FC<{
     } catch (err) {
       logger.error('Erro ao registrar ligação:', err)
     }
-  }
+  }, [loggedUser, showToast])
 
-  // Vendedor só vê seus clientes; gerente vê todos
-  const meusClientes = React.useMemo(() =>
+  const meusClientes = useMemo(() =>
     isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
   , [clientes, isGerente, loggedUser?.id])
 
-  const filteredTarefas = tarefas.filter(t => {
-    const matchStatus = filterStatus === 'todas' || t.status === filterStatus
-    const matchVendedor = isGerente ? true : (t.vendedorId === loggedUser?.id)
-    return matchStatus && matchVendedor
-  })
+  const minhasTarefas = useMemo(() =>
+    tarefas.filter(t => isGerente ? true : t.vendedorId === loggedUser?.id)
+  , [tarefas, isGerente, loggedUser?.id])
 
-  const tarefasPorData = filteredTarefas.reduce((acc, t) => {
-    if (!acc[t.data]) acc[t.data] = []
-    acc[t.data].push(t)
-    return acc
-  }, {} as Record<string, Tarefa[]>)
+  // Segmentar tarefas
+  const { atrasadas, deHoje, futuras, concluidas } = useMemo(() => {
+    const pendentes = minhasTarefas.filter(t => t.status === 'pendente')
+    const conc = minhasTarefas.filter(t => t.status === 'concluida')
 
-  const datasOrdenadas = Object.keys(tarefasPorData).sort()
+    const applyTipoFilter = (arr: Tarefa[]) =>
+      filterTipo === 'todos' ? arr : arr.filter(t => t.tipo === filterTipo)
+
+    const sortByHora = (arr: Tarefa[]) =>
+      [...arr].sort((a, b) => {
+        const horaA = a.hora || '23:59'
+        const horaB = b.hora || '23:59'
+        return horaA.localeCompare(horaB)
+      })
+
+    return {
+      atrasadas: applyTipoFilter(sortByHora(pendentes.filter(t => t.data < hoje))),
+      deHoje: applyTipoFilter(sortByHora(pendentes.filter(t => t.data === hoje))),
+      futuras: applyTipoFilter(
+        pendentes
+          .filter(t => t.data > hoje)
+          .sort((a, b) => a.data.localeCompare(b.data) || (a.hora || '').localeCompare(b.hora || ''))
+      ),
+      concluidas: applyTipoFilter(
+        [...conc].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 30)
+      ),
+    }
+  }, [minhasTarefas, hoje, filterTipo])
+
+  // Stats do dia
+  const totalHoje = deHoje.length
+  const concluidasHoje = minhasTarefas.filter(t => t.status === 'concluida' && t.data === hoje).length
+  const progressoHoje = totalHoje + concluidasHoje > 0
+    ? Math.round((concluidasHoje / (totalHoje + concluidasHoje)) * 100)
+    : 0
+
+  const toggleStatus = useCallback((tarefa: Tarefa) => {
+    onUpdateTarefa({ ...tarefa, status: tarefa.status === 'pendente' ? 'concluida' : 'pendente' })
+  }, [onUpdateTarefa])
 
   const handleAddTarefa = () => {
     if (!newTitulo.trim()) return
@@ -228,210 +484,303 @@ const TarefasView: React.FC<{
     setNewDescricao('')
     setNewHora('')
     setNewVendedorId(loggedUser?.id ?? '')
+    setNewClienteId('')
+    setClienteSearch('')
     setShowModal(false)
   }
 
-  const toggleStatus = (tarefa: Tarefa) => {
-    onUpdateTarefa({ ...tarefa, status: tarefa.status === 'pendente' ? 'concluida' : 'pendente' })
+  const formatDataLabel = (data: string) => {
+    if (data === hoje) return 'Hoje'
+    if (data === amanha) return 'Amanhã'
+    return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
-  const getTipoIcon = (tipo: Tarefa['tipo']) => {
-    switch (tipo) {
-      case 'ligacao': return '📞'
-      case 'reuniao': return '🤝'
-      case 'email': return '📧'
-      case 'whatsapp': return '💬'
-      case 'follow-up': return '🔄'
-      default: return '📋'
+  // Agrupar futuras por data
+  const futurasPorData = useMemo(() => {
+    const map: Record<string, Tarefa[]> = {}
+    for (const t of futuras) {
+      if (!map[t.data]) map[t.data] = []
+      map[t.data].push(t)
     }
+    return map
+  }, [futuras])
+
+  const renderCard = (tarefa: Tarefa, overdue = false) => {
+    const cliente = clientes.find(c => c.id === tarefa.clienteId)
+    const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
+    return (
+      <TarefaCard
+        key={tarefa.id}
+        tarefa={tarefa}
+        cliente={cliente}
+        vendedor={vendedor}
+        isGerente={isGerente}
+        onToggle={toggleStatus}
+        onWhatsApp={(c) => { setWaCliente(c); setShowWhatsApp(true) }}
+        onBot={(c) => setCommCliente(c)}
+        onEmail={(c) => setCommCliente(c)}
+        onCall={(c) => registerCall(c)}
+        isOverdue={overdue}
+        isToday={tarefa.data === hoje}
+      />
+    )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Tarefas e Agenda</h1>
-          <p className="mt-1 text-sm text-gray-600">Organize suas atividades e nunca perca um follow-up</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {onImportTarefas && (
-            <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-3 rounded-apple transition-colors duration-200 shadow-apple-sm flex items-center gap-1.5 cursor-pointer text-sm">
-              <input type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImportTarefas} />
-              📥 Importar Tarefas Agendor
-            </label>
-          )}
-          <button
-            onClick={() => setShowWhatsApp(prev => !prev)}
-            className={`px-4 py-2 rounded-apple shadow-apple-sm flex items-center text-sm font-medium transition-colors ${showWhatsApp ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'}`}
-          >
-            <DevicePhoneMobileIcon className="h-4 w-4 mr-2" />
-            {showWhatsApp ? 'Fechar WhatsApp' : '📱 Meu WhatsApp'}
-          </button>
-          <button
-            onClick={() => { setShowWorkspace(true); setWsCliente(null) }}
-            className="px-4 py-2 rounded-apple shadow-apple-sm flex items-center text-sm font-medium bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all"
-          >
-            <RocketLaunchIcon className="h-4 w-4 mr-2" />
-            Workspace
-          </button>
-          <button
-            onClick={() => {
-              const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-              const sugeridas: Tarefa[] = [
-                { id: Date.now() + 1, clienteId: meusClientes.find(c => c.diasInativo && c.diasInativo > 7)?.id, vendedorId: loggedUser?.id, titulo: 'Follow-up com leads inativos', descricao: 'Entrar em contato com clientes sem interação há mais de 7 dias', data: hoje, hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta' },
-                { id: Date.now() + 2, clienteId: meusClientes.find(c => c.etapa === 'negociacao')?.id, vendedorId: loggedUser?.id, titulo: 'Enviar proposta comercial', descricao: 'Preparar e enviar proposta para leads em negociação', data: hoje, hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'alta' },
-                { id: Date.now() + 3, vendedorId: loggedUser?.id, titulo: 'Revisar pipeline de vendas', descricao: 'Analisar funil e identificar gargalos', data: amanha, hora: '09:00', tipo: 'outro', status: 'pendente', prioridade: 'media' },
-                { id: Date.now() + 4, clienteId: meusClientes.find(c => c.etapa === 'amostra')?.id, vendedorId: loggedUser?.id, titulo: 'Agendar reunião de apresentação', descricao: 'Marcar reunião para apresentar produtos', data: amanha, hora: '15:00', tipo: 'reuniao', status: 'pendente', prioridade: 'media' },
-                { id: Date.now() + 5, vendedorId: loggedUser?.id, titulo: 'Atualizar CRM e registros', descricao: 'Revisar e atualizar informações de clientes', data: amanha, tipo: 'outro', status: 'pendente', prioridade: 'baixa' }
-              ]
-              sugeridas.forEach(t => onAddTarefa(t))
-              alert(`✨ IA adicionou ${sugeridas.length} tarefas sugeridas!`)
-            }}
-            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-apple hover:from-purple-700 hover:to-blue-700 shadow-apple-sm flex items-center"
-          >
-            <SparklesIcon className="h-4 w-4 mr-2" />
-            IA Sugerir Tarefas
-          </button>
-          <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm flex items-center">
-            <PlusIcon className="h-4 w-4 mr-2" />
-            Nova Tarefa
-          </button>
+    <div className="min-h-screen bg-gray-50/50">
+      {/* ── HEADER STICKY ────────────────────────────────── */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-16">
+            {/* Saudação + progresso */}
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-lg font-bold text-gray-900 leading-none">
+                  {new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'}
+                  {loggedUser ? `, ${loggedUser.nome.split(' ')[0]}` : ''}! 👋
+                </h1>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {totalHoje + concluidasHoje === 0
+                    ? 'Nenhuma tarefa para hoje'
+                    : `${concluidasHoje}/${totalHoje + concluidasHoje} tarefas concluídas hoje`
+                  }
+                </p>
+              </div>
+
+              {/* Barra de progresso do dia */}
+              {totalHoje + concluidasHoje > 0 && (
+                <div className="hidden sm:flex items-center gap-2">
+                  <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-700"
+                      style={{ width: `${progressoHoje}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-600">{progressoHoje}%</span>
+                </div>
+              )}
+            </div>
+
+            {/* Ações do header */}
+            <div className="flex items-center gap-2">
+              {/* Filtro por tipo */}
+              <select
+                value={filterTipo}
+                onChange={(e) => setFilterTipo(e.target.value)}
+                className="hidden sm:block px-3 py-1.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
+              >
+                <option value="todos">Todos os tipos</option>
+                <option value="ligacao">📞 Ligações</option>
+                <option value="whatsapp">💬 WhatsApp</option>
+                <option value="email">📧 E-mails</option>
+                <option value="reuniao">🤝 Reuniões</option>
+                <option value="follow-up">🔄 Follow-ups</option>
+              </select>
+
+              <button
+                onClick={() => setShowWhatsApp(prev => !prev)}
+                className={`p-2 rounded-xl transition-all ${showWhatsApp ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'}`}
+                title="Meu WhatsApp"
+              >
+                <DevicePhoneMobileIcon className="h-5 w-5" />
+              </button>
+
+              <button
+                onClick={() => { setShowWorkspace(true); setWsCliente(null) }}
+                className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-xl shadow-sm hover:shadow-md transition-all"
+                title="Workspace"
+              >
+                <RocketLaunchIcon className="h-5 w-5" />
+              </button>
+
+              {onImportTarefas && (
+                <label className="p-2 bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all" title="Importar CSV">
+                  <input type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImportTarefas} />
+                  <ArrowPathIcon className="h-5 w-5" />
+                </label>
+              )}
+
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 shadow-sm hover:shadow-md transition-all active:scale-95"
+              >
+                <PlusIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Nova Tarefa</span>
+                <span className="sm:hidden">Nova</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {importStatus && (
-        <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-2 rounded-apple text-sm font-medium">
-          {importStatus}
-        </div>
-      )}
+      {/* ── CONTEÚDO ─────────────────────────────────────── */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
-      <div className="flex gap-3">
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className="px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-          <option value="todas">Todas</option>
-          <option value="pendente">Pendentes</option>
-          <option value="concluida">Concluídas</option>
-        </select>
-      </div>
-
-      {/* WhatsApp Business Panel */}
-      {showWhatsApp && (
-        <WhatsAppUserPanel
-          loggedUser={loggedUser}
-          cliente={waCliente}
-          onClose={() => { setShowWhatsApp(false); setWaCliente(null) }}
-          showToast={showToast}
-          compact
-        />
-      )}
-
-      <div className="space-y-6">
-        {datasOrdenadas.length === 0 && (
-          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-12 text-center">
-            <p className="text-gray-500">Nenhuma tarefa encontrada</p>
+        {importStatus && (
+          <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-2">
+            <CheckCircleIcon className="h-4 w-4" />
+            {importStatus}
           </div>
         )}
-        {datasOrdenadas.map(data => {
-          const tarefasDia = tarefasPorData[data].sort((a, b) => {
-            if (a.hora && b.hora) return a.hora.localeCompare(b.hora)
-            if (a.hora) return -1
-            if (b.hora) return 1
-            return 0
-          })
-          const isHoje = data === hoje
-          return (
-            <div key={data} className="bg-white rounded-apple shadow-apple-sm border border-gray-200">
-              <div className={`px-6 py-4 border-b border-gray-200 ${isHoje ? 'bg-primary-50' : ''}`}>
-                <h3 className={`text-lg font-semibold ${isHoje ? 'text-primary-700' : 'text-gray-900'}`}>
-                  {isHoje ? '🔥 Hoje' : new Date(data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1">{tarefasDia.length} tarefa(s)</p>
-              </div>
-              <div className="p-6 space-y-3">
-                {tarefasDia.map(tarefa => {
-                  const cliente = clientes.find(c => c.id === tarefa.clienteId)
-                  const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
-                  return (
-                    <div key={tarefa.id} className={`p-4 rounded-apple border-2 transition-all ${tarefa.status === 'concluida' ? 'bg-gray-50 border-gray-200 opacity-60' : tarefa.prioridade === 'alta' ? 'bg-red-50 border-red-200' : tarefa.prioridade === 'media' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-200'}`}>
-                      <div className="flex items-start gap-4">
-                        <button onClick={() => toggleStatus(tarefa)} className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${tarefa.status === 'concluida' ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-500'}`}>
-                          {tarefa.status === 'concluida' && <span className="text-white text-xs">✓</span>}
-                        </button>
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg">{getTipoIcon(tarefa.tipo)}</span>
-                                <h4 className={`font-semibold text-gray-900 ${tarefa.status === 'concluida' ? 'line-through' : ''}`}>{tarefa.titulo}</h4>
-                              </div>
-                              {tarefa.descricao && <p className="text-sm text-gray-600 mt-1">{tarefa.descricao}</p>}
-                              <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                {cliente && <p className="text-xs text-gray-500">👤 {cliente.razaoSocial}</p>}
-                                {vendedor && <p className="text-xs text-primary-600 font-medium">🏷️ {vendedor.nome}</p>}
-                              </div>
-                              {/* Action buttons: WhatsApp, Email, Phone */}
-                              {cliente && tarefa.status !== 'concluida' && (
-                                <div className="flex items-center gap-1.5 mt-2">
-                                  {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                    <>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setWaCliente(cliente); setShowWhatsApp(true) }}
-                                        title="Enviar via meu WhatsApp"
-                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-full transition-colors"
-                                      >
-                                        <DevicePhoneMobileIcon className="h-3.5 w-3.5" />
-                                        Meu WA
-                                      </button>
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setCommCliente(cliente) }}
-                                        title="Enviar via Bot CRM"
-                                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-full transition-colors"
-                                      >
-                                        <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
-                                        Bot
-                                      </button>
-                                    </>
-                                  )}
-                                  {cliente.contatoEmail && (
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setCommCliente(cliente) }}
-                                      title="Email"
-                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-full transition-colors"
-                                    >
-                                      <EnvelopeIcon className="h-3.5 w-3.5" />
-                                      Email
-                                    </button>
-                                  )}
-                                  {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                                    <a
-                                      href={`tel:+${formatBrazilianPhone(cliente.contatoTelefone || cliente.contatoCelular || '')}`}
-                                      onClick={(e) => { e.stopPropagation(); registerCall(cliente) }}
-                                      title="Ligar"
-                                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-full transition-colors"
-                                    >
-                                      <PhoneIcon className="h-3.5 w-3.5" />
-                                      Ligar
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            <div className="text-right">
-                              {tarefa.hora && <p className="text-sm font-semibold text-gray-900">🕐 {tarefa.hora}</p>}
-                              <span className={`inline-block mt-1 px-2 py-1 text-xs font-semibold rounded-full ${tarefa.prioridade === 'alta' ? 'bg-red-100 text-red-700' : tarefa.prioridade === 'media' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-700'}`}>{tarefa.prioridade}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+
+        {/* WhatsApp Panel */}
+        {showWhatsApp && (
+          <WhatsAppUserPanel
+            loggedUser={loggedUser}
+            cliente={waCliente}
+            onClose={() => { setShowWhatsApp(false); setWaCliente(null) }}
+            showToast={showToast}
+            compact
+          />
+        )}
+
+        {/* ZONA 1: ATRASADAS */}
+        {atrasadas.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+              <h2 className="font-bold text-red-600">Atrasadas</h2>
+              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">
+                {atrasadas.length}
+              </span>
             </div>
-          )
-        })}
+            <div className="space-y-2">
+              {atrasadas.map(t => renderCard(t, true))}
+            </div>
+          </section>
+        )}
+
+        {/* ZONA 2: HOJE */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FireIcon className="h-5 w-5 text-orange-500" />
+              <h2 className="font-bold text-gray-900">Hoje</h2>
+              {deHoje.length > 0 && (
+                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
+                  {deHoje.length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                const sugeridas: Tarefa[] = [
+                  { id: Date.now() + 1, clienteId: meusClientes.find(c => c.diasInativo && c.diasInativo > 7)?.id, vendedorId: loggedUser?.id, titulo: 'Follow-up com clientes inativos', descricao: 'Clientes sem interação há mais de 7 dias', data: hoje, hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta' },
+                  { id: Date.now() + 2, clienteId: meusClientes.find(c => c.etapa === 'negociacao')?.id, vendedorId: loggedUser?.id, titulo: 'Enviar proposta comercial', data: hoje, hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'alta' },
+                ]
+                sugeridas.forEach(t => onAddTarefa(t))
+                showToast?.('success', '✨ IA adicionou tarefas sugeridas para hoje!')
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-xl border border-purple-200 transition-colors"
+            >
+              <SparklesIcon className="h-3.5 w-3.5" />
+              Sugerir com IA
+            </button>
+          </div>
+
+          {deHoje.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 bg-white rounded-2xl border border-dashed border-gray-200">
+              <InboxIcon className="h-10 w-10 text-gray-300 mb-3" />
+              <p className="text-gray-500 font-medium">Nenhuma tarefa para hoje</p>
+              <p className="text-gray-400 text-sm mt-1">Que tal adicionar uma?</p>
+              <button
+                onClick={() => setShowModal(true)}
+                className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700 transition-colors"
+              >
+                + Nova Tarefa
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {deHoje.map(t => renderCard(t, false))}
+            </div>
+          )}
+        </section>
+
+        {/* ZONA 3: PRÓXIMAS (agrupadas por data) */}
+        {Object.keys(futurasPorData).length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarDaysIcon className="h-5 w-5 text-blue-500" />
+              <h2 className="font-bold text-gray-900">Próximas</h2>
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                {futuras.length}
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              {Object.entries(futurasPorData).map(([data, lista]) => (
+                <div key={data}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
+                      data === amanha
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {formatDataLabel(data)}
+                    </span>
+                    <div className="flex-1 h-px bg-gray-200" />
+                  </div>
+                  <div className="space-y-2">
+                    {lista.map(t => renderCard(t, false))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ZONA 4: CONCLUÍDAS (colapsável) */}
+        {concluidas.length > 0 && (
+          <section>
+            <button
+              onClick={() => setShowConcluidas(v => !v)}
+              className="flex items-center gap-2 w-full text-left group"
+            >
+              <CheckCircleIcon className="h-5 w-5 text-green-500" />
+              <h2 className="font-bold text-gray-400 group-hover:text-gray-600 transition-colors">
+                Concluídas
+              </h2>
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs font-bold rounded-full">
+                {concluidas.length}
+              </span>
+              <div className="flex-1 h-px bg-gray-200" />
+              {showConcluidas
+                ? <ChevronUpIcon className="h-4 w-4 text-gray-400" />
+                : <ChevronDownIcon className="h-4 w-4 text-gray-400" />
+              }
+            </button>
+
+            {showConcluidas && (
+              <div className="mt-3 space-y-2">
+                {concluidas.map(t => renderCard(t, false))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ESTADO VAZIO GERAL */}
+        {atrasadas.length === 0 && deHoje.length === 0 && futuras.length === 0 && concluidas.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-20 h-20 bg-primary-50 rounded-full flex items-center justify-center mb-4">
+              <CheckCircleIcon className="h-10 w-10 text-primary-400" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-700 mb-1">Tudo limpo por aqui!</h3>
+            <p className="text-gray-400 text-center max-w-xs">
+              Nenhuma tarefa pendente. Aproveite para adicionar novas atividades.
+            </p>
+            <button
+              onClick={() => setShowModal(true)}
+              className="mt-6 px-6 py-3 bg-primary-600 text-white rounded-2xl font-semibold hover:bg-primary-700 transition-all shadow-lg hover:shadow-xl"
+            >
+              + Criar primeira tarefa
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Communication Panel */}
+      {/* ── MODAIS ───────────────────────────────────────── */}
+
       {commCliente && (
         <TaskCommPanel
           cliente={commCliente}
@@ -442,106 +791,149 @@ const TarefasView: React.FC<{
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-2xl w-full p-6">
-            <div className="flex items-start justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Nova Tarefa</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-6 w-6" /></button>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Nova Tarefa</h2>
+              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors">
+                <XMarkIcon className="h-5 w-5" />
+              </button>
             </div>
-            <div className="space-y-4">
+
+            <div className="p-5 space-y-4">
+              {/* Tipo — botões visuais */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Título *</label>
-                <input value={newTitulo} onChange={(e) => setNewTitulo(e.target.value)} placeholder="Ex: Ligar para cliente" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(TIPO_CONFIG).map(([key, cfg]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setNewTipo(key as Tarefa['tipo'])}
+                      className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 text-xs font-semibold transition-all ${
+                        newTipo === key
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <span className="text-lg">{cfg.icon}</span>
+                      {cfg.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                <textarea value={newDescricao} onChange={(e) => setNewDescricao(e.target.value)} rows={2} placeholder="Detalhes..." className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Título *</label>
+                <input
+                  value={newTitulo}
+                  onChange={(e) => setNewTitulo(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddTarefa()}
+                  placeholder="Ex: Ligar para João da Panificadora"
+                  autoFocus
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm"
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Data *</label>
-                  <input type="date" value={newData} onChange={(e) => setNewData(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Data *</label>
+                  <input type="date" value={newData} onChange={(e) => setNewData(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
-                  <input type="time" value={newHora} onChange={(e) => setNewHora(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
+                  <input type="time" value={newHora} onChange={(e) => setNewHora(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* Prioridade — visual */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Prioridade</label>
+                <div className="flex gap-2">
+                  {(['baixa', 'media', 'alta'] as const).map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setNewPrioridade(p)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                        newPrioridade === p
+                          ? p === 'alta' ? 'border-red-400 bg-red-50 text-red-700'
+                            : p === 'media' ? 'border-amber-400 bg-amber-50 text-amber-700'
+                            : 'border-gray-400 bg-gray-50 text-gray-700'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      {p === 'alta' ? '🔴 Urgente' : p === 'media' ? '🟡 Normal' : '⚪ Baixa'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cliente */}
+              <div className="relative">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Cliente</label>
+                <input
+                  type="text"
+                  value={clienteSearch}
+                  onChange={(e) => { setClienteSearch(e.target.value); setShowClienteList(true); if (!e.target.value) setNewClienteId('') }}
+                  onFocus={() => setShowClienteList(true)}
+                  placeholder="Buscar cliente..."
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm"
+                />
+                {newClienteId && (
+                  <button type="button" onClick={() => { setNewClienteId(''); setClienteSearch('') }} className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+                )}
+                {showClienteList && clienteSearch.length >= 2 && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                    {meusClientes
+                      .filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase()))
+                      .slice(0, 15)
+                      .map(c => (
+                        <button key={c.id} type="button"
+                          onClick={() => { setNewClienteId(c.id); setClienteSearch(c.razaoSocial); setShowClienteList(false) }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-primary-50 border-b border-gray-50 last:border-0 transition-colors"
+                        >
+                          <span className="font-medium text-gray-900">{c.razaoSocial}</span>
+                          {c.etapa && <span className="text-xs text-gray-400 ml-2">· {c.etapa}</span>}
+                        </button>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
+
+              {isGerente && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                  <select value={newTipo} onChange={(e) => setNewTipo(e.target.value as Tarefa['tipo'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    <option value="ligacao">📞 Ligação</option>
-                    <option value="reuniao">🤝 Reunião</option>
-                    <option value="email">📧 Email</option>
-                    <option value="whatsapp">💬 WhatsApp</option>
-                    <option value="follow-up">🔄 Follow-up</option>
-                    <option value="outro">📋 Outro</option>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Responsável</label>
+                  <select value={newVendedorId} onChange={(e) => setNewVendedorId(e.target.value ? Number(e.target.value) : '')} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm">
+                    <option value="">Sem responsável</option>
+                    {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
-                  <select value={newPrioridade} onChange={(e) => setNewPrioridade(e.target.value as Tarefa['prioridade'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    <option value="baixa">Baixa</option>
-                    <option value="media">Média</option>
-                    <option value="alta">Alta</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cliente (opcional)</label>
-                  <input
-                    type="text"
-                    value={clienteSearch}
-                    onChange={(e) => { setClienteSearch(e.target.value); setShowClienteList(true); if (!e.target.value) setNewClienteId('') }}
-                    onFocus={() => setShowClienteList(true)}
-                    placeholder={newClienteId ? clientes.find(c => c.id === newClienteId)?.razaoSocial || 'Buscar cliente...' : 'Buscar cliente...'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                  {newClienteId && !clienteSearch && (
-                    <button type="button" onClick={() => { setNewClienteId(''); setClienteSearch('') }} className="absolute right-2 top-8 text-gray-400 hover:text-gray-600 text-xs">✕</button>
-                  )}
-                  {showClienteList && clienteSearch.length >= 2 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-apple shadow-lg max-h-48 overflow-y-auto">
-                      {meusClientes
-                        .filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase()) || (c.cnpj || '').includes(clienteSearch))
-                        .slice(0, 20)
-                        .map(c => (
-                          <button key={c.id} type="button" onClick={() => { setNewClienteId(c.id); setClienteSearch(c.razaoSocial); setShowClienteList(false) }} className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 border-b border-gray-100 last:border-0">
-                            <span className="font-medium">{c.razaoSocial}</span>
-                            {c.cnpj && <span className="text-gray-400 ml-2 text-xs">{c.cnpj}</span>}
-                          </button>
-                        ))
-                      }
-                      {meusClientes.filter(c => c.razaoSocial.toLowerCase().includes(clienteSearch.toLowerCase()) || (c.nomeFantasia || '').toLowerCase().includes(clienteSearch.toLowerCase())).length === 0 && (
-                        <p className="px-3 py-2 text-sm text-gray-400">Nenhum cliente encontrado</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Responsável *</label>
-                  {isGerente ? (
-                    <select value={newVendedorId} onChange={(e) => setNewVendedorId(e.target.value ? Number(e.target.value) : '')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500">
-                      <option value="">Todos (sem filtro)</option>
-                      {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome} {v.cargo === 'gerente' ? '(Gerente)' : ''}</option>)}
-                    </select>
-                  ) : (
-                    <input type="text" readOnly value={loggedUser?.nome || ''} className="w-full px-3 py-2 border border-gray-200 rounded-apple bg-gray-50 text-gray-600 cursor-not-allowed" />
-                  )}
-                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Observações</label>
+                <textarea value={newDescricao} onChange={(e) => setNewDescricao(e.target.value)} rows={2} placeholder="Contexto ou notas..." className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm resize-none" />
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 mt-6">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50">Cancelar</button>
-              <button onClick={handleAddTarefa} disabled={!newTitulo.trim()} className="px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 disabled:bg-gray-400 shadow-apple-sm">Criar Tarefa</button>
+
+            <div className="p-5 pt-0 flex gap-3">
+              <button onClick={() => setShowModal(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleAddTarefa}
+                disabled={!newTitulo.trim()}
+                className="flex-1 py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed shadow-sm hover:shadow-md transition-all active:scale-95"
+              >
+                Criar Tarefa
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Workspace interativo (fullscreen overlay) */}
       {showWorkspace && (
         <Workspace
           loggedUser={loggedUser}

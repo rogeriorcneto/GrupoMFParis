@@ -8,7 +8,7 @@ import {
   DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView
+  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -653,6 +653,12 @@ export default function AppRouter({
         clientes={clientes}
         setClientes={setClientes}
         showToast={showToast}
+      />
+    case 'treinamento':
+      return <TreinamentoView
+        vendedor={loggedUser || { id: 0, nome: 'Vendedor', email: '', cargo: 'vendedor', ativo: true, metaVendas: 0, metaLeads: 0, metaConversao: 0 } as any}
+        isGerente={loggedUser?.cargo === 'gerente'}
+        produtos={produtos}
       />
     case 'omie':
       // Renderizado abaixo como componente persistente

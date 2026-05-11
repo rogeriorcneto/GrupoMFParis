@@ -16,6 +16,7 @@ import {
   ClipboardDocumentCheckIcon,
   CloudArrowUpIcon,
   BuildingLibraryIcon,
+  AcademicCapIcon,
 } from '@heroicons/react/24/outline'
 import type { ViewType, Vendedor } from '../types'
 
@@ -31,9 +32,9 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'produtos', 'pedidos', 'ia'],
-  vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'pedidos'],
-  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'pedidos'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia'],
+  vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'treinamento', 'pedidos'],
+  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
@@ -47,6 +48,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'mapa', icon: MapIcon, label: 'Mapa' },
   { id: 'produtos', icon: CubeIcon, label: 'Produtos' },
   { id: 'templates', icon: DocumentTextIcon, label: 'Templates' },
+  { id: 'treinamento', icon: AcademicCapIcon, label: '🎓 Academia de Vendas' },
   { id: 'automacoes', icon: PaperAirplaneIcon, label: 'Automações' },
   { id: 'prospeccao', icon: MagnifyingGlassIcon, label: 'Prospecção' },
   { id: 'baseleads', icon: BeakerIcon, label: '🍦 Base de Leads RF' },
@@ -65,12 +67,12 @@ export default function Sidebar({
   activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, pendingAprovacoes = 0
 }: SidebarProps) {
   return (
-    <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white border-gray-200 border-r flex flex-col`}>
+    <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-r flex flex-col`}>
       {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
+      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <img src="/Logo_MFParis.jpg" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
-          <h1 className="text-lg font-bold text-gray-900">Grupo MF Paris</h1>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Grupo MF Paris</h1>
         </div>
         <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-gray-400 hover:text-gray-600 rounded-apple">
           <XMarkIcon className="h-5 w-5" />
@@ -88,10 +90,10 @@ export default function Sidebar({
               className={`
                 w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-apple transition-all duration-200
                 ${activeView === item.id
-                  ? 'bg-primary-50 text-primary-700'
+                  ? 'bg-primary-50 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                   : item.id === 'aprovacao' && pendingAprovacoes > 0
-                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
                 }
               `}
             >
