@@ -697,73 +697,46 @@ const TarefasView: React.FC<{
       {/* ── HEADER STICKY ────────────────────────────────── */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6">
-          {/* Tabs */}
-          <div className="flex gap-1 pt-3 pb-0">
-            <button
-              onClick={() => setActiveTab('tarefas')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-xl border-b-2 transition-all ${
-                activeTab === 'tarefas'
-                  ? 'border-primary-500 text-primary-700 bg-primary-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <CalendarDaysIcon className="h-4 w-4" />
-              Minhas Tarefas
-            </button>
-            <button
-              onClick={() => setActiveTab('historico')}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-xl border-b-2 transition-all ${
-                activeTab === 'historico'
-                  ? 'border-primary-500 text-primary-700 bg-primary-50'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <ClipboardDocumentListIcon className="h-4 w-4" />
-              Histórico
-              {minhasTarefas.filter(t => t.status === 'concluida').length > 0 && (
-                <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                  {minhasTarefas.filter(t => t.status === 'concluida').length}
-                </span>
-              )}
-            </button>
-          </div>
-          <div className="flex items-center justify-between h-14">
-            {/* Saudação + progresso */}
-            <div className="flex items-center gap-4">
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 leading-none">
-                  {new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'}
-                  {loggedUser ? `, ${loggedUser.nome.split(' ')[0]}` : ''}! 👋
-                </h1>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {totalHoje + concluidasHoje === 0
-                    ? 'Nenhuma tarefa para hoje'
-                    : `${concluidasHoje}/${totalHoje + concluidasHoje} tarefas concluídas hoje`
-                  }
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-3 h-14">
 
-              {/* Barra de progresso do dia */}
-              {totalHoje + concluidasHoje > 0 && (
-                <div className="hidden sm:flex items-center gap-2">
-                  <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-700"
-                      style={{ width: `${progressoHoje}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-600">{progressoHoje}%</span>
-                </div>
-              )}
+            {/* Tabs */}
+            <div className="flex gap-0.5">
+              <button
+                onClick={() => setActiveTab('tarefas')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-xl transition-all ${
+                  activeTab === 'tarefas'
+                    ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-200'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                }`}
+              >
+                <CalendarDaysIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Minhas Tarefas</span>
+                <span className="sm:hidden">Tarefas</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('historico')}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-xl transition-all ${
+                  activeTab === 'historico'
+                    ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-200'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                }`}
+              >
+                <ClipboardDocumentListIcon className="h-4 w-4" />
+                Histórico
+                {minhasTarefas.filter(t => t.status === 'concluida').length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                    {minhasTarefas.filter(t => t.status === 'concluida').length}
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* Ações do header */}
-            <div className="flex items-center gap-2">
-              {/* Filtro por tipo */}
+            {/* Ações */}
+            <div className="flex items-center gap-1.5">
               <select
                 value={filterTipo}
                 onChange={(e) => setFilterTipo(e.target.value)}
-                className="hidden sm:block px-3 py-1.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
+                className="hidden md:block px-2.5 py-1.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
               >
                 <option value="todos">Todos os tipos</option>
                 <option value="ligacao">📞 Ligações</option>
@@ -775,10 +748,10 @@ const TarefasView: React.FC<{
 
               <button
                 onClick={() => setShowWhatsApp(prev => !prev)}
-                className={`p-2 rounded-xl transition-all ${showWhatsApp ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'}`}
+                className={`p-2 rounded-xl transition-all ${showWhatsApp ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'}`}
                 title="Meu WhatsApp"
               >
-                <DevicePhoneMobileIcon className="h-5 w-5" />
+                <DevicePhoneMobileIcon className="h-4.5 w-4.5 h-5 w-5" />
               </button>
 
               <button
@@ -791,24 +764,24 @@ const TarefasView: React.FC<{
 
               <button
                 onClick={handleExportTarefas}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-green-50 hover:text-green-700 rounded-xl cursor-pointer transition-all text-sm font-medium"
-                title="Exportar tarefas como CSV"
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700 rounded-xl transition-all text-xs font-medium"
+                title="Exportar CSV"
               >
                 <ArrowDownTrayIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Exportar</span>
+                Exportar
               </button>
 
               {onImportTarefas && (
-                <label className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all text-sm font-medium" title="Importar CSV do Agendor">
+                <label className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all text-xs font-medium" title="Importar Agendor">
                   <input type="file" accept=".csv,.txt" className="hidden" onChange={handleImportTarefas} />
                   <ArrowUpTrayIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Importar Agendor</span>
+                  Agendor
                 </label>
               )}
 
               <button
                 onClick={() => setShowModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 shadow-sm hover:shadow-md transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 shadow-sm transition-all active:scale-95 text-sm"
               >
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Nova Tarefa</span>
@@ -900,6 +873,33 @@ const TarefasView: React.FC<{
 
         {activeTab === 'tarefas' && (
           <>
+            {/* Saudação + progresso */}
+            <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">
+                  {new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'}
+                  {loggedUser ? `, ${loggedUser.nome.split(' ')[0]}` : ''}! 👋
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {totalHoje + concluidasHoje === 0
+                    ? 'Nenhuma tarefa para hoje'
+                    : `${concluidasHoje} de ${totalHoje + concluidasHoje} tarefas concluídas hoje`
+                  }
+                </p>
+              </div>
+              {totalHoje + concluidasHoje > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-28 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-700"
+                      style={{ width: `${progressoHoje}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-bold text-gray-600">{progressoHoje}%</span>
+                </div>
+              )}
+            </div>
+
             {importStatus && (
               <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-2">
                 <CheckCircleIcon className="h-4 w-4" />
