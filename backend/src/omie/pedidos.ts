@@ -471,6 +471,9 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
 
   // Cenário fiscal: vendas ou amostra/bonificação (automático pelo tipo)
   const cenarioFiscal = tipoPedido === 'bonificacao' ? cenarioAmostra : cenarioVendas
+  if (tipoPedido === 'bonificacao' && !cenarioFiscal) {
+    throw new Error('Cenário fiscal "Bonificação" não encontrado no Omie. Verifique se o cenário está cadastrado em Configurações → Cenários Fiscais no Omie ERP.')
+  }
 
   // 3. Garantir produtos no Omie e montar itens
   const det: any[] = []

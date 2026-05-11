@@ -121,6 +121,7 @@ export interface FormData {
   enderecoCep2: string
   cnaePrimario: string
   cnaeSecundario: string
+  segmento: string
   redesSociais: string
   valorEstimado?: string
   produtosInteresse: string

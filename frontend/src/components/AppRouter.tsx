@@ -225,6 +225,7 @@ export default function AppRouter({
                 // 2) Criar novo card em Proposta
                 const novoCard: Omit<Cliente, 'id'> = {
                   ...cli,
+                  cnpj: undefined,
                   etapa: 'proposta',
                   etapaAnterior: 'perdido',
                   novoCiclo: true,
@@ -555,7 +556,7 @@ export default function AppRouter({
                 if (cli) {
                   try {
                     if (cli.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cli, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cli, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else if (cli.etapa !== 'negociacao') {
@@ -576,7 +577,7 @@ export default function AppRouter({
                 if (cli2) {
                   try {
                     if (cli2.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cli2, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cli2, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else if (cli2.etapa !== 'negociacao') {
@@ -609,7 +610,7 @@ export default function AppRouter({
                 if (cliApproved) {
                   try {
                     if (cliApproved.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else if (cliApproved.etapa !== 'negociacao') {
@@ -630,7 +631,7 @@ export default function AppRouter({
                 if (cliApproved2) {
                   try {
                     if (cliApproved2.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved2, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved2, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else if (cliApproved2.etapa !== 'negociacao') {

@@ -243,11 +243,12 @@ export function useFunilActions({
       } catch (err) { logger.error('Erro ao criar tarefas automáticas:', err) }
     }
 
-    // Novo ciclo automático: ao concluir o follow-up, duplicar card em Proposta
-    if (extras.statusFollowUp === 'concluido') {
+    // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue
+    if (extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue') {
       const clienteAtualizado = { ...cliente, ...extras, etapa: toStage }
       const novoCard: Omit<Cliente, 'id'> = {
         ...clienteAtualizado,
+        cnpj: undefined,
         etapa: 'proposta',
         etapaAnterior: 'follow_up',
         novoCiclo: true,
@@ -380,6 +381,7 @@ export function useFunilActions({
       if (fromStage === 'negociacao') {
         const novoCliente: Omit<Cliente, 'id'> = {
           ...clienteOriginal,
+          cnpj: undefined,
           etapa: 'proposta',
           etapaAnterior: 'perdido',
           novoCiclo: true,

@@ -108,6 +108,8 @@ export default function ClientePanel({
   const [panelTarefaTipo, setPanelTarefaTipo] = useState<Tarefa['tipo']>('follow-up')
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
   const [showCallRecorder, setShowCallRecorder] = useState(false)
+  const [showProspeccaoModal, setShowProspeccaoModal] = useState(false)
+  const [prospeccaoVendedorId, setProspeccaoVendedorId] = useState<number | ''>('')
 
   // Pedido rápido state
   const [showPedido, setShowPedido] = useState(false)
@@ -583,8 +585,53 @@ export default function ClientePanel({
               {['negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
                 <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
               )}
-              {c.etapa === 'lead' && (
-                <button onClick={() => { onMoverCliente(c.id, 'prospecção'); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-sky-600 text-white rounded-apple hover:bg-sky-700">🔎 Enviar para Prospecção</button>
+              {c.etapa === 'lead' && !showProspeccaoModal && (
+                <button
+                  onClick={() => {
+                    setProspeccaoVendedorId(c.vendedorId || loggedUser?.id || '')
+                    setShowProspeccaoModal(true)
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium bg-sky-600 text-white rounded-apple hover:bg-sky-700"
+                >
+                  🔎 Enviar para Prospecção
+                </button>
+              )}
+              {c.etapa === 'lead' && showProspeccaoModal && (
+                <div className="w-full mt-1 p-3 bg-sky-50 border border-sky-200 rounded-xl space-y-2" onClick={e => e.stopPropagation()}>
+                  <p className="text-xs font-bold text-sky-800">🔎 Designar responsável pela prospecção</p>
+                  <select
+                    value={prospeccaoVendedorId}
+                    onChange={e => setProspeccaoVendedorId(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 text-sm border border-sky-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-400"
+                    autoFocus
+                  >
+                    <option value="">— Selecionar vendedor —</option>
+                    {vendedores.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.nome}{v.id === loggedUser?.id ? ' (você)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowProspeccaoModal(false)}
+                      className="flex-1 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      disabled={prospeccaoVendedorId === ''}
+                      onClick={() => {
+                        if (prospeccaoVendedorId === '') return
+                        onMoverCliente(c.id, 'prospecção', { vendedorId: prospeccaoVendedorId as number })
+                        onClose()
+                      }}
+                      className="flex-1 py-1.5 text-xs font-bold bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50"
+                    >
+                      ✅ Confirmar
+                    </button>
+                  </div>
+                </div>
               )}
               {c.etapa === 'amostra_perdida' && (c.tentativaAmostra || 0) < 2 && (
                 <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">🔄 2ª Tentativa Amostra</button>

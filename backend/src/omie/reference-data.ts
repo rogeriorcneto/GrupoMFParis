@@ -43,14 +43,16 @@ export async function fetchCenariosFiscais(creds?: OmieCredentials): Promise<Omi
     { credentials }
   )
 
-  const cenarios: OmieCenario[] = (response.cadastros || response.cenariosCadastro || []).map((c: any) => ({
+  log.info({ responseKeys: Object.keys(response || {}), rawSample: JSON.stringify(response).slice(0, 500) }, '🔍 Omie ListarCenarios resposta bruta')
+  const lista = response.cadastros || response.cenariosCadastro || response.cenario_cadastro || []
+  const cenarios: OmieCenario[] = lista.map((c: any) => ({
     nCodigo: c.nCodigo || c.codigo || 0,
     cDescricao: c.cDescricao || c.descricao || '',
     cPadrao: c.cPadrao || '',
   }))
 
   setCache('cenarios', cenarios)
-  log.info({ count: cenarios.length }, 'Cenários fiscais carregados do Omie')
+  log.info({ count: cenarios.length, cenarios: cenarios.map(c => ({ id: c.nCodigo, desc: c.cDescricao })) }, 'Cenários fiscais carregados do Omie')
   return cenarios
 }
 
@@ -67,10 +69,20 @@ export async function getCenarioVendas(creds?: OmieCredentials): Promise<number>
 
 export async function getCenarioAmostra(creds?: OmieCredentials): Promise<number> {
   const cenarios = await fetchCenariosFiscais(creds)
-  const amostra = cenarios.find(c =>
-    c.cDescricao.toLowerCase().includes('amostra') ||
-    c.cDescricao.toLowerCase().includes('bonifica')
-  )
+  log.info({ cenarios: cenarios.map(c => ({ id: c.nCodigo, desc: c.cDescricao, padrao: c.cPadrao })) }, '🔍 Cenários fiscais disponíveis no Omie')
+  const normalizar = (s: string) =>
+    s.toLowerCase()
+     .normalize('NFD')
+     .replace(/[\u0300-\u036f]/g, '') // remove acentos
+  const amostra = cenarios.find(c => {
+    const desc = normalizar(c.cDescricao)
+    return desc.includes('amostra') || desc.includes('bonifica')
+  })
+  if (!amostra) {
+    log.warn({ descricoes: cenarios.map(c => c.cDescricao) }, '⚠️ Cenário de Bonificação não encontrado no Omie. Verifique se o cenário "Bonificação" está cadastrado.')
+  } else {
+    log.info({ codigo: amostra.nCodigo, descricao: amostra.cDescricao }, '✅ Cenário de bonificação/amostra encontrado')
+  }
   return amostra?.nCodigo || 0
 }
 

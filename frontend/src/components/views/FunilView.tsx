@@ -8,74 +8,63 @@ import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
 
 // Função para abreviar nomes de produtos
+// Resultado: "Comp. Horizonte 200g", "LPI Horizonte 25kg", "Creme Leite 200ml"
 function abreviarProduto(nome: string): string {
-  const abreviacoes: Record<string, string> = {
-    'COMPOSTO LACTEO COM LEITE HORIZONTE': 'Comp. Horizonte',
-    'COMPOSTO LACTEO': 'Comp.',
-    'LEITE HORIZONTE': 'L. Horizonte',
-    'AÇAÍ': 'Açaí',
-    'AÇAI': 'Açaí',
-    'LPI': 'LPI',
-    'CREME DE LEITE': 'Creme Leite',
-    'CREME LEITE': 'Creme Leite',
-    'LEITE CONDENSADO': 'Leite Cond.',
-    'LEITE PO': 'Leite Pó',
-    'LEITE EM PO': 'Leite Pó',
-    'MUCILON': 'Mucilon',
-    'ACHOCOLATADO': 'Achocol.',
-    'CHOCOLATE': 'Choc.',
-    'MORANGO': 'Morango',
-    'BAUNILHA': 'Baunilha',
-    'CHOCOLATE AO LEITE': 'Choc. Leite',
-    'CHOCOLATE MEIO AMARGO': 'Choc. M.A.',
-    'BISCOITO': 'Bisc.',
-    'BOLACHA': 'Bol.',
-    'SORVETE': 'Sorv.',
-    'PICOLÉ': 'Picolé',
-    'PICOLE': 'Picolé',
-    'CALDA': 'Calda',
-    'COBERTURA': 'Cob.',
-    'RECHEIO': 'Recheio',
-    'EMULSIFICANTE': 'Emuls.',
-    'ESTABILIZANTE': 'Estab.',
-    'BASE': 'Base',
-    'PO': 'Pó',
-    'LATA': 'Lt',
-    'LITRO': 'L',
-    'KILO': 'kg',
-    'QUILO': 'kg',
-    'GRAMA': 'g',
-    'MILILITRO': 'ml',
-    'LITROS': 'L',
-    'KILOS': 'kg',
-    'QUILOS': 'kg',
-    'GRAMAS': 'g',
+  if (!nome) return ''
+
+  // Extrai peso/volume do final (ex: 200G, 25KG, 1L, 500ML, 1KG)
+  const pesoMatch = nome.match(/[\s\-](\d+(?:[.,]\d+)?\s*(?:KG|G|L|ML|LT|UN|CX|SC|BD|FD|BG|PCT|PT))\s*$/i)
+  const peso = pesoMatch ? pesoMatch[1].toLowerCase().replace(/\s+/, '') : ''
+  const semPeso = pesoMatch ? nome.slice(0, pesoMatch.index).trim() : nome.trim()
+
+  // Mapeamento prefixo→abreviação (ordem: mais específico primeiro)
+  const prefixos: [RegExp, string][] = [
+    [/^COMPOSTO L[AÁ]CTEO\s+(?:COM\s+LEITE\s+)?/i,  'Comp.'],
+    [/^LEITE\s+P[OÓ]\s+INTEGRAL/i,                   'LPI'],
+    [/^LEITE\s+P[OÓ]/i,                               'Leite Pó'],
+    [/^LEITE\s+CONDENSADO/i,                           'Leite Cond.'],
+    [/^CREME\s+DE\s+LEITE/i,                           'Creme Leite'],
+    [/^CREME\s+LEITE/i,                                'Creme Leite'],
+    [/^A[ÇC]A[ÍI]/i,                                   'Açaí'],
+    [/^CHOCOLATE\s+MEIO\s+AMARGO/i,                    'Choc. M.A.'],
+    [/^CHOCOLATE\s+AO\s+LEITE/i,                       'Choc. Leite'],
+    [/^CHOCOLATE/i,                                    'Choc.'],
+    [/^ACHOCOLATADO/i,                                 'Achocol.'],
+    [/^SORVETE/i,                                      'Sorv.'],
+    [/^PICOLÉ|^PICOLE/i,                               'Picolé'],
+    [/^EMULSIFICANTE/i,                                'Emuls.'],
+    [/^ESTABILIZANTE/i,                                'Estab.'],
+    [/^COBERTURA/i,                                    'Cob.'],
+    [/^BASE\s+/i,                                      'Base'],
+  ]
+
+  let prefixAbrev = ''
+  let resto = semPeso
+
+  for (const [rx, abrev] of prefixos) {
+    if (rx.test(semPeso)) {
+      prefixAbrev = abrev
+      resto = semPeso.replace(rx, '').trim()
+      break
+    }
   }
-  
-  let abreviado = nome
-  
-  // Tenta encontrar substituições exatas primeiro
-  for (const [original, abrev] of Object.entries(abreviacoes)) {
-    const regex = new RegExp(`\\b${original}\\b`, 'gi')
-    abreviado = abreviado.replace(regex, abrev)
+
+  // Se não achou prefixo conhecido, pega as 2 primeiras palavras
+  if (!prefixAbrev) {
+    const palavras = semPeso.split(/\s+/)
+    prefixAbrev = palavras.slice(0, 2).join(' ')
+    resto = palavras.slice(2).join(' ')
   }
-  
-  // Remove palavras comuns desnecessárias
-  const palavrasRemover = ['DE', 'DA', 'DO', 'DAS', 'DOS', 'COM', 'PARA', 'EM', 'E', 'O', 'A', 'OS', 'AS']
-  const palavras = abreviado.split(' ')
-  const filtradas = palavras.filter((p, i) => {
-    const upper = p.toUpperCase()
-    // Mantém primeira e última palavra, remove conectores do meio
-    if (i === 0 || i === palavras.length - 1) return true
-    return !palavrasRemover.includes(upper)
-  })
-  
-  // Limita a 3-4 palavras principais
-  if (filtradas.length > 4) {
-    return filtradas.slice(0, 3).join(' ') + '...'
-  }
-  
-  return filtradas.join(' ')
+
+  // Pega a próxima palavra-chave do resto (marca/variante), ignorando conectores
+  const conectores = /^(DE|DA|DO|DAS|DOS|COM|PARA|EM|E|O|A|OS|AS|AO|À|AOS)\s+/i
+  let varResto = resto.replace(conectores, '').trim()
+  const varPalavras = varResto.split(/\s+/).filter(w => !conectores.test(w + ' '))
+  // Pega até 2 palavras de variante/marca
+  const variante = varPalavras.slice(0, 2).join(' ')
+
+  const partes = [prefixAbrev, variante, peso].filter(Boolean)
+  return partes.join(' ')
 }
 
 function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
@@ -911,25 +900,26 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                               {p.itens && p.itens.length > 0 && (
                                 <div className="space-y-0.5">
                                   {p.itens.map((item, idx) => (
-                                    <div key={idx} className="flex items-center justify-between text-[10px]">
-                                      <span className="text-gray-700 truncate flex-1" title={item.nomeProduto}>
-                                        • {abreviarProduto(item.nomeProduto)}
-                                      </span>
-                                      <span className="font-bold text-gray-900 ml-2">
-                                        ×{item.quantidade}
-                                      </span>
-                                      <span className="text-gray-500 ml-1">
-                                        ({(item.preco * item.quantidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
-                                      </span>
+                                    <div key={idx} className="text-[10px]">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-gray-700 font-medium leading-tight" title={item.nomeProduto}>
+                                          • {abreviarProduto(item.nomeProduto)}
+                                        </span>
+                                        <span className="font-bold text-gray-900 whitespace-nowrap flex-shrink-0">
+                                          {item.quantidade}x
+                                        </span>
+                                      </div>
+                                      <div className="text-gray-500 pl-2 text-[9px]">
+                                        {(item.preco * item.quantidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </div>
                                     </div>
                                   ))}
-                                  {/* Total de itens e valor */}
                                   <div className="flex items-center justify-between pt-1 mt-1 border-t border-gray-200">
                                     <span className="text-[9px] text-gray-500">
-                                      {p.itens.length} item{p.itens.length > 1 ? 's' : ''}
+                                      {p.itens.reduce((s, i) => s + i.quantidade, 0)} un
                                     </span>
                                     <span className="text-[11px] font-bold text-green-700">
-                                      Total: {p.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      {p.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </span>
                                   </div>
                                 </div>
@@ -943,10 +933,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                   <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-gray-100 text-gray-600 truncate max-w-[110px]">{p.formaPagamento}</span>
                                 )}
                               </div>
-                              {/* Valor total */}
-                              {p.totalValor > 0 && (
-                                <p className="text-[11px] font-bold text-gray-800">💰 R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                              )}
                               {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
                             </div>
                           )
@@ -993,155 +979,65 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                   })}
                   {stageClientes.length === 0 && !showNovosCiclos && <div className="p-6 text-center text-gray-400 dark:text-gray-600 text-xs">Arraste clientes aqui</div>}
 
-                  {/* Cards virtuais: clientes em Follow-up prontos para novo ciclo */}
-                  {isProposta && showNovosCiclos && clientesNovoCiclo.length > 0 && (
-                    <>
-                      {stageClientes.length > 0 && (
-                        <div className="flex items-center gap-2 py-1">
-                          <div className="flex-1 h-px bg-blue-200" />
-                          <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wide whitespace-nowrap">🔄 Novos Ciclos ({clientesNovoCiclo.length})</span>
-                          <div className="flex-1 h-px bg-blue-200" />
-                        </div>
-                      )}
-                      {clientesNovoCiclo
-                        .filter(c => !novoCicloEscondidos.has(c.id))
-                        .map((cliente) => {
-                        const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
-                        const historico = propostasPorCliente.get(cliente.id) || []
-                        const ultimaProposta = historico[0]
-                        const isReviver = cliente.etapa === 'perdido' && cliente.etapaAnterior === 'negociacao'
-                        return (
-                          <div
-                            key={`ciclo-${cliente.id}`}
-                            className={`p-3 rounded-lg bg-white hover:shadow-md transition-all duration-150 group border-l-[3px] ${isReviver ? 'border-l-orange-400 border-orange-100' : 'border-l-blue-400 border-blue-100'} border relative`}
-                            title={isReviver ? `⚠️ Cliente perdido em Negociação — ${cliente.motivoPerda || 'Clique para tentar novo ciclo'}` : 'Cliente em Follow-up — clique para criar nova proposta'}
-                          >
-                            {/* Botão esconder */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setNovoCicloEscondidos(prev => new Set([...prev, cliente.id]))
-                              }}
-                              className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                              title="Esconder este card"
-                            >
-                              🙈
-                            </button>
-                            <div onClick={() => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)} className="cursor-pointer">
-                              <div className="flex items-start justify-between gap-1.5 pr-6">
-                                <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <span className="text-[10px] font-bold text-gray-400">{cliente.score}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
-                                {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
-                              </div>
-                              <div className="flex gap-1 mt-2 flex-wrap">
-                                {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                  <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
-                                )}
-                                {cliente.contatoEmail && (
-                                  <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
-                                )}
-                                {isReviver ? (
-                                  <span className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-600 rounded-md font-medium border border-orange-100">⚡ Reviver</span>
-                                ) : (
-                                  <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-600 rounded-md font-medium border border-blue-100">🔄 Novo ciclo</span>
-                                )}
-                              </div>
-                            {historico.length > 0 && (
-                              <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">
-                                <div className="flex items-center gap-1 mb-1">
-                                  <span className="text-[10px] font-semibold text-purple-800">💰 Propostas ({historico.length})</span>
-                                </div>
-                                <div className="space-y-1">
-                                  {historico.slice(0, 2).map((p, i) => (
-                                    <div key={p.id || i} className="flex items-center justify-between text-[9px]">
-                                      <span className="text-gray-600 truncate max-w-[70px]">{p.numero}</span>
-                                      <span className="font-medium text-purple-700">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
-                                      <span className="text-gray-400">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
-                                    </div>
-                                  ))}
-                                  {historico.length > 2 && <p className="text-[9px] text-purple-600 text-center">+{historico.length - 2} mais</p>}
-                                </div>
-                                {ultimaProposta?.frete && <p className="text-[9px] text-gray-500 mt-1">🚚 {ultimaProposta.frete}</p>}
-                              </div>
-                            )}
-                            {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
-                            {cliente.produtosInteresse && cliente.produtosInteresse.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1.5">
-                                {cliente.produtosInteresse.slice(0, 3).map(p => (<span key={p} className="px-1.5 py-0.5 text-[9px] bg-primary-50 text-primary-700 rounded-full border border-primary-100 truncate max-w-[100px]">{p}</span>))}
-                                {cliente.produtosInteresse.length > 3 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 3}</span>}
-                              </div>
-                            )}
-                            </div>
+                  {/* Novos ciclos: todos juntos, ocultos por padrão, botão 🔄 no header para mostrar */}
+                  {isProposta && showNovosCiclos && (() => {
+                    const todos = [
+                      ...clientesNovoCicloProposta,
+                      ...clientesNovoCiclo.filter(c => !clientesNovoCicloProposta.some(p => p.id === c.id)),
+                    ].filter(c => !novoCicloEscondidos.has(c.id))
+                    if (todos.length === 0) return <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>
+                    return (
+                      <>
+                        {stageClientes.length > 0 && (
+                          <div className="flex items-center gap-2 py-1">
+                            <div className="flex-1 h-px bg-gray-200" />
+                            <span className="text-[9px] text-gray-400 uppercase tracking-wide whitespace-nowrap">🔄 {todos.length} novo{todos.length > 1 ? 's' : ''} ciclo{todos.length > 1 ? 's' : ''}</span>
+                            <div className="flex-1 h-px bg-gray-200" />
                           </div>
-                        )
-                      })}
-                    </>
-                  )}
-
-                  {/* Cards virtuais: clientes em Proposta que são novos ciclos (vindos de perdidos) */}
-                  {isProposta && showNovosCiclos && clientesNovoCicloProposta.length > 0 && (
-                    <>
-                      {(stageClientes.length > 0 || clientesNovoCiclo.length > 0) && (
-                        <div className="flex items-center gap-2 py-1">
-                          <div className="flex-1 h-px bg-purple-200" />
-                          <span className="text-[9px] font-bold text-purple-500 uppercase tracking-wide whitespace-nowrap">🆕 Novos Ciclos Proposta ({clientesNovoCicloProposta.length})</span>
-                          <div className="flex-1 h-px bg-purple-200" />
-                        </div>
-                      )}
-                      {clientesNovoCicloProposta
-                        .filter(c => !novoCicloEscondidos.has(c.id))
-                        .map((cliente) => {
-                        const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
-                        return (
-                          <div
-                            key={`novo-ciclo-proposta-${cliente.id}`}
-                            className="p-3 rounded-lg bg-white hover:shadow-md transition-all duration-150 group border-l-[3px] border-l-purple-400 border-purple-100 border relative"
-                            title={`🆕 Novo ciclo #${cliente.cicloNumero || 2} - Cliente duplicado de perda em Negociação`}
-                          >
-                            {/* Botão esconder */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setNovoCicloEscondidos(prev => new Set([...prev, cliente.id]))
-                              }}
-                              className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                              title="Esconder este card"
+                        )}
+                        {todos.map((cliente) => {
+                          const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
+                          const handleClick = cliente.novoCiclo
+                            ? () => onClickCliente?.(cliente)
+                            : () => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)
+                          return (
+                            <div
+                              key={`nc-${cliente.id}`}
+                              className="p-3 rounded-lg bg-white hover:shadow-md transition-all duration-150 group border border-gray-200 hover:border-gray-300 relative"
                             >
-                              🙈
-                            </button>
-                            <div onClick={() => onClickCliente?.(cliente)} className="cursor-pointer">
-                              <div className="flex items-start justify-between gap-1.5 pr-6">
-                                <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  <span className="text-[10px] font-bold text-purple-600">#{cliente.cicloNumero || 2}°</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setNovoCicloEscondidos(prev => new Set([...prev, cliente.id])) }}
+                                className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity text-[9px]"
+                                title="Esconder"
+                              >✕</button>
+                              <div onClick={handleClick} className="cursor-pointer">
+                                <div className="flex items-start justify-between gap-1.5 pr-5">
+                                  <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
+                                  <span className="text-[10px] font-bold text-gray-400 flex-shrink-0">{cliente.score}</span>
                                 </div>
-                              </div>
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
-                                {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
-                              </div>
-                              <div className="flex gap-1 mt-2 flex-wrap">
-                                {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                  <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
-                                )}
-                                {cliente.contatoEmail && (
-                                  <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
-                                )}
-                                <span className="px-2 py-0.5 text-[9px] bg-purple-50 text-purple-600 rounded-md font-medium border border-purple-100">🆕 Novo ciclo</span>
+                                <div className="flex items-center justify-between mt-1">
+                                  <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                                  {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
+                                </div>
+                                <div className="flex gap-1 mt-2 flex-wrap">
+                                  {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+                                    <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
+                                  )}
+                                  {cliente.contatoEmail && (
+                                    <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
+                                  )}
+                                  <span className="px-2 py-0.5 text-[9px] bg-gray-100 text-gray-500 rounded-md font-medium border border-gray-200">🔄 #{cliente.cicloNumero || 2}° ciclo</span>
+                                </div>
+                                {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                               </div>
                             </div>
-                          </div>
-                        )
-                      })}
-                    </>
-                  )}
+                          )
+                        })}
+                      </>
+                    )
+                  })()}
 
-                  {isProposta && showNovosCiclos && clientesNovoCiclo.length === 0 && clientesNovoCicloProposta.length === 0 && stageClientes.length === 0 && (
+                  {isProposta && showNovosCiclos && novoCicloCount === 0 && stageClientes.length === 0 && (
                     <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>
                   )}
                 </div>

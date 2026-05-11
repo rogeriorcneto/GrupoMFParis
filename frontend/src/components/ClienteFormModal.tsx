@@ -288,6 +288,16 @@ export default function ClienteFormModal({
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                       placeholder="Preenchido automaticamente pelo CNPJ" />
                   </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Segmento</label>
+                    <select name="segmento" value={formData.segmento} onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white">
+                      <option value="">— Selecionar —</option>
+                      <option value="Indústria">🏭 Indústria</option>
+                      <option value="Distribuição">🚚 Distribuição</option>
+                      <option value="Consumo">🛒 Consumo</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
