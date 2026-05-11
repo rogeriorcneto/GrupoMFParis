@@ -57,6 +57,7 @@ interface AppRouterProps {
   runJobNow: (id: number) => void
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
   onNovoCiclo?: (cliente: Cliente) => void
+  onVerNoFunil?: (cliente: Cliente) => void
 }
 
 export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
@@ -76,7 +77,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, handleQuickAction,
-  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo
+  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -437,7 +438,7 @@ export default function AppRouter({
         />
       )
     case 'tarefas':
-      return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast}
+      return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast} onVerNoFunil={onVerNoFunil}
         onUpdateTarefa={async (t) => {
           try {
             await db.updateTarefa(t.id, t)

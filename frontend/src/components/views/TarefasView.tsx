@@ -6,7 +6,7 @@ import {
   ChevronDownIcon, ChevronUpIcon, FunnelIcon, BoltIcon,
   ExclamationTriangleIcon, ArrowPathIcon, UserCircleIcon,
   EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon,
-  ArrowUturnRightIcon, ClipboardDocumentListIcon
+  ArrowUturnRightIcon, ClipboardDocumentListIcon, ArrowTopRightOnSquareIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
 import type { Tarefa, TarefaReagendamento, Cliente, Vendedor, Interacao, Pedido } from '../../types'
@@ -47,12 +47,13 @@ interface TarefaCardProps {
   onReagendar: (tarefa: Tarefa, motivo: string, novaData: string, novaHora: string) => void
   isOverdue: boolean
   isToday: boolean
+  onVerNoFunil?: (cliente: Cliente) => void
 }
 
 const TarefaCard: React.FC<TarefaCardProps> = ({
   tarefa, cliente, vendedor, isGerente,
   onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
-  isOverdue, isToday
+  isOverdue, isToday, onVerNoFunil
 }) => {
   const [expanded, setExpanded] = useState(false)
   const [completing, setCompleting] = useState(false)
@@ -312,6 +313,16 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                     Ligar
                   </a>
                 )}
+                {onVerNoFunil && (
+                  <button
+                    onClick={() => onVerNoFunil(cliente)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-primary-50 text-primary-700 border border-primary-200 rounded-xl transition-all hover:shadow-sm active:scale-95 ml-auto"
+                    title="Ir para este cliente no funil"
+                  >
+                    <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                    Ver no Funil
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -333,7 +344,8 @@ const TarefasView: React.FC<{
   onAddTarefa: (t: Tarefa) => void
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
   showToast?: (tipo: 'success' | 'error', texto: string) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast }) => {
+  onVerNoFunil?: (cliente: Cliente) => void
+}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil }) => {
   const [showModal, setShowModal] = useState(false)
   const [commCliente, setCommCliente] = useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
@@ -666,6 +678,7 @@ const TarefasView: React.FC<{
         onReagendar={handleReagendar}
         isOverdue={overdue}
         isToday={tarefa.data === hoje}
+        onVerNoFunil={onVerNoFunil}
       />
     )
   }

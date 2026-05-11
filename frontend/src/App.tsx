@@ -512,6 +512,7 @@ function App() {
                 moverCliente={moverCliente}
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
                 onNovoCiclo={handleNovoCiclo}
+                onVerNoFunil={(c) => { setActiveView('funil'); setSelectedClientePanel(c) }}
               />
               <PersistentViews
                 activeView={activeView}
