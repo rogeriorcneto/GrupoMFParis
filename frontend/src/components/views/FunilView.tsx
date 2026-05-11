@@ -630,92 +630,85 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden">
-      {/* KPI strip */}
-      <div className="flex items-stretch gap-px bg-gray-200 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 overflow-x-auto">
-        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-5 py-2.5 min-w-max">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Pipeline</span>
-            <span className="text-base font-black text-gray-900 dark:text-gray-100 leading-tight">R$ {totalPipeline.toLocaleString('pt-BR')}</span>
+      {/* KPI bar — cards com mais destaque */}
+      <div className="flex items-center gap-2 px-1 py-2 flex-shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-primary-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Pipeline</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-none mt-0.5">R$ {totalPipeline.toLocaleString('pt-BR')}</p>
           </div>
-          <span className="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-full font-medium">{activeCount}</span>
+          <span className="text-[10px] text-gray-400 ml-1">({activeCount})</span>
         </div>
-        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-5 py-2.5 min-w-max">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-emerald-500 uppercase tracking-widest font-semibold">Receita Prevista</span>
-            <span className="text-base font-black text-emerald-600 dark:text-emerald-400 leading-tight">R$ {Math.round(receitaPonderada).toLocaleString('pt-BR')}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-5 py-2.5 min-w-max">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-indigo-500 uppercase tracking-widest font-semibold">Conversão</span>
-            <span className="text-base font-black text-indigo-600 dark:text-indigo-400 leading-tight">{taxaConversao}%</span>
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Prevista</p>
+            <p className="text-sm font-bold text-green-600 dark:text-green-400 leading-none mt-0.5">R$ {Math.round(receitaPonderada).toLocaleString('pt-BR')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 px-5 py-2.5 min-w-max">
-          <div className="flex flex-col">
-            <span className="text-[9px] text-violet-500 uppercase tracking-widest font-semibold">Ciclo Médio</span>
-            <span className="text-base font-black text-violet-600 dark:text-violet-400 leading-tight">{tempoMedio} dias</span>
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-blue-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Conversão</p>
+            <p className="text-sm font-bold text-primary-600 dark:text-primary-400 leading-none mt-0.5">{taxaConversao}%</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 shadow-sm">
+          <div className="w-2 h-2 rounded-full bg-purple-500" />
+          <div>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-wide">Ciclo Médio</p>
+            <p className="text-sm font-bold text-purple-600 dark:text-purple-400 leading-none mt-0.5">{tempoMedio} dias</p>
           </div>
         </div>
         {alertCount > 0 && (
-          <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950 px-5 py-2.5 ml-auto min-w-max">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs font-bold text-red-600 dark:text-red-400">{alertCount} urgentes</span>
+          <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-xl px-4 py-2 shadow-sm ml-auto">
+            <span className="text-sm">🚨</span>
+            <span className="text-xs font-bold text-red-700 dark:text-red-400">{alertCount} vencendo</span>
           </div>
         )}
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex-shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <div className="flex items-center gap-2 px-1 pb-2 flex-shrink-0 flex-wrap">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">🔍</span>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar cliente..."
-            className="w-full pl-8 pr-6 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 focus:bg-white transition-all"
+            className="w-full pl-7 pr-6 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-400"
           />
-          {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>}
+          {search && <button onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-[10px]">✕</button>}
         </div>
         {isGerente && (
-          <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all">
+          <select value={filterVendedorId} onChange={(e) => setFilterVendedorId(e.target.value ? Number(e.target.value) : '')} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-400">
             <option value="">Todos vendedores</option>
             {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
           </select>
         )}
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all">
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-400">
           <option value="urgencia">Urgência</option>
           <option value="score">Score</option>
           <option value="valor">Valor</option>
           <option value="antigo">Mais antigo</option>
           <option value="recente">Mais recente</option>
         </select>
-        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all" />
-        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Localização" className="px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all" />
+        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-24 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+        <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-24 focus:outline-none focus:ring-2 focus:ring-primary-400" />
 
-        <div className="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-0.5" />
-
-        <button onClick={() => setHideAmostraPerdida(v => !v)}
-          className={`h-7 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium border transition-all ${
-            hideAmostraPerdida ? 'bg-gray-50 border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-700' : 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/20'
-          }`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
-          <span className="text-[10px]">Amt. Perdida</span>
+        <div className="h-5 w-px bg-gray-300" />
+        <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
+          🚫
         </button>
-
         {isGerente && (
           <>
-            <button onClick={() => setHideInativos(v => !v)}
-              className={`h-7 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium border transition-all ${
-                hideInativos ? 'bg-gray-50 border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-300'
-              }`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
-              <span className="text-[10px]">Inativos</span>
+            <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
+              💤
             </button>
-            <button onClick={() => setHidePerdidos(v => !v)}
-              className={`h-7 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-medium border transition-all ${
-                hidePerdidos ? 'bg-gray-50 border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-700' : 'bg-red-50 text-red-600 border-red-200'
-              }`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
-              <span className="text-[10px]">Perdidos</span>
+            <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
+              ❌
             </button>
           </>
         )}
@@ -737,90 +730,76 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
               finally { setSyncing(false) }
             }}
             disabled={syncing}
-            className={`h-7 px-3 flex items-center gap-1.5 rounded-lg text-xs font-medium border transition-all ${
-              syncing ? 'bg-gray-50 text-gray-400 border-gray-200' : 'bg-white text-slate-600 border-gray-200 hover:bg-slate-50 hover:border-slate-300'
-            }`}
+            className={`h-7 px-2 flex items-center gap-1 rounded-md text-xs border transition-colors ${syncing ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'}`}
             title="Sincronizar status dos pedidos com o Omie"
           >
-            {syncing
-              ? <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-              : <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-            }
+            {syncing ? <span className="w-3 h-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : '🔄'}
             <span>Sync Omie</span>
           </button>
         )}
 
         {isGerente && onImportNegocios && (
-          <label className="ml-auto h-7 px-3 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors cursor-pointer text-xs">
+          <label className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1 px-2.5 rounded-lg transition-colors shadow-sm flex items-center gap-1 cursor-pointer text-xs ml-auto">
             <input type="file" accept=".csv" className="hidden" onChange={handleImportNegocios} />
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Importar
+            📥 Importar
           </label>
         )}
         {importStatus && (
-          <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1">
+          <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1">
             <div className="w-2.5 h-2.5 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin" />
-            <span className="text-[10px] text-indigo-700 font-medium">{importStatus}</span>
+            <span className="text-[10px] text-indigo-700">{importStatus}</span>
           </div>
         )}
       </div>
 
       {/* Kanban columns */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50 dark:bg-gray-950">
-        <div className="flex gap-2.5 h-full px-3 py-3" style={{ minWidth: `${displayedStages.length * 290}px` }}>
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 300}px` }}>
           {displayedStages.map((stage) => {
             const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
             const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             const isProposta = stage.key === 'proposta'
             const novoCicloCount = isProposta ? clientesNovoCiclo.length + clientesNovoCicloProposta.length : 0
-            const colAccent: Record<string, { bar: string; count: string; dot: string }> = {
-              lead:           { bar: 'bg-emerald-400',  count: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', dot: 'bg-emerald-400' },
-              'prospecção':   { bar: 'bg-sky-400',      count: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',                 dot: 'bg-sky-400' },
-              amostra:        { bar: 'bg-amber-400',    count: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',         dot: 'bg-amber-400' },
-              amostra_perdida:{ bar: 'bg-orange-400',  count: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',     dot: 'bg-orange-400' },
-              inativo:        { bar: 'bg-gray-300',    count: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',                 dot: 'bg-gray-400' },
-              proposta:       { bar: 'bg-indigo-400',  count: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',     dot: 'bg-indigo-400' },
-              negociacao:     { bar: 'bg-violet-400',  count: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',     dot: 'bg-violet-400' },
-              follow_up:      { bar: 'bg-blue-400',    count: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',             dot: 'bg-blue-400' },
-              perdido:        { bar: 'bg-rose-400',    count: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',             dot: 'bg-rose-400' },
+            // Cor do header de cada coluna
+            const colHeaderColor: Record<string, string> = {
+              lead: 'border-t-2 border-t-emerald-400',
+              'prospecção': 'border-t-2 border-t-sky-400',
+              amostra: 'border-t-2 border-t-amber-400',
+              amostra_perdida: 'border-t-2 border-t-orange-400',
+              inativo: 'border-t-2 border-t-gray-400',
+              proposta: 'border-t-2 border-t-indigo-400',
+              negociacao: 'border-t-2 border-t-purple-400',
+              follow_up: 'border-t-2 border-t-blue-400',
+              perdido: 'border-t-2 border-t-red-400',
             }
-            const accent = colAccent[stage.key] || colAccent.lead
             return (
-              <div key={stage.key} className="flex-1 min-w-[265px] max-w-[370px] flex flex-col bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200/80 dark:border-gray-800 overflow-hidden" onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
-                {/* Accent bar */}
-                <div className={`h-0.5 w-full ${accent.bar} flex-shrink-0`} />
+              <div key={stage.key} className={`flex-1 min-w-[270px] max-w-[380px] flex flex-col bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden ${colHeaderColor[stage.key] || ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
                 {/* Column header */}
-                <div className="px-3.5 pt-3 pb-2.5 flex-shrink-0">
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm leading-none flex-shrink-0">{stage.icon}</span>
-                      <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm truncate leading-none tracking-tight">{stage.title}</h3>
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                <div className="px-3 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm truncate leading-none">{stage.icon} {stage.title}</h3>
+                    <div className="flex items-center gap-1.5">
                       {isProposta && novoCicloCount > 0 && (
                         <button
                           onClick={() => setShowNovosCiclos(v => !v)}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
-                            showNovosCiclos ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 hover:bg-indigo-50 hover:text-indigo-600'
-                          }`}
-                          title={showNovosCiclos ? 'Ocultar novos ciclos' : `${novoCicloCount} prontos para novo ciclo`}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${showNovosCiclos ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-600 hover:bg-blue-50 hover:text-blue-600'}`}
+                          title={showNovosCiclos ? 'Ocultar clientes em novo ciclo (Follow-up)' : `Mostrar ${novoCicloCount} cliente(s) prontos para novo ciclo`}
                         >
-                          <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-                          {novoCicloCount}
+                          🔄 {novoCicloCount}
                         </button>
                       )}
-                      <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full leading-none ${accent.count}`}>{stageClientes.length}</span>
+                      <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
                     </div>
                   </div>
-                  <div className="flex items-baseline gap-1.5 mt-2">
-                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">R$ {stageValor.toLocaleString('pt-BR')}</span>
-                    {stage.prob > 0 && <span className="text-[10px] text-gray-400 font-medium">{Math.round(stage.prob * 100)}%</span>}
+                  <div className="flex items-center justify-between mt-1.5">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">R$ {stageValor.toLocaleString('pt-BR')}</span>
+                    {stage.prob > 0 && <span className="text-[10px] text-gray-400">{Math.round(stage.prob * 100)}% prob.</span>}
                   </div>
                 </div>
 
                 {/* Cards area */}
-                <div className="flex-1 overflow-y-auto px-2.5 pb-2.5 space-y-2 bg-gray-50/60 dark:bg-gray-900/60 border-t border-gray-100 dark:border-gray-800 pt-2">
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {stageClientes.map((cliente) => {
                     const urgencia = getCardUrgencia(cliente)
                     const nextAction = getNextAction(cliente)
@@ -828,82 +807,74 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     return (
                       <div
                         key={cliente.id}
-                        className={`p-3 rounded-xl bg-white dark:bg-gray-800 ${isGerente ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} hover:shadow-md dark:hover:shadow-gray-900/60 transition-all duration-150 ${
-                          urgencia === 'critico' ? 'ring-1 ring-red-200 dark:ring-red-900/50 border-l-2 border-l-red-500' :
-                          urgencia === 'atencao' ? 'ring-1 ring-amber-200 dark:ring-amber-900/50 border-l-2 border-l-amber-400' :
-                          'border border-gray-100 dark:border-gray-700/80 hover:border-gray-200'
+                        className={`p-3 rounded-xl bg-white dark:bg-gray-800 ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-lg dark:hover:shadow-gray-900/50 transition-all duration-150 group ${
+                          urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-red-100 dark:border-red-900/50' :
+                          urgencia === 'atencao' ? 'border-l-[3px] border-l-yellow-400 border border-yellow-100 dark:border-yellow-900/50' :
+                          'border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                         }`}
                         draggable={isGerente}
                         onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
                         onClick={() => onClickCliente?.(cliente)}
                       >
                         <div className="flex items-start justify-between gap-1.5">
-                          <h4 className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 leading-snug line-clamp-2 tracking-tight">{cliente.razaoSocial}</h4>
+                          <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
                           <div className="flex items-center gap-1 flex-shrink-0">
-                            {urgencia === 'critico' && <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />}
-                            {urgencia === 'atencao' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />}
-                            {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 tabular-nums">{cliente.score}</span>}
+                            {urgencia !== 'normal' && <span className="text-xs">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
+                            {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 rounded-full">{cliente.score}</span>}
                           </div>
                         </div>
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{cliente.contatoNome}</span>
-                          {vendedor && <span className="text-[10px] font-semibold flex-shrink-0 text-gray-500 dark:text-gray-400">{vendedor.nome.split(' ')[0]}</span>}
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.contatoNome}</span>
+                          {vendedor && <span className="text-[10px] text-primary-500 dark:text-primary-400 font-semibold flex-shrink-0 bg-primary-50 dark:bg-primary-900/30 px-1.5 py-0.5 rounded-full">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
-                        {/* Ações rápidas */}
-                        <div className="flex gap-1 mt-2.5 flex-wrap">
+                        {/* Ações rápidas — sempre visíveis no topo */}
+                        <div className="flex gap-1 mt-2 flex-wrap">
                           {cliente.etapa === 'amostra' && moverCliente && cliente.statusAmostra === 'entregue' && (
                             <>
-                              <button onClick={(e) => { e.stopPropagation(); moverCliente(cliente.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }}
-                                className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500 text-white rounded-md hover:bg-emerald-600 transition-colors" title="Aprovar amostra → Proposta">Aprovar</button>
-                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }}
-                                className="px-2 py-0.5 text-[10px] font-semibold bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors" title="Reprovar amostra → Amostra Perdida">Reprovar</button>
+                              <button onClick={(e) => { e.stopPropagation(); moverCliente(cliente.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Aprovar amostra → Proposta">✅ Aprovar</button>
+                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
                             </>
                           )}
                           {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(cliente.statusAmostra || '') && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition-colors border border-gray-200" title="Cancelar amostra">Cancelar</button>
+                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-0.5 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium border border-red-100" title="Cancelar amostra e voltar para Prospecção">❌ Cancelar</button>
                           )}
                           {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-600 rounded-md hover:bg-green-50 hover:text-green-700 transition-colors border border-gray-200" title="Abrir WhatsApp">WA</button>
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Abrir WhatsApp">📱 WA</button>
                           )}
                           {cliente.contatoEmail && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-600 rounded-md hover:bg-blue-50 hover:text-blue-700 transition-colors border border-gray-200" title="Enviar Email">Email</button>
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 font-medium border border-blue-100" title="Enviar Email">📧 Email</button>
                           )}
                           {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }}
-                              className="px-2 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-600 rounded-md hover:bg-orange-50 hover:text-orange-700 transition-colors border border-gray-200" title="Ligar com gravação">Ligar</button>
+                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Ligar com gravação">📞 Ligar</button>
                           )}
                         </div>
 
-                        {/* Histórico de Propostas */}
+                        {/* Histórico de Propostas (negociação) */}
                         {(() => {
                           const historico = propostasPorCliente.get(cliente.id)
                           if (!historico || historico.length === 0) return null
                           const ultima = historico[0]
                           return (
-                            <div className="mt-2.5 px-2.5 py-2 bg-violet-50/70 dark:bg-violet-900/10 rounded-lg border border-violet-100 dark:border-violet-800/30">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-[10px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wide">Propostas</span>
-                                <span className="text-[9px] text-violet-500 font-medium">{historico.length}</span>
+                            <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">
+                              <div className="flex items-center gap-1 mb-1">
+                                <span className="text-[10px] font-semibold text-purple-800">💰 Propostas ({historico.length})</span>
                               </div>
                               <div className="space-y-1">
                                 {historico.slice(0, 2).map((p, i) => (
-                                  <div key={p.id || i} className="flex items-center justify-between gap-1">
-                                    <span className="text-[9px] text-gray-500 truncate max-w-[70px]">{p.numero}</span>
-                                    <span className="text-[10px] font-bold text-violet-700">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
-                                    <span className="text-[9px] text-gray-400">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                  <div key={p.id || i} className="flex items-center justify-between text-[9px]">
+                                    <span className="text-gray-600 truncate max-w-[70px]">{p.numero}</span>
+                                    <span className="font-medium text-purple-700">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
+                                    <span className="text-gray-400">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                                   </div>
                                 ))}
-                                {historico.length > 2 && <p className="text-[9px] text-violet-500 text-right">+{historico.length - 2}</p>}
+                                {historico.length > 2 && <p className="text-[9px] text-purple-600 text-center">+{historico.length - 2} mais</p>}
                               </div>
-                              {ultima.frete && <p className="text-[9px] text-gray-400 mt-1">{ultima.frete}</p>}
+                              {ultima.frete && <p className="text-[9px] text-gray-500 mt-1">🚚 {ultima.frete}</p>}
                             </div>
                           )
                         })()}
 
-                        {cliente.valorEstimado ? <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-2">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
+                        {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                         {renderCardInfo(cliente)}
                         {/* Logistics mini-info from pedidos */}
                         {(() => {
@@ -912,41 +883,57 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           const p = info.latest
                           const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando Aprov. Gerência', confirmado: 'Confirmado', cancelado: 'Cancelado' }
                           return (
-                            <div className="mt-2 px-2.5 py-2 bg-gray-50 dark:bg-gray-800/60 rounded-lg border border-gray-100 dark:border-gray-700 space-y-1.5">
-                              <div className="flex items-center justify-between gap-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-md ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                                    {p.tipo === 'bonificacao' ? 'Amostra' : 'Venda'}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-md ${p.status === 'confirmado' ? 'bg-emerald-100 text-emerald-700' : p.status === 'enviado' ? 'bg-amber-100 text-amber-700' : p.status === 'cancelado' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                                    {statusLabel[p.status] || p.status}
-                                  </span>
-                                </div>
-                                {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total}x</span>}
+                            <div className="mt-1.5 p-2 bg-gray-50 rounded-md border border-gray-100 space-y-1">
+                              {/* Tipo + Status */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                  {p.tipo === 'bonificacao' ? '🧪 Amostra' : '🛒 Venda'}
+                                </span>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 text-green-700' : p.status === 'enviado' ? 'bg-amber-100 text-amber-700' : p.status === 'cancelado' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                  {statusLabel[p.status] || p.status}
+                                </span>
+                                {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}
                               </div>
-                              <p className="text-[9px] text-gray-400 font-mono">#{p.omieNumero || p.numero}</p>
+                              {/* Número */}
+                              <p className="text-[10px] text-gray-500 font-medium">📋 #{p.omieNumero || p.numero}</p>
+                              {/* Itens */}
                               {p.itens && p.itens.length > 0 && (
                                 <div className="space-y-0.5">
                                   {p.itens.map((item, idx) => (
-                                    <div key={idx} className="flex items-center justify-between gap-1 text-[10px]">
-                                      <span className="text-gray-600 dark:text-gray-400 truncate" title={item.nomeProduto}>{abreviarProduto(item.nomeProduto)}</span>
-                                      <span className="font-semibold text-gray-800 dark:text-gray-200 whitespace-nowrap flex-shrink-0 tabular-nums">{item.quantidade}×</span>
+                                    <div key={idx} className="text-[10px]">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-gray-700 font-medium leading-tight" title={item.nomeProduto}>
+                                          • {abreviarProduto(item.nomeProduto)}
+                                        </span>
+                                        <span className="font-bold text-gray-900 whitespace-nowrap flex-shrink-0">
+                                          {item.quantidade}x
+                                        </span>
+                                      </div>
+                                      <div className="text-gray-500 pl-2 text-[9px]">
+                                        {(item.preco * item.quantidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </div>
                                     </div>
                                   ))}
-                                  <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-700">
-                                    <span className="text-[9px] text-gray-400">{p.itens.reduce((s, i) => s + i.quantidade, 0)} un</span>
-                                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                  <div className="flex items-center justify-between pt-1 mt-1 border-t border-gray-200">
+                                    <span className="text-[9px] text-gray-500">
+                                      {p.itens.reduce((s, i) => s + i.quantidade, 0)} un
+                                    </span>
+                                    <span className="text-[11px] font-bold text-green-700">
                                       {p.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </span>
                                   </div>
                                 </div>
                               )}
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {p.tipoFrete && <span className="text-[9px] text-gray-500 font-medium">{p.tipoFrete}</span>}
-                                {p.tipoFrete && p.formaPagamento && <span className="text-[9px] text-gray-300">·</span>}
-                                {p.formaPagamento && <span className="text-[9px] text-gray-400 truncate max-w-[110px]">{p.formaPagamento}</span>}
+                              {/* Frete + Pgto */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {p.tipoFrete && (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-700">{p.tipoFrete}</span>
+                                )}
+                                {p.formaPagamento && (
+                                  <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-gray-100 text-gray-600 truncate max-w-[110px]">{p.formaPagamento}</span>
+                                )}
                               </div>
-                              {p.omieStatus && <p className="text-[9px] text-gray-400">Omie: {p.omieStatus}</p>}
+                              {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
                             </div>
                           )
                         })()}
