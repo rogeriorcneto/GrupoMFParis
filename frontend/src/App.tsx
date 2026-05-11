@@ -148,6 +148,8 @@ function App() {
         if (vendedor) {
           setLoggedUser(vendedor)
           await loadAllData()
+          const key = `crm_session_${vendedor.id}`
+          if (!localStorage.getItem(key)) localStorage.setItem(key, new Date().toISOString())
         }
       } catch {
         // Sem sessão ativa, mostra login
@@ -189,6 +191,9 @@ function App() {
         try { await disconnectUserWhatsApp() } catch { /* ignore */ }
         sessionStorage.removeItem('wa_auth_token')
         sessionStorage.removeItem('wa_page_alive')
+        // Clear session timer on logout
+        const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_session_'))
+        allKeys.forEach(k => localStorage.removeItem(k))
         setLoggedUser(null)
         setClientes([])
         setInteracoes([])
@@ -341,6 +346,8 @@ function App() {
         setActiveView(viewsPermitidas[vendedor.cargo][0])
         setLoginUsuario('')
         setLoginSenha('')
+        const key = `crm_session_${vendedor.id}`
+        if (!localStorage.getItem(key)) localStorage.setItem(key, new Date().toISOString())
       } else {
         setLoginError('Usuário não encontrado na equipe')
       }

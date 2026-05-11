@@ -469,7 +469,7 @@ export default function AppRouter({
     case 'integracoes':
       return <IntegracoesView />
     case 'equipe':
-      return <VendedoresView vendedores={vendedores} clientes={clientes}
+      return <VendedoresView vendedores={vendedores} clientes={clientes} loggedUser={loggedUser}
         onAddVendedor={async (email, senha, vendedorData) => {
           try {
             const saved = await db.createVendedorWithAuth(email, senha, vendedorData)

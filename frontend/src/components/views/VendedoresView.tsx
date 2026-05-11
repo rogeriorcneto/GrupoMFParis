@@ -3,12 +3,58 @@ import { PlusIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Vendedor, Cliente } from '../../types'
 import { fetchVendedorHistorico, type VendedorHistoricoItem } from '../../lib/botApi'
 
+function useOnlineStatus(vendedorIds: number[]): Record<number, string | null> {
+  const [status, setStatus] = React.useState<Record<number, string | null>>(() => {
+    const s: Record<number, string | null> = {}
+    vendedorIds.forEach(id => { s[id] = localStorage.getItem(`crm_session_${id}`) })
+    return s
+  })
+  React.useEffect(() => {
+    const update = () => {
+      const s: Record<number, string | null> = {}
+      vendedorIds.forEach(id => { s[id] = localStorage.getItem(`crm_session_${id}`) })
+      setStatus(s)
+    }
+    update()
+    const id = setInterval(update, 5000)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(vendedorIds)])
+  return status
+}
+
+function useSessionTimer(vendedorId: number | null) {
+  const [elapsed, setElapsed] = React.useState<number>(0)
+
+  React.useEffect(() => {
+    if (!vendedorId) { setElapsed(0); return }
+    const key = `crm_session_${vendedorId}`
+    const tick = () => {
+      const start = localStorage.getItem(key)
+      if (start) setElapsed(Math.floor((Date.now() - new Date(start).getTime()) / 1000))
+      else setElapsed(0)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [vendedorId])
+
+  if (elapsed <= 0) return null
+  const h = Math.floor(elapsed / 3600)
+  const m = Math.floor((elapsed % 3600) / 60)
+  const s = elapsed % 60
+  return h > 0
+    ? `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
+    : `${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
+}
+
 const VendedoresView: React.FC<{
   vendedores: Vendedor[]
   clientes: Cliente[]
+  loggedUser: Vendedor | null
   onAddVendedor: (email: string, senha: string, v: Omit<Vendedor, 'id' | 'usuario' | 'senha'>) => void
   onUpdateVendedor: (v: Vendedor) => void
-}> = ({ vendedores, clientes, onAddVendedor, onUpdateVendedor }) => {
+}> = ({ vendedores, clientes, loggedUser, onAddVendedor, onUpdateVendedor }) => {
   const [selectedVendedorId, setSelectedVendedorId] = React.useState<number | null>(null)
   const [showModal, setShowModal] = React.useState(false)
   const [newNome, setNewNome] = React.useState('')
@@ -28,6 +74,10 @@ const VendedoresView: React.FC<{
   const [editMetaConversao, setEditMetaConversao] = React.useState('')
   const [historico, setHistorico] = React.useState<VendedorHistoricoItem[]>([])
   const [historicoLoading, setHistoricoLoading] = React.useState(false)
+
+  const isManager = loggedUser?.cargo === 'gerente' || loggedUser?.cargo === 'sdr'
+  const sessionTimer = useSessionTimer(isManager && selectedVendedorId ? selectedVendedorId : null)
+  const onlineStatus = useOnlineStatus(isManager ? vendedores.map(v => v.id) : [])
 
   const selectedVendedor = vendedores.find(v => v.id === selectedVendedorId) ?? null
 
@@ -130,6 +180,34 @@ const VendedoresView: React.FC<{
             </button>
           </div>
         </div>
+
+        {/* Session Timer — visible only to manager */}
+        {isManager && (
+          <div className={`rounded-apple border p-4 flex items-center justify-between ${
+            sessionTimer
+              ? 'bg-green-50 border-green-200'
+              : 'bg-gray-50 border-gray-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+                sessionTimer ? 'bg-green-500' : 'bg-gray-400'
+              }`} />
+              <div>
+                <p className="text-sm font-semibold text-gray-800">⏱️ Tempo no CRM hoje</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {sessionTimer ? 'Sessão ativa agora' : 'Fora do sistema'}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-2xl font-bold font-mono tracking-tight ${
+                sessionTimer ? 'text-green-700' : 'text-gray-400'
+              }`}>
+                {sessionTimer ?? '--:--'}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">🔐 Credenciais de Acesso</h3>
@@ -250,31 +328,45 @@ const VendedoresView: React.FC<{
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {vendedores.map(v => {
-          const m = getVendedorMetrics(v)
-          const pctVendas = Math.min((m.valorPipeline / v.metaVendas) * 100, 100)
-          return (
-            <div key={v.id} onClick={() => setSelectedVendedorId(v.id)} className="bg-white rounded-apple shadow-apple-sm border-2 border-gray-200 p-6 hover:border-primary-300 transition-all cursor-pointer">
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${v.ativo ? 'bg-primary-100' : 'bg-gray-200'}`}>
-                  <span className={`text-sm font-bold ${v.ativo ? 'text-primary-700' : 'text-gray-500'}`}>{v.avatar}</span>
+            const m = getVendedorMetrics(v)
+            const pctVendas = Math.min((m.valorPipeline / v.metaVendas) * 100, 100)
+            const isOnline = isManager && !!onlineStatus[v.id]
+            return (
+              <div key={v.id} onClick={() => setSelectedVendedorId(v.id)} className={`bg-white rounded-apple shadow-apple-sm border-2 p-6 hover:border-primary-300 transition-all cursor-pointer ${
+                isOnline ? 'border-green-300' : 'border-gray-200'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${v.ativo ? 'bg-primary-100' : 'bg-gray-200'}`}>
+                      <span className={`text-sm font-bold ${v.ativo ? 'text-primary-700' : 'text-gray-500'}`}>{v.avatar}</span>
+                    </div>
+                    {isOnline && (
+                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{v.nome}</h3>
+                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getCargoBadge(v.cargo)}`}>{getCargoLabel(v.cargo)}</span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{v.nome}</h3>
-                  <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getCargoBadge(v.cargo)}`}>{getCargoLabel(v.cargo)}</span>
+                <div className="mt-4 space-y-2">
+                  <div className="flex justify-between text-sm"><span className="text-gray-600">Clientes</span><span className="font-semibold text-gray-900">{m.totalLeads}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-gray-600">Pipeline</span><span className="font-semibold text-gray-900">R$ {m.valorPipeline.toLocaleString('pt-BR')}</span></div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1"><span className="text-gray-500">Meta vendas</span><span className="font-semibold text-gray-700">{pctVendas.toFixed(0)}%</span></div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden"><div className={`h-2 rounded-full ${getBarColor(pctVendas)}`} style={{ width: `${pctVendas}%` }}></div></div>
+                  </div>
                 </div>
+                {isOnline && (
+                  <p className="text-xs text-green-600 font-semibold mt-2 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full inline-block" />
+                    Online agora
+                  </p>
+                )}
+                {!v.ativo && <p className="text-xs text-red-500 mt-2 font-semibold">Inativo</p>}
               </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-sm"><span className="text-gray-600">Clientes</span><span className="font-semibold text-gray-900">{m.totalLeads}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-600">Pipeline</span><span className="font-semibold text-gray-900">R$ {m.valorPipeline.toLocaleString('pt-BR')}</span></div>
-                <div>
-                  <div className="flex justify-between text-xs mb-1"><span className="text-gray-500">Meta vendas</span><span className="font-semibold text-gray-700">{pctVendas.toFixed(0)}%</span></div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden"><div className={`h-2 rounded-full ${getBarColor(pctVendas)}`} style={{ width: `${pctVendas}%` }}></div></div>
-                </div>
-              </div>
-              {!v.ativo && <p className="text-xs text-red-500 mt-2 font-semibold">Inativo</p>}
-            </div>
-          )
-        })}
+            )
+          })}
       </div>
 
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200">
