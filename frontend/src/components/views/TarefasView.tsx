@@ -58,7 +58,6 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
   const [completing, setCompleting] = useState(false)
   const [nota, setNota] = useState(tarefa.descricao || '')
   const [notaSaved, setNotaSaved] = useState(false)
-  const [showReagendar, setShowReagendar] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [novaData, setNovaData] = useState(tarefa.data)
   const [novaHora, setNovaHora] = useState(tarefa.hora || '')
@@ -74,7 +73,6 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
   const handleConfirmReagendar = () => {
     if (!motivo.trim() || !novaData) return
     onReagendar(tarefa, motivo.trim(), novaData, novaHora)
-    setShowReagendar(false)
     setMotivo('')
   }
   const cfg = TIPO_CONFIG[tarefa.tipo] || TIPO_CONFIG.outro
@@ -237,58 +235,38 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </div>
             )}
 
-            {/* Botão Não consegui */}
+            {/* Motivo + reagendar — always visible on pending tasks */}
             {!done && (
-              <div className="mt-2">
-                {!showReagendar ? (
-                  <button
-                    onClick={() => setShowReagendar(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl transition-all"
-                  >
-                    <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-                    Não consegui realizar
-                  </button>
-                ) : (
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-2">
-                    <p className="text-xs font-semibold text-orange-700">⚠️ Por que não conseguiu realizar?</p>
-                    <textarea
-                      value={motivo}
-                      onChange={e => setMotivo(e.target.value)}
-                      rows={2}
-                      placeholder="Ex: Cliente não atendeu, número errado, ocupado..."
-                      className="w-full text-xs text-gray-700 bg-white border border-orange-200 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300"
-                      autoFocus
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  rows={2}
+                  placeholder="Motivo / observação (ex: cliente não atendeu, reagendar...)"
+                  className="w-full text-xs text-gray-600 bg-white/70 border border-gray-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400 transition-all"
+                />
+                {motivo.trim() && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={novaData}
+                      onChange={e => setNovaData(e.target.value)}
+                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white"
                     />
-                    <p className="text-xs font-semibold text-orange-700">🗓️ Reagendar para:</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="date"
-                        value={novaData}
-                        onChange={e => setNovaData(e.target.value)}
-                        className="flex-1 text-xs border border-orange-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
-                      />
-                      <input
-                        type="time"
-                        value={novaHora}
-                        onChange={e => setNovaHora(e.target.value)}
-                        className="w-28 text-xs border border-orange-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowReagendar(false)}
-                        className="flex-1 py-1.5 text-xs font-semibold bg-white text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleConfirmReagendar}
-                        disabled={!motivo.trim() || !novaData}
-                        className="flex-1 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Reagendar
-                      </button>
-                    </div>
+                    <input
+                      type="time"
+                      value={novaHora}
+                      onChange={e => setNovaHora(e.target.value)}
+                      className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white"
+                    />
+                    <button
+                      onClick={handleConfirmReagendar}
+                      disabled={!novaData}
+                      className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-1 whitespace-nowrap"
+                    >
+                      <ArrowUturnRightIcon className="h-3 w-3" />
+                      Reagendar
+                    </button>
                   </div>
                 )}
               </div>
