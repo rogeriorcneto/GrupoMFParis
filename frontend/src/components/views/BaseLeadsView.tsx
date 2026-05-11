@@ -3,6 +3,7 @@ import type { Cliente, Vendedor } from '../../types'
 import * as db from '../../lib/database'
 import { authFetch } from '../../lib/botApi'
 import { placesSearch, placesDetails, placesPhotoUrl, type PlacesSearchResult, type PlacesDetails } from '../../lib/placesApi'
+import { PlacesEnrich } from '../PlacesEnrich'
 
 const BOT_URL = import.meta.env.VITE_BOT_URL || 'http://localhost:3001'
 
@@ -204,6 +205,205 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Modal de detalhes do lead ────────────────────────────────────────────────
+const LeadDetailModal: React.FC<{
+  lead: LeadRf
+  loggedUser: Vendedor | null
+  clientes: Cliente[]
+  setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
+  showToast: (tipo: 'success' | 'error', texto: string) => void
+  onClose: () => void
+  onImported: (cnpj: string) => void
+}> = ({ lead, loggedUser, clientes, setClientes, showToast, onClose, onImported }) => {
+  const cnpjFmt = lead.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+  const cepFmt = lead.cep?.replace(/(\d{5})(\d{3})/, '$1-$2')
+  const cnpjsJaNoCrm = new Set(clientes.map(c => c.cnpj?.replace(/\D/g, '')).filter(Boolean))
+  const jaNoCrm = lead.importado || cnpjsJaNoCrm.has(lead.cnpj)
+  const [importando, setImportando] = useState(false)
+  const [enriched, setEnriched] = useState<{
+    phone?: string; website?: string; googleMapsUrl?: string
+    street?: string; streetNumber?: string; neighborhood?: string
+    city?: string; state?: string; postalCode?: string
+  } | null>(null)
+
+  const importar = async () => {
+    setImportando(true)
+    try {
+      const cep = lead.cep?.replace(/\D/g, '')
+      const cepFormatado = cep?.length === 8 ? `${cep.slice(0,5)}-${cep.slice(5)}` : lead.cep
+      const enderecoCompleto = [lead.logradouro, lead.bairro, lead.municipio, lead.uf].filter(Boolean).join(', ')
+      await db.insertCliente({
+        razaoSocial: lead.razao_social || lead.nome_fantasia || 'Sem nome',
+        nomeFantasia: lead.nome_fantasia || undefined,
+        cnpj: lead.cnpj,
+        contatoNome: '',
+        contatoTelefone: enriched?.phone || lead.telefone || '',
+        contatoEmail: lead.email || '',
+        endereco: enderecoCompleto || undefined,
+        enderecoRua: enriched?.street || lead.logradouro || undefined,
+        enderecoNumero: enriched?.streetNumber || undefined,
+        enderecoBairro: enriched?.neighborhood || lead.bairro || undefined,
+        enderecoCidade: enriched?.city || lead.municipio || undefined,
+        enderecoEstado: enriched?.state || lead.uf || undefined,
+        enderecoCep: enriched?.postalCode || cepFormatado || undefined,
+        cnaePrimario: lead.cnae || undefined,
+        etapa: 'lead',
+        origemLead: 'base_rf',
+        score: 15,
+        ultimaInteracao: new Date().toISOString().split('T')[0],
+        diasInativo: 0,
+        vendedorId: loggedUser?.id,
+      } as Omit<Cliente, 'id'>)
+      await authFetch(`${import.meta.env.VITE_BOT_URL || 'http://localhost:3001'}/api/leads-rf/importar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cnpjs: [lead.cnpj] }),
+      })
+      const novos = await db.fetchClientes()
+      setClientes(novos)
+      onImported(lead.cnpj)
+      showToast('success', `${lead.razao_social || lead.nome_fantasia} importado para o CRM!`)
+      onClose()
+    } catch {
+      showToast('error', 'Erro ao importar lead')
+    } finally {
+      setImportando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-start justify-between rounded-t-2xl z-10">
+          <div className="flex-1 min-w-0 pr-4">
+            <h2 className="text-base font-bold text-gray-900 leading-tight">
+              {lead.razao_social || lead.nome_fantasia || '—'}
+            </h2>
+            {lead.nome_fantasia && lead.nome_fantasia !== lead.razao_social && (
+              <p className="text-xs text-gray-500 mt-0.5">{lead.nome_fantasia}</p>
+            )}
+            <p className="text-xs font-mono text-gray-400 mt-0.5">{cnpjFmt}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 flex-shrink-0 p-1">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* Status badges */}
+          <div className="flex flex-wrap gap-2">
+            {jaNoCrm && (
+              <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold">✅ Já no CRM</span>
+            )}
+            <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-mono">
+              {SEGMENTOS.find(s => s.cnae === lead.cnae)?.label || lead.cnae}
+            </span>
+            <span className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">{lead.uf}</span>
+          </div>
+
+          {/* Dados da RF */}
+          <div className="grid grid-cols-1 gap-2">
+            {/* Localização */}
+            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+              <span className="text-lg flex-shrink-0">📍</span>
+              <div className="text-sm text-gray-700">
+                <p className="font-semibold text-gray-900">{lead.municipio} — {lead.uf}</p>
+                {lead.logradouro && <p className="text-gray-500 text-xs mt-0.5">{lead.logradouro}{lead.bairro ? `, ${lead.bairro}` : ''}{cepFmt ? ` — CEP ${cepFmt}` : ''}</p>}
+              </div>
+            </div>
+
+            {/* Contato RF */}
+            {(lead.telefone || lead.email) && (
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                <span className="text-lg flex-shrink-0">📋</span>
+                <div className="text-sm space-y-1">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dados da Receita Federal</p>
+                  {lead.telefone && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600">📞</span>
+                      <a href={`tel:${lead.telefone}`} className="text-gray-800 font-medium hover:text-blue-600">{lead.telefone}</a>
+                      <a href={`https://wa.me/55${lead.telefone.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
+                        className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-lg hover:bg-green-600">WA</a>
+                    </div>
+                  )}
+                  {lead.email && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600">✉️</span>
+                      <a href={`mailto:${lead.email}`} className="text-gray-800 hover:text-blue-600 text-xs break-all">{lead.email}</a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Enriquecido */}
+            {enriched && (
+              <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <span className="text-lg flex-shrink-0">✨</span>
+                <div className="text-sm space-y-1">
+                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Dados enriquecidos (Google)</p>
+                  {enriched.phone && (
+                    <div className="flex items-center gap-2">
+                      <span>📞</span>
+                      <span className="font-semibold text-gray-900">{enriched.phone}</span>
+                      <a href={`https://wa.me/${enriched.phone.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
+                        className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-lg">WA</a>
+                    </div>
+                  )}
+                  {enriched.website && (
+                    <div className="flex items-center gap-2">
+                      <span>🌐</span>
+                      <a href={enriched.website} target="_blank" rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline text-xs truncate max-w-xs">{enriched.website.replace(/^https?:\/\//, '')}</a>
+                    </div>
+                  )}
+                  {enriched.googleMapsUrl && (
+                    <a href={enriched.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-blue-600">🗺️ Ver no Google Maps</a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* PlacesEnrich */}
+          <PlacesEnrich
+            razaoSocial={lead.razao_social || lead.nome_fantasia || ''}
+            cidade={lead.municipio}
+            onApply={data => setEnriched(data)}
+          />
+
+          {/* Botão importar */}
+          {!jaNoCrm && (
+            <button
+              onClick={importar}
+              disabled={importando}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              {importando ? (
+                <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg> Importando...</>
+              ) : (
+                <>⬇️ Importar para o CRM{enriched ? ' (com dados do Google)' : ''}</>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function BaseLeadsView({ loggedUser, clientes, setClientes, showToast }: Props) {
   const [segmento, setSegmento] = useState<string>('')
   const [uf, setUf] = useState<string>('')
@@ -216,7 +416,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
   const [loading, setLoading] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [importando, setImportando] = useState(false)
-  const [googleOpenCnpj, setGoogleOpenCnpj] = useState<string | null>(null)
+  const [modalLead, setModalLead] = useState<LeadRf | null>(null)
   const [municipios, setMunicipios] = useState<string[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -422,7 +622,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
             type="text"
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Buscar por nome da empresa..."
+            placeholder="Buscar por razão social ou nome fantasia..."
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 flex-1 min-w-[220px]"
           />
         </div>
@@ -485,21 +685,20 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
               return (
                 <div
                   key={lead.cnpj}
-                  onClick={() => importavel && toggleSelecionado(lead.cnpj)}
                   className={`bg-white rounded-lg border transition-all ${
                     !importavel
-                      ? 'opacity-60 cursor-default border-gray-200'
+                      ? 'opacity-60 border-gray-200'
                       : selecionado
-                        ? 'border-blue-500 shadow-sm cursor-pointer ring-1 ring-blue-200'
-                        : 'border-gray-200 hover:border-gray-300 cursor-pointer hover:shadow-sm'
+                        ? 'border-blue-500 shadow-sm ring-1 ring-blue-200'
+                        : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                   }`}
                 >
                   <div className="flex items-start gap-3 p-4">
                     {/* Checkbox */}
-                    <div className="mt-0.5 flex-shrink-0">
+                    <div className="mt-0.5 flex-shrink-0" onClick={() => importavel && toggleSelecionado(lead.cnpj)}>
                       {importavel ? (
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                          selecionado ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                          selecionado ? 'bg-blue-600 border-blue-600' : 'border-gray-300 hover:border-blue-400'
                         }`}>
                           {selecionado && (
                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -518,8 +717,8 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
                       )}
                     </div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
+                    {/* Info — clicável para abrir modal */}
+                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setModalLead(lead)}>
                       <div className="flex items-start justify-between gap-2 flex-wrap">
                         <div>
                           <span className="font-semibold text-gray-900 text-sm">
@@ -557,18 +756,9 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
                         )}
                       </div>
 
-                      {/* Google Places button */}
-                      <div className="mt-2" onClick={e => e.stopPropagation()}>
-                        {googleOpenCnpj !== lead.cnpj ? (
-                          <button
-                            onClick={() => setGoogleOpenCnpj(lead.cnpj)}
-                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all font-medium"
-                          >
-                            🔍 Conferir no Google
-                          </button>
-                        ) : (
-                          <LeadGooglePanel lead={lead} onClose={() => setGoogleOpenCnpj(null)} />
-                        )}
+                      {/* Hint de clique */}
+                      <div className="mt-1.5" onClick={e => e.stopPropagation()}>
+                        <span className="text-xs text-gray-400 italic">Clique para ver detalhes e enriquecer com Google</span>
                       </div>
                     </div>
                   </div>
@@ -579,6 +769,19 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
         )}
 
         {/* Paginação */}
+        {/* Modal de detalhe */}
+        {modalLead && (
+          <LeadDetailModal
+            lead={modalLead}
+            loggedUser={loggedUser}
+            clientes={clientes}
+            setClientes={setClientes}
+            showToast={showToast}
+            onClose={() => setModalLead(null)}
+            onImported={cnpj => setLeads(prev => prev.map(l => l.cnpj === cnpj ? { ...l, importado: true } : l))}
+          />
+        )}
+
         {totalPages > 1 && !loading && (
           <div className="flex items-center justify-center gap-2 mt-6 pb-4">
             <button
