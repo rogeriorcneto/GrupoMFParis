@@ -1,6 +1,209 @@
 import React from 'react'
-import { SparklesIcon } from '@heroicons/react/24/outline'
+import { SparklesIcon, MagnifyingGlassIcon, PhoneIcon, GlobeAltIcon, MapPinIcon, StarIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Interacao, TemplateMsg, Cadencia, Campanha, JobAutomacao } from '../../types'
+import { placesSearch, placesDetails, placesPhotoUrl, type PlacesSearchResult, type PlacesDetails } from '../../lib/placesApi'
+
+// ─── Google Places enrichment inline no painel do lead ───────────────────────
+const LeadPlacesEnrich: React.FC<{ lead: Cliente }> = ({ lead }) => {
+  const [state, setState] = React.useState<'idle' | 'searching' | 'results' | 'loading_details' | 'done'>('idle')
+  const [results, setResults] = React.useState<PlacesSearchResult[]>([])
+  const [details, setDetails] = React.useState<PlacesDetails | null>(null)
+  const prevLeadId = React.useRef<number | null>(null)
+
+  React.useEffect(() => {
+    if (lead.id !== prevLeadId.current) {
+      prevLeadId.current = lead.id
+      setState('idle')
+      setResults([])
+      setDetails(null)
+    }
+  }, [lead.id])
+
+  const handleSearch = async () => {
+    setState('searching')
+    const q = [lead.razaoSocial, lead.enderecoCidade || lead.endereco?.split(',').pop()?.trim()].filter(Boolean).join(' ')
+    const res = await placesSearch(q)
+    setResults(res.slice(0, 5))
+    setState('results')
+  }
+
+  const handleSelect = async (r: PlacesSearchResult) => {
+    setState('loading_details')
+    const d = await placesDetails(r.place_id)
+    if (d && r.photos?.length) d.photoRefs = r.photos.slice(0, 2).map(p => p.photo_reference)
+    setDetails(d)
+    setState('done')
+  }
+
+  const handleReset = () => { setState('idle'); setResults([]); setDetails(null) }
+
+  if (state === 'idle') {
+    return (
+      <div className="mt-4 border-t border-gray-100 pt-4">
+        <button
+          type="button"
+          onClick={handleSearch}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl transition-all"
+        >
+          <MagnifyingGlassIcon className="h-4 w-4" />
+          🔍 Cruzar dados no Google (telefone, site, Instagram...)
+        </button>
+        <p className="text-xs text-gray-400 mt-1">1 consulta por cliente — econômico</p>
+      </div>
+    )
+  }
+
+  if (state === 'searching' || state === 'loading_details') {
+    return (
+      <div className="mt-4 border-t border-gray-100 pt-4 flex items-center gap-2 text-sm text-blue-600">
+        <span className="animate-spin">⏳</span>
+        {state === 'searching' ? 'Buscando no Google Places...' : 'Carregando detalhes...'}
+      </div>
+    )
+  }
+
+  if (state === 'results') {
+    return (
+      <div className="mt-4 border-t border-gray-100 pt-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-blue-700">Qual desses é o cliente?</p>
+          <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600">Cancelar</button>
+        </div>
+        {results.length === 0 && <p className="text-xs text-gray-500">Nenhum resultado encontrado.</p>}
+        {results.map(r => (
+          <button
+            key={r.place_id}
+            onClick={() => handleSelect(r)}
+            className="w-full text-left px-3 py-2 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
+          >
+            <p className="text-sm font-semibold text-gray-800">{r.name}</p>
+            <p className="text-xs text-gray-500 truncate">{r.formatted_address || r.vicinity}</p>
+            {r.rating && (
+              <span className="text-xs text-amber-600 font-medium">⭐ {r.rating} ({r.user_ratings_total?.toLocaleString('pt-BR')} avaliações)</span>
+            )}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  if (state === 'done' && details) {
+    return (
+      <div className="mt-4 border-t border-gray-100 pt-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
+            <SparklesIcon className="h-3.5 w-3.5" /> Dados encontrados no Google
+          </p>
+          <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600">Nova busca</button>
+        </div>
+
+        {/* Fotos */}
+        {details.photoRefs && details.photoRefs.length > 0 && (
+          <div className="flex gap-2">
+            {details.photoRefs.map((ref, i) => (
+              <img key={i} src={placesPhotoUrl(ref, 200)} alt="" className="h-20 w-32 object-cover rounded-xl border border-gray-100 flex-shrink-0"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            ))}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Telefone */}
+          {details.phone && (
+            <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-xl border border-green-200">
+              <PhoneIcon className="h-4 w-4 text-green-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-green-700 font-bold">Telefone</p>
+                <a href={`tel:${details.phone}`} className="text-sm font-semibold text-green-900">{details.phone}</a>
+              </div>
+              <a href={`https://wa.me/${details.phone?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
+                className="ml-auto text-xs bg-green-500 text-white px-2 py-1 rounded-lg hover:bg-green-600 whitespace-nowrap">
+                📱 WhatsApp
+              </a>
+            </div>
+          )}
+
+          {/* Site */}
+          {details.website && (
+            <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-200">
+              <GlobeAltIcon className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs text-blue-700 font-bold">Site</p>
+                <a href={details.website} target="_blank" rel="noopener noreferrer"
+                  className="text-sm font-semibold text-blue-900 hover:underline truncate block max-w-[160px]">
+                  {details.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Instagram hint */}
+          {details.website?.includes('instagram.com') && (
+            <div className="flex items-center gap-2 p-2.5 bg-pink-50 rounded-xl border border-pink-200">
+              <span className="text-pink-500 text-lg">📸</span>
+              <div className="min-w-0">
+                <p className="text-xs text-pink-700 font-bold">Instagram</p>
+                <a href={details.website} target="_blank" rel="noopener noreferrer"
+                  className="text-sm font-semibold text-pink-900 hover:underline truncate block max-w-[160px]">
+                  {details.website.replace('https://www.instagram.com/', '@').replace(/\/$/, '')}
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Rating */}
+          {details.rating && (
+            <div className="flex items-center gap-2 p-2.5 bg-amber-50 rounded-xl border border-amber-200">
+              <StarIcon className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-amber-700 font-bold">Avaliação Google</p>
+                <p className="text-sm font-bold text-amber-900">{details.rating} <span className="text-xs font-normal text-amber-700">({details.totalRatings?.toLocaleString('pt-BR')} avaliações)</span></p>
+              </div>
+            </div>
+          )}
+
+          {/* Endereço */}
+          {details.address && (
+            <div className="flex items-start gap-2 p-2.5 bg-gray-50 rounded-xl border border-gray-200 sm:col-span-2">
+              <MapPinIcon className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-xs text-gray-600 font-bold">Endereço</p>
+                <p className="text-sm text-gray-800">{details.address}</p>
+              </div>
+              {details.googleMapsUrl && (
+                <a href={details.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                  className="ml-auto text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-300 whitespace-nowrap flex-shrink-0">
+                  🗺️ Maps
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Horários */}
+          {details.openingHours && details.openingHours.length > 0 && (
+            <div className="flex items-start gap-2 p-2.5 bg-gray-50 rounded-xl border border-gray-200 sm:col-span-2">
+              <ClockIcon className="h-4 w-4 text-gray-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-gray-600 font-bold mb-1">
+                  Horários —{' '}
+                  <span className={details.isOpen ? 'text-green-600' : 'text-red-500'}>
+                    {details.isOpen ? 'Aberto agora ✅' : 'Fechado agora ❌'}
+                  </span>
+                </p>
+                <div className="text-xs text-gray-600 space-y-0.5">
+                  {details.openingHours.map((h, i) => <p key={i}>{h}</p>)}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const ProspeccaoView: React.FC<{
   clientes: Cliente[]
@@ -169,6 +372,7 @@ const ProspeccaoView: React.FC<{
                 </div>
                 {selectedLead && <div className="text-right"><div className="text-xs text-gray-500">Score</div><div className="text-lg font-bold text-gray-900">{selectedLead.score || 0}</div></div>}
               </div>
+              {selectedLead && <LeadPlacesEnrich lead={selectedLead} />}
               {selectedLead && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                   <div className="rounded-apple border border-gray-200 p-4">
