@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { Cliente, Vendedor } from '../../types'
 import * as db from '../../lib/database'
 import { authFetch } from '../../lib/botApi'
+import { placesSearch, placesDetails, placesPhotoUrl, type PlacesSearchResult, type PlacesDetails } from '../../lib/placesApi'
 
 const BOT_URL = import.meta.env.VITE_BOT_URL || 'http://localhost:3001'
 
@@ -49,6 +50,160 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json()
 }
 
+// ── Excel export ────────────────────────────────────────────────────────────
+function exportToExcel(leads: LeadRf[], filename = 'leads.csv') {
+  const cols = ['CNPJ','Razão Social','Nome Fantasia','CNAE','Município','UF','Logradouro','Bairro','CEP','Telefone','Email']
+  const rows = leads.map(l => [
+    l.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5'),
+    l.razao_social, l.nome_fantasia, l.cnae,
+    l.municipio, l.uf, l.logradouro, l.bairro,
+    l.cep?.replace(/(\d{5})(\d{3})/, '$1-$2'),
+    l.telefone, l.email,
+  ])
+  const bom = '\uFEFF'
+  const csv = bom + [cols, ...rows].map(r => r.map(v => `"${(v||'').toString().replace(/"/g,'""')}"`).join(';')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Google Places mini-panel por lead ────────────────────────────────────────
+const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead, onClose }) => {
+  const [step, setStep] = React.useState<'searching'|'results'|'loading'|'done'>('searching')
+  const [results, setResults] = React.useState<PlacesSearchResult[]>([])
+  const [details, setDetails] = React.useState<PlacesDetails | null>(null)
+
+  React.useEffect(() => {
+    const q = [lead.razao_social || lead.nome_fantasia, lead.municipio, lead.uf].filter(Boolean).join(' ')
+    placesSearch(q).then(r => { setResults(r.slice(0,5)); setStep('results') })
+  }, [])
+
+  const handleSelect = async (r: PlacesSearchResult) => {
+    setStep('loading')
+    const d = await placesDetails(r.place_id)
+    if (d && r.photos?.length) d.photoRefs = r.photos.slice(0,2).map(p => p.photo_reference)
+    setDetails(d); setStep('done')
+  }
+
+  return (
+    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-blue-700">🔍 Google Places</p>
+        <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600">✕ Fechar</button>
+      </div>
+
+      {(step === 'searching') && (
+        <p className="text-xs text-blue-600 flex items-center gap-1"><span className="animate-spin">⏳</span> Buscando...</p>
+      )}
+
+      {step === 'results' && (
+        <div className="space-y-1.5">
+          {results.length === 0 && <p className="text-xs text-gray-500">Nenhum resultado encontrado.</p>}
+          {results.map(r => (
+            <button key={r.place_id} onClick={() => handleSelect(r)}
+              className="w-full text-left px-3 py-2 bg-white rounded-xl border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-all">
+              <p className="text-xs font-semibold text-gray-800">{r.name}</p>
+              <p className="text-xs text-gray-500 truncate">{r.formatted_address || r.vicinity}</p>
+              {r.rating && <span className="text-xs text-amber-600">⭐ {r.rating} ({r.user_ratings_total?.toLocaleString('pt-BR')})</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {step === 'loading' && (
+        <p className="text-xs text-blue-600 flex items-center gap-1"><span className="animate-spin">⏳</span> Carregando detalhes...</p>
+      )}
+
+      {step === 'done' && details && (
+        <div className="space-y-2">
+          {details.photoRefs && details.photoRefs.length > 0 && (
+            <div className="flex gap-1.5">
+              {details.photoRefs.map((ref,i) => (
+                <img key={i} src={placesPhotoUrl(ref,180)} alt="" className="h-16 w-24 object-cover rounded-lg border border-gray-100 flex-shrink-0"
+                  onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-1.5 text-xs">
+            {details.phone && (
+              <div className="flex items-center gap-1.5 p-2 bg-green-50 rounded-lg border border-green-200">
+                <span className="text-green-600">📞</span>
+                <div>
+                  <p className="font-bold text-green-700">Telefone</p>
+                  <a href={`tel:${details.phone}`} className="text-green-900 font-semibold">{details.phone}</a>
+                </div>
+                <a href={`https://wa.me/${details.phone.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
+                  className="ml-auto bg-green-500 text-white px-1.5 py-0.5 rounded text-xs hover:bg-green-600">WA</a>
+              </div>
+            )}
+            {details.website && (
+              <div className="flex items-center gap-1.5 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                <span>🌐</span>
+                <div className="min-w-0">
+                  <p className="font-bold text-blue-700">Site</p>
+                  <a href={details.website} target="_blank" rel="noopener noreferrer"
+                    className="text-blue-900 hover:underline truncate block max-w-[120px]">
+                    {details.website.replace(/^https?:\/\//,'').replace(/\//,'')}
+                  </a>
+                </div>
+              </div>
+            )}
+            {details.website?.includes('instagram.com') && (
+              <div className="flex items-center gap-1.5 p-2 bg-pink-50 rounded-lg border border-pink-200">
+                <span>📸</span>
+                <div className="min-w-0">
+                  <p className="font-bold text-pink-700">Instagram</p>
+                  <a href={details.website} target="_blank" rel="noopener noreferrer"
+                    className="text-pink-900 hover:underline truncate block max-w-[120px]">
+                    {details.website.replace('https://www.instagram.com/','@').replace(/\/$/,'')}
+                  </a>
+                </div>
+              </div>
+            )}
+            {details.rating && (
+              <div className="flex items-center gap-1.5 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                <span>⭐</span>
+                <div>
+                  <p className="font-bold text-amber-700">Google</p>
+                  <p className="text-amber-900 font-semibold">{details.rating} <span className="font-normal text-amber-600">({details.totalRatings?.toLocaleString('pt-BR')})</span></p>
+                </div>
+              </div>
+            )}
+            {details.isOpen !== undefined && (
+              <div className={`flex items-center gap-1.5 p-2 rounded-lg border ${
+                details.isOpen ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+              }`}>
+                <span>{details.isOpen ? '✅' : '❌'}</span>
+                <div>
+                  <p className={`font-bold ${details.isOpen ? 'text-green-700' : 'text-red-600'}`}>
+                    {details.isOpen ? 'Aberto agora' : 'Fechado agora'}
+                  </p>
+                </div>
+              </div>
+            )}
+            {details.googleMapsUrl && (
+              <div className="flex items-center gap-1.5 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                <span>🗺️</span>
+                <div>
+                  <p className="font-bold text-gray-600">Maps</p>
+                  <a href={details.googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="text-gray-800 hover:underline">Ver no Google Maps</a>
+                </div>
+              </div>
+            )}
+          </div>
+          <button onClick={() => { setStep('results') }}
+            className="text-xs text-gray-400 hover:text-gray-600">← Ver outros resultados</button>
+        </div>
+      )}
+    </div>
+  )
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function BaseLeadsView({ loggedUser, clientes, setClientes, showToast }: Props) {
   const [segmento, setSegmento] = useState<string>('')
   const [uf, setUf] = useState<string>('')
@@ -61,6 +216,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
   const [loading, setLoading] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
   const [importando, setImportando] = useState(false)
+  const [googleOpenCnpj, setGoogleOpenCnpj] = useState<string | null>(null)
   const [municipios, setMunicipios] = useState<string[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -186,21 +342,32 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
               235.519 empresas ativas do setor alimentício • Filtradas por CNAE
             </p>
           </div>
-          {selecionados.size > 0 && (
-            <button
-              onClick={importarSelecionados}
-              disabled={importando}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-60"
-            >
-              {importando ? (
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-              ) : '⬇️'}
-              Importar {selecionados.size} lead{selecionados.size > 1 ? 's' : ''}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {leads.length > 0 && (
+              <button
+                onClick={() => exportToExcel(leads, `leads-${uf||'br'}-${municipio||'todos'}.csv`)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                title="Baixar lista em Excel/CSV"
+              >
+                📥 Excel
+              </button>
+            )}
+            {selecionados.size > 0 && (
+              <button
+                onClick={importarSelecionados}
+                disabled={importando}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-60"
+              >
+                {importando ? (
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                  </svg>
+                ) : '⬇️'}
+                Importar {selecionados.size} lead{selecionados.size > 1 ? 's' : ''}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Chips de segmento */}
@@ -387,6 +554,20 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
                           <span className="truncate max-w-[260px]" title={`${lead.logradouro}, ${lead.bairro} — ${cepFmt}`}>
                             {lead.logradouro}{lead.bairro ? `, ${lead.bairro}` : ''}{cepFmt ? ` — ${cepFmt}` : ''}
                           </span>
+                        )}
+                      </div>
+
+                      {/* Google Places button */}
+                      <div className="mt-2" onClick={e => e.stopPropagation()}>
+                        {googleOpenCnpj !== lead.cnpj ? (
+                          <button
+                            onClick={() => setGoogleOpenCnpj(lead.cnpj)}
+                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg transition-all font-medium"
+                          >
+                            🔍 Conferir no Google
+                          </button>
+                        ) : (
+                          <LeadGooglePanel lead={lead} onClose={() => setGoogleOpenCnpj(null)} />
                         )}
                       </div>
                     </div>
