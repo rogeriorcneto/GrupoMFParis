@@ -1,6 +1,7 @@
 import React from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Produto, Vendedor, FormData } from '../types'
+import { PlacesEnrich } from './PlacesEnrich'
 
 const etapaLabels: Record<string, string> = { 'lead': 'Lead', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Am. Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativo', 'perdido': 'Perdido' }
 const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
@@ -242,6 +243,33 @@ export default function ClienteFormModal({
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                       placeholder="Ex: Supermercado BH Ltda" />
                   </div>
+
+                  {/* ── Google Places Enrichment ── */}
+                  <PlacesEnrich
+                    razaoSocial={formData.razaoSocial}
+                    cidade={formData.enderecoCidade}
+                    onApply={data => {
+                      setFormData(prev => ({
+                        ...prev,
+                        ...(data.phone && !prev.contatoTelefone ? { contatoTelefone: data.phone } : {}),
+                        ...(data.phone && !prev.contatoCelular ? { contatoCelular: data.phone } : {}),
+                        ...(data.street && !prev.enderecoRua ? { enderecoRua: data.street } : {}),
+                        ...(data.streetNumber && !prev.enderecoNumero ? { enderecoNumero: data.streetNumber } : {}),
+                        ...(data.neighborhood && !prev.enderecoBairro ? { enderecoBairro: data.neighborhood } : {}),
+                        ...(data.city && !prev.enderecoCidade ? { enderecoCidade: data.city } : {}),
+                        ...(data.state && !prev.enderecoEstado ? { enderecoEstado: data.state } : {}),
+                        ...(data.postalCode && !prev.enderecoCep ? {
+                          enderecoCep: data.postalCode.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2')
+                        } : {}),
+                        redesSociais: [
+                          prev.redesSociais,
+                          data.website && !prev.redesSociais.includes(data.website) ? data.website : '',
+                          data.instagramHint && !prev.redesSociais.includes('instagram') ? data.instagramHint : '',
+                          data.googleMapsUrl && !prev.redesSociais.includes('maps.google') ? data.googleMapsUrl : '',
+                        ].filter(Boolean).join(', '),
+                      }))
+                    }}
+                  />
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Nome Fantasia</label>
                     <input type="text" name="nomeFantasia" value={formData.nomeFantasia} onChange={handleInputChange}

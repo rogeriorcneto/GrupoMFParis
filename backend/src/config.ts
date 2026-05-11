@@ -27,4 +27,5 @@ export const CONFIG = {
   get emailConfigured(): boolean {
     return !!(this.email.host && this.email.user && this.email.pass)
   },
+  googlePlacesKey: envOptional('GOOGLE_PLACES_API_KEY') || '',
 }

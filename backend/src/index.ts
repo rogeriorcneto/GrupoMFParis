@@ -20,6 +20,7 @@ import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
 import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter } from './routes/omie.js'
+import { placesRouter } from './routes/places.js'
 import { traficoRouter } from './routes/trafico.js'
 import { leadsRfRouter } from './routes/leads-rf.js'
 import twilioRouter from './routes/twilio.js'
@@ -1080,6 +1081,7 @@ app.use('/api/tts-websocket', requireAuth, ttsWebSocketRouter)
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
+app.use('/api/places', requireAuth, placesRouter)
 app.use('/api/trafico', requireAuth, requireGerente, traficoRouter)
 app.use('/api/leads-rf', requireAuth, leadsRfRouter)
 
