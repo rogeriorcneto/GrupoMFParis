@@ -5,7 +5,7 @@ import {
   CheckCircleIcon, ClockIcon, FireIcon, CalendarDaysIcon,
   ChevronDownIcon, ChevronUpIcon, FunnelIcon, BoltIcon,
   ExclamationTriangleIcon, ArrowPathIcon, UserCircleIcon,
-  EllipsisHorizontalIcon, InboxIcon
+  EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../../types'
@@ -253,6 +253,32 @@ const TarefasView: React.FC<{
   const [waCliente, setWaCliente] = useState<Cliente | null>(null)
   const [showWorkspace, setShowWorkspace] = useState(false)
   const [wsCliente, setWsCliente] = useState<Cliente | null>(null)
+
+  const handleExportTarefas = () => {
+    const tarefasVisiveis = [...atrasadas, ...deHoje, ...futuras, ...concluidas]
+    if (tarefasVisiveis.length === 0) { alert('Nenhuma tarefa para exportar.'); return }
+    const header = ['ID', 'Título', 'Descrição', 'Data', 'Hora', 'Tipo', 'Status', 'Prioridade', 'Cliente', 'Vendedor']
+    const rows = tarefasVisiveis.map(t => [
+      t.id,
+      `"${(t.titulo || '').replace(/"/g, '""')}"`,
+      `"${(t.descricao || '').replace(/"/g, '""')}"`,
+      t.data,
+      t.hora || '',
+      t.tipo,
+      t.status,
+      t.prioridade,
+      `"${(clientes.find(c => c.id === t.clienteId)?.razaoSocial || '').replace(/"/g, '""')}"`,
+      `"${(vendedores.find(v => v.id === t.vendedorId)?.nome || '').replace(/"/g, '""')}"`
+    ])
+    const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tarefas_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const handleImportTarefas = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -593,10 +619,20 @@ const TarefasView: React.FC<{
                 <RocketLaunchIcon className="h-5 w-5" />
               </button>
 
+              <button
+                onClick={handleExportTarefas}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-green-50 hover:text-green-700 rounded-xl cursor-pointer transition-all text-sm font-medium"
+                title="Exportar tarefas como CSV"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Exportar</span>
+              </button>
+
               {onImportTarefas && (
-                <label className="p-2 bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all" title="Importar CSV">
-                  <input type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImportTarefas} />
-                  <ArrowPathIcon className="h-5 w-5" />
+                <label className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all text-sm font-medium" title="Importar CSV do Agendor">
+                  <input type="file" accept=".csv,.txt" className="hidden" onChange={handleImportTarefas} />
+                  <ArrowUpTrayIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Importar Agendor</span>
                 </label>
               )}
 
