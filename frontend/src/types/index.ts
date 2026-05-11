@@ -262,6 +262,13 @@ export interface JobAutomacao {
   campanhaId?: number
 }
 
+export interface TarefaReagendamento {
+  dataOriginal: string
+  horaOriginal?: string
+  motivo: string
+  reagendadoEm: string
+}
+
 export interface Tarefa {
   id: number
   titulo: string
@@ -273,6 +280,8 @@ export interface Tarefa {
   prioridade: 'alta' | 'media' | 'baixa'
   clienteId?: number
   vendedorId?: number
+  concluidaEm?: string
+  reagendamentos?: TarefaReagendamento[]
 }
 
 export interface Vendedor {

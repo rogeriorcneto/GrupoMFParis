@@ -5,10 +5,11 @@ import {
   CheckCircleIcon, ClockIcon, FireIcon, CalendarDaysIcon,
   ChevronDownIcon, ChevronUpIcon, FunnelIcon, BoltIcon,
   ExclamationTriangleIcon, ArrowPathIcon, UserCircleIcon,
-  EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon
+  EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon,
+  ArrowUturnRightIcon, ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
-import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../../types'
+import type { Tarefa, TarefaReagendamento, Cliente, Vendedor, Interacao, Pedido } from '../../types'
 import { logger } from '../../utils/logger'
 import { formatBrazilianPhone } from '../../utils/validators'
 import { insertInteracao, insertAtividade } from '../../lib/database'
@@ -42,17 +43,40 @@ interface TarefaCardProps {
   onBot: (c: Cliente) => void
   onEmail: (c: Cliente) => void
   onCall: (c: Cliente) => void
+  onUpdateNota: (tarefa: Tarefa, nota: string) => void
+  onReagendar: (tarefa: Tarefa, motivo: string, novaData: string, novaHora: string) => void
   isOverdue: boolean
   isToday: boolean
 }
 
 const TarefaCard: React.FC<TarefaCardProps> = ({
   tarefa, cliente, vendedor, isGerente,
-  onToggle, onWhatsApp, onBot, onEmail, onCall,
+  onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
   isOverdue, isToday
 }) => {
   const [expanded, setExpanded] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [nota, setNota] = useState(tarefa.descricao || '')
+  const [notaSaved, setNotaSaved] = useState(false)
+  const [showReagendar, setShowReagendar] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [novaData, setNovaData] = useState(tarefa.data)
+  const [novaHora, setNovaHora] = useState(tarefa.hora || '')
+
+  const handleSaveNota = () => {
+    if (nota !== (tarefa.descricao || '')) {
+      onUpdateNota(tarefa, nota)
+      setNotaSaved(true)
+      setTimeout(() => setNotaSaved(false), 2000)
+    }
+  }
+
+  const handleConfirmReagendar = () => {
+    if (!motivo.trim() || !novaData) return
+    onReagendar(tarefa, motivo.trim(), novaData, novaHora)
+    setShowReagendar(false)
+    setMotivo('')
+  }
   const cfg = TIPO_CONFIG[tarefa.tipo] || TIPO_CONFIG.outro
   const pri = PRIORIDADE_CONFIG[tarefa.prioridade]
   const done = tarefa.status === 'concluida'
@@ -149,25 +173,55 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </div>
 
               {/* Botão expandir */}
-              {(tarefa.descricao || cliente) && (
-                <button
-                  onClick={() => setExpanded(e => !e)}
-                  className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-white/70 transition-colors"
-                >
-                  {expanded
-                    ? <ChevronUpIcon className="h-4 w-4" />
-                    : <ChevronDownIcon className="h-4 w-4" />
-                  }
-                </button>
-              )}
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-white/70 transition-colors"
+                title={expanded ? 'Recolher' : 'Expandir / Adicionar anotação'}
+              >
+                {expanded
+                  ? <ChevronUpIcon className="h-4 w-4" />
+                  : <ChevronDownIcon className="h-4 w-4" />
+                }
+              </button>
             </div>
 
             {/* Área expandida */}
             {expanded && (
-              <div className="mt-3 pt-3 border-t border-black/5 space-y-2 animate-in slide-in-from-top-1 duration-200">
-                {tarefa.descricao && (
-                  <p className="text-sm text-gray-600 leading-relaxed">{tarefa.descricao}</p>
+              <div className="mt-3 pt-3 border-t border-black/5 space-y-3 animate-in slide-in-from-top-1 duration-200">
+                {/* Histórico de reagendamentos */}
+                {tarefa.reagendamentos && tarefa.reagendamentos.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
+                      <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                      Histórico de tentativas ({tarefa.reagendamentos.length})
+                    </p>
+                    <div className="space-y-1.5">
+                      {tarefa.reagendamentos.map((r, i) => (
+                        <div key={i} className="bg-orange-50 border border-orange-100 rounded-lg px-2.5 py-1.5 text-xs">
+                          <p className="font-semibold text-orange-700">❌ {r.motivo}</p>
+                          <p className="text-gray-400 mt-0.5">
+                            Era: {r.dataOriginal}{r.horaOriginal ? ` às ${r.horaOriginal}` : ''} · Registrado em {new Date(r.reagendadoEm).toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
+                {/* Anotação editável */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
+                    📝 Anotação
+                    {notaSaved && <span className="text-green-600 font-medium">✓ Salvo</span>}
+                  </label>
+                  <textarea
+                    value={nota}
+                    onChange={e => setNota(e.target.value)}
+                    onBlur={handleSaveNota}
+                    rows={3}
+                    placeholder="Escreva suas observações sobre esta tarefa..."
+                    className="w-full text-sm text-gray-700 bg-white/80 border border-gray-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-300 placeholder:text-gray-400 transition-all"
+                  />
+                </div>
                 {cliente && (
                   <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
                     {cliente.contatoNome && <span>👤 {cliente.contatoNome}</span>}
@@ -183,9 +237,66 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </div>
             )}
 
+            {/* Botão Não consegui */}
+            {!done && (
+              <div className="mt-2">
+                {!showReagendar ? (
+                  <button
+                    onClick={() => setShowReagendar(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 rounded-xl transition-all"
+                  >
+                    <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                    Não consegui realizar
+                  </button>
+                ) : (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 space-y-2">
+                    <p className="text-xs font-semibold text-orange-700">⚠️ Por que não conseguiu realizar?</p>
+                    <textarea
+                      value={motivo}
+                      onChange={e => setMotivo(e.target.value)}
+                      rows={2}
+                      placeholder="Ex: Cliente não atendeu, número errado, ocupado..."
+                      className="w-full text-xs text-gray-700 bg-white border border-orange-200 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-2 focus:ring-orange-300"
+                      autoFocus
+                    />
+                    <p className="text-xs font-semibold text-orange-700">🗓️ Reagendar para:</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        value={novaData}
+                        onChange={e => setNovaData(e.target.value)}
+                        className="flex-1 text-xs border border-orange-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                      />
+                      <input
+                        type="time"
+                        value={novaHora}
+                        onChange={e => setNovaHora(e.target.value)}
+                        className="w-28 text-xs border border-orange-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300 bg-white"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowReagendar(false)}
+                        className="flex-1 py-1.5 text-xs font-semibold bg-white text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleConfirmReagendar}
+                        disabled={!motivo.trim() || !novaData}
+                        className="flex-1 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Reagendar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Botões de ação rápida */}
             {!done && cliente && (
-              <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                 {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
                   <>
                     <button
@@ -253,6 +364,7 @@ const TarefasView: React.FC<{
   const [waCliente, setWaCliente] = useState<Cliente | null>(null)
   const [showWorkspace, setShowWorkspace] = useState(false)
   const [wsCliente, setWsCliente] = useState<Cliente | null>(null)
+  const [activeTab, setActiveTab] = useState<'tarefas' | 'historico'>('tarefas')
 
   const handleExportTarefas = () => {
     const tarefasVisiveis = [...atrasadas, ...deHoje, ...futuras, ...concluidas]
@@ -489,7 +601,12 @@ const TarefasView: React.FC<{
     : 0
 
   const toggleStatus = useCallback((tarefa: Tarefa) => {
-    onUpdateTarefa({ ...tarefa, status: tarefa.status === 'pendente' ? 'concluida' : 'pendente' })
+    const novoConcluida = tarefa.status === 'pendente'
+    onUpdateTarefa({
+      ...tarefa,
+      status: novoConcluida ? 'concluida' : 'pendente',
+      concluidaEm: novoConcluida ? new Date().toISOString() : undefined,
+    })
   }, [onUpdateTarefa])
 
   const handleAddTarefa = () => {
@@ -531,6 +648,27 @@ const TarefasView: React.FC<{
     return map
   }, [futuras])
 
+  const handleUpdateNota = useCallback((tarefa: Tarefa, nota: string) => {
+    onUpdateTarefa({ ...tarefa, descricao: nota })
+  }, [onUpdateTarefa])
+
+  const handleReagendar = useCallback((tarefa: Tarefa, motivo: string, novaData: string, novaHora: string) => {
+    const reagendamento: TarefaReagendamento = {
+      dataOriginal: tarefa.data,
+      horaOriginal: tarefa.hora,
+      motivo,
+      reagendadoEm: new Date().toISOString(),
+    }
+    onUpdateTarefa({
+      ...tarefa,
+      data: novaData,
+      hora: novaHora || tarefa.hora,
+      status: 'pendente',
+      reagendamentos: [...(tarefa.reagendamentos || []), reagendamento],
+    })
+    showToast?.('success', `Tarefa reagendada para ${new Date(novaData + 'T00:00:00').toLocaleDateString('pt-BR')}`)
+  }, [onUpdateTarefa, showToast])
+
   const renderCard = (tarefa: Tarefa, overdue = false) => {
     const cliente = clientes.find(c => c.id === tarefa.clienteId)
     const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
@@ -546,6 +684,8 @@ const TarefasView: React.FC<{
         onBot={(c) => setCommCliente(c)}
         onEmail={(c) => setCommCliente(c)}
         onCall={(c) => registerCall(c)}
+        onUpdateNota={handleUpdateNota}
+        onReagendar={handleReagendar}
         isOverdue={overdue}
         isToday={tarefa.data === hoje}
       />
@@ -557,7 +697,37 @@ const TarefasView: React.FC<{
       {/* ── HEADER STICKY ────────────────────────────────── */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center justify-between h-16">
+          {/* Tabs */}
+          <div className="flex gap-1 pt-3 pb-0">
+            <button
+              onClick={() => setActiveTab('tarefas')}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-xl border-b-2 transition-all ${
+                activeTab === 'tarefas'
+                  ? 'border-primary-500 text-primary-700 bg-primary-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <CalendarDaysIcon className="h-4 w-4" />
+              Minhas Tarefas
+            </button>
+            <button
+              onClick={() => setActiveTab('historico')}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-xl border-b-2 transition-all ${
+                activeTab === 'historico'
+                  ? 'border-primary-500 text-primary-700 bg-primary-50'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <ClipboardDocumentListIcon className="h-4 w-4" />
+              Histórico
+              {minhasTarefas.filter(t => t.status === 'concluida').length > 0 && (
+                <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                  {minhasTarefas.filter(t => t.status === 'concluida').length}
+                </span>
+              )}
+            </button>
+          </div>
+          <div className="flex items-center justify-between h-14">
             {/* Saudação + progresso */}
             <div className="flex items-center gap-4">
               <div>
@@ -652,23 +822,101 @@ const TarefasView: React.FC<{
       {/* ── CONTEÚDO ─────────────────────────────────────── */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
 
-        {importStatus && (
-          <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-2">
-            <CheckCircleIcon className="h-4 w-4" />
-            {importStatus}
-          </div>
-        )}
+        {/* ── ABA HISTÓRICO ─────────────────────────── */}
+        {activeTab === 'historico' && (() => {
+          const todas = minhasTarefas.filter(t => t.status === 'concluida')
+            .sort((a, b) => (b.concluidaEm || b.data).localeCompare(a.concluidaEm || a.data))
+          const comReagendamento = minhasTarefas.filter(t => t.reagendamentos && t.reagendamentos.length > 0)
+          return (
+            <>
+              {/* KPIs rápidos */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-bold text-green-700">{todas.length}</p>
+                  <p className="text-xs text-green-600 font-medium mt-0.5">Concluídas</p>
+                </div>
+                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-bold text-orange-700">{comReagendamento.length}</p>
+                  <p className="text-xs text-orange-600 font-medium mt-0.5">Reagendadas</p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-bold text-blue-700">
+                    {todas.length + comReagendamento.length > 0
+                      ? Math.round((todas.length / (todas.length + comReagendamento.length)) * 100)
+                      : 0}%
+                  </p>
+                  <p className="text-xs text-blue-600 font-medium mt-0.5">Taxa de conclusão</p>
+                </div>
+              </div>
 
-        {/* WhatsApp Panel */}
-        {showWhatsApp && (
-          <WhatsAppUserPanel
-            loggedUser={loggedUser}
-            cliente={waCliente}
-            onClose={() => { setShowWhatsApp(false); setWaCliente(null) }}
-            showToast={showToast}
-            compact
-          />
-        )}
+              {todas.length === 0 && comReagendamento.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <ClipboardDocumentListIcon className="h-12 w-12 text-gray-300 mb-3" />
+                  <p className="text-gray-500 font-medium">Nenhuma tarefa no histórico ainda</p>
+                  <p className="text-gray-400 text-sm mt-1">As tarefas concluídas e reagendadas aparecerão aqui.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Concluídas */}
+                  {todas.map(t => {
+                    const cliente = clientes.find(c => c.id === t.clienteId)
+                    const cfg = TIPO_CONFIG[t.tipo] || TIPO_CONFIG.outro
+                    return (
+                      <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{cfg.icon}</span>
+                            <span className="font-semibold text-gray-700 line-through text-sm">{t.titulo}</span>
+                          </div>
+                          <span className="flex-shrink-0 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200">✓ Concluída</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+                          {cliente && <span>🏢 {cliente.razaoSocial}</span>}
+                          <span>🗓️ {new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
+                          {t.concluidaEm && <span>✅ Concluída em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')}</span>}
+                        </div>
+                        {t.descricao && (
+                          <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">📝 {t.descricao}</p>
+                        )}
+                        {t.reagendamentos && t.reagendamentos.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-orange-600">🔁 {t.reagendamentos.length} tentativa(s) anterior(es):</p>
+                            {t.reagendamentos.map((r, i) => (
+                              <div key={i} className="bg-orange-50 rounded-lg px-2.5 py-1.5 text-xs">
+                                <span className="font-medium text-orange-700">❌ {r.motivo}</span>
+                                <span className="text-gray-400 ml-2">· Era {r.dataOriginal}{r.horaOriginal ? ` às ${r.horaOriginal}` : ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )
+        })()}
+
+        {activeTab === 'tarefas' && (
+          <>
+            {importStatus && (
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-4 py-3 rounded-2xl text-sm font-medium flex items-center gap-2">
+                <CheckCircleIcon className="h-4 w-4" />
+                {importStatus}
+              </div>
+            )}
+
+            {/* WhatsApp Panel */}
+            {showWhatsApp && (
+              <WhatsAppUserPanel
+                loggedUser={loggedUser}
+                cliente={waCliente}
+                onClose={() => { setShowWhatsApp(false); setWaCliente(null) }}
+                showToast={showToast}
+                compact
+              />
+            )}
 
         {/* ZONA 1: ATRASADAS */}
         {atrasadas.length > 0 && (
@@ -813,6 +1061,8 @@ const TarefasView: React.FC<{
             </button>
           </div>
         )}
+        </>
+        )}{/* fim activeTab tarefas */}
       </div>
 
       {/* ── MODAIS ───────────────────────────────────────── */}
