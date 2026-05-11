@@ -28,6 +28,78 @@ import AppRouter, { PersistentViews } from './components/AppRouter'
 import GlobalSearch from './components/GlobalSearch'
 import ChatInterno from './components/ChatInterno'
 
+// ── Active-time tracker ─────────────────────────────────────────────────────
+// Stores accumulated active seconds in localStorage.
+// crm_active_secs_<id>  = total seconds accumulated so far (string number)
+// crm_segment_start_<id> = ISO timestamp when current visible segment started
+
+let _activeTimerId: number | null = null
+let _activeVendedorId: number | null = null
+
+function _flushSegment(id: number) {
+  const segKey = `crm_segment_start_${id}`
+  const secsKey = `crm_active_secs_${id}`
+  const segStart = localStorage.getItem(segKey)
+  if (segStart) {
+    const elapsed = Math.floor((Date.now() - new Date(segStart).getTime()) / 1000)
+    const prev = parseInt(localStorage.getItem(secsKey) || '0', 10)
+    localStorage.setItem(secsKey, String(prev + elapsed))
+    localStorage.removeItem(segKey)
+  }
+}
+
+function _startSegment(id: number) {
+  localStorage.setItem(`crm_segment_start_${id}`, new Date().toISOString())
+}
+
+function startActiveTimer(vendedorId: number) {
+  if (_activeTimerId !== null) stopActiveTimer()
+  _activeVendedorId = vendedorId
+
+  // Reset daily if needed (clear if last reset was a different calendar day)
+  const dayKey = `crm_active_day_${vendedorId}`
+  const today = new Date().toISOString().slice(0, 10)
+  if (localStorage.getItem(dayKey) !== today) {
+    localStorage.removeItem(`crm_active_secs_${vendedorId}`)
+    localStorage.removeItem(`crm_segment_start_${vendedorId}`)
+    localStorage.setItem(dayKey, today)
+  }
+
+  // Start first segment if page is currently visible
+  if (!document.hidden) _startSegment(vendedorId)
+
+  const onVisibility = () => {
+    if (!_activeVendedorId) return
+    if (document.hidden) _flushSegment(_activeVendedorId)
+    else _startSegment(_activeVendedorId)
+  }
+  document.addEventListener('visibilitychange', onVisibility)
+
+  // Flush every 10s as a safety net (e.g. before browser kills the page)
+  _activeTimerId = window.setInterval(() => {
+    if (_activeVendedorId && !document.hidden) {
+      _flushSegment(_activeVendedorId)
+      _startSegment(_activeVendedorId)
+    }
+  }, 10_000)
+
+  // Store cleanup so stopActiveTimer can remove the listener
+  ;(startActiveTimer as any)._cleanup = () => {
+    document.removeEventListener('visibilitychange', onVisibility)
+  }
+}
+
+function stopActiveTimer() {
+  if (_activeVendedorId) _flushSegment(_activeVendedorId)
+  if (_activeTimerId !== null) { clearInterval(_activeTimerId); _activeTimerId = null }
+  if (typeof (startActiveTimer as any)._cleanup === 'function') {
+    ;(startActiveTimer as any)._cleanup()
+    ;(startActiveTimer as any)._cleanup = null
+  }
+  _activeVendedorId = null
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 function App() {
   const { newVersionAvailable, reloadApp } = useVersionCheck()
   const { dark, toggleDark } = useDarkMode()
@@ -148,8 +220,7 @@ function App() {
         if (vendedor) {
           setLoggedUser(vendedor)
           await loadAllData()
-          const key = `crm_session_${vendedor.id}`
-          if (!localStorage.getItem(key)) localStorage.setItem(key, new Date().toISOString())
+          startActiveTimer(vendedor.id)
         }
       } catch {
         // Sem sessão ativa, mostra login
@@ -192,7 +263,8 @@ function App() {
         sessionStorage.removeItem('wa_auth_token')
         sessionStorage.removeItem('wa_page_alive')
         // Clear session timer on logout
-        const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_session_'))
+        stopActiveTimer()
+        const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_active_'))
         allKeys.forEach(k => localStorage.removeItem(k))
         setLoggedUser(null)
         setClientes([])
@@ -346,8 +418,7 @@ function App() {
         setActiveView(viewsPermitidas[vendedor.cargo][0])
         setLoginUsuario('')
         setLoginSenha('')
-        const key = `crm_session_${vendedor.id}`
-        if (!localStorage.getItem(key)) localStorage.setItem(key, new Date().toISOString())
+        startActiveTimer(vendedor.id)
       } else {
         setLoginError('Usuário não encontrado na equipe')
       }

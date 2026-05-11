@@ -3,21 +3,37 @@ import { PlusIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Vendedor, Cliente } from '../../types'
 import { fetchVendedorHistorico, type VendedorHistoricoItem } from '../../lib/botApi'
 
-function useOnlineStatus(vendedorIds: number[]): Record<number, string | null> {
-  const [status, setStatus] = React.useState<Record<number, string | null>>(() => {
-    const s: Record<number, string | null> = {}
-    vendedorIds.forEach(id => { s[id] = localStorage.getItem(`crm_session_${id}`) })
+function getActiveSecs(id: number): number {
+  const base = parseInt(localStorage.getItem(`crm_active_secs_${id}`) || '0', 10)
+  const segStart = localStorage.getItem(`crm_segment_start_${id}`)
+  if (!segStart) return base
+  return base + Math.floor((Date.now() - new Date(segStart).getTime()) / 1000)
+}
+
+function formatSecs(secs: number): string {
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  return h > 0
+    ? `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
+    : `${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
+}
+
+function useOnlineStatus(vendedorIds: number[]): Record<number, boolean> {
+  const [status, setStatus] = React.useState<Record<number, boolean>>(() => {
+    const s: Record<number, boolean> = {}
+    vendedorIds.forEach(id => { s[id] = !!localStorage.getItem(`crm_segment_start_${id}`) })
     return s
   })
   React.useEffect(() => {
     const update = () => {
-      const s: Record<number, string | null> = {}
-      vendedorIds.forEach(id => { s[id] = localStorage.getItem(`crm_session_${id}`) })
+      const s: Record<number, boolean> = {}
+      vendedorIds.forEach(id => { s[id] = !!localStorage.getItem(`crm_segment_start_${id}`) })
       setStatus(s)
     }
     update()
-    const id = setInterval(update, 5000)
-    return () => clearInterval(id)
+    const tid = setInterval(update, 5000)
+    return () => clearInterval(tid)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(vendedorIds)])
   return status
@@ -28,24 +44,14 @@ function useSessionTimer(vendedorId: number | null) {
 
   React.useEffect(() => {
     if (!vendedorId) { setElapsed(0); return }
-    const key = `crm_session_${vendedorId}`
-    const tick = () => {
-      const start = localStorage.getItem(key)
-      if (start) setElapsed(Math.floor((Date.now() - new Date(start).getTime()) / 1000))
-      else setElapsed(0)
-    }
+    const tick = () => setElapsed(getActiveSecs(vendedorId))
     tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
+    const tid = setInterval(tick, 1000)
+    return () => clearInterval(tid)
   }, [vendedorId])
 
   if (elapsed <= 0) return null
-  const h = Math.floor(elapsed / 3600)
-  const m = Math.floor((elapsed % 3600) / 60)
-  const s = elapsed % 60
-  return h > 0
-    ? `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
-    : `${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
+  return formatSecs(elapsed)
 }
 
 const VendedoresView: React.FC<{
