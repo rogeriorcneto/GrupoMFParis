@@ -116,7 +116,106 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         return null
       }
 
+      // Função para encontrar cliente duplicado por CNPJ ou Razão Social
+      const findDuplicado = (cliente: Cliente): Cliente | undefined => {
+        return clientes.find(c => {
+          // Prioridade 1: CNPJ exato
+          if (cliente.cnpj && c.cnpj && cliente.cnpj.replace(/[^\d]/g, '') === c.cnpj.replace(/[^\d]/g, '')) {
+            return true
+          }
+          // Prioridade 2: Razão Social similar (>80%)
+          if (cliente.razaoSocial && c.razaoSocial) {
+            const similarity = calculateSimilarity(cliente.razaoSocial.toLowerCase(), c.razaoSocial.toLowerCase())
+            if (similarity > 0.8) {
+              return true
+            }
+          }
+          return false
+        })
+      }
+
+      // Função para calcular similaridade entre strings
+      const calculateSimilarity = (str1: string, str2: string): number => {
+        const longer = str1.length > str2.length ? str1 : str2
+        const shorter = str1.length > str2.length ? str2 : str1
+        if (longer.length === 0) return 1.0
+        const editDistance = levenshteinDistance(longer, shorter)
+        return (longer.length - editDistance) / longer.length
+      }
+
+      // Função para calcular distância de Levenshtein
+      const levenshteinDistance = (str1: string, str2: string): number => {
+        const matrix = []
+        for (let i = 0; i <= str2.length; i++) {
+          matrix[i] = [i]
+        }
+        for (let j = 0; j <= str1.length; j++) {
+          matrix[0][j] = j
+        }
+        for (let i = 1; i <= str2.length; i++) {
+          for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+              matrix[i][j] = matrix[i - 1][j - 1]
+            } else {
+              matrix[i][j] = Math.min(
+                matrix[i - 1][j - 1] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j] + 1
+              )
+            }
+          }
+        }
+        return matrix[str2.length][str1.length]
+      }
+
+      // Função para fazer merge de informações (sobrescrever vazios com novos dados)
+      const mergeClienteInfo = (existente: Cliente, novo: Cliente): Cliente => {
+        const merged = { ...existente }
+        
+        // Lista de campos para verificar e atualizar se o novo não estiver vazio
+        const camposParaAtualizar: (keyof Cliente)[] = [
+          'nomeFantasia', 'cnpj2', 'contatoNome', 'contatoTelefone', 'contatoCelular',
+          'contatoTelefoneFixo', 'contatoEmail', 'enderecoRua', 'enderecoNumero',
+          'enderecoComplemento', 'enderecoBairro', 'enderecoCidade', 'enderecoEstado',
+          'enderecoCep', 'enderecoRua2', 'enderecoNumero2', 'enderecoComplemento2',
+          'enderecoBairro2', 'enderecoCidade2', 'enderecoEstado2', 'enderecoCep2',
+          'cnaePrimario', 'cnaeSecundario', 'whatsapp', 'redesSociais',
+          'produtosInteresse', 'notas', 'website', 'segmento', 'localizacao',
+          'googlePlaceId', 'googleRating', 'googleReviews', 'latitude', 'longitude'
+        ]
+
+        camposParaAtualizar.forEach(campo => {
+          const valorNovo = novo[campo]
+          const valorExistente = existente[campo]
+          
+          // Se o novo valor não estiver vazio e for diferente do existente
+          if (valorNovo !== undefined && valorNovo !== null && valorNovo !== '' && 
+              valorNovo !== valorExistente) {
+            // Para arrays, fazer merge
+            if (Array.isArray(valorNovo) && Array.isArray(valorExistente)) {
+              merged[campo] = [...new Set([...valorExistente, ...valorNovo])]
+            } else {
+              merged[campo] = valorNovo
+            }
+          }
+        })
+
+        // Adicionar às notas existentes se houver novas informações
+        if (novo.notas && novo.notas !== existente.notas) {
+          if (existente.notas) {
+            merged.notas = `${existente.notas} | Atualização: ${novo.notas}`
+          } else {
+            merged.notas = novo.notas
+          }
+        }
+
+        return merged
+      }
+
       const novos: Cliente[] = []
+      const atualizados: { id: number, changes: Partial<Cliente>, razaoSocial: string }[] = []
+      const duplicados: { razaoSocial: string, cnpj: string, motivo: string }[] = []
+
       for (let i = 1; i < lines.length; i++) {
         const vals = parseLine(lines[i])
         const row: Record<string, string> = {}
@@ -182,7 +281,20 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             produtosInteresse = (row['produtos de interesse'] || row['produtos']).split(',').map(p => p.trim()).filter(p => p)
           }
 
-          novos.push({
+          // Parse de vendedor (nome ou ID)
+          let vendedorId: number | undefined
+          const vendedorNome = row['vendedor'] || row['vendedor nome'] || row['responsavel'] || ''
+          if (vendedorNome) {
+            const vendedorEncontrado = vendedores.find(v => 
+              v.nome.toLowerCase().includes(vendedorNome.toLowerCase()) ||
+              vendedorNome.toLowerCase().includes(v.nome.toLowerCase())
+            )
+            if (vendedorEncontrado) {
+              vendedorId = vendedorEncontrado.id
+            }
+          }
+
+          const clienteNovo: Cliente = {
             id: Date.now() + i,
             razaoSocial: razao || fantasia,
             nomeFantasia: fantasia,
@@ -216,13 +328,46 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             website: row['website'] || '',
             segmento: row['segmento'] || '',
             localizacao: row['localizacao'] || row['região'] || row['regiao'] || '',
-            whatsappValido: row['whatsapp'] ? parseBoolean(row['whatsapp válido'] || row['whatsapp validado']) : null
-          })
+            whatsappValido: row['whatsapp'] ? parseBoolean(row['whatsapp válido'] || row['whatsapp validado']) : null,
+            vendedorId
+          }
+
+          // Verificar duplicado
+          const duplicado = findDuplicado(clienteNovo)
+          if (duplicado) {
+            // Fazer merge das informações
+            const merged = mergeClienteInfo(duplicado, clienteNovo)
+            atualizados.push({
+              id: duplicado.id!,
+              changes: merged,
+              razaoSocial: duplicado.razaoSocial
+            })
+            duplicados.push({
+              razaoSocial: duplicado.razaoSocial,
+              cnpj: duplicado.cnpj || 'N/A',
+              motivo: 'CNPJ ou Razão Social similar'
+            })
+          } else {
+            novos.push(clienteNovo)
+          }
         } else {
           // Importação padrão (não-Agendor) - mapeamento completo
           if (!row['razaosocial'] && !row['razao_social'] && !row['nome'] && !row['razão social']) continue
           
-          novos.push({
+          // Parse de vendedor (nome ou ID)
+          let vendedorId: number | undefined
+          const vendedorNome = row['vendedor'] || row['vendedor nome'] || row['responsavel'] || ''
+          if (vendedorNome) {
+            const vendedorEncontrado = vendedores.find(v => 
+              v.nome.toLowerCase().includes(vendedorNome.toLowerCase()) ||
+              vendedorNome.toLowerCase().includes(v.nome.toLowerCase())
+            )
+            if (vendedorEncontrado) {
+              vendedorId = vendedorEncontrado.id
+            }
+          }
+
+          const clienteNovo: Cliente = {
             id: Date.now() + i,
             razaoSocial: row['razaosocial'] || row['razao_social'] || row['razão social'] || row['nome'] || `Importado ${i}`,
             nomeFantasia: row['nomefantasia'] || row['nome_fantasia'] || row['nome fantasia'] || '',
@@ -305,16 +450,76 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             grupoEconomicoId: row['grupoeconomicoid'] || row['grupo_economico_id'] ? parseInt(row['grupoeconomicoid'] || row['grupo_economico_id']) : undefined,
             valorEstimado: parseMoney(row['valorestimado'] || row['valor_estimado'] || row['valor']),
             ultimaInteracao: parseDate(row['ultimainteracao'] || row['ultima_interacao']) || new Date().toISOString().split('T')[0],
-            diasInativo: 0
-          })
+            diasInativo: 0,
+            vendedorId
+          }
+
+          // Verificar duplicado
+          const duplicado = findDuplicado(clienteNovo)
+          if (duplicado) {
+            // Fazer merge das informações
+            const merged = mergeClienteInfo(duplicado, clienteNovo)
+            atualizados.push({
+              id: duplicado.id!,
+              changes: merged,
+              razaoSocial: duplicado.razaoSocial
+            })
+            duplicados.push({
+              razaoSocial: duplicado.razaoSocial,
+              cnpj: duplicado.cnpj || 'N/A',
+              motivo: 'CNPJ ou Razão Social similar'
+            })
+          } else {
+            novos.push(clienteNovo)
+          }
         }
       }
-      if (novos.length === 0) { 
+
+      // Processar atualizações de clientes duplicados
+      if (atualizados.length > 0 && onUpdateCliente) {
+        for (const atualizacao of atualizados) {
+          try {
+            await onUpdateCliente(atualizacao.id, atualizacao.changes)
+          } catch (error) {
+            console.error('Erro ao atualizar cliente duplicado:', error)
+          }
+        }
+      }
+
+      // Importar novos clientes
+      if (novos.length === 0 && atualizados.length === 0) { 
         alert('Nenhum cliente válido encontrado no CSV.\nFormatos aceitos: CSV padrão ou exportação do Agendor.'); 
         return 
       }
-      onImportClientes(novos)
-      alert(`✅ ${novos.length} cliente(s) importado(s) com sucesso!${isAgendor ? '\n📋 Formato Agendor detectado automaticamente.' : ''}\n📊 Todos os campos foram mapeados conforme disponível no CSV.`)
+
+      if (novos.length > 0) {
+        onImportClientes(novos)
+      }
+
+      // Montar mensagem de resultado
+      let mensagem = `✅ Importação concluída!\n\n`
+      if (novos.length > 0) {
+        mensagem += `📥 ${novos.length} cliente(s) novo(s) importado(s)\n`
+      }
+      if (atualizados.length > 0) {
+        mensagem += `🔄 ${atualizados.length} cliente(s) atualizado(s) (duplicados)\n`
+      }
+      if (duplicados.length > 0) {
+        mensagem += `\n📋 Clientes duplicados encontrados:\n`
+        duplicados.slice(0, 5).forEach(d => {
+          mensagem += `• ${d.razaoSocial} (${d.cnpj})\n`
+        })
+        if (duplicados.length > 5) {
+          mensagem += `• ... e mais ${duplicados.length - 5} cliente(s)\n`
+        }
+      }
+      
+      if (isAgendor) {
+        mensagem += `\n📋 Formato Agendor detectado automaticamente.`
+      }
+      mensagem += `\n📊 Todos os campos foram mapeados conforme disponível no CSV.`
+
+      alert(mensagem)
     }
     reader.readAsText(file, 'UTF-8')
     e.target.value = ''
@@ -331,7 +536,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       'enderecoRua2', 'enderecoNumero2', 'enderecoComplemento2', 'enderecoBairro2', 
       'enderecoCidade2', 'enderecoEstado2', 'enderecoCep2', 'cnaePrimario', 'cnaeSecundario',
       'whatsapp', 'redesSociais', 'omieCodigo', 'etapa', 'score', 'ultimaInteracao', 
-      'diasInativo', 'valorEstimado', 'produtosInteresse', 'vendedorId', 'dataEntradaEtapa',
+      'diasInativo', 'valorEstimado', 'produtosInteresse', 'vendedorId', 'vendedorNome', 'dataEntradaEtapa',
       'notas', 'origemLead', 'dataEnvioAmostra', 'statusAmostra', 'dataHomologacao',
       'proximoPedidoPrevisto', 'dataProposta', 'valorProposta', 'resultadoAmostra',
       'dataResultadoAmostra', 'motivoReprovacao', 'statusFollowUp', 'statusSatisfacao',
@@ -356,6 +561,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
     
     // Gerar linhas com todos os dados
     const rows = exportData.map(c => {
+      // Encontrar nome do vendedor
+      const vendedorNome = c.vendedorId ? vendedores.find(v => v.id === c.vendedorId)?.nome || '' : ''
+      
       return [
         escapeCSV(c.razaoSocial),
         escapeCSV(c.nomeFantasia),
@@ -392,6 +600,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         escapeCSV(c.valorEstimado),
         escapeCSV(c.produtosInteresse),
         escapeCSV(c.vendedorId),
+        escapeCSV(vendedorNome), // Adicionar nome do vendedor
         escapeCSV(c.dataEntradaEtapa),
         escapeCSV(c.notas),
         escapeCSV(c.origemLead),
@@ -454,10 +663,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   }
 
   const handleDownloadModelo = () => {
-    // Modelo completo com campos principais
-    const modelo = 'razaoSocial,nomeFantasia,cnpj,contatoNome,contatoTelefone,contatoCelular,contatoEmail,enderecoRua,enderecoNumero,enderecoBairro,enderecoCidade,enderecoEstado,enderecoCep,whatsapp,website,segmento,valorEstimado,etapa,origemLead,notas\n' +
-      '"Padaria Exemplo Ltda","Padaria Exemplo","12.345.678/0001-99","João Silva","(31) 99999-1234","(31) 99999-1234","joao@exemplo.com","Rua das Flores","100","Centro","Belo Horizonte","MG","30100-000","(31) 99999-1234","www.exemplo.com","Alimentício","15000","prospecção","Site","Cliente com potencial de grande pedido","Contato preferencial às 14h"\n' +
-      '"Mercado Modelo S/A","Mercado Modelo","98.765.432/0001-11","Maria Santos","(31) 98888-5678","(31) 98888-5678","maria@modelo.com","Avenida Brasil","500","Funcionários","Contagem","MG","32000-000","(31) 98888-5678","www.modelo.com","Varejo","25000","prospecção","Indicação","Interessado em produtos de panificação","Já é cliente da concorrência"'
+    // Modelo completo com campos principais incluindo vendedor
+    const modelo = 'razaoSocial,nomeFantasia,cnpj,contatoNome,contatoTelefone,contatoCelular,contatoEmail,enderecoRua,enderecoNumero,enderecoBairro,enderecoCidade,enderecoEstado,enderecoCep,whatsapp,website,segmento,valorEstimado,etapa,vendedor,origemLead,notas\n' +
+      '"Padaria Exemplo Ltda","Padaria Exemplo","12.345.678/0001-99","João Silva","(31) 99999-1234","(31) 99999-1234","joao@exemplo.com","Rua das Flores","100","Centro","Belo Horizonte","MG","30100-000","(31) 99999-1234","www.exemplo.com","Alimentício","15000","prospecção","Rafael","Site","Cliente com potencial de grande pedido","Contato preferencial às 14h"\n' +
+      '"Mercado Modelo S/A","Mercado Modelo","98.765.432/0001-11","Maria Santos","(31) 98888-5678","(31) 98888-5678","maria@modelo.com","Avenida Brasil","500","Funcionários","Contagem","MG","32000-000","(31) 98888-5678","www.modelo.com","Varejo","25000","prospecção","Eridiane","Indicação","Interessado em produtos de panificação","Já é cliente da concorrência"'
     const blob = new Blob(['\uFEFF' + modelo], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_clientes_completo.csv'; a.click()
