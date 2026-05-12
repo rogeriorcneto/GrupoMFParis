@@ -205,11 +205,35 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
   const [novaRegra, setNovaRegra] = useState<RegraAutomacao | null>(null)
   const [filtroGatilho, setFiltroGatilho] = useState<string>('todos')
   const [expandedRegras, setExpandedRegras] = useState<Set<number>>(new Set())
+  const [tarefasExistentes, setTarefasExistentes] = useState<Array<{id: string, titulo: string}>>([])
+  const [carregandoTarefas, setCarregandoTarefas] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Carregar regras do banco
+  // Carregar tarefas existentes do CRM
+  const carregarTarefasExistentes = async () => {
+    try {
+      setCarregandoTarefas(true)
+      const tarefas = await db.getTarefas()
+      // Extrair títulos únicos das tarefas
+      const titulosUnicos = Array.from(new Set(tarefas.map(t => t.titulo)))
+        .map(titulo => ({
+          id: titulo,
+          titulo
+        }))
+        .sort((a, b) => a.titulo.localeCompare(b.titulo))
+      setTarefasExistentes(titulosUnicos)
+    } catch (err) {
+      console.error('Erro ao carregar tarefas existentes:', err)
+    } finally {
+      setCarregandoTarefas(false)
+    }
+  }
+
+  // Carregar tarefas e regras do banco
   useEffect(() => {
+    carregarTarefasExistentes()
+    
     const carregarRegras = async () => {
       try {
         setLoading(true)
@@ -713,15 +737,25 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tarefa Específica (opcional)</label>
                   <input
                     type="text"
+                    list="tarefas-existentes"
                     value={regra.condicoes.tarefaEspecifica || ''}
                     onChange={e => setRegra(prev => ({ 
                       ...prev, 
                       condicoes: { ...prev.condicoes, tarefaEspecifica: e.target.value || undefined }
                     }))}
-                    placeholder="Ex: Enviar amostra, Follow-up proposta, Cobrar resultado"
+                    placeholder="Digite ou selecione uma tarefa existente..."
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Disparar apenas quando esta tarefa específica for concluída (exato)</p>
+                  <datalist id="tarefas-existentes">
+                    {tarefasExistentes.map(tarefa => (
+                      <option key={tarefa.id} value={tarefa.titulo}>
+                        {tarefa.titulo}
+                      </option>
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {carregandoTarefas ? 'Carregando tarefas...' : `Disparar apenas quando esta tarefa específica for concluída (exato)`}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarefa Concluída</label>
