@@ -215,12 +215,12 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
 
   const salvarAutomacao = async () => {
     if (!formData.nome.trim()) {
-      alert('Preencha o nome da automação')
+      alert('⚠️ Preencha o nome da automação')
       return
     }
 
     if (formData.acoes.length === 0) {
-      alert('Adicione pelo menos uma ação')
+      alert('⚠️ Adicione pelo menos uma ação')
       return
     }
 
@@ -264,13 +264,13 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
         setEditando(null)
         setMostrarEditor(false)
         
-        alert(editando ? 'Automação atualizada com sucesso!' : 'Automação criada com sucesso!')
+        alert(`✅ ${editando ? 'Automação atualizada' : 'Automação criada'} com sucesso no banco de dados!`)
       } else {
-        alert('Erro ao salvar automação')
+        alert('❌ Erro ao salvar automação no banco')
       }
     } catch (error) {
       console.error('Erro ao salvar automação:', error)
-      alert('Erro ao salvar automação')
+      alert('❌ Erro ao conectar com o banco de dados. Tente novamente.')
     } finally {
       setCarregando(false)
     }
@@ -513,11 +513,22 @@ Como posso ajudar você hoje?`
             ) : (
               /* Editor de Automação */
               <div className="space-y-6">
-                {/* Informações Básicas */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Informações Básicas</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                {/* Indicador de Salvamento */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                  <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-900">Salvamento Automático no Banco de Dados</p>
+                    <p className="text-xs text-blue-700">Esta automação será salva no Supabase e estará disponível para toda a equipe.</p>
+                  </div>
+                </div>
+
+              {/* Informações Básicas */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Informações Básicas</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Nome da Automação *
                       </label>
@@ -657,31 +668,77 @@ Como posso ajudar você hoje?`
                 </div>
 
                 {/* Botões de Ação */}
-                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+                <div className="flex justify-between gap-3 pt-6 border-t border-gray-200">
                   <button
                     onClick={() => {
-                      setMostrarEditor(false)
-                      setEditando(null)
-                      setFormData({
-                        nome: '',
-                        descricao: '',
-                        tipo: 'mensagem',
-                        gatilhoTipo: 'tempo',
-                        gatilhoConfig: {},
-                        acoes: []
-                      })
+                      if (formData.nome.trim() || formData.descricao.trim() || formData.acoes.length > 0) {
+                        if (confirm('Tem certeza que deseja sair sem salvar? Todas as alterações serão perdidas.')) {
+                          setMostrarEditor(false)
+                          setEditando(null)
+                          setFormData({
+                            nome: '',
+                            descricao: '',
+                            tipo: 'mensagem',
+                            gatilhoTipo: 'tempo',
+                            gatilhoConfig: {},
+                            acoes: []
+                          })
+                        }
+                      } else {
+                        setMostrarEditor(false)
+                        setEditando(null)
+                        setFormData({
+                          nome: '',
+                          descricao: '',
+                          tipo: 'mensagem',
+                          gatilhoTipo: 'tempo',
+                          gatilhoConfig: {},
+                          acoes: []
+                        })
+                      }
                     }}
                     className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    Cancelar
+                    Sair sem Salvar
                   </button>
-                  <button
-                    onClick={salvarAutomacao}
-                    disabled={carregando}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                  >
-                    {carregando ? 'Salvando...' : (editando ? 'Atualizar' : 'Criar') + ' Automação'}
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setMostrarEditor(false)
+                        setEditando(null)
+                        setFormData({
+                          nome: '',
+                          descricao: '',
+                          tipo: 'mensagem',
+                          gatilhoTipo: 'tempo',
+                          gatilhoConfig: {},
+                          acoes: []
+                        })
+                      }}
+                      className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={salvarAutomacao}
+                      disabled={carregando}
+                      className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {carregando ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                          Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V2" />
+                          </svg>
+                          {editando ? 'Atualizar' : 'Salvar'} Automação
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
