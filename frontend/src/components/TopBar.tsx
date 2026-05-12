@@ -25,6 +25,8 @@ const viewTitles: Record<ViewType, string> = {
   baseleads: '🍦 Base de Leads RF',
   licitacoes: '🏛️ Licitações Públicas',
   treinamento: '🎓 Academia de Vendas',
+  'configuracao-tarefas': '⚙️ Automação de Tarefas',
+  'configuracao-mensagens': '💬 Mensagens Automáticas',
 }
 
 interface TopBarProps {
