@@ -1,16 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react'
-import {
-  PlusIcon, TrashIcon, PencilIcon, CheckIcon, XMarkIcon,
-  ChevronDownIcon, ChevronUpIcon, Cog6ToothIcon,
-  ClockIcon, ArrowPathIcon, BellIcon, FunnelIcon,
-  PlayIcon, PauseIcon, LightBulbIcon
-} from '@heroicons/react/24/outline'
-import type { Vendedor } from '../../types'
+import React, { useState, useEffect } from 'react'
+import { PlusIcon, PlayIcon, PauseIcon, PencilIcon, TrashIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
 import * as db from '../../lib/database'
+import type { Vendedor } from '../../types'
 
-// Tipos para regras de automação
+// Interface para regras de automação
 interface RegraAutomacao {
-  id: number
+  id?: number
   nome: string
   ativa: boolean
   gatilho: 'mudanca_etapa' | 'inatividade' | 'substatus' | 'data_especifica' | 'reconquista' | 'tarefa_concluida'
@@ -142,11 +137,10 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
     condicoes: { etapaDestino: 'follow_up' },
     acao: {
       titulo: 'Preparar proposta comercial — {cliente}',
-      descricao: 'Cliente em Follow-up. Preparar nova proposta para próximo ciclo de compra.',
+      descricao: 'Cliente satisfeito. Preparar proposta para próximo ciclo de compras.',
       tipo: 'reuniao',
-      prioridade: 'alta',
-      diasPrazo: 15,
-      horaPadrao: '09:00'
+      prioridade: 'media',
+      diasPrazo: 60
     }
   },
   {
@@ -173,26 +167,30 @@ const ETAPAS = [
   { key: 'amostra_perdida', label: 'Amostra Perdida' },
   { key: 'proposta', label: 'Proposta' },
   { key: 'negociacao', label: 'Negociação' },
-  { key: 'follow_up', label: 'Follow-up' },
-  { key: 'inativo', label: 'Inativos' },
-  { key: 'perdido', label: 'Perdido' }
+  { key: 'perdido', label: 'Perdido' },
+  { key: 'homologado', label: 'Homologado' },
+  { key: 'pos_venda', label: 'Pós-venda' },
+  { key: 'follow_up', label: 'Follow-up' }
 ]
 
+// Gatilhos disponíveis
 const GATILHOS = [
-  { key: 'mudanca_etapa', label: 'Mudança de Etapa', desc: 'Quando cliente move de uma etapa para outra' },
-  { key: 'tarefa_concluida', label: 'Tarefa Concluída', desc: 'Quando uma tarefa específica é concluída em uma etapa' },
-  { key: 'inatividade', label: 'Inatividade', desc: 'Quando cliente fica sem interação por X dias' },
-  { key: 'substatus', label: 'Mudança de Sub-status', desc: 'Quando status interno muda (ex: amostra entregue)' },
-  { key: 'data_especifica', label: 'Data Específica', desc: 'X dias após um evento específico' },
-  { key: 'reconquista', label: 'Reconquista', desc: 'Quando cliente perdido pode ser reativado' }
+  { key: 'mudanca_etapa', label: 'Mudança de Etapa no Funil' },
+  { key: 'inatividade', label: 'Inatividade do Cliente' },
+  { key: 'substatus', label: 'Mudança de Sub-status' },
+  { key: 'data_especifica', label: 'Data Específica' },
+  { key: 'reconquista', label: 'Reconquista de Cliente Perdido' },
+  { key: 'tarefa_concluida', label: 'Tarefa Concluída' }
 ]
 
+// Tipos de tarefas
 const TIPOS_TAREFA = [
   { key: 'ligacao', label: 'Ligação', icon: '📞' },
-  { key: 'email', label: 'Email', icon: '📧' },
+  { key: 'email', label: 'E-mail', icon: '📧' },
   { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
   { key: 'reuniao', label: 'Reunião', icon: '🤝' },
-  { key: 'outro', label: 'Outro', icon: '📝' }
+  { key: 'follow-up', label: 'Follow-up', icon: '🔄' },
+  { key: 'outro', label: 'Outro', icon: '📌' }
 ]
 
 interface ConfiguracaoTarefasViewProps {
@@ -251,74 +249,14 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
         }
       } catch (err) {
         console.error('Erro ao carregar regras:', err)
-        setError('Erro ao carregar regras do banco de dados')
-        // Fallback para regras locais
-        setRegras(REGRAS_INICIAIS)
+        setError('Falha ao carregar regras de automação')
       } finally {
         setLoading(false)
       }
     }
+
     carregarRegras()
   }, [])
-
-  const isGerente = loggedUser?.cargo === 'gerente'
-
-  const regrasFiltradas = useMemo(() => {
-    if (filtroGatilho === 'todos') return regras
-    return regras.filter(r => r.gatilho === filtroGatilho)
-  }, [regras, filtroGatilho])
-
-  const toggleRegra = async (id: number) => {
-    const regra = regras.find(r => r.id === id)
-    if (!regra) return
-    
-    const novoStatus = !regra.ativa
-    setRegras(prev => prev.map(r => r.id === id ? { ...r, ativa: novoStatus } : r))
-    
-    try {
-      await db.updateRegraAutomacao(id, { ativa: novoStatus })
-    } catch (err) {
-      console.error('Erro ao atualizar regra:', err)
-      // Reverter em caso de erro
-      setRegras(prev => prev.map(r => r.id === id ? { ...r, ativa: !novoStatus } : r))
-    }
-  }
-
-  const deleteRegra = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir esta regra?')) return
-    
-    try {
-      await db.deleteRegraAutomacao(id)
-      setRegras(prev => prev.filter(r => r.id !== id))
-    } catch (err) {
-      console.error('Erro ao excluir regra:', err)
-      alert('Erro ao excluir regra. Tente novamente.')
-    }
-  }
-
-  const saveRegra = async (regra: RegraAutomacao) => {
-    try {
-      if (regra.id === 0) {
-        // Nova regra
-        const novaRegraDB = await db.insertRegraAutomacao(regra)
-        setRegras(prev => [...prev, novaRegraDB])
-      } else {
-        // Editar existente
-        await db.updateRegraAutomacao(regra.id, regra)
-        setRegras(prev => prev.map(r => r.id === regra.id ? regra : r))
-      }
-      setEditando(null)
-      setNovaRegra(null)
-    } catch (err: any) {
-      console.error('Erro ao salvar regra:', err)
-      const errorMessage = err?.message || ''
-      if (errorMessage.includes('does not exist') || errorMessage.includes('não existe')) {
-        alert('ERRO: A tabela de regras não existe no banco de dados.\n\nExecute o SQL de migração no Supabase:\n/regras_automacao_tarefas_mensagens.sql')
-      } else {
-        alert('Erro ao salvar regra: ' + (err?.message || 'Erro desconhecido'))
-      }
-    }
-  }
 
   const startNovaRegra = () => {
     setNovaRegra({
@@ -346,264 +284,255 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
     })
   }
 
-  if (!isGerente) {
+  const toggleRegra = async (id: number) => {
+    const regra = regras.find(r => r.id === id)
+    if (!regra) return
+    
+    try {
+      await db.updateRegraAutomacao(id, { ativa: !regra.ativa })
+      setRegras(prev => prev.map(r => 
+        r.id === id ? { ...r, ativa: !r.ativa } : r
+      ))
+    } catch (err) {
+      console.error('Erro ao ativar/desativar regra:', err)
+    }
+  }
+
+  const deleteRegra = async (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir esta regra?')) return
+    
+    try {
+      await db.deleteRegraAutomacao(id)
+      setRegras(prev => prev.filter(r => r.id !== id))
+    } catch (err) {
+      console.error('Erro ao excluir regra:', err)
+    }
+  }
+
+  const saveRegra = async (regra: RegraAutomacao) => {
+    try {
+      if (regra.id === 0) {
+        // Nova regra
+        const nova = await db.insertRegraAutomacao(regra)
+        setRegras(prev => [...prev, nova])
+        setNovaRegra(null)
+      } else {
+        // Editar regra
+        await db.updateRegraAutomacao(regra.id, regra)
+        setRegras(prev => prev.map(r => r.id === regra.id ? regra : r))
+        setEditando(null)
+      }
+    } catch (err) {
+      console.error('Erro ao salvar regra:', err)
+      alert('Erro ao salvar regra. Tente novamente.')
+    }
+  }
+
+  const regrasFiltradas = filtroGatilho === 'todos' 
+    ? regras 
+    : regras.filter(r => r.gatilho === filtroGatilho)
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white border border-gray-200 p-8 text-center">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Acesso Restrito</h2>
-            <p className="text-gray-500">Apenas gerentes podem configurar automações de tarefas.</p>
-          </div>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Carregando regras de automação...</div>
       </div>
     )
   }
 
-  if (loading) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Carregando regras...</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-red-500">{error}</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-6 py-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">Automação de Tarefas</h1>
-              <p className="text-sm text-gray-500 mt-0.5">Configure regras para criar tarefas automaticamente</p>
-            </div>
-            <button
-              onClick={startNovaRegra}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Nova Regra
-            </button>
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Automação de Tarefas</h1>
+            <p className="text-gray-600 mt-1">Configure regras para criar tarefas automaticamente</p>
           </div>
+          <button
+            onClick={startNovaRegra}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Nova Regra
+          </button>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6">
-        {/* Stats simplificados */}
-        <div className="flex items-center gap-6 mb-6 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900">{regras.length}</span>
-            <span className="text-gray-500">regras totais</span>
-          </div>
-          <div className="w-px h-4 bg-gray-300" />
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-green-600">{regras.filter(r => r.ativa).length}</span>
-            <span className="text-gray-500">ativas</span>
-          </div>
-          <div className="w-px h-4 bg-gray-300" />
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-400">{regras.filter(r => !r.ativa).length}</span>
-            <span className="text-gray-500">inativas</span>
-          </div>
-        </div>
-
-        {/* Filtros inline */}
-        <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1">
-          <span className="text-sm text-gray-500 mr-2">Filtrar:</span>
-          <button
-            onClick={() => setFiltroGatilho('todos')}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              filtroGatilho === 'todos' 
-                ? 'bg-blue-100 text-blue-700' 
-                : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
-            }`}
+      {/* Filtros */}
+      <div className="mb-6">
+        <div className="flex items-center gap-4">
+          <label className="text-sm font-medium text-gray-700">Filtrar por gatilho:</label>
+          <select
+            value={filtroGatilho}
+            onChange={e => setFiltroGatilho(e.target.value)}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            Todas
-          </button>
-          {GATILHOS.map(g => (
-            <button
-              key={g.key}
-              onClick={() => setFiltroGatilho(g.key)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                filtroGatilho === g.key 
-                  ? 'bg-blue-100 text-blue-700' 
-                  : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              {g.label}
-            </button>
-          ))}
+            <option value="todos">Todos</option>
+            {GATILHOS.map(gatilho => (
+              <option key={gatilho.key} value={gatilho.key}>
+                {gatilho.label}
+              </option>
+            ))}
+          </select>
         </div>
+      </div>
 
-        {/* Lista de Regras */}
-        <div className="space-y-4">
-          {/* Nova Regra Form */}
-          {novaRegra && (
-            <RegraForm
-              regra={novaRegra}
-              onSave={saveRegra}
-              onCancel={() => setNovaRegra(null)}
-              isNova={true}
-              tarefasExistentes={tarefasExistentes}
-              carregandoTarefas={carregandoTarefas}
-            />
-          )}
+      {/* Lista de Regras */}
+      <div className="space-y-4">
+        {/* Nova Regra Form */}
+        {novaRegra && (
+          <RegraForm
+            regra={novaRegra}
+            onSave={saveRegra}
+            onCancel={() => setNovaRegra(null)}
+            isNova={true}
+            tarefasExistentes={tarefasExistentes}
+            carregandoTarefas={carregandoTarefas}
+          />
+        )}
 
-          {/* Regras existentes */}
-          {regrasFiltradas.map(regra => (
-            <div key={regra.id}>
-                        <button
-                          onClick={() => toggleRegra(regra.id)}
-                          className={`mt-0.5 flex-shrink-0 w-8 h-8 rounded flex items-center justify-center transition-colors ${
-                            regra.ativa ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
-                          }`}
-                          title={regra.ativa ? 'Desativar regra' : 'Ativar regra'}
-                        >
-                          {regra.ativa ? <PlayIcon className="h-4 w-4" /> : <PauseIcon className="h-4 w-4" />}
-                        </button>
+        {/* Regras existentes */}
+        {regrasFiltradas.map(regra => (
+          <div key={regra.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className={`font-semibold ${regra.ativa ? 'text-gray-900' : 'text-gray-500'}`}>
+                      {regra.nome}
+                    </h3>
+                    {!regra.ativa && (
+                      <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">
+                        Inativa
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="text-sm text-gray-600 mb-3">
+                    <span className="font-medium">Gatilho:</span> {GATILHOS.find(g => g.key === regra.gatilho)?.label}
+                    {regra.condicoes.tarefaEspecifica && (
+                      <span className="ml-2">• Tarefa: "{regra.condicoes.tarefaEspecifica}"</span>
+                    )}
+                    {regra.condicoes.etapaDestino && (
+                      <span className="ml-2">• Etapa: {ETAPAS.find(e => e.key === regra.condicoes.etapaDestino)?.label}</span>
+                    )}
+                  </div>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className={`font-medium text-sm ${regra.ativa ? 'text-gray-900' : 'text-gray-500'}`}>
-                              {regra.nome}
-                            </h3>
-                            {!regra.ativa && (
-                              <span className="text-xs text-gray-400">(inativa)</span>
-                            )}
-                          </div>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-medium">Ação:</span> Criar tarefa "{regra.acao.titulo}" 
+                    <span className="ml-2">({regra.acao.diasPrazo} dias{regra.acao.horaPadrao ? ` às ${regra.acao.horaPadrao}` : ''})</span>
+                  </div>
+                </div>
 
-                          <p className="text-xs text-gray-500 mb-2">
-                            {GATILHOS.find(g => g.key === regra.gatilho)?.label}
-                            {regra.condicoes.tarefaEspecifica && (
-                              <> • "{regra.condicoes.tarefaEspecifica}"</>
-                            )}
-                            {regra.condicoes.etapaDestino && (
-                              <> • {ETAPAS.find(e => e.key === regra.condicoes.etapaDestino)?.label}</>
-                            )}
-                            {regra.condicoes.diasInatividade && (
-                              <> • Inatividade: {regra.condicoes.diasInatividade}d</>
-                            )}
-                            {regra.condicoes.tipoTarefaConcluida && regra.condicoes.tipoTarefaConcluida !== 'qualquer' && (
-                              <> • {TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.icon} {TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.label}</>
-                            )}
-                            {regra.condicoes.etapaCliente && (
-                              <> em {ETAPAS.find(e => e.key === regra.condicoes.etapaCliente)?.label}</>
-                            )}
-                            {regra.condicoes.subStatus && (
-                              <> • {regra.condicoes.subStatus}</>
-                            )}
-                          </p>
+                <div className="flex items-center gap-2 ml-4">
+                  <button
+                    onClick={() => toggleRegra(regra.id!)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      regra.ativa 
+                        ? 'bg-green-100 text-green-600 hover:bg-green-200' 
+                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                    }`}
+                    title={regra.ativa ? 'Desativar' : 'Ativar'}
+                  >
+                    {regra.ativa ? <PauseIcon className="h-4 w-4" /> : <PlayIcon className="h-4 w-4" />}
+                  </button>
+                  
+                  <button
+                    onClick={() => setEditando(regra.id!)}
+                    className="p-2 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                    title="Editar"
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                  </button>
+                  
+                  <button
+                    onClick={() => deleteRegra(regra.id!)}
+                    className="p-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                    title="Excluir"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
+                  
+                  <button
+                    onClick={() => toggleExpand(regra.id!)}
+                    className="p-2 text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    title="Expandir"
+                  >
+                    {expandedRegras.has(regra.id!) ? 
+                      <ChevronUpIcon className="h-4 w-4" /> : 
+                      <ChevronDownIcon className="h-4 w-4" />
+                    }
+                  </button>
+                </div>
+              </div>
 
-                          {/* Preview da ação */}
-                          <div className="flex items-center gap-2 text-xs">
-                            <span>{TIPOS_TAREFA.find(t => t.key === regra.acao.tipo)?.icon}</span>
-                            <span className="text-gray-700 truncate">{regra.acao.titulo}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-xs ${
-                              regra.acao.prioridade === 'alta' ? 'bg-red-50 text-red-600' :
-                              regra.acao.prioridade === 'media' ? 'bg-amber-50 text-amber-600' :
-                              'bg-blue-50 text-blue-600'
-                            }`}>
-                              {regra.acao.prioridade}
-                            </span>
-                            <span className="text-gray-400">• {regra.acao.diasPrazo}d</span>
-                          </div>
-                        </div>
+              {/* Detalhes expandidos */}
+              {expandedRegras.has(regra.id!) && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Condições</h4>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        {regra.condicoes.etapaOrigem && (
+                          <div>• Etapa origem: {ETAPAS.find(e => e.key === regra.condicoes.etapaOrigem)?.label}</div>
+                        )}
+                        {regra.condicoes.etapaDestino && (
+                          <div>• Etapa destino: {ETAPAS.find(e => e.key === regra.condicoes.etapaDestino)?.label}</div>
+                        )}
+                        {regra.condicoes.diasInatividade && (
+                          <div>• Dias inatividade: {regra.condicoes.diasInatividade}</div>
+                        )}
+                        {regra.condicoes.subStatus && (
+                          <div>• Sub-status: {regra.condicoes.subStatus}</div>
+                        )}
+                        {regra.condicoes.tipoTarefaConcluida && regra.condicoes.tipoTarefaConcluida !== 'qualquer' && (
+                          <div>• Tipo tarefa: {TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.label}</div>
+                        )}
+                        {regra.condicoes.etapaCliente && (
+                          <div>• Etapa cliente: {ETAPAS.find(e => e.key === regra.condicoes.etapaCliente)?.label}</div>
+                        )}
                       </div>
-
-                      <div className="flex items-center gap-0.5 flex-shrink-0">
-                        <button
-                          onClick={() => toggleExpand(regra.id)}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          {expandedRegras.has(regra.id) ? (
-                            <ChevronUpIcon className="h-4 w-4" />
-                          ) : (
-                            <ChevronDownIcon className="h-4 w-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => setEditando(regra.id)}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteRegra(regra.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Ação</h4>
+                      <div className="space-y-1 text-sm text-gray-600">
+                        <div>• Título: {regra.acao.titulo}</div>
+                        <div>• Descrição: {regra.acao.descricao}</div>
+                        <div>• Tipo: {TIPOS_TAREFA.find(t => t.key === regra.acao.tipo)?.label}</div>
+                        <div>• Prioridade: {regra.acao.prioridade}</div>
+                        <div>• Prazo: {regra.acao.diasPrazo} dias{regra.acao.horaPadrao ? ` às ${regra.acao.horaPadrao}` : ''}</div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Detalhes expandidos */}
-                  {expandedRegras.has(regra.id) && (
-                    <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-                      <div className="grid grid-cols-2 gap-6 text-sm">
-                        <div>
-                          <p className="font-medium text-gray-700 mb-2">Condições:</p>
-                          <div className="bg-gray-50 rounded-lg p-3 space-y-1">
-                            {regra.condicoes.etapaOrigem && (
-                              <p><span className="text-gray-500">Etapa origem:</span> {ETAPAS.find(e => e.key === regra.condicoes.etapaOrigem)?.label}</p>
-                            )}
-                            {regra.condicoes.etapaDestino && (
-                              <p><span className="text-gray-500">Etapa destino:</span> {ETAPAS.find(e => e.key === regra.condicoes.etapaDestino)?.label}</p>
-                            )}
-                            {regra.condicoes.diasInatividade && (
-                              <p><span className="text-gray-500">Dias inatividade:</span> {regra.condicoes.diasInatividade}</p>
-                            )}
-                            {regra.condicoes.subStatus && (
-                              <p><span className="text-gray-500">Sub-status:</span> {regra.condicoes.subStatus}</p>
-                            )}
-                            {regra.condicoes.tarefaEspecifica && (
-                              <p><span className="text-gray-500">Tarefa específica:</span> "{regra.condicoes.tarefaEspecifica}"</p>
-                            )}
-                            {regra.condicoes.tipoTarefaConcluida && (
-                              <p><span className="text-gray-500">Tipo de tarefa:</span> {regra.condicoes.tipoTarefaConcluida === 'qualquer' ? 'Qualquer tipo' : TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.label}</p>
-                            )}
-                            {regra.condicoes.etapaCliente && (
-                              <p><span className="text-gray-500">Etapa do cliente:</span> {ETAPAS.find(e => e.key === regra.condicoes.etapaCliente)?.label}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-700 mb-2">Ação (Tarefa criada):</p>
-                          <div className="bg-primary-50 rounded-lg p-3 space-y-1">
-                            <p><span className="text-gray-500">Título:</span> {regra.acao.titulo}</p>
-                            <p><span className="text-gray-500">Descrição:</span> {regra.acao.descricao}</p>
-                            <p><span className="text-gray-500">Tipo:</span> {TIPOS_TAREFA.find(t => t.key === regra.acao.tipo)?.label}</p>
-                            <p><span className="text-gray-500">Prioridade:</span> {regra.acao.prioridade}</p>
-                            <p><span className="text-gray-500">Prazo:</span> {regra.acao.diasPrazo} dias{regra.acao.horaPadrao ? ` às ${regra.acao.horaPadrao}` : ''}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
-          ))}
-        </div>
-
-        {/* Info */}
-        <div className="mt-8 bg-blue-50 rounded-2xl border border-blue-200 p-5">
-          <div className="flex items-start gap-3">
-            <LightBulbIcon className="h-5 w-5 text-blue-600 mt-0.5" />
-            <div>
-              <h4 className="font-semibold text-blue-900 mb-1">Como funciona?</h4>
-              <p className="text-sm text-blue-700">
-                Quando um evento configurado ocorre (ex: cliente muda de etapa), o sistema automaticamente cria uma tarefa 
-                atribuída ao vendedor responsável. Use <code className="bg-blue-100 px-1 rounded">{'{cliente}'}</code> no título 
-                para incluir o nome do cliente automaticamente.
-              </p>
-            </div>
           </div>
-        </div>
+        ))}
       </div>
+
+      {regrasFiltradas.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-gray-500 mb-4">Nenhuma regra encontrada</div>
+          <button
+            onClick={startNovaRegra}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Criar Primeira Regra
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -618,7 +547,14 @@ interface RegraFormProps {
   carregandoTarefas: boolean
 }
 
-const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCancel, isNova, tarefasExistentes, carregandoTarefas }) => {
+const RegraForm: React.FC<RegraFormProps> = ({ 
+  regra: initialRegra, 
+  onSave, 
+  onCancel, 
+  isNova, 
+  tarefasExistentes, 
+  carregandoTarefas 
+}) => {
   const [regra, setRegra] = useState(initialRegra)
 
   const handleSave = () => {
@@ -630,180 +566,178 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
   }
 
   return (
-    <div className="bg-white border border-gray-200 shadow-sm">
-      <div className="p-5">
-        <div className="mb-5">
-          <h3 className="font-medium text-gray-900">{isNova ? 'Nova Regra de Automação' : 'Editar Regra'}</h3>
-          <p className="text-sm text-gray-500">Configure quando e como criar a tarefa automaticamente</p>
+    <div className="bg-white rounded-lg border border-blue-200 overflow-hidden">
+      <div className="p-4 bg-blue-50 border-b border-blue-200">
+        <h3 className="font-semibold text-blue-900">
+          {isNova ? 'Nova Regra de Automação' : 'Editar Regra'}
+        </h3>
+      </div>
+      
+      <div className="p-4 space-y-4">
+        {/* Nome da regra */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Regra</label>
+          <input
+            type="text"
+            value={regra.nome}
+            onChange={e => setRegra(prev => ({ ...prev, nome: e.target.value }))}
+            placeholder="Ex: Follow-up após amostra"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
 
-        <div className="grid grid-cols-2 gap-5">
-          {/* Nome e Gatilho */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Regra</label>
-              <input
-                type="text"
-                value={regra.nome}
-                onChange={e => setRegra(prev => ({ ...prev, nome: e.target.value }))}
-                placeholder="Ex: Follow-up após amostra"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-              />
-            </div>
+        {/* Gatilho */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Gatilho</label>
+          <select
+            value={regra.gatilho}
+            onChange={e => setRegra(prev => ({ 
+              ...prev, 
+              gatilho: e.target.value as RegraAutomacao['gatilho'],
+              condicoes: {} // Reset condições ao mudar gatilho
+            }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {GATILHOS.map(gatilho => (
+              <option key={gatilho.key} value={gatilho.key}>
+                {gatilho.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
+        {/* Condições baseadas no gatilho */}
+        {regra.gatilho === 'mudanca_etapa' && (
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Gatilho (Evento)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Etapa Origem (opcional)</label>
               <select
-                value={regra.gatilho}
+                value={regra.condicoes.etapaOrigem || ''}
                 onChange={e => setRegra(prev => ({ 
                   ...prev, 
-                  gatilho: e.target.value as any,
-                  condicoes: {}
+                  condicoes: { ...prev.condicoes, etapaOrigem: e.target.value || undefined }
                 }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {GATILHOS.map(g => (
-                  <option key={g.key} value={g.key}>{g.label} - {g.desc}</option>
+                <option value="">Qualquer etapa</option>
+                {ETAPAS.map(etapa => (
+                  <option key={etapa.key} value={etapa.key}>
+                    {etapa.label}
+                  </option>
                 ))}
               </select>
             </div>
-
-            {/* Condições específicas */}
-            {regra.gatilho === 'mudanca_etapa' && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Etapa de Origem (opcional)</label>
-                  <select
-                    value={regra.condicoes.etapaOrigem || ''}
-                    onChange={e => setRegra(prev => ({ 
-                      ...prev, 
-                      condicoes: { ...prev.condicoes, etapaOrigem: e.target.value || undefined }
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">Qualquer etapa</option>
-                    {ETAPAS.map(e => (
-                      <option key={e.key} value={e.key}>{e.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Etapa de Destino</label>
-                  <select
-                    value={regra.condicoes.etapaDestino || ''}
-                    onChange={e => setRegra(prev => ({ 
-                      ...prev, 
-                      condicoes: { ...prev.condicoes, etapaDestino: e.target.value }
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">Selecione...</option>
-                    {ETAPAS.map(e => (
-                      <option key={e.key} value={e.key}>{e.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {regra.gatilho === 'inatividade' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dias de Inatividade</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={regra.condicoes.diasInatividade || 7}
-                  onChange={e => setRegra(prev => ({ 
-                    ...prev, 
-                    condicoes: { ...prev.condicoes, diasInatividade: parseInt(e.target.value) }
-                  }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            )}
-
-            {regra.gatilho === 'tarefa_concluida' && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tarefa Específica (opcional)</label>
-                  <input
-                    type="text"
-                    list="tarefas-existentes"
-                    value={regra.condicoes.tarefaEspecifica || ''}
-                    onChange={e => setRegra(prev => ({ 
-                      ...prev, 
-                      condicoes: { ...prev.condicoes, tarefaEspecifica: e.target.value || undefined }
-                    }))}
-                    placeholder="Digite ou selecione uma tarefa existente..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  />
-                  <datalist id="tarefas-existentes">
-                    {tarefasExistentes.map(tarefa => (
-                      <option key={tarefa.id} value={tarefa.titulo}>
-                        {tarefa.titulo}
-                      </option>
-                    ))}
-                  </datalist>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {carregandoTarefas ? 'Carregando tarefas...' : `Disparar apenas quando esta tarefa específica for concluída (exato)`}
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarefa Concluída</label>
-                  <select
-                    value={regra.condicoes.tipoTarefaConcluida || 'qualquer'}
-                    onChange={e => setRegra(prev => ({ 
-                      ...prev, 
-                      condicoes: { ...prev.condicoes, tipoTarefaConcluida: e.target.value as any }
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="qualquer">Qualquer tipo</option>
-                    {TIPOS_TAREFA.map(t => (
-                      <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Disparar quando uma tarefa deste tipo for concluída</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Etapa do Cliente (Kanban)</label>
-                  <select
-                    value={regra.condicoes.etapaCliente || ''}
-                    onChange={e => setRegra(prev => ({ 
-                      ...prev, 
-                      condicoes: { ...prev.condicoes, etapaCliente: e.target.value || undefined }
-                    }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                  >
-                    <option value="">Qualquer etapa</option>
-                    {ETAPAS.map(e => (
-                      <option key={e.key} value={e.key}>{e.label}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Apenas se o cliente estiver nesta etapa do funil</p>
-                </div>
-              </div>
-            )}
-
-            {regra.gatilho === 'substatus' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Sub-status</label>
-                <input
-                  type="text"
-                  value={regra.condicoes.subStatus || ''}
-                  onChange={e => setRegra(prev => ({ 
-                    ...prev, 
-                    condicoes: { ...prev.condicoes, subStatus: e.target.value }
-                  }))}
-                  placeholder="Ex: entregue, liberada, aprovada"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Etapa Destino</label>
+              <select
+                value={regra.condicoes.etapaDestino || ''}
+                onChange={e => setRegra(prev => ({ 
+                  ...prev, 
+                  condicoes: { ...prev.condicoes, etapaDestino: e.target.value || undefined }
+                }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Selecione...</option>
+                {ETAPAS.map(etapa => (
+                  <option key={etapa.key} value={etapa.key}>
+                    {etapa.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+        )}
 
-          {/* Ação */}
+        {regra.gatilho === 'inatividade' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Dias de Inatividade</label>
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={regra.condicoes.diasInatividade || ''}
+              onChange={e => setRegra(prev => ({ 
+                ...prev, 
+                condicoes: { ...prev.condicoes, diasInatividade: parseInt(e.target.value) }
+              }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
+        {regra.gatilho === 'tarefa_concluida' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tarefa Específica (opcional)</label>
+              <input
+                type="text"
+                list="tarefas-existentes"
+                value={regra.condicoes.tarefaEspecifica || ''}
+                onChange={e => setRegra(prev => ({ 
+                  ...prev, 
+                  condicoes: { ...prev.condicoes, tarefaEspecifica: e.target.value || undefined }
+                }))}
+                placeholder="Digite ou selecione uma tarefa existente..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="tarefas-existentes">
+                {tarefasExistentes.map(tarefa => (
+                  <option key={tarefa.id} value={tarefa.titulo}>
+                    {tarefa.titulo}
+                  </option>
+                ))}
+              </datalist>
+              <p className="text-xs text-gray-500 mt-1">
+                {carregandoTarefas ? 'Carregando tarefas...' : 'Disparar apenas quando esta tarefa específica for concluída (exato)'}
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarefa</label>
+                <select
+                  value={regra.condicoes.tipoTarefaConcluida || 'qualquer'}
+                  onChange={e => setRegra(prev => ({ 
+                    ...prev, 
+                    condicoes: { ...prev.condicoes, tipoTarefaConcluida: e.target.value as any }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="qualquer">Qualquer tipo</option>
+                  {TIPOS_TAREFA.map(tipo => (
+                    <option key={tipo.key} value={tipo.key}>
+                      {tipo.icon} {tipo.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Etapa do Cliente</label>
+                <select
+                  value={regra.condicoes.etapaCliente || ''}
+                  onChange={e => setRegra(prev => ({ 
+                    ...prev, 
+                    condicoes: { ...prev.condicoes, etapaCliente: e.target.value || undefined }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Qualquer etapa</option>
+                  {ETAPAS.map(etapa => (
+                    <option key={etapa.key} value={etapa.key}>
+                      {etapa.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Ação */}
+        <div className="border-t pt-4">
+          <h4 className="font-medium text-gray-900 mb-3">Ação (Tarefa a ser criada)</h4>
+          
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Título da Tarefa</label>
@@ -815,9 +749,9 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                   acao: { ...prev.acao, titulo: e.target.value }
                 }))}
                 placeholder="Ex: Follow-up — {cliente}"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-              <p className="text-xs text-gray-500 mt-1">Use {'{cliente}'} para nome do cliente</p>
+              <p className="text-xs text-gray-500 mt-1">Use {'{cliente}'} para incluir o nome do cliente</p>
             </div>
 
             <div>
@@ -828,13 +762,13 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                   ...prev, 
                   acao: { ...prev.acao, descricao: e.target.value }
                 }))}
-                rows={2}
+                rows={3}
                 placeholder="Descreva o objetivo da tarefa"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
                 <select
@@ -843,13 +777,16 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                     ...prev, 
                     acao: { ...prev.acao, tipo: e.target.value as any }
                   }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {TIPOS_TAREFA.map(t => (
-                    <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
+                  {TIPOS_TAREFA.map(tipo => (
+                    <option key={tipo.key} value={tipo.key}>
+                      {tipo.icon} {tipo.label}
+                    </option>
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
                 <select
@@ -858,13 +795,14 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                     ...prev, 
                     acao: { ...prev.acao, prioridade: e.target.value as any }
                   }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="alta">Alta</option>
                   <option value="media">Média</option>
                   <option value="baixa">Baixa</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Prazo (dias)</label>
                 <input
@@ -876,41 +814,39 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                     ...prev, 
                     acao: { ...prev.acao, diasPrazo: parseInt(e.target.value) || 0 }
                   }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Horário Padrão (opcional)</label>
-              <input
-                type="time"
-                value={regra.acao.horaPadrao || ''}
-                onChange={e => setRegra(prev => ({ 
-                  ...prev, 
-                  acao: { ...prev.acao, horaPadrao: e.target.value || undefined }
-                }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">Deixe em branco para "sem horário"</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Horário (opcional)</label>
+                <input
+                  type="time"
+                  value={regra.acao.horaPadrao || ''}
+                  onChange={e => setRegra(prev => ({ 
+                    ...prev, 
+                    acao: { ...prev.acao, horaPadrao: e.target.value || undefined }
+                  }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Botões */}
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+        <div className="flex justify-end gap-3 pt-4 border-t">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
+            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            <CheckIcon className="h-4 w-4" />
-            Salvar Regra
+            {isNova ? 'Criar Regra' : 'Salvar Alterações'}
           </button>
         </div>
       </div>
