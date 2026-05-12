@@ -289,9 +289,14 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
       }
       setEditando(null)
       setNovaRegra(null)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao salvar regra:', err)
-      alert('Erro ao salvar regra. Tente novamente.')
+      const errorMessage = err?.message || ''
+      if (errorMessage.includes('does not exist') || errorMessage.includes('não existe')) {
+        alert('ERRO: A tabela de regras não existe no banco de dados.\n\nExecute o SQL de migração no Supabase:\n/regras_automacao_tarefas_mensagens.sql')
+      } else {
+        alert('Erro ao salvar regra: ' + (err?.message || 'Erro desconhecido'))
+      }
     }
   }
 

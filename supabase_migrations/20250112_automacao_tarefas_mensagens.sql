@@ -22,11 +22,11 @@ CREATE INDEX IF NOT EXISTS idx_regras_automacao_gatilho ON regras_automacao(gati
 ALTER TABLE regras_automacao ENABLE ROW LEVEL SECURITY;
 
 -- Política: Permitir SELECT para todos os usuários autenticados
-CREATE POLICY "Permitir SELECT para usuários autenticados" ON regras_automacao
+CREATE POLICY IF NOT EXISTS "Permitir SELECT para usuários autenticados" ON regras_automacao
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Política: Permitir INSERT/UPDATE/DELETE apenas para gerentes
-CREATE POLICY "Permitir modificações apenas para gerentes" ON regras_automacao
+CREATE POLICY IF NOT EXISTS "Permitir modificações apenas para gerentes" ON regras_automacao
   FOR ALL USING (
     EXISTS (
       SELECT 1 FROM vendedores 
@@ -60,11 +60,11 @@ CREATE INDEX IF NOT EXISTS idx_mensagens_automacao_gatilho ON mensagens_automaca
 ALTER TABLE mensagens_automacao ENABLE ROW LEVEL SECURITY;
 
 -- Política: Permitir SELECT para todos os usuários autenticados
-CREATE POLICY "Permitir SELECT mensagens para usuários autenticados" ON mensagens_automacao
+CREATE POLICY IF NOT EXISTS "Permitir SELECT mensagens para usuários autenticados" ON mensagens_automacao
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Política: Permitir INSERT/UPDATE/DELETE apenas para gerentes
-CREATE POLICY "Permitir modificações mensagens apenas para gerentes" ON mensagens_automacao
+CREATE POLICY IF NOT EXISTS "Permitir modificações mensagens apenas para gerentes" ON mensagens_automacao
   FOR ALL USING (
     EXISTS (
       SELECT 1 FROM vendedores 
