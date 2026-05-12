@@ -214,14 +214,14 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
   const carregarTarefasExistentes = async () => {
     try {
       setCarregandoTarefas(true)
-      const tarefas = await db.getTarefas()
+      const tarefas = await db.fetchTarefas()
       // Extrair títulos únicos das tarefas
       const titulosUnicos = Array.from(new Set(tarefas.map(t => t.titulo)))
         .map(titulo => ({
           id: titulo,
           titulo
         }))
-        .sort((a, b) => a.titulo.localeCompare(b.titulo))
+        .sort((a, b) => (a.titulo || '').localeCompare(b.titulo || ''))
       setTarefasExistentes(titulosUnicos)
     } catch (err) {
       console.error('Erro ao carregar tarefas existentes:', err)
@@ -446,25 +446,15 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
               regra={novaRegra}
               onSave={saveRegra}
               onCancel={() => setNovaRegra(null)}
-              isNova
+              isNova={true}
+              tarefasExistentes={tarefasExistentes}
+              carregandoTarefas={carregandoTarefas}
             />
           )}
 
           {/* Regras existentes */}
           {regrasFiltradas.map(regra => (
             <div key={regra.id}>
-              {editando === regra.id ? (
-                <RegraForm
-                  regra={regra}
-                  onSave={saveRegra}
-                  onCancel={() => setEditando(null)}
-                />
-              ) : (
-                <div className={`bg-white border ${regra.ativa ? 'border-gray-200' : 'border-gray-200 bg-gray-50/30'}`}>
-                  <div className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        {/* Ícone de status */}
                         <button
                           onClick={() => toggleRegra(regra.id)}
                           className={`mt-0.5 flex-shrink-0 w-8 h-8 rounded flex items-center justify-center transition-colors ${
@@ -623,10 +613,12 @@ interface RegraFormProps {
   regra: RegraAutomacao
   onSave: (regra: RegraAutomacao) => void
   onCancel: () => void
-  isNova?: boolean
+  isNova: boolean
+  tarefasExistentes: Array<{id: string, titulo: string}>
+  carregandoTarefas: boolean
 }
 
-const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCancel, isNova }) => {
+const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCancel, isNova, tarefasExistentes, carregandoTarefas }) => {
   const [regra, setRegra] = useState(initialRegra)
 
   const handleSave = () => {
