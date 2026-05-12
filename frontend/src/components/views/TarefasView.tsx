@@ -229,21 +229,6 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                     </div>
                   </div>
                 )}
-                {/* Anotação editável */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
-                    📝 Anotação
-                    {notaSaved && <span className="text-green-600 font-medium">✓ Salvo</span>}
-                  </label>
-                  <textarea
-                    value={nota}
-                    onChange={e => setNota(e.target.value)}
-                    onBlur={handleSaveNota}
-                    rows={3}
-                    placeholder="Escreva suas observações sobre esta tarefa..."
-                    className="w-full text-sm text-gray-700 bg-white/80 border border-gray-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-300 placeholder:text-gray-400 transition-all"
-                  />
-                </div>
                 {cliente && (
                   <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
                     {cliente.contatoNome && <span>👤 {cliente.contatoNome}</span>}
