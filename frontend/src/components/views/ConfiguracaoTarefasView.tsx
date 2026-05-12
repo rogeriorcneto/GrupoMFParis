@@ -21,6 +21,7 @@ interface RegraAutomacao {
     subStatus?: string
     diasDesdeEvento?: number
     tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
+    tarefaEspecifica?: string
     etapaCliente?: string
   }
   acao: {
@@ -29,7 +30,6 @@ interface RegraAutomacao {
     tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
     prioridade: 'alta' | 'media' | 'baixa'
     diasPrazo: number
-    horaPadrao: string
   }
 }
 
@@ -46,8 +46,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Verificar se o cliente recebeu e analisou a amostra',
       tipo: 'ligacao',
       prioridade: 'media',
-      diasPrazo: 20,
-      horaPadrao: '10:00'
+      diasPrazo: 20
     }
   },
   {
@@ -76,8 +75,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Amostra aprovada. Preparar e enviar proposta comercial.',
       tipo: 'reuniao',
       prioridade: 'alta',
-      diasPrazo: 5,
-      horaPadrao: '10:00'
+      diasPrazo: 5
     }
   },
   {
@@ -91,8 +89,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Verificar se o cliente analisou a proposta.',
       tipo: 'ligacao',
       prioridade: 'media',
-      diasPrazo: 15,
-      horaPadrao: '10:00'
+      diasPrazo: 15
     }
   },
   {
@@ -106,8 +103,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Verificar retorno da proposta comercial enviada.',
       tipo: 'ligacao',
       prioridade: 'alta',
-      diasPrazo: 7,
-      horaPadrao: '10:00'
+      diasPrazo: 7
     }
   },
   {
@@ -166,8 +162,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Amostra reprovada. Avaliar se vale tentar novamente.',
       tipo: 'reuniao',
       prioridade: 'alta',
-      diasPrazo: 3,
-      horaPadrao: '10:00'
+      diasPrazo: 3
     }
   }
 ]
@@ -315,8 +310,7 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
         descricao: '',
         tipo: 'ligacao',
         prioridade: 'media',
-        diasPrazo: 7,
-        horaPadrao: '10:00'
+        diasPrazo: 7
       }
     })
   }
@@ -471,6 +465,9 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
 
                           <p className="text-xs text-gray-500 mb-2">
                             {GATILHOS.find(g => g.key === regra.gatilho)?.label}
+                            {regra.condicoes.tarefaEspecifica && (
+                              <> • "{regra.condicoes.tarefaEspecifica}"</>
+                            )}
                             {regra.condicoes.etapaDestino && (
                               <> • {ETAPAS.find(e => e.key === regra.condicoes.etapaDestino)?.label}</>
                             )}
@@ -550,6 +547,9 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
                             {regra.condicoes.subStatus && (
                               <p><span className="text-gray-500">Sub-status:</span> {regra.condicoes.subStatus}</p>
                             )}
+                            {regra.condicoes.tarefaEspecifica && (
+                              <p><span className="text-gray-500">Tarefa específica:</span> "{regra.condicoes.tarefaEspecifica}"</p>
+                            )}
                             {regra.condicoes.tipoTarefaConcluida && (
                               <p><span className="text-gray-500">Tipo de tarefa:</span> {regra.condicoes.tipoTarefaConcluida === 'qualquer' ? 'Qualquer tipo' : TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.label}</p>
                             )}
@@ -565,7 +565,7 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
                             <p><span className="text-gray-500">Descrição:</span> {regra.acao.descricao}</p>
                             <p><span className="text-gray-500">Tipo:</span> {TIPOS_TAREFA.find(t => t.key === regra.acao.tipo)?.label}</p>
                             <p><span className="text-gray-500">Prioridade:</span> {regra.acao.prioridade}</p>
-                            <p><span className="text-gray-500">Prazo:</span> {regra.acao.diasPrazo} dias às {regra.acao.horaPadrao}</p>
+                            <p><span className="text-gray-500">Prazo:</span> {regra.acao.diasPrazo} dias</p>
                           </div>
                         </div>
                       </div>
@@ -712,6 +712,20 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
             {regra.gatilho === 'tarefa_concluida' && (
               <div className="space-y-3">
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tarefa Específica (opcional)</label>
+                  <input
+                    type="text"
+                    value={regra.condicoes.tarefaEspecifica || ''}
+                    onChange={e => setRegra(prev => ({ 
+                      ...prev, 
+                      condicoes: { ...prev.condicoes, tarefaEspecifica: e.target.value || undefined }
+                    }))}
+                    placeholder="Ex: Enviar amostra, Follow-up proposta, Cobrar resultado"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Disparar apenas quando esta tarefa específica for concluída (exato)</p>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarefa Concluída</label>
                   <select
                     value={regra.condicoes.tipoTarefaConcluida || 'qualquer'}
@@ -841,19 +855,6 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Horário Padrão</label>
-              <input
-                type="time"
-                value={regra.acao.horaPadrao}
-                onChange={e => setRegra(prev => ({ 
-                  ...prev, 
-                  acao: { ...prev.acao, horaPadrao: e.target.value }
-                }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-              />
             </div>
           </div>
         </div>

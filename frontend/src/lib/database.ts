@@ -1256,6 +1256,7 @@ export interface RegraAutomacaoDB {
     subStatus?: string
     diasDesdeEvento?: number
     tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
+    tarefaEspecifica?: string
     etapaCliente?: string
   }
   acao: {
@@ -1264,7 +1265,6 @@ export interface RegraAutomacaoDB {
     tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
     prioridade: 'alta' | 'media' | 'baixa'
     diasPrazo: number
-    horaPadrao: string
   }
   created_at?: string
   updated_at?: string
@@ -1544,6 +1544,14 @@ export async function processarRegrasTarefaConcluida(
     for (const regra of regras) {
       const condicoes = regra.condicoes || {}
 
+      // Filtrar por tarefa específica
+      if (condicoes.tarefaEspecifica) {
+        if (tarefaConcluida.titulo !== condicoes.tarefaEspecifica) {
+          console.log(`  -> Regra "${regra.nome}" não aplicável: tarefa "${tarefaConcluida.titulo}" !== "${condicoes.tarefaEspecifica}"`)
+          continue
+        }
+      }
+
       // Filtrar por tipo de tarefa
       if (condicoes.tipoTarefaConcluida && condicoes.tipoTarefaConcluida !== 'qualquer') {
         if (condicoes.tipoTarefaConcluida !== tarefaConcluida.tipo) {
@@ -1567,7 +1575,6 @@ export async function processarRegrasTarefaConcluida(
         titulo,
         descricao,
         data: dataDaqui(regra.acao?.diasPrazo || 7),
-        hora: regra.acao?.horaPadrao || '10:00',
         tipo: regra.acao?.tipo || 'outro',
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
