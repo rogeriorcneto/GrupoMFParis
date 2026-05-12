@@ -17,7 +17,9 @@ import {
   EnvelopeIcon,
   ChatBubbleLeftRightIcon,
   CalendarIcon,
-  TagIcon
+  TagIcon,
+  XMarkIcon,
+  PaperAirplaneIcon
 } from '@heroicons/react/24/outline'
 import { 
   getAutomacoes, 
@@ -26,6 +28,7 @@ import {
   deleteAutomacao, 
   type Automacao 
 } from '../../lib/database'
+import { callAI, buildCRMContext } from '../../lib/gemini'
 
 interface CriarAutomacaoViewProps {
   loggedUser: any
@@ -38,6 +41,12 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
   const [editando, setEditando] = useState<Automacao | null>(null)
   const [carregando, setCarregando] = useState(false)
   const [abaAtiva, setAbaAtiva] = useState<'criar' | 'gerenciar'>('criar')
+  
+  // Estados do chat com IA
+  const [mostrarChat, setMostrarChat] = useState(false)
+  const [mensagensChat, setMensagensChat] = useState<Array<{role: 'user' | 'assistant', content: string}>>([])
+  const [inputChat, setInputChat] = useState('')
+  const [carregandoChat, setCarregandoChat] = useState(false)
 
   // Estado do formulário
   const [formData, setFormData] = useState({
@@ -157,7 +166,7 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
     }
   ]
 
-  // Carregar automações (simulação)
+  // Carregar automações
   useEffect(() => {
     carregarAutomacoes()
   }, [])
@@ -221,7 +230,6 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
       let resultado: Automacao | null = null
 
       if (editando) {
-        // Atualizar automação existente
         resultado = await updateAutomacao(editando.id, {
           nome: formData.nome,
           descricao: formData.descricao,
@@ -231,7 +239,6 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
           acoes: formData.acoes
         })
       } else {
-        // Criar nova automação
         resultado = await createAutomacao(
           formData.nome,
           formData.descricao,
@@ -243,7 +250,7 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
       }
 
       if (resultado) {
-        await carregarAutomacoes() // Recarregar dados
+        await carregarAutomacoes()
         
         setFormData({
           nome: '',
@@ -319,6 +326,98 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
     }
   }
 
+  // Funções do chat com IA
+  const enviarMensagemChat = async () => {
+    if (!inputChat.trim() || carregandoChat) return
+
+    const mensagemUsuario = inputChat.trim()
+    setInputChat('')
+    
+    setMensagensChat(prev => [...prev, { role: 'user', content: mensagemUsuario }])
+    setCarregandoChat(true)
+
+    try {
+      const contextoAutomacoes = `
+Contexto de Automações da MF Paris:
+
+Automações Ativas:
+${automacoes.map(a => `
+- ${a.nome} (${a.tipo})
+  Status: ${a.status}
+  Gatilho: ${a.gatilhoTipo}
+  Ações: ${a.acoes.length}
+  Execuções: ${a.execucoes}
+  Descrição: ${a.descricao || 'Sem descrição'}
+`).join('\n')}
+
+Tipos de Automação Disponíveis:
+- mensagem: Enviar mensagens automáticas
+- tarefa: Criar tarefas automaticamente
+- etapa: Mover clientes entre etapas
+- notificacao: Enviar notificações
+- email: E-mails marketing
+- whatsapp: Mensagens WhatsApp
+
+Tipos de Gatilho:
+- tempo: Agendado por horário
+- evento: Baseado em eventos
+- manual: Execução manual
+
+Você é um assistente especialista em automações de vendas para a MF Paris. Ajude o gerente a entender, criar e otimizar automações.
+`
+
+      setMensagensChat(prev => [...prev, { role: 'assistant', content: '🤖 Processando sua pergunta...' }])
+
+      const resposta = await callAI([{ role: 'user', content: mensagemUsuario }], contextoAutomacoes)
+      
+      setMensagensChat(prev => {
+        const novas = [...prev]
+        novas[novas.length - 1] = { role: 'assistant', content: resposta }
+        return novas
+      })
+    } catch (error) {
+      console.error('Erro ao enviar mensagem para IA:', error)
+      setMensagensChat(prev => {
+        const novas = [...prev]
+        novas[novas.length - 1] = { role: 'assistant', content: '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.' }
+        return novas
+      })
+    } finally {
+      setCarregandoChat(false)
+    }
+  }
+
+  const limparChat = () => {
+    setMensagensChat([])
+    setInputChat('')
+  }
+
+  const abrirChatComContexto = (automacao?: Automacao) => {
+    setMostrarChat(true)
+    
+    if (automacao) {
+      const mensagemContexto = `Olá! Preciso de ajuda com a automação "${automacao.nome}". Pode me explicar como ela funciona e dar sugestões de melhoria?`
+      setMensagensChat([
+        { role: 'user', content: mensagemContexto }
+      ])
+      setInputChat('')
+    } else if (mensagensChat.length === 0) {
+      setMensagensChat([
+        { 
+          role: 'assistant', 
+          content: `👋 Olá! Sou o assistente de automações da MF Paris. Posso ajudar você a:
+
+🔧 **Criar automações** - Explicar passo a passo como configurar
+📊 **Analisar performance** - Avaliar suas automações atuais
+💡 **Sugerir melhorias** - Otimizar processos existentes
+❓ **Tirar dúvidas** - Esclarecer qualquer questão sobre automações
+
+Como posso ajudar você hoje?` 
+        }
+      ])
+    }
+  }
+
   if (!isGerente) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -335,14 +434,24 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-indigo-100 rounded-lg">
-            <CogIcon className="h-6 w-6 text-indigo-600" />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-100 rounded-lg">
+              <CogIcon className="h-6 w-6 text-indigo-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Criação de Automações</h1>
+              <p className="text-sm text-gray-500">Configure automações para otimizar processos de vendas</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Criação de Automações</h1>
-            <p className="text-sm text-gray-500">Configure automações para otimizar processos de vendas</p>
-          </div>
+          <button
+            onClick={() => abrirChatComContexto()}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg"
+            title="Converse com o assistente de automações"
+          >
+            <SparklesIcon className="h-5 w-5" />
+            <span className="hidden sm:inline">Assistente IA</span>
+          </button>
         </div>
       </div>
 
@@ -469,57 +578,6 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
                       </button>
                     ))}
                   </div>
-
-                  {/* Configuração do Gatilho */}
-                  {formData.gatilhoTipo === 'tempo' && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-gray-900 mb-3">Configurar Agendamento</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Frequência</label>
-                          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option>Diariamente</option>
-                            <option>Semanalmente</option>
-                            <option>Mensalmente</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Horário</label>
-                          <input type="time" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
-                          <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {formData.gatilhoTipo === 'evento' && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-gray-900 mb-3">Configurar Evento</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Evento</label>
-                          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option>Cliente entra em nova etapa</option>
-                            <option>Tarefa concluída</option>
-                            <option>Novo cliente criado</option>
-                            <option>Pedido realizado</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Condição</label>
-                          <select className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                            <option>Etapa = Prospecção</option>
-                            <option>Etapa = Amostra</option>
-                            <option>Etapa = Proposta</option>
-                            <option>Qualquer etapa</option>
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Ações */}
@@ -590,35 +648,6 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
                                   placeholder="Digite a mensagem..."
                                 />
                               </div>
-                            )}
-
-                            {acao.tipo === 'criar_tarefa' && (
-                              <>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Título da Tarefa
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={acao.configuracao.titulo || ''}
-                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, titulo: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    placeholder="Título da tarefa"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Descrição
-                                  </label>
-                                  <textarea
-                                    value={acao.configuracao.descricao || ''}
-                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, descricao: e.target.value })}
-                                    rows={2}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    placeholder="Descrição da tarefa"
-                                  />
-                                </div>
-                              </>
                             )}
                           </div>
                         </div>
@@ -716,6 +745,13 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
                         </div>
                         <div className="flex items-center gap-2 ml-4">
                           <button
+                            onClick={() => abrirChatComContexto(automacao)}
+                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="Pedir ajuda à IA"
+                          >
+                            <SparklesIcon className="h-4 w-4" />
+                          </button>
+                          <button
                             onClick={() => alternarStatus(automacao)}
                             className={`p-2 rounded-lg transition-colors ${
                               automacao.status === 'ativa' 
@@ -754,6 +790,136 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
           </div>
         )}
       </div>
+
+      {/* Chat com IA */}
+      {mostrarChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setMostrarChat(false)} />
+          <div className="relative bg-white rounded-apple shadow-apple-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
+            {/* Header do Chat */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg">
+                  <SparklesIcon className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Assistente de Automações</h3>
+                  <p className="text-xs text-gray-500">IA especialista em automações de vendas</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={limparChat}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Limpar conversa"
+                >
+                  <ArrowPathIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setMostrarChat(false)}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Fechar"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Mensagens */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {mensagensChat.length === 0 ? (
+                <div className="text-center py-8">
+                  <SparklesIcon className="h-12 w-12 text-purple-500 mx-auto mb-4" />
+                  <h4 className="font-medium text-gray-900 mb-2">Como posso ajudar?</h4>
+                  <p className="text-sm text-gray-500">Pergunte sobre automações, configurações, melhores práticas ou tire dúvidas sobre suas automações existentes.</p>
+                </div>
+              ) : (
+                mensagensChat.map((mensagem, index) => (
+                  <div
+                    key={index}
+                    className={`flex ${mensagem.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                        mensagem.role === 'user'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        {mensagem.content}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              
+              {carregandoChat && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 rounded-lg px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-indigo-600"></div>
+                      <span className="text-sm text-gray-600">Pensando...</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div className="p-4 border-t border-gray-200">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={inputChat}
+                  onChange={(e) => setInputChat(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && enviarMensagemChat()}
+                  placeholder="Digite sua pergunta sobre automações..."
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  disabled={carregandoChat}
+                />
+                <button
+                  onClick={enviarMensagemChat}
+                  disabled={carregandoChat || !inputChat.trim()}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <PaperAirplaneIcon className="h-4 w-4" />
+                </button>
+              </div>
+              
+              {/* Sugestões rápidas */}
+              {mensagensChat.length <= 1 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setInputChat('Como criar uma automação de boas-vindas?')}
+                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
+                  >
+                    Como criar automação?
+                  </button>
+                  <button
+                    onClick={() => setInputChat('Quais são as melhores práticas para automações?')}
+                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
+                  >
+                    Melhores práticas
+                  </button>
+                  <button
+                    onClick={() => setInputChat('Como otimizar minhas automações existentes?')}
+                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
+                  >
+                    Otimizar automações
+                  </button>
+                  <button
+                    onClick={() => setInputChat('Explique os tipos de gatilhos disponíveis')}
+                    className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200 transition-colors"
+                  >
+                    Tipos de gatilhos
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
