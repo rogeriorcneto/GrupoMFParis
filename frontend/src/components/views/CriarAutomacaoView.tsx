@@ -706,7 +706,7 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
                             <p className="text-sm text-gray-600 mb-2">{automacao.descricao}</p>
                             <div className="flex items-center gap-4 text-xs text-gray-500">
                               <span>{automacao.acoes.length} ação(ões)</span>
-                              <span>{automacao.execuções} execuções</span>
+                              <span>{automacao.execucoes} execuções</span>
                               {automacao.ultimaExecucao && (
                                 <span>Última: {new Date(automacao.ultimaExecucao).toLocaleDateString('pt-BR')}</span>
                               )}

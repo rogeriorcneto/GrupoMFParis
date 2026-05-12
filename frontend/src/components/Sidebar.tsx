@@ -18,6 +18,7 @@ import {
   BuildingLibraryIcon,
   AcademicCapIcon,
   Cog6ToothIcon,
+  CogIcon,
   ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline'
 import type { ViewType, Vendedor } from '../types'
