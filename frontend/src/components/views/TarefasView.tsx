@@ -1555,8 +1555,11 @@ const TarefasView: React.FC<{
           </div>
         )}
         </>
-        )}{/* fim activeTab tarefas */}
-      </div>
+        )}
+      </>
+      )}
+      {/* fim activeTab tarefas */}
+    </div>
 
       {/* ── MODAIS ───────────────────────────────────────── */}
 
