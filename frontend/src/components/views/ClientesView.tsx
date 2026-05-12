@@ -86,6 +86,36 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         (headers.some(h => h.includes('razão social') || h.includes('razao social')) &&
          headers.some(h => h.includes('nome fantasia')))
 
+      // Função para parse de data brasileira
+      const parseDate = (s: string): string => {
+        if (!s || !s.trim()) return ''
+        const clean = s.trim().replace(/^"|"$/g, '')
+        const parts = clean.split('/')
+        if (parts.length === 3) {
+          let [d, m, y] = parts
+          if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y
+          return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+        }
+        return clean
+      }
+
+      // Função para parse de valor monetário
+      const parseMoney = (s: string): number | undefined => {
+        if (!s || !s.trim()) return undefined
+        const clean = s.replace(/[R$\s.]/g, '').replace(',', '.')
+        const num = parseFloat(clean)
+        return isNaN(num) ? undefined : num
+      }
+
+      // Função para parse de boolean
+      const parseBoolean = (s: string): boolean | null => {
+        if (!s || !s.trim()) return null
+        const clean = s.toLowerCase().trim()
+        if (['sim', 's', 'true', '1', 'yes', 'y'].includes(clean)) return true
+        if (['não', 'nao', 'n', 'false', '0', 'no', 'n'].includes(clean)) return false
+        return null
+      }
+
       const novos: Cliente[] = []
       for (let i = 1; i < lines.length; i++) {
         const vals = parseLine(lines[i])
@@ -97,22 +127,33 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           const fantasia = row['nome fantasia'] || ''
           if (!razao && !fantasia) continue
 
-          const endParts = [
-            row['rua'], row['número'] || row['numero'],
-            row['complemento'] ? `(${row['complemento']})` : '',
-            row['bairro'], row['cidade'],
-            row['estado'], row['cep'] ? `CEP ${row['cep']}` : ''
-          ].filter(Boolean)
-          const endereco = endParts.join(', ')
+          // Parse de telefones
           const tel = row['celular'] || row['whatsapp'] || row['telefone'] || ''
+          const telFixo = row['telefone fixo'] || row['telefone comercial'] || ''
+          const celular = row['celular'] || row['whatsapp'] || ''
+
+          // Parse de score/ranking
           const ranking = parseInt(row['ranking'] || '0')
           const score = ranking > 0 ? Math.min(ranking * 20, 100) : 30
 
+          // Parse de valor estimado
+          const valorEstimado = parseMoney(row['valor estimado'] || row['valor'] || row['faturamento'] || '')
+
+          // Parse de datas
+          let ultimaInteracao = new Date().toISOString().split('T')[0]
+          const dataStr = row['ultima atualização'] || row['ultima atualizacao'] || row['ultima atualização '] || row['data de cadastro'] || ''
+          if (dataStr) {
+            const parsed = parseDate(dataStr)
+            if (parsed) ultimaInteracao = parsed
+          }
+
+          // Montar notas com informações adicionais
           const notasParts: string[] = []
           if (row['setor']) notasParts.push(`Setor: ${row['setor']}`)
           if (row['descrição'] || row['descricao']) notasParts.push(`Obs: ${row['descrição'] || row['descricao']}`)
           if (row['website']) notasParts.push(`Site: ${row['website']}`)
           if (row['categoria']) notasParts.push(`Cat: ${row['categoria']}`)
+          if (row['segmento']) notasParts.push(`Segmento: ${row['segmento']}`)
           if (row['facebook']) notasParts.push(`FB: ${row['facebook']}`)
           if (row['instagram']) notasParts.push(`IG: ${row['instagram']}`)
           if (row['linkedin']) notasParts.push(`LI: ${row['linkedin']}`)
@@ -121,43 +162,159 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           if (row['rádio'] || row['radio']) notasParts.push(`Rádio: ${row['rádio'] || row['radio']}`)
           if (row['skype']) notasParts.push(`Skype: ${row['skype']}`)
           if (row['nível de interesse'] || row['nivel de interesse']) notasParts.push(`Interesse: ${row['nível de interesse'] || row['nivel de interesse']}`)
+          if (row['pessoa de contato'] || row['contato principal']) notasParts.push(`Contato Principal: ${row['pessoa de contato'] || row['contato principal']}`)
 
-          let ultInteracao = new Date().toISOString().split('T')[0]
-          const dataStr = row['ultima atualização'] || row['ultima atualizacao'] || row['ultima atualização '] || row['data de cadastro'] || ''
-          if (dataStr) {
-            const match = dataStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/)
-            if (match) {
-              const ano = match[3].length === 2 ? '20' + match[3] : match[3]
-              ultInteracao = `${ano}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
-            }
+          // Montar redes sociais
+          const redesSociaisParts: string[] = []
+          if (row['facebook']) redesSociaisParts.push(`Facebook: ${row['facebook']}`)
+          if (row['instagram']) redesSociaisParts.push(`Instagram: ${row['instagram']}`)
+          if (row['linkedin']) redesSociaisParts.push(`LinkedIn: ${row['linkedin']}`)
+          if (row['twitter']) redesSociaisParts.push(`Twitter: ${row['twitter']}`)
+          if (row['youtube']) redesSociaisParts.push(`YouTube: ${row['youtube']}`)
+
+          // Parse de CNAE
+          const cnaePrimario = row['cnae primario'] || row['cnae principal'] || row['cnae'] || ''
+          const cnaeSecundario = row['cnae secundario'] || ''
+
+          // Parse de produtos interesse
+          let produtosInteresse: string[] = []
+          if (row['produtos de interesse'] || row['produtos']) {
+            produtosInteresse = (row['produtos de interesse'] || row['produtos']).split(',').map(p => p.trim()).filter(p => p)
           }
 
           novos.push({
-            id: Date.now() + i, razaoSocial: razao || fantasia, nomeFantasia: fantasia,
-            cnpj: (row['cnpj'] || '').replace(/[^\d./\-]/g, ''), contatoNome: '', contatoTelefone: tel,
-            contatoEmail: row['e-mail'] || row['email'] || '', endereco, etapa: 'prospecção',
-            origemLead: row['origem do cliente'] || row['origem do lead'] || row['origem'] || 'Agendor',
+            id: Date.now() + i,
+            razaoSocial: razao || fantasia,
+            nomeFantasia: fantasia,
+            cnpj: (row['cnpj'] || '').replace(/[^\d./\-]/g, ''),
+            cnpj2: (row['cnpj2'] || row['cnpj secundario'] || '').replace(/[^\d./\-]/g, ''),
+            contatoNome: row['pessoa de contato'] || row['contato principal'] || row['contato'] || '',
+            contatoTelefone: tel,
+            contatoCelular: celular,
+            contatoTelefoneFixo: telFixo,
+            contatoEmail: row['e-mail'] || row['email'] || '',
+            enderecoRua: row['rua'] || row['logradouro'] || '',
+            enderecoNumero: row['número'] || row['numero'] || '',
+            enderecoComplemento: row['complemento'] || '',
+            enderecoBairro: row['bairro'] || '',
+            enderecoCidade: row['cidade'] || '',
+            enderecoEstado: row['estado'] || row['uf'] || '',
+            enderecoCep: row['cep'] || '',
+            cnaePrimario,
+            cnaeSecundario,
+            whatsapp: row['whatsapp'] || '',
+            redesSociais: redesSociaisParts.length > 0 ? redesSociaisParts.join(' | ') : undefined,
+            etapa: 'prospecção',
+            score,
+            produtosInteresse,
+            dataEntradaEtapa: new Date().toISOString().split('T')[0],
             notas: notasParts.length > 0 ? notasParts.join(' | ') : undefined,
-            ultimaInteracao: ultInteracao, diasInativo: 0, score
+            origemLead: row['origem do cliente'] || row['origem do lead'] || row['origem'] || 'Agendor',
+            valorEstimado,
+            ultimaInteracao,
+            diasInativo: 0,
+            website: row['website'] || '',
+            segmento: row['segmento'] || '',
+            localizacao: row['localizacao'] || row['região'] || row['regiao'] || '',
+            whatsappValido: row['whatsapp'] ? parseBoolean(row['whatsapp válido'] || row['whatsapp validado']) : null
           })
         } else {
+          // Importação padrão (não-Agendor) - mapeamento completo
           if (!row['razaosocial'] && !row['razao_social'] && !row['nome'] && !row['razão social']) continue
+          
           novos.push({
             id: Date.now() + i,
             razaoSocial: row['razaosocial'] || row['razao_social'] || row['razão social'] || row['nome'] || `Importado ${i}`,
             nomeFantasia: row['nomefantasia'] || row['nome_fantasia'] || row['nome fantasia'] || '',
-            cnpj: row['cnpj'] || '', contatoNome: row['contatonome'] || row['contato_nome'] || row['contato'] || '',
+            cnpj: row['cnpj'] || '',
+            cnpj2: row['cnpj2'] || row['cnpj_secundario'] || '',
+            contatoNome: row['contatonome'] || row['contato_nome'] || row['contato'] || row['pessoa_contato'] || '',
             contatoTelefone: row['contatotelefone'] || row['contato_telefone'] || row['telefone'] || '',
+            contatoCelular: row['contatocelular'] || row['contato_celular'] || row['celular'] || '',
+            contatoTelefoneFixo: row['contatotelefonefixo'] || row['contato_telefone_fixo'] || row['telefone_fixo'] || '',
             contatoEmail: row['contatoemail'] || row['contato_email'] || row['email'] || row['e-mail'] || '',
-            endereco: row['endereco'] || '', etapa: 'prospecção',
-            valorEstimado: (row['valorestimado'] || row['valor_estimado'] || row['valor']) ? parseFloat(row['valorestimado'] || row['valor_estimado'] || row['valor']) : undefined,
-            ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 30
+            enderecoRua: row['enderecorua'] || row['endereco_rua'] || row['rua'] || row['logradouro'] || '',
+            enderecoNumero: row['endereconumero'] || row['endereco_numero'] || row['numero'] || '',
+            enderecoComplemento: row['enderecocomplemento'] || row['endereco_complemento'] || row['complemento'] || '',
+            enderecoBairro: row['enderecobairro'] || row['endereco_bairro'] || row['bairro'] || '',
+            enderecoCidade: row['enderecocidade'] || row['endereco_cidade'] || row['cidade'] || '',
+            enderecoEstado: row['enderecoestado'] || row['endereco_estado'] || row['estado'] || row['uf'] || '',
+            enderecoCep: row['enderecocep'] || row['endereco_cep'] || row['cep'] || '',
+            enderecoRua2: row['enderecorua2'] || row['endereco_rua2'] || '',
+            enderecoNumero2: row['endereconumero2'] || row['endereco_numero2'] || '',
+            enderecoComplemento2: row['enderecocomplemento2'] || row['endereco_complemento2'] || '',
+            enderecoBairro2: row['enderecobairro2'] || row['endereco_bairro2'] || '',
+            enderecoCidade2: row['enderecocidade2'] || row['endereco_cidade2'] || '',
+            enderecoEstado2: row['enderecoestado2'] || row['endereco_estado2'] || '',
+            enderecoCep2: row['enderecocep2'] || row['endereco_cep2'] || '',
+            cnaePrimario: row['cnaeprimario'] || row['cnae_primario'] || row['cnae'] || '',
+            cnaeSecundario: row['cnaesecundario'] || row['cnae_secundario'] || '',
+            whatsapp: row['whatsapp'] || '',
+            redesSociais: row['redessociais'] || row['redes_sociais'] || '',
+            etapa: row['etapa'] || 'prospecção',
+            score: row['score'] ? parseInt(row['score']) : 30,
+            produtosInteresse: row['produtosinteresse'] || row['produtos_interesse'] ? 
+              (row['produtosinteresse'] || row['produtos_interesse']).split(',').map(p => p.trim()).filter(p => p) : [],
+            dataEntradaEtapa: parseDate(row['dataentradaetapa'] || row['data_entrada_etapa']) || new Date().toISOString().split('T')[0],
+            notas: row['notas'] || row['observacoes'] || row['obs'] || '',
+            origemLead: row['origemlead'] || row['origem_lead'] || row['origem'] || 'Importação CSV',
+            dataEnvioAmostra: parseDate(row['dataenvioamostra'] || row['data_envio_amostra']),
+            statusAmostra: row['statusamostra'] || row['status_amostra'] as any,
+            dataHomologacao: parseDate(row['datahomologacao'] || row['data_homologacao']),
+            proximoPedidoPrevisto: parseDate(row['proximopedidoprevisto'] || row['proximo_pedido_previsto']),
+            dataProposta: parseDate(row['dataproposta'] || row['data_proposta']),
+            valorProposta: parseMoney(row['valorproposta'] || row['valor_proposta']),
+            resultadoAmostra: row['resultadoamostra'] || row['resultado_amostra'] as any,
+            dataResultadoAmostra: parseDate(row['dataresultadoamostra'] || row['data_resultado_amostra']),
+            motivoReprovacao: row['motivoreprovacao'] || row['motivo_reprovacao'],
+            statusFollowUp: row['statusfollowup'] || row['status_follow_up'] as any,
+            statusSatisfacao: row['statussatisfacao'] || row['status_satisfacao'] as any,
+            notaSatisfacao: row['notasatisfacao'] || row['nota_satisfacao'] ? parseInt(row['notasatisfacao'] || row['nota_satisfacao']) : undefined,
+            feedbackSatisfacao: row['feedbacksatisfacao'] || row['feedback_satisfacao'],
+            cicloRecompra: row['ciclorecompra'] || row['ciclo_recompra'] ? parseInt(row['ciclorecompra'] || row['ciclo_recompra']) : undefined,
+            dataProximaRecompra: parseDate(row['dataproximarecompra'] || row['data_proxima_recompra']),
+            totalCompras: parseMoney(row['totalcompras'] || row['total_compras']),
+            omieStatusLogistico: row['omiestatuslogistico'] || row['omie_status_logistico'],
+            omieCodigoRastreio: row['omiecodigorastreio'] || row['omie_codigo_rastreio'],
+            omieNotaFiscal: row['omienotafiscal'] || row['omie_nota_fiscal'],
+            omieDataFaturamento: parseDate(row['omiedatafaturamento'] || row['omie_data_faturamento']),
+            statusEntrega: row['statusentrega'] || row['status_entrega'] as any,
+            dataEntregaPrevista: parseDate(row['dataentregaprevista'] || row['data_entrega_prevista']),
+            dataEntregaRealizada: parseDate(row['dataentregarealizada'] || row['data_entrega_realizada']),
+            statusFaturamento: row['statusfaturamento'] || row['status_faturamento'] as any,
+            dataUltimoPedido: parseDate(row['dataultimopedido'] || row['data_ultimo_pedido']),
+            etapaAnterior: row['etapaanterior'] || row['etapa_anterior'],
+            categoriaPerda: row['categoriaperda'] || row['categoria_perda'] as any,
+            motivoPerda: row['motivoperda'] || row['motivo_perda'],
+            dataPerda: parseDate(row['dataperda'] || row['data_perda']),
+            segmento: row['segmento'] || '',
+            localizacao: row['localizacao'] || '',
+            tentativaAmostra: row['tentativaamostra'] || row['tentativa_amostra'] ? parseInt(row['tentativaamostra'] || row['tentativa_amostra']) : undefined,
+            whatsappValido: parseBoolean(row['whatsappvalido'] || row['whatsapp_valido']),
+            whatsappJid: row['whatsappjid'] || row['whatsapp_jid'],
+            whatsappValidadoEm: parseDate(row['whatsappvalidadoem'] || row['whatsapp_validado_em']),
+            novoCiclo: parseBoolean(row['novociclo'] || row['novo_ciclo']),
+            cicloNumero: row['ciclonumero'] || row['ciclo_numero'] ? parseInt(row['ciclonumero'] || row['ciclo_numero']) : undefined,
+            googlePlaceId: row['googleplaceid'] || row['google_place_id'],
+            googleRating: row['googlerating'] || row['google_rating'] ? parseFloat(row['googlerating'] || row['google_rating']) : undefined,
+            googleReviews: row['googlereviews'] || row['google_reviews'] ? parseInt(row['googlereviews'] || row['google_reviews']) : undefined,
+            website: row['website'] || '',
+            latitude: row['latitude'] ? parseFloat(row['latitude']) : undefined,
+            longitude: row['longitude'] ? parseFloat(row['longitude']) : undefined,
+            statusCliente: row['statuscliente'] || row['status_cliente'] as any,
+            grupoEconomicoId: row['grupoeconomicoid'] || row['grupo_economico_id'] ? parseInt(row['grupoeconomicoid'] || row['grupo_economico_id']) : undefined,
+            valorEstimado: parseMoney(row['valorestimado'] || row['valor_estimado'] || row['valor']),
+            ultimaInteracao: parseDate(row['ultimainteracao'] || row['ultima_interacao']) || new Date().toISOString().split('T')[0],
+            diasInativo: 0
           })
         }
       }
-      if (novos.length === 0) { alert('Nenhum cliente válido encontrado no CSV.\nFormatos aceitos: CSV padrão ou exportação do Agendor.'); return }
+      if (novos.length === 0) { 
+        alert('Nenhum cliente válido encontrado no CSV.\nFormatos aceitos: CSV padrão ou exportação do Agendor.'); 
+        return 
+      }
       onImportClientes(novos)
-      alert(`✅ ${novos.length} cliente(s) importado(s) com sucesso!${isAgendor ? '\n📋 Formato Agendor detectado automaticamente.' : ''}`)
+      alert(`✅ ${novos.length} cliente(s) importado(s) com sucesso!${isAgendor ? '\n📋 Formato Agendor detectado automaticamente.' : ''}\n📊 Todos os campos foram mapeados conforme disponível no CSV.`)
     }
     reader.readAsText(file, 'UTF-8')
     e.target.value = ''
@@ -165,21 +322,145 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
 
   const handleExportCSV = () => {
     const exportData = filtersActive || debouncedSearch ? filteredClientes : scopedClientes
-    const csv = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado,etapa,score\n' +
-      exportData.map(c => `"${c.razaoSocial}","${c.cnpj}","${c.contatoNome}","${c.contatoTelefone}","${c.contatoEmail}","${c.endereco || ''}","${c.valorEstimado || ''}","${c.etapa}","${c.score || 0}"`).join('\n')
+    
+    // Header completo com todos os campos
+    const headers = [
+      'razaoSocial', 'nomeFantasia', 'cnpj', 'cnpj2', 'contatoNome', 'contatoTelefone', 
+      'contatoCelular', 'contatoTelefoneFixo', 'contatoEmail', 'enderecoRua', 'enderecoNumero',
+      'enderecoComplemento', 'enderecoBairro', 'enderecoCidade', 'enderecoEstado', 'enderecoCep',
+      'enderecoRua2', 'enderecoNumero2', 'enderecoComplemento2', 'enderecoBairro2', 
+      'enderecoCidade2', 'enderecoEstado2', 'enderecoCep2', 'cnaePrimario', 'cnaeSecundario',
+      'whatsapp', 'redesSociais', 'omieCodigo', 'etapa', 'score', 'ultimaInteracao', 
+      'diasInativo', 'valorEstimado', 'produtosInteresse', 'vendedorId', 'dataEntradaEtapa',
+      'notas', 'origemLead', 'dataEnvioAmostra', 'statusAmostra', 'dataHomologacao',
+      'proximoPedidoPrevisto', 'dataProposta', 'valorProposta', 'resultadoAmostra',
+      'dataResultadoAmostra', 'motivoReprovacao', 'statusFollowUp', 'statusSatisfacao',
+      'notaSatisfacao', 'feedbackSatisfacao', 'cicloRecompra', 'dataProximaRecompra',
+      'totalCompras', 'omieStatusLogistico', 'omieCodigoRastreio', 'omieNotaFiscal',
+      'omieDataFaturamento', 'statusEntrega', 'dataEntregaPrevista', 'dataEntregaRealizada',
+      'statusFaturamento', 'dataUltimoPedido', 'etapaAnterior', 'categoriaPerda',
+      'motivoPerda', 'dataPerda', 'segmento', 'localizacao', 'tentativaAmostra',
+      'whatsappValido', 'whatsappJid', 'whatsappValidadoEm', 'novoCiclo', 'cicloNumero',
+      'googlePlaceId', 'googleRating', 'googleReviews', 'website', 'latitude', 'longitude',
+      'statusCliente', 'grupoEconomicoId'
+    ].join(',')
+    
+    // Função para escapar valores CSV
+    const escapeCSV = (value: any): string => {
+      if (value === null || value === undefined) return ''
+      if (Array.isArray(value)) return `"${value.join(';')}"`
+      if (typeof value === 'boolean') return value ? 'true' : 'false'
+      if (typeof value === 'number') return value.toString()
+      return `"${String(value).replace(/"/g, '""')}"`
+    }
+    
+    // Gerar linhas com todos os dados
+    const rows = exportData.map(c => {
+      return [
+        escapeCSV(c.razaoSocial),
+        escapeCSV(c.nomeFantasia),
+        escapeCSV(c.cnpj),
+        escapeCSV(c.cnpj2),
+        escapeCSV(c.contatoNome),
+        escapeCSV(c.contatoTelefone),
+        escapeCSV(c.contatoCelular),
+        escapeCSV(c.contatoTelefoneFixo),
+        escapeCSV(c.contatoEmail),
+        escapeCSV(c.enderecoRua),
+        escapeCSV(c.enderecoNumero),
+        escapeCSV(c.enderecoComplemento),
+        escapeCSV(c.enderecoBairro),
+        escapeCSV(c.enderecoCidade),
+        escapeCSV(c.enderecoEstado),
+        escapeCSV(c.enderecoCep),
+        escapeCSV(c.enderecoRua2),
+        escapeCSV(c.enderecoNumero2),
+        escapeCSV(c.enderecoComplemento2),
+        escapeCSV(c.enderecoBairro2),
+        escapeCSV(c.enderecoCidade2),
+        escapeCSV(c.enderecoEstado2),
+        escapeCSV(c.enderecoCep2),
+        escapeCSV(c.cnaePrimario),
+        escapeCSV(c.cnaeSecundario),
+        escapeCSV(c.whatsapp),
+        escapeCSV(c.redesSociais),
+        escapeCSV(c.omieCodigo),
+        escapeCSV(c.etapa),
+        escapeCSV(c.score),
+        escapeCSV(c.ultimaInteracao),
+        escapeCSV(c.diasInativo),
+        escapeCSV(c.valorEstimado),
+        escapeCSV(c.produtosInteresse),
+        escapeCSV(c.vendedorId),
+        escapeCSV(c.dataEntradaEtapa),
+        escapeCSV(c.notas),
+        escapeCSV(c.origemLead),
+        escapeCSV(c.dataEnvioAmostra),
+        escapeCSV(c.statusAmostra),
+        escapeCSV(c.dataHomologacao),
+        escapeCSV(c.proximoPedidoPrevisto),
+        escapeCSV(c.dataProposta),
+        escapeCSV(c.valorProposta),
+        escapeCSV(c.resultadoAmostra),
+        escapeCSV(c.dataResultadoAmostra),
+        escapeCSV(c.motivoReprovacao),
+        escapeCSV(c.statusFollowUp),
+        escapeCSV(c.statusSatisfacao),
+        escapeCSV(c.notaSatisfacao),
+        escapeCSV(c.feedbackSatisfacao),
+        escapeCSV(c.cicloRecompra),
+        escapeCSV(c.dataProximaRecompra),
+        escapeCSV(c.totalCompras),
+        escapeCSV(c.omieStatusLogistico),
+        escapeCSV(c.omieCodigoRastreio),
+        escapeCSV(c.omieNotaFiscal),
+        escapeCSV(c.omieDataFaturamento),
+        escapeCSV(c.statusEntrega),
+        escapeCSV(c.dataEntregaPrevista),
+        escapeCSV(c.dataEntregaRealizada),
+        escapeCSV(c.statusFaturamento),
+        escapeCSV(c.dataUltimoPedido),
+        escapeCSV(c.etapaAnterior),
+        escapeCSV(c.categoriaPerda),
+        escapeCSV(c.motivoPerda),
+        escapeCSV(c.dataPerda),
+        escapeCSV(c.segmento),
+        escapeCSV(c.localizacao),
+        escapeCSV(c.tentativaAmostra),
+        escapeCSV(c.whatsappValido),
+        escapeCSV(c.whatsappJid),
+        escapeCSV(c.whatsappValidadoEm),
+        escapeCSV(c.novoCiclo),
+        escapeCSV(c.cicloNumero),
+        escapeCSV(c.googlePlaceId),
+        escapeCSV(c.googleRating),
+        escapeCSV(c.googleReviews),
+        escapeCSV(c.website),
+        escapeCSV(c.latitude),
+        escapeCSV(c.longitude),
+        escapeCSV(c.statusCliente),
+        escapeCSV(c.grupoEconomicoId)
+      ].join(',')
+    }).join('\n')
+    
+    const csv = headers + '\n' + rows
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`; a.click()
+    const a = document.createElement('a'); 
+    a.href = url; 
+    a.download = `clientes_completos_${new Date().toISOString().split('T')[0]}.csv`; 
+    a.click()
     URL.revokeObjectURL(url)
   }
 
   const handleDownloadModelo = () => {
-    const modelo = 'razaoSocial,cnpj,contatoNome,contatoTelefone,contatoEmail,endereco,valorEstimado\n' +
-      '"Padaria Exemplo","12.345.678/0001-99","João Silva","(31) 99999-1234","joao@exemplo.com","Rua das Flores 100, Belo Horizonte - MG","15000"\n' +
-      '"Mercado Modelo","98.765.432/0001-11","Maria Santos","(31) 98888-5678","maria@modelo.com","Av. Brasil 500, Contagem - MG","25000"'
+    // Modelo completo com campos principais
+    const modelo = 'razaoSocial,nomeFantasia,cnpj,contatoNome,contatoTelefone,contatoCelular,contatoEmail,enderecoRua,enderecoNumero,enderecoBairro,enderecoCidade,enderecoEstado,enderecoCep,whatsapp,website,segmento,valorEstimado,etapa,origemLead,notas\n' +
+      '"Padaria Exemplo Ltda","Padaria Exemplo","12.345.678/0001-99","João Silva","(31) 99999-1234","(31) 99999-1234","joao@exemplo.com","Rua das Flores","100","Centro","Belo Horizonte","MG","30100-000","(31) 99999-1234","www.exemplo.com","Alimentício","15000","prospecção","Site","Cliente com potencial de grande pedido","Contato preferencial às 14h"\n' +
+      '"Mercado Modelo S/A","Mercado Modelo","98.765.432/0001-11","Maria Santos","(31) 98888-5678","(31) 98888-5678","maria@modelo.com","Avenida Brasil","500","Funcionários","Contagem","MG","32000-000","(31) 98888-5678","www.modelo.com","Varejo","25000","prospecção","Indicação","Interessado em produtos de panificação","Já é cliente da concorrência"'
     const blob = new Blob(['\uFEFF' + modelo], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_clientes.csv'; a.click()
+    const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_clientes_completo.csv'; a.click()
     URL.revokeObjectURL(url)
   }
 
