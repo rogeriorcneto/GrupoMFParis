@@ -8,7 +8,7 @@ import {
   DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
+  ProdutosView, PedidosView, AssistenteIAView, IAContextoView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
   ConfiguracaoTarefasView, ConfiguracaoMensagensView
 } from './views'
 import * as db from '../lib/database'
@@ -714,6 +714,8 @@ export default function AppRouter({
         onRefreshData={refreshData}
         showToast={showToast}
       />
+    case 'ia-contexto':
+      return <IAContextoView loggedUser={loggedUser} />
     default:
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
   }

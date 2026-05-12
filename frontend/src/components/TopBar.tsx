@@ -20,6 +20,7 @@ const viewTitles: Record<ViewType, string> = {
   produtos: 'Catálogo de Produtos',
   pedidos: 'Lançamento de Pedidos',
   ia: 'Assistente IA',
+  'ia-contexto': 'Contexto da IA',
   omie: 'Omie ERP',
   trafico: 'Tráfego Pago',
   baseleads: '🍦 Base de Leads RF',

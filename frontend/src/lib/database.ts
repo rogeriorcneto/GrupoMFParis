@@ -1592,3 +1592,177 @@ export async function processarRegrasTarefaConcluida(
 
   return tarefasCriadas
 }
+
+// ============================================
+// Contexto da IA
+// ============================================
+
+export interface IAContexto {
+  id: string
+  secao: string
+  titulo: string
+  tipo: 'texto' | 'pdf' | 'regra' | 'produto'
+  conteudo: string
+  urlArquivo?: string
+  tamanhoArquivo?: number
+  criadoPor?: string
+  criadoEm: string
+  atualizadoEm: string
+  ativo: boolean
+}
+
+export function iaContextoFromDb(row: any): IAContexto {
+  return {
+    id: row.id,
+    secao: row.secao,
+    titulo: row.titulo,
+    tipo: row.tipo,
+    conteudo: row.conteudo,
+    urlArquivo: row.url_arquivo,
+    tamanhoArquivo: row.tamanho_arquivo,
+    criadoPor: row.criado_por,
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em,
+    ativo: row.ativo
+  }
+}
+
+export async function getIAContexto(secao?: string): Promise<IAContexto[]> {
+  try {
+    let query = supabase
+      .from('ia_contexto')
+      .select('*')
+      .eq('ativo', true)
+      .order('criado_em', { ascending: false })
+
+    if (secao) {
+      query = query.eq('secao', secao)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+    return data ? data.map(iaContextoFromDb) : []
+  } catch (err) {
+    console.error('Erro ao buscar contexto da IA:', err)
+    return []
+  }
+}
+
+export async function createIAContexto(
+  secao: string,
+  titulo: string,
+  tipo: 'texto' | 'pdf' | 'regra' | 'produto',
+  conteudo: string,
+  urlArquivo?: string,
+  tamanhoArquivo?: number
+): Promise<IAContexto | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Usuário não autenticado')
+
+    const { data, error } = await supabase
+      .from('ia_contexto')
+      .insert({
+        secao,
+        titulo,
+        tipo,
+        conteudo,
+        url_arquivo: urlArquivo,
+        tamanho_arquivo: tamanhoArquivo,
+        criado_por: user.id
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data ? iaContextoFromDb(data) : null
+  } catch (err) {
+    console.error('Erro ao criar contexto da IA:', err)
+    return null
+  }
+}
+
+export async function updateIAContexto(
+  id: string,
+  updates: Partial<{
+    titulo: string
+    conteudo: string
+    urlArquivo: string
+    tamanhoArquivo: number
+    ativo: boolean
+  }>
+): Promise<IAContexto | null> {
+  try {
+    const updateData: any = {}
+    if (updates.titulo !== undefined) updateData.titulo = updates.titulo
+    if (updates.conteudo !== undefined) updateData.conteudo = updates.conteudo
+    if (updates.urlArquivo !== undefined) updateData.url_arquivo = updates.urlArquivo
+    if (updates.tamanhoArquivo !== undefined) updateData.tamanho_arquivo = updates.tamanhoArquivo
+    if (updates.ativo !== undefined) updateData.ativo = updates.ativo
+
+    const { data, error } = await supabase
+      .from('ia_contexto')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data ? iaContextoFromDb(data) : null
+  } catch (err) {
+    console.error('Erro ao atualizar contexto da IA:', err)
+    return null
+  }
+}
+
+export async function deleteIAContexto(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('ia_contexto')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return true
+  } catch (err) {
+    console.error('Erro ao deletar contexto da IA:', err)
+    return false
+  }
+}
+
+export async function uploadArquivoIAContexto(
+  arquivo: File,
+  secao: string,
+  titulo: string
+): Promise<{ url: string; tamanho: number } | null> {
+  try {
+    // Gerar nome único para o arquivo
+    const timestamp = Date.now()
+    const extensao = arquivo.name.split('.').pop()
+    const nomeArquivo = `ia-contexto/${secao}/${timestamp}-${arquivo.name}`
+
+    // Fazer upload para o Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('documentos')
+      .upload(nomeArquivo, arquivo, {
+        cacheControl: '3600',
+        upsert: false
+      })
+
+    if (error) throw error
+
+    // Obter URL pública
+    const { data: { publicUrl } } = supabase.storage
+      .from('documentos')
+      .getPublicUrl(data.path)
+
+    return {
+      url: publicUrl,
+      tamanho: arquivo.size
+    }
+  } catch (err) {
+    console.error('Erro ao fazer upload de arquivo:', err)
+    return null
+  }
+}
