@@ -439,6 +439,13 @@ export default function AppRouter({
       )
     case 'tarefas':
       return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast} onVerNoFunil={onVerNoFunil}
+        onDeleteTarefa={async (t) => {
+          try {
+            await db.deleteTarefa(t.id)
+            setTarefas(prev => prev.filter(x => x.id !== t.id))
+            showToast('success', 'Tarefa excluída com sucesso!')
+          } catch (err) { logger.error('Erro ao excluir tarefa:', err); showToast('error', 'Erro ao excluir tarefa') }
+        }}
         onUpdateTarefa={async (t) => {
           try {
             await db.updateTarefa(t.id, t)

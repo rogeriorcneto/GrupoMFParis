@@ -3,16 +3,16 @@ import {
   XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon,
   ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon,
   CheckCircleIcon, ClockIcon, FireIcon, CalendarDaysIcon,
-  ChevronDownIcon, ChevronUpIcon, FunnelIcon, BoltIcon,
+  ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, FunnelIcon, BoltIcon,
   ExclamationTriangleIcon, ArrowPathIcon, UserCircleIcon,
   EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon,
-  ArrowUturnRightIcon, ClipboardDocumentListIcon, ArrowTopRightOnSquareIcon
+  ArrowUturnRightIcon, ClipboardDocumentListIcon, ArrowTopRightOnSquareIcon, PencilIcon, TrashIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
 import type { Tarefa, TarefaReagendamento, Cliente, Vendedor, Interacao, Pedido } from '../../types'
 import { logger } from '../../utils/logger'
 import { formatBrazilianPhone } from '../../utils/validators'
-import { insertInteracao, insertAtividade } from '../../lib/database'
+import { insertInteracao, insertAtividade, deleteTarefa } from '../../lib/database'
 import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
@@ -48,12 +48,13 @@ interface TarefaCardProps {
   isOverdue: boolean
   isToday: boolean
   onVerNoFunil?: (cliente: Cliente) => void
+  onDeleteTarefa?: (tarefa: Tarefa) => void
 }
 
 const TarefaCard: React.FC<TarefaCardProps> = ({
   tarefa, cliente, vendedor, isGerente,
   onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
-  isOverdue, isToday, onVerNoFunil
+  isOverdue, isToday, onVerNoFunil, onDeleteTarefa
 }) => {
   const [expanded, setExpanded] = useState(false)
   const [completing, setCompleting] = useState(false)
@@ -147,12 +148,19 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
 
                 {/* Meta info em linha */}
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  {tarefa.hora && (
-                    <span className={`flex items-center gap-1 text-xs font-semibold ${isOverdue && !done ? 'text-red-600' : 'text-gray-600'}`}>
-                      <ClockIcon className="h-3.5 w-3.5" />
-                      {tarefa.hora}
-                    </span>
-                  )}
+                  {/* PRAZO EM DESTAQUE */}
+                  <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
+                    isOverdue && !done
+                      ? 'bg-red-100 text-red-700 border border-red-200'
+                      : isToday && !done
+                        ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                        : 'bg-gray-100 text-gray-700 border border-gray-200'
+                  }`}>
+                    <CalendarDaysIcon className="h-3.5 w-3.5" />
+                    {new Date(tarefa.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                    {tarefa.hora && ` às ${tarefa.hora}`}
+                  </span>
+
                   {cliente && (
                     <span className="flex items-center gap-1 text-xs text-gray-500 truncate max-w-[160px]">
                       <UserCircleIcon className="h-3.5 w-3.5 flex-shrink-0" />
@@ -171,17 +179,32 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 </div>
               </div>
 
-              {/* Botão expandir */}
-              <button
-                onClick={() => setExpanded(e => !e)}
-                className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-white/70 transition-colors"
-                title={expanded ? 'Recolher' : 'Expandir / Adicionar anotação'}
-              >
-                {expanded
-                  ? <ChevronUpIcon className="h-4 w-4" />
-                  : <ChevronDownIcon className="h-4 w-4" />
-                }
-              </button>
+              {/* Botões de ação - Editar e Excluir */}
+              <div className="flex items-center gap-1">
+                {/* Botão Editar - abre área expandida */}
+                <button
+                  onClick={() => setExpanded(e => !e)}
+                  className="flex-shrink-0 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title={expanded ? 'Recolher' : 'Editar tarefa'}
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+
+                {/* Botão Excluir */}
+                {onDeleteTarefa && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
+                        onDeleteTarefa(tarefa)
+                      }
+                    }}
+                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Excluir tarefa"
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Área expandida */}
@@ -294,25 +317,6 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                     </button>
                   </>
                 )}
-                {cliente.contatoEmail && (
-                  <button
-                    onClick={() => onEmail(cliente)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-sky-50 text-sky-700 border border-sky-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
-                  >
-                    <EnvelopeIcon className="h-3.5 w-3.5" />
-                    E-mail
-                  </button>
-                )}
-                {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                  <a
-                    href={`tel:+${formatBrazilianPhone(cliente.contatoTelefone || cliente.contatoCelular || '')}`}
-                    onClick={() => onCall(cliente)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-violet-50 text-violet-700 border border-violet-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
-                  >
-                    <PhoneIcon className="h-3.5 w-3.5" />
-                    Ligar
-                  </a>
-                )}
                 {onVerNoFunil && (
                   <button
                     onClick={() => onVerNoFunil(cliente)}
@@ -332,6 +336,253 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
   )
 }
 
+// ─── Componente Calendário ───────────────────────────────────────────────────
+interface CalendarioViewProps {
+  tarefas: Tarefa[]
+  clientes: Cliente[]
+  onTarefaClick: (tarefa: Tarefa) => void
+  onDateClick: (date: string) => void
+}
+
+const CalendarioView: React.FC<CalendarioViewProps> = ({ tarefas, clientes, onTarefaClick, onDateClick }) => {
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+
+  // Navegação entre meses
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+    setSelectedDate(null)
+  }
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+    setSelectedDate(null)
+  }
+
+  const goToToday = () => {
+    const today = new Date()
+    setCurrentDate(today)
+    setSelectedDate(today.toISOString().split('T')[0])
+  }
+
+  // Calcular dias do calendário
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
+  const firstDayOfMonth = new Date(year, month, 1)
+  const lastDayOfMonth = new Date(year, month + 1, 0)
+  const daysInMonth = lastDayOfMonth.getDate()
+  const startingDayOfWeek = firstDayOfMonth.getDay() // 0 = Domingo
+
+  // Organizar tarefas por data
+  const tarefasPorData = useMemo(() => {
+    const map: Record<string, Tarefa[]> = {}
+    tarefas.forEach(t => {
+      if (t.data) {
+        if (!map[t.data]) map[t.data] = []
+        map[t.data].push(t)
+      }
+    })
+    return map
+  }, [tarefas])
+
+  // Nomes dos meses em português
+  const monthNames = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ]
+
+  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+  // Gerar array de dias para o calendário
+  const calendarDays = []
+  
+  // Dias vazios antes do início do mês
+  for (let i = 0; i < startingDayOfWeek; i++) {
+    calendarDays.push(null)
+  }
+  
+  // Dias do mês
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    calendarDays.push({
+      day,
+      date: dateStr,
+      tarefas: tarefasPorData[dateStr] || [],
+      isToday: dateStr === new Date().toISOString().split('T')[0]
+    })
+  }
+
+  const selectedTarefas = selectedDate ? tarefasPorData[selectedDate] || [] : []
+
+  return (
+    <div className="space-y-4">
+      {/* Header do Calendário */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-bold text-gray-900">
+              {monthNames[month]} {year}
+            </h2>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={prevMonth}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronLeftIcon className="h-5 w-5 text-gray-600" />
+              </button>
+              <button
+                onClick={nextMonth}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronRightIcon className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={goToToday}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+          >
+            Hoje
+          </button>
+        </div>
+
+        {/* Dias da semana */}
+        <div className="grid grid-cols-7 gap-1 mb-2">
+          {weekDays.map(day => (
+            <div key={day} className="text-center text-xs font-semibold text-gray-500 py-2">
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Grade do calendário */}
+        <div className="grid grid-cols-7 gap-1">
+          {calendarDays.map((dayInfo, index) => (
+            <div key={index} className="aspect-square">
+              {dayInfo ? (
+                <button
+                  onClick={() => {
+                    setSelectedDate(dayInfo.date)
+                    if (dayInfo.tarefas.length === 0) {
+                      onDateClick(dayInfo.date)
+                    }
+                  }}
+                  className={`w-full h-full rounded-xl border transition-all flex flex-col items-start p-2 ${
+                    selectedDate === dayInfo.date
+                      ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                      : dayInfo.isToday
+                        ? 'border-primary-400 bg-primary-50/50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-sm font-semibold ${
+                    dayInfo.isToday ? 'text-primary-700' : 'text-gray-700'
+                  }`}>
+                    {dayInfo.day}
+                  </span>
+                  
+                  {/* Indicadores de tarefas */}
+                  {dayInfo.tarefas.length > 0 && (
+                    <div className="flex-1 w-full flex flex-col justify-end gap-0.5">
+                      <div className="flex gap-0.5 flex-wrap">
+                        {dayInfo.tarefas.slice(0, 3).map((t, i) => (
+                          <button
+                            key={i}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onTarefaClick(t)
+                            }}
+                            className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                              t.prioridade === 'alta' ? 'bg-red-500' :
+                              t.prioridade === 'media' ? 'bg-amber-500' :
+                              'bg-blue-500'
+                            }`}
+                          />
+                        ))}
+                        {dayInfo.tarefas.length > 3 && (
+                          <span className="text-[8px] text-gray-500 leading-none">+{dayInfo.tarefas.length - 3}</span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-gray-500 truncate w-full text-left">
+                        {dayInfo.tarefas.length} tarefa{dayInfo.tarefas.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              ) : (
+                <div className="w-full h-full" />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Lista de tarefas do dia selecionado */}
+      {selectedDate && selectedTarefas.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Tarefas de {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long' 
+              })}
+            </h3>
+            <button
+              onClick={() => onDateClick(selectedDate)}
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+            >
+              Ver no modo listagem →
+            </button>
+          </div>
+          <div className="space-y-2">
+            {selectedTarefas.map(tarefa => {
+              const cliente = clientes.find(c => c.id === tarefa.clienteId)
+              const cfg = TIPO_CONFIG[tarefa.tipo] || TIPO_CONFIG.outro
+              return (
+                <button
+                  key={tarefa.id}
+                  onClick={() => onTarefaClick(tarefa)}
+                  className="w-full text-left p-3 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg">{cfg.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{tarefa.titulo}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        {tarefa.hora && <span>🕐 {tarefa.hora}</span>}
+                        {cliente && <span>👤 {cliente.razaoSocial}</span>}
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                          tarefa.prioridade === 'alta' ? 'bg-red-100 text-red-700' :
+                          tarefa.prioridade === 'media' ? 'bg-amber-100 text-amber-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {tarefa.prioridade}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Estado vazio quando não há tarefas no mês */}
+      {Object.keys(tarefasPorData).length === 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+          <CalendarDaysIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">Nenhuma tarefa neste período</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Navegue para outro mês ou ajuste os filtros
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 const TarefasView: React.FC<{
   tarefas: Tarefa[]
@@ -345,10 +596,17 @@ const TarefasView: React.FC<{
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   onVerNoFunil?: (cliente: Cliente) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil }) => {
+  onDeleteTarefa?: (tarefa: Tarefa) => void
+}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onDeleteTarefa }) => {
   const [showModal, setShowModal] = useState(false)
   const [commCliente, setCommCliente] = useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
+  // Filtros de data estilo Agendor
+  const [dateFilter, setDateFilter] = useState<'todas' | 'semana' | 'hoje' | 'definir'>('hoje')
+  const [statusFilter, setStatusFilter] = useState<'pendentes' | 'finalizadas'>('pendentes')
+  const [viewMode, setViewMode] = useState<'listagem' | 'calendario'>('listagem')
+  const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null)
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [waCliente, setWaCliente] = useState<Cliente | null>(null)
@@ -554,10 +812,54 @@ const TarefasView: React.FC<{
     tarefas.filter(t => isGerente ? true : t.vendedorId === loggedUser?.id)
   , [tarefas, isGerente, loggedUser?.id])
 
-  // Segmentar tarefas
+  // Calcular datas da semana
+  const inicioSemana = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    const day = d.getDay()
+    const diff = d.getDate() - day
+    return new Date(d.setDate(diff)).toISOString().split('T')[0]
+  }, [hoje])
+
+  const fimSemana = useMemo(() => {
+    const d = new Date(inicioSemana)
+    d.setDate(d.getDate() + 6)
+    return d.toISOString().split('T')[0]
+  }, [inicioSemana])
+
+  // Filtros de data estilo Agendor
+  const tarefasFiltradas = useMemo(() => {
+    let filtered = minhasTarefas
+
+    // Aplicar filtro de status
+    if (statusFilter === 'pendentes') {
+      filtered = filtered.filter(t => t.status === 'pendente')
+    } else if (statusFilter === 'finalizadas') {
+      filtered = filtered.filter(t => t.status === 'concluida')
+    }
+
+    // Aplicar filtro de data
+    if (dateFilter === 'hoje') {
+      filtered = filtered.filter(t => t.data === hoje)
+    } else if (dateFilter === 'semana') {
+      filtered = filtered.filter(t => t.data >= inicioSemana && t.data <= fimSemana)
+    } else if (dateFilter === 'definir') {
+      filtered = filtered.filter(t => !t.data || t.data === '')
+    }
+    // 'todas' não filtra por data
+
+    // Aplicar filtro de período customizado
+    if (dateRange) {
+      filtered = filtered.filter(t => t.data >= dateRange.start && t.data <= dateRange.end)
+    }
+
+    return filtered
+  }, [minhasTarefas, dateFilter, statusFilter, dateRange, hoje, inicioSemana, fimSemana])
+
+  // Segmentar tarefas filtradas
   const { atrasadas, deHoje, futuras, concluidas } = useMemo(() => {
-    const pendentes = minhasTarefas.filter(t => t.status === 'pendente')
-    const conc = minhasTarefas.filter(t => t.status === 'concluida')
+    const pendentes = tarefasFiltradas.filter(t => t.status === 'pendente')
+    const conc = tarefasFiltradas.filter(t => t.status === 'concluida')
 
     const applyTipoFilter = (arr: Tarefa[]) =>
       filterTipo === 'todos' ? arr : arr.filter(t => t.tipo === filterTipo)
@@ -581,7 +883,7 @@ const TarefasView: React.FC<{
         [...conc].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 30)
       ),
     }
-  }, [minhasTarefas, hoje, filterTipo])
+  }, [tarefasFiltradas, hoje, filterTipo])
 
   // Stats do dia
   const totalHoje = deHoje.length
@@ -679,6 +981,7 @@ const TarefasView: React.FC<{
         isOverdue={overdue}
         isToday={tarefa.data === hoje}
         onVerNoFunil={onVerNoFunil}
+        onDeleteTarefa={onDeleteTarefa}
       />
     )
   }
@@ -864,6 +1167,180 @@ const TarefasView: React.FC<{
 
         {activeTab === 'tarefas' && (
           <>
+            {/* Barra de Filtros - Estilo Agendor */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+              {/* Linha 1: Filtros de Data e Status */}
+              <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+                {/* Filtros de Data */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Data:</span>
+                  <button
+                    onClick={() => { setDateFilter('todas'); setDateRange(null) }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      dateFilter === 'todas' && !dateRange
+                        ? 'bg-primary-100 text-primary-700 ring-1 ring-primary-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  <button
+                    onClick={() => { setDateFilter('semana'); setDateRange(null) }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      dateFilter === 'semana' && !dateRange
+                        ? 'bg-primary-100 text-primary-700 ring-1 ring-primary-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Esta Semana
+                  </button>
+                  <button
+                    onClick={() => { setDateFilter('hoje'); setDateRange(null) }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      dateFilter === 'hoje' && !dateRange
+                        ? 'bg-primary-100 text-primary-700 ring-1 ring-primary-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Hoje
+                  </button>
+                  <button
+                    onClick={() => { setDateFilter('definir'); setDateRange(null) }}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      dateFilter === 'definir' && !dateRange
+                        ? 'bg-primary-100 text-primary-700 ring-1 ring-primary-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    A Definir
+                  </button>
+                  
+                  {/* Date Range Picker Toggle */}
+                  <button
+                    onClick={() => setShowDatePicker(!showDatePicker)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                      dateRange
+                        ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <CalendarDaysIcon className="h-4 w-4" />
+                    {dateRange ? `${new Date(dateRange.start).toLocaleDateString('pt-BR')} - ${new Date(dateRange.end).toLocaleDateString('pt-BR')}` : 'Período'}
+                  </button>
+                  
+                  {dateRange && (
+                    <button
+                      onClick={() => { setDateRange(null); setDateFilter('hoje') }}
+                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                      title="Limpar período"
+                    >
+                      <XMarkIcon className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filtros de Status */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Status:</span>
+                  <button
+                    onClick={() => setStatusFilter('pendentes')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      statusFilter === 'pendentes'
+                        ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Pendentes
+                  </button>
+                  <button
+                    onClick={() => setStatusFilter('finalizadas')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      statusFilter === 'finalizadas'
+                        ? 'bg-green-100 text-green-700 ring-1 ring-green-200'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Finalizadas
+                  </button>
+                </div>
+              </div>
+
+              {/* Date Range Picker */}
+              {showDatePicker && (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">De:</label>
+                    <input
+                      type="date"
+                      value={dateRange?.start || ''}
+                      onChange={(e) => setDateRange(prev => ({ start: e.target.value, end: prev?.end || e.target.value }))}
+                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Até:</label>
+                    <input
+                      type="date"
+                      value={dateRange?.end || ''}
+                      onChange={(e) => setDateRange(prev => ({ start: prev?.start || e.target.value, end: e.target.value }))}
+                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </div>
+                  <button
+                    onClick={() => { setDateRange(null); setShowDatePicker(false) }}
+                    className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => setShowDatePicker(false)}
+                    className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Aplicar
+                  </button>
+                </div>
+              )}
+
+              {/* Linha 2: Modo de Visualização e Contador */}
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Visualização:</span>
+                  <button
+                    onClick={() => setViewMode('listagem')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      viewMode === 'listagem'
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    Listagem
+                  </button>
+                  <button
+                    onClick={() => setViewMode('calendario')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      viewMode === 'calendario'
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <CalendarDaysIcon className="h-4 w-4" />
+                    Calendário
+                  </button>
+                </div>
+
+                {/* Contador de Tarefas */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-gray-500">
+                    <span className="font-semibold text-gray-800">{tarefasFiltradas.length}</span> tarefa{tarefasFiltradas.length !== 1 ? 's' : ''} para
+                  </span>
+                  <span className="font-medium text-gray-800">{loggedUser?.nome.split(' ')[0] || 'Mim'}</span>
+                </div>
+              </div>
+            </div>
+
             {/* Saudação + progresso */}
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-center justify-between">
               <div>
@@ -909,6 +1386,31 @@ const TarefasView: React.FC<{
               />
             )}
 
+        {/* VISUALIZAÇÃO DE CALENDÁRIO */}
+        {viewMode === 'calendario' && (
+          <CalendarioView 
+            tarefas={tarefasFiltradas}
+            clientes={clientes}
+            onTarefaClick={(tarefa) => {
+              // Encontrar e expandir a tarefa no modo listagem
+              setViewMode('listagem')
+              setDateFilter('todas')
+              setTimeout(() => {
+                const element = document.getElementById(`tarefa-${tarefa.id}`)
+                element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }, 100)
+            }}
+            onDateClick={(date) => {
+              setDateFilter('todas')
+              setDateRange({ start: date, end: date })
+              setViewMode('listagem')
+            }}
+          />
+        )}
+
+        {/* VISUALIZAÇÃO DE LISTAGEM */}
+        {viewMode === 'listagem' && (
+          <>
         {/* ZONA 1: ATRASADAS */}
         {atrasadas.length > 0 && (
           <section>
