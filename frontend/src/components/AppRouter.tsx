@@ -449,8 +449,33 @@ export default function AppRouter({
         }}
         onUpdateTarefa={async (t) => {
           try {
+            // Detectar se a tarefa está sendo marcada como concluída agora
+            const tarefaAnterior = tarefas.find(x => x.id === t.id)
+            const foiConcluidaAgora = tarefaAnterior?.status !== 'concluida' && t.status === 'concluida'
+            
             await db.updateTarefa(t.id, t)
             setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
+            
+            // Disparar regras de automação ao concluir tarefa
+            if (foiConcluidaAgora && t.clienteId) {
+              try {
+                const cliente = clientes.find(c => c.id === t.clienteId)
+                if (cliente) {
+                  const novasTarefas = await db.processarRegrasTarefaConcluida(
+                    t,
+                    cliente.etapa,
+                    cliente.razaoSocial || 'Cliente',
+                    t.vendedorId || cliente.vendedorId || loggedUser?.id || 0
+                  )
+                  if (novasTarefas.length > 0) {
+                    setTarefas(prev => [...novasTarefas, ...prev])
+                    showToast('success', `${novasTarefas.length} tarefa(s) automática(s) criada(s)`)
+                  }
+                }
+              } catch (err) {
+                logger.error('Erro ao processar regras tarefa concluída:', err)
+              }
+            }
           } catch (err) { logger.error('Erro ao atualizar tarefa:', err) }
         }}
         onAddTarefa={async (t) => {

@@ -1248,13 +1248,15 @@ export interface RegraAutomacaoDB {
   id: number
   nome: string
   ativa: boolean
-  gatilho: 'mudanca_etapa' | 'inatividade' | 'substatus' | 'data_especifica' | 'reconquista'
+  gatilho: 'mudanca_etapa' | 'inatividade' | 'substatus' | 'data_especifica' | 'reconquista' | 'tarefa_concluida'
   condicoes: {
     etapaOrigem?: string
     etapaDestino?: string
     diasInatividade?: number
     subStatus?: string
     diasDesdeEvento?: number
+    tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
+    etapaCliente?: string
   }
   acao: {
     titulo: string
@@ -1504,5 +1506,80 @@ export async function processarRegrasAutomacao(
     console.error('Erro ao processar regras de automação:', err)
   }
   
+  return tarefasCriadas
+}
+
+// ============================================
+// PROCESSAR REGRAS QUANDO TAREFA É CONCLUÍDA
+// ============================================
+export async function processarRegrasTarefaConcluida(
+  tarefaConcluida: Tarefa,
+  etapaCliente: string,
+  nomeCliente: string,
+  vendedorId: number
+): Promise<Tarefa[]> {
+  const tarefasCriadas: Tarefa[] = []
+
+  try {
+    const { data: regras, error } = await supabase
+      .from('regras_automacao')
+      .select('*')
+      .eq('ativa', true)
+      .eq('gatilho', 'tarefa_concluida')
+
+    if (error) {
+      console.error('Erro ao buscar regras tarefa_concluida:', error)
+      return tarefasCriadas
+    }
+
+    if (!regras || regras.length === 0) {
+      console.log('Nenhuma regra ativa para gatilho tarefa_concluida')
+      return tarefasCriadas
+    }
+
+    console.log(`[Automação] Tarefa concluída: ${tarefaConcluida.titulo} (tipo: ${tarefaConcluida.tipo}, etapa cliente: ${etapaCliente}). Verificando ${regras.length} regra(s)...`)
+
+    const dataDaqui = (dias: number) => new Date(Date.now() + dias * 86400000).toISOString().split('T')[0]
+
+    for (const regra of regras) {
+      const condicoes = regra.condicoes || {}
+
+      // Filtrar por tipo de tarefa
+      if (condicoes.tipoTarefaConcluida && condicoes.tipoTarefaConcluida !== 'qualquer') {
+        if (condicoes.tipoTarefaConcluida !== tarefaConcluida.tipo) {
+          console.log(`  -> Regra "${regra.nome}" não aplicável: tipo ${condicoes.tipoTarefaConcluida} !== ${tarefaConcluida.tipo}`)
+          continue
+        }
+      }
+
+      // Filtrar por etapa do cliente
+      if (condicoes.etapaCliente && condicoes.etapaCliente !== etapaCliente) {
+        console.log(`  -> Regra "${regra.nome}" não aplicável: etapaCliente ${condicoes.etapaCliente} !== ${etapaCliente}`)
+        continue
+      }
+
+      console.log(`  -> Regra "${regra.nome}" APLICADA! Criando tarefa...`)
+
+      const titulo = (regra.acao?.titulo || '').replace(/\{cliente\}/g, nomeCliente)
+      const descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
+
+      const novaTarefa = await insertTarefa({
+        titulo,
+        descricao,
+        data: dataDaqui(regra.acao?.diasPrazo || 7),
+        hora: regra.acao?.horaPadrao || '10:00',
+        tipo: regra.acao?.tipo || 'outro',
+        status: 'pendente',
+        prioridade: regra.acao?.prioridade || 'media',
+        clienteId: tarefaConcluida.clienteId,
+        vendedorId
+      })
+
+      tarefasCriadas.push(novaTarefa)
+    }
+  } catch (err) {
+    console.error('Erro ao processar regras de tarefa concluída:', err)
+  }
+
   return tarefasCriadas
 }

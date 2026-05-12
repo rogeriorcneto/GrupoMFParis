@@ -13,13 +13,15 @@ interface RegraAutomacao {
   id: number
   nome: string
   ativa: boolean
-  gatilho: 'mudanca_etapa' | 'inatividade' | 'substatus' | 'data_especifica' | 'reconquista'
+  gatilho: 'mudanca_etapa' | 'inatividade' | 'substatus' | 'data_especifica' | 'reconquista' | 'tarefa_concluida'
   condicoes: {
     etapaOrigem?: string
     etapaDestino?: string
     diasInatividade?: number
     subStatus?: string
     diasDesdeEvento?: number
+    tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
+    etapaCliente?: string
   }
   acao: {
     titulo: string
@@ -185,6 +187,7 @@ const ETAPAS = [
 
 const GATILHOS = [
   { key: 'mudanca_etapa', label: 'Mudança de Etapa', desc: 'Quando cliente move de uma etapa para outra' },
+  { key: 'tarefa_concluida', label: 'Tarefa Concluída', desc: 'Quando uma tarefa específica é concluída em uma etapa' },
   { key: 'inatividade', label: 'Inatividade', desc: 'Quando cliente fica sem interação por X dias' },
   { key: 'substatus', label: 'Mudança de Sub-status', desc: 'Quando status interno muda (ex: amostra entregue)' },
   { key: 'data_especifica', label: 'Data Específica', desc: 'X dias após um evento específico' },
@@ -474,6 +477,15 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
                             {regra.condicoes.diasInatividade && (
                               <> • Inatividade: {regra.condicoes.diasInatividade}d</>
                             )}
+                            {regra.condicoes.tipoTarefaConcluida && regra.condicoes.tipoTarefaConcluida !== 'qualquer' && (
+                              <> • {TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.icon} {TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.label}</>
+                            )}
+                            {regra.condicoes.etapaCliente && (
+                              <> em {ETAPAS.find(e => e.key === regra.condicoes.etapaCliente)?.label}</>
+                            )}
+                            {regra.condicoes.subStatus && (
+                              <> • {regra.condicoes.subStatus}</>
+                            )}
                           </p>
 
                           {/* Preview da ação */}
@@ -537,6 +549,12 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
                             )}
                             {regra.condicoes.subStatus && (
                               <p><span className="text-gray-500">Sub-status:</span> {regra.condicoes.subStatus}</p>
+                            )}
+                            {regra.condicoes.tipoTarefaConcluida && (
+                              <p><span className="text-gray-500">Tipo de tarefa:</span> {regra.condicoes.tipoTarefaConcluida === 'qualquer' ? 'Qualquer tipo' : TIPOS_TAREFA.find(t => t.key === regra.condicoes.tipoTarefaConcluida)?.label}</p>
+                            )}
+                            {regra.condicoes.etapaCliente && (
+                              <p><span className="text-gray-500">Etapa do cliente:</span> {ETAPAS.find(e => e.key === regra.condicoes.etapaCliente)?.label}</p>
                             )}
                           </div>
                         </div>
@@ -686,6 +704,61 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                     ...prev, 
                     condicoes: { ...prev.condicoes, diasInatividade: parseInt(e.target.value) }
                   }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            )}
+
+            {regra.gatilho === 'tarefa_concluida' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarefa Concluída</label>
+                  <select
+                    value={regra.condicoes.tipoTarefaConcluida || 'qualquer'}
+                    onChange={e => setRegra(prev => ({ 
+                      ...prev, 
+                      condicoes: { ...prev.condicoes, tipoTarefaConcluida: e.target.value as any }
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="qualquer">Qualquer tipo</option>
+                    {TIPOS_TAREFA.map(t => (
+                      <option key={t.key} value={t.key}>{t.icon} {t.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Disparar quando uma tarefa deste tipo for concluída</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Etapa do Cliente (Kanban)</label>
+                  <select
+                    value={regra.condicoes.etapaCliente || ''}
+                    onChange={e => setRegra(prev => ({ 
+                      ...prev, 
+                      condicoes: { ...prev.condicoes, etapaCliente: e.target.value || undefined }
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="">Qualquer etapa</option>
+                    {ETAPAS.map(e => (
+                      <option key={e.key} value={e.key}>{e.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Apenas se o cliente estiver nesta etapa do funil</p>
+                </div>
+              </div>
+            )}
+
+            {regra.gatilho === 'substatus' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sub-status</label>
+                <input
+                  type="text"
+                  value={regra.condicoes.subStatus || ''}
+                  onChange={e => setRegra(prev => ({ 
+                    ...prev, 
+                    condicoes: { ...prev.condicoes, subStatus: e.target.value }
+                  }))}
+                  placeholder="Ex: entregue, liberada, aprovada"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
                 />
               </div>

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS regras_automacao (
   id SERIAL PRIMARY KEY,
   nome TEXT NOT NULL,
   ativa BOOLEAN DEFAULT true,
-  gatilho TEXT NOT NULL CHECK (gatilho IN ('mudanca_etapa', 'inatividade', 'substatus', 'data_especifica', 'reconquista')),
+  gatilho TEXT NOT NULL CHECK (gatilho IN ('mudanca_etapa', 'inatividade', 'substatus', 'data_especifica', 'reconquista', 'tarefa_concluida')),
   condicoes JSONB DEFAULT '{}',
   acao JSONB NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -21,12 +21,16 @@ CREATE INDEX IF NOT EXISTS idx_regras_automacao_gatilho ON regras_automacao(gati
 -- Habilitar Row Level Security
 ALTER TABLE regras_automacao ENABLE ROW LEVEL SECURITY;
 
+-- Remover políticas existentes se houver
+DROP POLICY IF EXISTS "Permitir SELECT para usuários autenticados" ON regras_automacao;
+DROP POLICY IF EXISTS "Permitir modificações apenas para gerentes" ON regras_automacao;
+
 -- Política: Permitir SELECT para todos os usuários autenticados
-CREATE POLICY IF NOT EXISTS "Permitir SELECT para usuários autenticados" ON regras_automacao
+CREATE POLICY "Permitir SELECT para usuários autenticados" ON regras_automacao
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Política: Permitir INSERT/UPDATE/DELETE apenas para gerentes
-CREATE POLICY IF NOT EXISTS "Permitir modificações apenas para gerentes" ON regras_automacao
+CREATE POLICY "Permitir modificações apenas para gerentes" ON regras_automacao
   FOR ALL USING (
     EXISTS (
       SELECT 1 FROM vendedores 
@@ -59,12 +63,16 @@ CREATE INDEX IF NOT EXISTS idx_mensagens_automacao_gatilho ON mensagens_automaca
 -- Habilitar Row Level Security
 ALTER TABLE mensagens_automacao ENABLE ROW LEVEL SECURITY;
 
+-- Remover políticas existentes se houver
+DROP POLICY IF EXISTS "Permitir SELECT mensagens para usuários autenticados" ON mensagens_automacao;
+DROP POLICY IF EXISTS "Permitir modificações mensagens apenas para gerentes" ON mensagens_automacao;
+
 -- Política: Permitir SELECT para todos os usuários autenticados
-CREATE POLICY IF NOT EXISTS "Permitir SELECT mensagens para usuários autenticados" ON mensagens_automacao
+CREATE POLICY "Permitir SELECT mensagens para usuários autenticados" ON mensagens_automacao
   FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Política: Permitir INSERT/UPDATE/DELETE apenas para gerentes
-CREATE POLICY IF NOT EXISTS "Permitir modificações mensagens apenas para gerentes" ON mensagens_automacao
+CREATE POLICY "Permitir modificações mensagens apenas para gerentes" ON mensagens_automacao
   FOR ALL USING (
     EXISTS (
       SELECT 1 FROM vendedores 
@@ -86,6 +94,10 @@ BEGIN
   RETURN NEW;
 END;
 $$ language 'plpgsql';
+
+-- Remover triggers existentes se houver
+DROP TRIGGER IF EXISTS update_regras_automacao_updated_at ON regras_automacao;
+DROP TRIGGER IF EXISTS update_mensagens_automacao_updated_at ON mensagens_automacao;
 
 CREATE TRIGGER update_regras_automacao_updated_at 
   BEFORE UPDATE ON regras_automacao 

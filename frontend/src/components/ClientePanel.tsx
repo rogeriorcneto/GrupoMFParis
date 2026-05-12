@@ -1075,6 +1075,24 @@ export default function ClientePanel({
                               const ns = t.status === 'concluida' ? 'pendente' : 'concluida'
                               try { await db.updateTarefa(t.id, { status: ns }) } catch (err) { logger.error('Erro toggle tarefa:', err) }
                               setTarefas(prev => prev.map(x => x.id === t.id ? { ...x, status: ns } : x))
+                              
+                              // Disparar regras de automação ao concluir tarefa
+                              if (ns === 'concluida' && t.clienteId) {
+                                try {
+                                  const novasTarefas = await db.processarRegrasTarefaConcluida(
+                                    { ...t, status: 'concluida' },
+                                    c.etapa,
+                                    c.razaoSocial || 'Cliente',
+                                    t.vendedorId || c.vendedorId || loggedUser?.id || 0
+                                  )
+                                  if (novasTarefas.length > 0) {
+                                    setTarefas(prev => [...novasTarefas, ...prev])
+                                    logger.log(`${novasTarefas.length} tarefa(s) automática(s) criada(s) ao concluir "${t.titulo}"`)
+                                  }
+                                } catch (err) {
+                                  logger.error('Erro ao processar regras tarefa concluída:', err)
+                                }
+                              }
                             }}
                             className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${t.status === 'concluida' ? 'bg-green-500 border-green-500 text-white' : isVencida ? 'border-red-400 hover:border-red-600' : 'border-gray-300 hover:border-primary-500'}`}
                           >
