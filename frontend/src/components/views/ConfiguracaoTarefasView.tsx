@@ -30,6 +30,7 @@ interface RegraAutomacao {
     tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
     prioridade: 'alta' | 'media' | 'baixa'
     diasPrazo: number
+    horaPadrao?: string
   }
 }
 
@@ -60,8 +61,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Prazo de 45 dias se aproximando. Cobrar retorno urgente.',
       tipo: 'ligacao',
       prioridade: 'alta',
-      diasPrazo: 40,
-      horaPadrao: '09:00'
+      diasPrazo: 40
     }
   },
   {
@@ -117,8 +117,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Pedido aprovado. Acompanhar produção e entrega.',
       tipo: 'ligacao',
       prioridade: 'media',
-      diasPrazo: 7,
-      horaPadrao: '11:00'
+      diasPrazo: 7
     }
   },
   {
@@ -132,8 +131,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
       descricao: 'Após entrega, avaliar satisfação do cliente.',
       tipo: 'email',
       prioridade: 'media',
-      diasPrazo: 30,
-      horaPadrao: '14:00'
+      diasPrazo: 30
     }
   },
   {
@@ -565,7 +563,7 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
                             <p><span className="text-gray-500">Descrição:</span> {regra.acao.descricao}</p>
                             <p><span className="text-gray-500">Tipo:</span> {TIPOS_TAREFA.find(t => t.key === regra.acao.tipo)?.label}</p>
                             <p><span className="text-gray-500">Prioridade:</span> {regra.acao.prioridade}</p>
-                            <p><span className="text-gray-500">Prazo:</span> {regra.acao.diasPrazo} dias</p>
+                            <p><span className="text-gray-500">Prazo:</span> {regra.acao.diasPrazo} dias{regra.acao.horaPadrao ? ` às ${regra.acao.horaPadrao}` : ''}</p>
                           </div>
                         </div>
                       </div>
@@ -855,6 +853,20 @@ const RegraForm: React.FC<RegraFormProps> = ({ regra: initialRegra, onSave, onCa
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Horário Padrão (opcional)</label>
+              <input
+                type="time"
+                value={regra.acao.horaPadrao || ''}
+                onChange={e => setRegra(prev => ({ 
+                  ...prev, 
+                  acao: { ...prev.acao, horaPadrao: e.target.value || undefined }
+                }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Deixe em branco para "sem horário"</p>
             </div>
           </div>
         </div>

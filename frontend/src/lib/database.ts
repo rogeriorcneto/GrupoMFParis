@@ -1265,6 +1265,7 @@ export interface RegraAutomacaoDB {
     tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
     prioridade: 'alta' | 'media' | 'baixa'
     diasPrazo: number
+    horaPadrao?: string
   }
   created_at?: string
   updated_at?: string
@@ -1575,6 +1576,7 @@ export async function processarRegrasTarefaConcluida(
         titulo,
         descricao,
         data: dataDaqui(regra.acao?.diasPrazo || 7),
+        hora: regra.acao?.horaPadrao || undefined,
         tipo: regra.acao?.tipo || 'outro',
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
