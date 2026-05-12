@@ -49,12 +49,13 @@ interface TarefaCardProps {
   isToday: boolean
   onVerNoFunil?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
+  onVerRegraAutomacao?: (regraId: number) => void
 }
 
 const TarefaCard: React.FC<TarefaCardProps> = ({
   tarefa, cliente, vendedor, isGerente,
   onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
-  isOverdue, isToday, onVerNoFunil, onDeleteTarefa
+  isOverdue, isToday, onVerNoFunil, onDeleteTarefa, onVerRegraAutomacao
 }) => {
   const [expanded, setExpanded] = useState(false)
   const [completing, setCompleting] = useState(false)
@@ -135,9 +136,22 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 {/* Tipo + título */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-base">{cfg.icon}</span>
-                  <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'line-through text-gray-400' : ''}`}>
-                    {tarefa.titulo}
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'line-through text-gray-400' : ''}`}>
+                      {tarefa.titulo}
+                    </h4>
+                    {/* Indicador de automação */}
+                    {tarefa.origemAutomacaoId && onVerRegraAutomacao && (
+                      <button
+                        onClick={() => onVerRegraAutomacao(tarefa.origemAutomacaoId!)}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200 hover:bg-purple-200 transition-colors"
+                        title="Ver regra de automação"
+                      >
+                        <BoltIcon className="h-3 w-3" />
+                        Automática
+                      </button>
+                    )}
+                  </div>
                   {isOverdue && !done && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full border border-red-200">
                       <ExclamationTriangleIcon className="h-3 w-3" />
@@ -160,6 +174,31 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                     {new Date(tarefa.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                     {tarefa.hora && ` às ${tarefa.hora}`}
                   </span>
+
+                  {/* HORA DE EXECUÇÃO (se concluída) */}
+                  {done && tarefa.concluidaEm && (
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                      <CheckCircleIcon className="h-3.5 w-3.5" />
+                      Executada: {new Date(tarefa.concluidaEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {new Date(tarefa.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+
+                  {/* PRAZO EM DIAS */}
+                  {!done && (
+                    <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <ClockIcon className="h-3.5 w-3.5" />
+                      {(() => {
+                        const hoje = new Date()
+                        const dataTarefa = new Date(tarefa.data)
+                        const diffDias = Math.ceil((dataTarefa.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+                        if (diffDias === 0) return 'Hoje'
+                        if (diffDias === 1) return 'Amanhã'
+                        if (diffDias === -1) return 'Ontem'
+                        if (diffDias > 0) return `Em ${diffDias} dias`
+                        return `Há ${Math.abs(diffDias)} dias`
+                      })()}
+                    </span>
+                  )}
 
                   {cliente && (
                     <span className="flex items-center gap-1 text-xs text-gray-500 truncate max-w-[160px]">
@@ -590,6 +629,9 @@ const TarefasView: React.FC<{
   const [dateFilter, setDateFilter] = useState<'todas' | 'semana' | 'hoje' | 'definir'>('hoje')
   const [statusFilter, setStatusFilter] = useState<'pendentes' | 'finalizadas'>('pendentes')
   const [viewMode, setViewMode] = useState<'listagem' | 'calendario'>('listagem')
+  // Estado para pesquisa
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTermHistorico, setSearchTermHistorico] = useState('')
   const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -816,6 +858,25 @@ const TarefasView: React.FC<{
   const tarefasFiltradas = useMemo(() => {
     let filtered = minhasTarefas
 
+    // Aplicar filtro de pesquisa
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase()
+      filtered = filtered.filter(t => {
+        const cliente = clientes.find(c => c.id === t.clienteId)
+        const clienteNome = cliente?.razaoSocial.toLowerCase() || ''
+        const titulo = t.titulo.toLowerCase()
+        const descricao = t.descricao?.toLowerCase() || ''
+        const tipo = t.tipo.toLowerCase()
+        
+        return (
+          titulo.includes(searchLower) ||
+          descricao.includes(searchLower) ||
+          clienteNome.includes(searchLower) ||
+          tipo.includes(searchLower)
+        )
+      })
+    }
+
     // Aplicar filtro de status
     if (statusFilter === 'pendentes') {
       filtered = filtered.filter(t => t.status === 'pendente')
@@ -957,6 +1018,10 @@ const TarefasView: React.FC<{
         vendedor={vendedor}
         isGerente={isGerente}
         onToggle={toggleStatus}
+        onVerRegraAutomacao={(regraId) => {
+          // Redirecionar para página de configuração de tarefas
+          window.open(`/configuracao-tarefas?regra=${regraId}`, '_blank')
+        }}
         onWhatsApp={(c) => { setWaCliente(c); setShowWhatsApp(true) }}
         onBot={(c) => setCommCliente(c)}
         onEmail={(c) => setCommCliente(c)}
@@ -1076,11 +1141,54 @@ const TarefasView: React.FC<{
 
         {/* ── ABA HISTÓRICO ─────────────────────────── */}
         {activeTab === 'historico' && (() => {
-          const todas = minhasTarefas.filter(t => t.status === 'concluida')
-            .sort((a, b) => (b.concluidaEm || b.data).localeCompare(a.concluidaEm || a.data))
+          // Aplicar filtro de pesquisa no histórico
+          let todas = minhasTarefas.filter(t => t.status === 'concluida')
+          if (searchTermHistorico.trim()) {
+            const searchLower = searchTermHistorico.toLowerCase()
+            todas = todas.filter(t => {
+              const cliente = clientes.find(c => c.id === t.clienteId)
+              const clienteNome = cliente?.razaoSocial.toLowerCase() || ''
+              const titulo = t.titulo.toLowerCase()
+              const descricao = t.descricao?.toLowerCase() || ''
+              const tipo = t.tipo.toLowerCase()
+              
+              return (
+                titulo.includes(searchLower) ||
+                descricao.includes(searchLower) ||
+                clienteNome.includes(searchLower) ||
+                tipo.includes(searchLower)
+              )
+            })
+          }
+          todas = todas.sort((a, b) => (b.concluidaEm || b.data).localeCompare(a.concluidaEm || a.data))
+          
           const comReagendamento = minhasTarefas.filter(t => t.reagendamentos && t.reagendamentos.length > 0)
           return (
             <>
+              {/* Barra de Pesquisa do Histórico */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-4">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FunnelIcon className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTermHistorico}
+                    onChange={e => setSearchTermHistorico(e.target.value)}
+                    placeholder="Pesquisar no histórico por título, descrição, cliente ou tipo..."
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                  {searchTermHistorico && (
+                    <button
+                      onClick={() => setSearchTermHistorico('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* KPIs rápidos */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
@@ -1124,8 +1232,17 @@ const TarefasView: React.FC<{
                         </div>
                         <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
                           {cliente && <span>🏢 {cliente.razaoSocial}</span>}
-                          <span>🗓️ {new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
-                          {t.concluidaEm && <span>✅ Concluída em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')}</span>}
+                          <span>🗓️ Prazo: {new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
+                          {t.concluidaEm && (
+                            <span>✅ Executada em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')} às {new Date(t.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                          {/* Indicador de automação no histórico */}
+                          {t.origemAutomacaoId && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200">
+                              <BoltIcon className="h-3 w-3" />
+                              Automática
+                            </span>
+                          )}
                         </div>
                         {t.descricao && (
                           <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">📝 {t.descricao}</p>
@@ -1152,8 +1269,30 @@ const TarefasView: React.FC<{
 
         {activeTab === 'tarefas' && (
           <>
-            {/* Barra de Filtros - Estilo Agendor */}
+            {/* Barra de Pesquisa e Filtros - Estilo Agendor */}
             <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-4">
+              {/* Barra de Pesquisa */}
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FunnelIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Pesquisar por título, descrição, cliente ou tipo..."
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
+              
               {/* Linha 1: Filtros de Data e Status */}
               <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
                 {/* Filtros de Data */}

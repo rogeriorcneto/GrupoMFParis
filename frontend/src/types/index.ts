@@ -283,6 +283,7 @@ export interface Tarefa {
   vendedorId?: number
   concluidaEm?: string
   reagendamentos?: TarefaReagendamento[]
+  origemAutomacaoId?: number // ID da regra de automação que criou esta tarefa
 }
 
 export interface Vendedor {
