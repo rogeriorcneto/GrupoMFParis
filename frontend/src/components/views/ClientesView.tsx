@@ -53,22 +53,27 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   }
 
   // --- CSV handlers (extracted from JSX for cleanliness) ---
-  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string
-      const lines = text.split('\n').filter(l => l.trim())
-      if (lines.length < 2) { alert('CSV vazio ou sem dados'); return }
+    
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (ev) => resolve(ev.target?.result as string)
+      reader.onerror = () => reject(new Error('Erro ao ler arquivo'))
+      reader.readAsText(file, 'UTF-8')
+    })
 
-      const firstLine = lines[0]
-      const countSemicolon = (firstLine.match(/;/g) || []).length
-      const countComma = (firstLine.match(/,/g) || []).length
-      const countTab = (firstLine.match(/\t/g) || []).length
-      const sep = countTab > countComma && countTab > countSemicolon ? '\t' : countSemicolon > countComma ? ';' : ','
+    const lines = text.split('\n').filter(l => l.trim())
+    if (lines.length < 2) { alert('CSV vazio ou sem dados'); return }
 
-      const parseLine = (line: string): string[] => {
+    const firstLine = lines[0]
+    const countSemicolon = (firstLine.match(/;/g) || []).length
+    const countComma = (firstLine.match(/,/g) || []).length
+    const countTab = (firstLine.match(/\t/g) || []).length
+    const sep = countTab > countComma && countTab > countSemicolon ? '\t' : countSemicolon > countComma ? ';' : ','
+
+    const parseLine = (line: string): string[] => {
         const result: string[] = []
         let current = '', inQuotes = false
         for (let j = 0; j < line.length; j++) {
@@ -193,9 +198,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
               valorNovo !== valorExistente) {
             // Para arrays, fazer merge
             if (Array.isArray(valorNovo) && Array.isArray(valorExistente)) {
-              merged[campo] = [...new Set([...valorExistente, ...valorNovo])]
+              (merged as any)[campo] = [...new Set([...valorExistente, ...valorNovo])]
             } else {
-              merged[campo] = valorNovo
+              (merged as any)[campo] = valorNovo
             }
           }
         })
@@ -520,8 +525,6 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       mensagem += `\n📊 Todos os campos foram mapeados conforme disponível no CSV.`
 
       alert(mensagem)
-    }
-    reader.readAsText(file, 'UTF-8')
     e.target.value = ''
   }
 

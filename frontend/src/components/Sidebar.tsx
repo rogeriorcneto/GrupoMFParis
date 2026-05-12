@@ -34,7 +34,7 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'configuracao-tarefas', 'configuracao-mensagens'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens'],
   vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'treinamento', 'pedidos'],
   sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos'],
 }
@@ -43,6 +43,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'dashboard', icon: HomeIcon, label: 'Visão Geral' },
   { id: 'ia', icon: SparklesIcon, label: '🤖 Assistente IA' },
   { id: 'ia-contexto', icon: DocumentTextIcon, label: '📚 Contexto IA' },
+  { id: 'criar-automacao', icon: CogIcon, label: '⚙️ Criar Automação' },
   { id: 'aprovacao', icon: ClipboardDocumentCheckIcon, label: 'Aprovação de Pedidos' },
   { id: 'funil', icon: FunnelIcon, label: 'Funil Comercial' },
   { id: 'clientes', icon: UserGroupIcon, label: 'Clientes' },

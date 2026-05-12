@@ -1766,3 +1766,258 @@ export async function uploadArquivoIAContexto(
     return null
   }
 }
+
+// ============================================
+// Automações
+// ============================================
+
+export interface Automacao {
+  id: string
+  nome: string
+  descricao?: string
+  tipo: 'mensagem' | 'tarefa' | 'etapa' | 'notificacao' | 'email' | 'whatsapp'
+  status: 'ativa' | 'pausada' | 'rascunho'
+  gatilhoTipo: 'tempo' | 'evento' | 'manual'
+  gatilhoConfig: Record<string, any>
+  acoes: Array<{
+    tipo: string
+    configuracao: Record<string, any>
+    ordem: number
+  }>
+  criadoPor?: string
+  criadoEm: string
+  atualizadoEm: string
+  execucoes: number
+  ultimaExecucao?: string
+  proximaExecucao?: string
+  ativo: boolean
+}
+
+export interface AutomacaoExecucao {
+  id: string
+  automacaoId: string
+  status: 'sucesso' | 'erro' | 'executando'
+  inicio: string
+  fim?: string
+  resultado?: Record<string, any>
+  erroMensagem?: string
+  dadosEntrada?: Record<string, any>
+  criadoEm: string
+}
+
+export function automacaoFromDb(row: any): Automacao {
+  return {
+    id: row.id,
+    nome: row.nome,
+    descricao: row.descricao,
+    tipo: row.tipo,
+    status: row.status,
+    gatilhoTipo: row.gatilho_tipo,
+    gatilhoConfig: row.gatilho_config || {},
+    acoes: row.acoes || [],
+    criadoPor: row.criado_por,
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em,
+    execucoes: row.execucoes || 0,
+    ultimaExecucao: row.ultima_execucao,
+    proximaExecucao: row.proxima_execucao,
+    ativo: row.ativo
+  }
+}
+
+export function automacaoExecucaoFromDb(row: any): AutomacaoExecucao {
+  return {
+    id: row.id,
+    automacaoId: row.automacao_id,
+    status: row.status,
+    inicio: row.inicio,
+    fim: row.fim,
+    resultado: row.resultado,
+    erroMensagem: row.erro_mensagem,
+    dadosEntrada: row.dados_entrada,
+    criadoEm: row.criado_em
+  }
+}
+
+export async function getAutomacoes(): Promise<Automacao[]> {
+  try {
+    const { data, error } = await supabase
+      .from('automacoes')
+      .select('*')
+      .eq('ativo', true)
+      .order('criado_em', { ascending: false })
+
+    if (error) throw error
+    return data ? data.map(automacaoFromDb) : []
+  } catch (err) {
+    console.error('Erro ao buscar automações:', err)
+    return []
+  }
+}
+
+export async function getAutomacao(id: string): Promise<Automacao | null> {
+  try {
+    const { data, error } = await supabase
+      .from('automacoes')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data ? automacaoFromDb(data) : null
+  } catch (err) {
+    console.error('Erro ao buscar automação:', err)
+    return null
+  }
+}
+
+export async function createAutomacao(
+  nome: string,
+  descricao: string,
+  tipo: Automacao['tipo'],
+  gatilhoTipo: Automacao['gatilhoTipo'],
+  gatilhoConfig: Record<string, any>,
+  acoes: Array<{
+    tipo: string
+    configuracao: Record<string, any>
+    ordem: number
+  }>
+): Promise<Automacao | null> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Usuário não autenticado')
+
+    const { data, error } = await supabase
+      .from('automacoes')
+      .insert({
+        nome,
+        descricao,
+        tipo,
+        gatilho_tipo: gatilhoTipo,
+        gatilho_config: gatilhoConfig,
+        acoes,
+        criado_por: user.id
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data ? automacaoFromDb(data) : null
+  } catch (err) {
+    console.error('Erro ao criar automação:', err)
+    return null
+  }
+}
+
+export async function updateAutomacao(
+  id: string,
+  updates: Partial<{
+    nome: string
+    descricao: string
+    tipo: Automacao['tipo']
+    status: Automacao['status']
+    gatilhoTipo: Automacao['gatilhoTipo']
+    gatilhoConfig: Record<string, any>
+    acoes: Array<{
+      tipo: string
+      configuracao: Record<string, any>
+      ordem: number
+    }>
+    execucoes: number
+    ultimaExecucao: string
+    proximaExecucao: string
+    ativo: boolean
+  }>
+): Promise<Automacao | null> {
+  try {
+    const updateData: any = {}
+    if (updates.nome !== undefined) updateData.nome = updates.nome
+    if (updates.descricao !== undefined) updateData.descricao = updates.descricao
+    if (updates.tipo !== undefined) updateData.tipo = updates.tipo
+    if (updates.status !== undefined) updateData.status = updates.status
+    if (updates.gatilhoTipo !== undefined) updateData.gatilho_tipo = updates.gatilhoTipo
+    if (updates.gatilhoConfig !== undefined) updateData.gatilho_config = updates.gatilhoConfig
+    if (updates.acoes !== undefined) updateData.acoes = updates.acoes
+    if (updates.execucoes !== undefined) updateData.execucoes = updates.execucoes
+    if (updates.ultimaExecucao !== undefined) updateData.ultima_execucao = updates.ultimaExecucao
+    if (updates.proximaExecucao !== undefined) updateData.proxima_execucao = updates.proximaExecucao
+    if (updates.ativo !== undefined) updateData.ativo = updates.ativo
+
+    const { data, error } = await supabase
+      .from('automacoes')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return data ? automacaoFromDb(data) : null
+  } catch (err) {
+    console.error('Erro ao atualizar automação:', err)
+    return null
+  }
+}
+
+export async function deleteAutomacao(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('automacoes')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return true
+  } catch (err) {
+    console.error('Erro ao deletar automação:', err)
+    return false
+  }
+}
+
+export async function getAutomacoesExecucoes(automacaoId?: string): Promise<AutomacaoExecucao[]> {
+  try {
+    let query = supabase
+      .from('automacoes_execucoes')
+      .select('*')
+      .order('criado_em', { ascending: false })
+
+    if (automacaoId) {
+      query = query.eq('automacao_id', automacaoId)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+    return data ? data.map(automacaoExecucaoFromDb) : []
+  } catch (err) {
+    console.error('Erro ao buscar execuções de automação:', err)
+    return []
+  }
+}
+
+export async function registrarExecucaoAutomacao(
+  automacaoId: string,
+  status: 'sucesso' | 'erro' | 'executando',
+  dadosEntrada?: Record<string, any>,
+  resultado?: Record<string, any>,
+  erroMensagem?: string
+): Promise<AutomacaoExecucao | null> {
+  try {
+    const { data, error } = await supabase
+      .from('automacoes_execucoes')
+      .insert({
+        automacao_id: automacaoId,
+        status,
+        dados_entrada: dadosEntrada,
+        resultado,
+        erro_mensagem: erroMensagem
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return data ? automacaoExecucaoFromDb(data) : null
+  } catch (err) {
+    console.error('Erro ao registrar execução de automação:', err)
+    return null
+  }
+}
