@@ -1,7 +1,125 @@
 import React, { useState, useEffect } from 'react'
-import { PlusIcon, PlayIcon, PauseIcon, PencilIcon, TrashIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, PlayIcon, PauseIcon, PencilIcon, TrashIcon, ChevronDownIcon, ChevronUpIcon, MagnifyingGlassIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/outline'
 import * as db from '../../lib/database'
 import type { Vendedor } from '../../types'
+
+// Componente de seleção de tarefas
+interface TarefaSelectorProps {
+  tarefas: Array<{id: string, titulo: string}>
+  carregando: boolean
+  tarefaSelecionadaId?: number
+  tarefaSelecionadaNome?: string
+  onTarefaSelecionada: (tarefa: {id: number, titulo: string} | null) => void
+  onLimparSelecao: () => void
+}
+
+const TarefaSelector: React.FC<TarefaSelectorProps> = ({
+  tarefas,
+  carregando,
+  tarefaSelecionadaId,
+  tarefaSelecionadaNome,
+  onTarefaSelecionada,
+  onLimparSelecao
+}) => {
+  const [busca, setBusca] = useState('')
+  const [mostrarLista, setMostrarLista] = useState(false)
+
+  const tarefasFiltradas = tarefas.filter(t => 
+    t.titulo.toLowerCase().includes(busca.toLowerCase())
+  )
+
+  const selecionarTarefa = (tarefa: {id: string, titulo: string}) => {
+    onTarefaSelecionada({
+      id: parseInt(tarefa.id),
+      titulo: tarefa.titulo
+    })
+    setBusca('')
+    setMostrarLista(false)
+  }
+
+  return (
+    <div className="relative">
+      {/* Campo de busca/seleção */}
+      <div className="relative">
+        {tarefaSelecionadaId ? (
+          // Tarefa selecionada
+          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <CheckIcon className="h-5 w-5 text-green-600" />
+            <span className="flex-1 text-sm font-medium text-green-800">
+              {tarefaSelecionadaNome}
+            </span>
+            <button
+              onClick={onLimparSelecao}
+              className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+              title="Limpar seleção"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          // Campo de busca
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              value={busca}
+              onChange={e => {
+                setBusca(e.target.value)
+                setMostrarLista(true)
+              }}
+              onFocus={() => setMostrarLista(true)}
+              placeholder="Buscar tarefa existente..."
+              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {busca && (
+              <button
+                onClick={() => setBusca('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Lista de resultados */}
+      {mostrarLista && !tarefaSelecionadaId && (
+        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {carregando ? (
+            <div className="p-3 text-center text-gray-500 text-sm">
+              Carregando tarefas...
+            </div>
+          ) : tarefasFiltradas.length === 0 ? (
+            <div className="p-3 text-center text-gray-500 text-sm">
+              {busca ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa disponível'}
+            </div>
+          ) : (
+            <div className="py-1">
+              {tarefasFiltradas.map(tarefa => (
+                <button
+                  key={tarefa.id}
+                  onClick={() => selecionarTarefa(tarefa)}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 focus:bg-gray-50 focus:outline-none border-b border-gray-100 last:border-b-0"
+                >
+                  <div className="font-medium text-gray-900">{tarefa.titulo}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fechar lista ao clicar fora */}
+      {mostrarLista && (
+        <div 
+          className="fixed inset-0 z-0" 
+          onClick={() => setMostrarLista(false)}
+        />
+      )}
+    </div>
+  )
+}
 
 // Interface para regras de automação
 interface RegraAutomacao {
@@ -17,6 +135,7 @@ interface RegraAutomacao {
     diasDesdeEvento?: number
     tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
     tarefaEspecifica?: string
+    tarefaEspecificaId?: number // ID da tarefa específica existente no CRM
     etapaCliente?: string
   }
   acao: {
@@ -420,7 +539,12 @@ const ConfiguracaoTarefasView: React.FC<ConfiguracaoTarefasViewProps> = ({ logge
                   <div className="text-sm text-gray-600 mb-3">
                     <span className="font-medium">Gatilho:</span> {GATILHOS.find(g => g.key === regra.gatilho)?.label}
                     {regra.condicoes.tarefaEspecifica && (
-                      <span className="ml-2">• Tarefa: "{regra.condicoes.tarefaEspecifica}"</span>
+                      <span className="ml-2">
+                        • Tarefa: "{regra.condicoes.tarefaEspecifica}"
+                        {regra.condicoes.tarefaEspecificaId && (
+                          <span className="text-purple-600 font-medium"> (ID: {regra.condicoes.tarefaEspecificaId})</span>
+                        )}
+                      </span>
                     )}
                     {regra.condicoes.etapaDestino && (
                       <span className="ml-2">• Etapa: {ETAPAS.find(e => e.key === regra.condicoes.etapaDestino)?.label}</span>
@@ -669,24 +793,32 @@ const RegraForm: React.FC<RegraFormProps> = ({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tarefa Específica (opcional)</label>
-              <input
-                type="text"
-                list="tarefas-existentes"
-                value={regra.condicoes.tarefaEspecifica || ''}
-                onChange={e => setRegra(prev => ({ 
-                  ...prev, 
-                  condicoes: { ...prev.condicoes, tarefaEspecifica: e.target.value || undefined }
-                }))}
-                placeholder="Digite ou selecione uma tarefa existente..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <TarefaSelector
+                tarefas={tarefasExistentes}
+                carregando={carregandoTarefas}
+                tarefaSelecionadaId={regra.condicoes.tarefaEspecificaId}
+                tarefaSelecionadaNome={regra.condicoes.tarefaEspecifica}
+                onTarefaSelecionada={(tarefa) => {
+                  setRegra(prev => ({ 
+                    ...prev, 
+                    condicoes: { 
+                      ...prev.condicoes, 
+                      tarefaEspecificaId: tarefa?.id,
+                      tarefaEspecifica: tarefa?.titulo || undefined
+                    }
+                  }))
+                }}
+                onLimparSelecao={() => {
+                  setRegra(prev => ({ 
+                    ...prev, 
+                    condicoes: { 
+                      ...prev.condicoes, 
+                      tarefaEspecificaId: undefined,
+                      tarefaEspecifica: undefined
+                    }
+                  }))
+                }}
               />
-              <datalist id="tarefas-existentes">
-                {tarefasExistentes.map(tarefa => (
-                  <option key={tarefa.id} value={tarefa.titulo}>
-                    {tarefa.titulo}
-                  </option>
-                ))}
-              </datalist>
               <p className="text-xs text-gray-500 mt-1">
                 {carregandoTarefas ? 'Carregando tarefas...' : 'Disparar apenas quando esta tarefa específica for concluída (exato)'}
               </p>
