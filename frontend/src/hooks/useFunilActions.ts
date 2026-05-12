@@ -213,34 +213,23 @@ export function useFunilActions({
       logger.error('Erro ao registrar atividade de movimento:', err)
     }
 
-    // Item 3: Tarefas automáticas ao mover etapa
-    const nome = cliente?.razaoSocial || 'Cliente'
-    const dataDaqui = (dias: number) => new Date(Date.now() + dias * 86400000).toISOString().split('T')[0]
-    const tarefaDefs: Omit<Tarefa, 'id'>[] = []
-    if (toStage === 'amostra') {
-      tarefaDefs.push({ titulo: `Follow-up amostra — ${nome}`, descricao: 'Verificar se o cliente recebeu e analisou a amostra', data: dataDaqui(20), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Cobrar resultado amostra — ${nome}`, descricao: 'Prazo de 45 dias se aproximando. Cobrar retorno urgente.', data: dataDaqui(40), hora: '09:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-    }
-    if (toStage === 'proposta') {
-      tarefaDefs.push({ titulo: `Preparar proposta — ${nome}`, descricao: 'Amostra aprovada. Preparar e enviar proposta comercial.', data: dataDaqui(5), hora: '10:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Follow-up proposta — ${nome}`, descricao: 'Verificar se o cliente analisou a proposta.', data: dataDaqui(15), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-    }
-    if (toStage === 'negociacao') {
-      tarefaDefs.push({ titulo: `Cobrar resposta proposta — ${nome}`, descricao: 'Verificar retorno da proposta comercial enviada.', data: dataDaqui(7), hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-    }
-    if (toStage === 'follow_up') {
-      tarefaDefs.push({ titulo: `Acompanhar logística — ${nome}`, descricao: 'Pedido aprovado. Acompanhar produção e entrega.', data: dataDaqui(7), hora: '11:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Coletar satisfação — ${nome}`, descricao: 'Após entrega, avaliar satisfação do cliente.', data: dataDaqui(30), hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-      tarefaDefs.push({ titulo: `Preparar proposta comercial — ${nome}`, descricao: 'Cliente em Follow-up. Preparar nova proposta para próximo ciclo de compra.', data: dataDaqui(15), hora: '09:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-    }
-    if (toStage === 'amostra_perdida') {
-      tarefaDefs.push({ titulo: `Avaliar 2ª tentativa amostra — ${nome}`, descricao: 'Amostra reprovada. Avaliar se vale tentar novamente.', data: dataDaqui(3), hora: '10:00', tipo: 'reuniao', status: 'pendente', prioridade: 'alta', clienteId, vendedorId: cliente?.vendedorId || loggedUser?.id })
-    }
-    if (tarefaDefs.length > 0) {
-      try {
-        const savedTarefas = await Promise.all(tarefaDefs.map(t => db.insertTarefa(t)))
-        setTarefas(prev => [...savedTarefas, ...prev])
-      } catch (err) { logger.error('Erro ao criar tarefas automáticas:', err) }
+    // Item 3: Tarefas automáticas ao mover etapa (usando regras do banco)
+    try {
+      const nome = cliente?.razaoSocial || 'Cliente'
+      const tarefasCriadas = await db.processarRegrasAutomacao(
+        clienteId,
+        toStage,
+        fromStage,
+        cliente?.vendedorId || loggedUser?.id || 0,
+        nome
+      )
+      
+      if (tarefasCriadas.length > 0) {
+        setTarefas(prev => [...tarefasCriadas, ...prev])
+        logger.log(`${tarefasCriadas.length} tarefa(s) criada(s) automaticamente para ${nome}`)
+      }
+    } catch (err) {
+      logger.error('Erro ao processar regras de automação:', err)
     }
 
     // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue

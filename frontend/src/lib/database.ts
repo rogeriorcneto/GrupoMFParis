@@ -1239,3 +1239,270 @@ export async function fetchUnreadCounts(myId: number): Promise<Record<number, nu
   }
   return counts
 }
+
+// ============================================
+// REGRAS DE AUTOMAÇÃO DE TAREFAS
+// ============================================
+
+export interface RegraAutomacaoDB {
+  id: number
+  nome: string
+  ativa: boolean
+  gatilho: 'mudanca_etapa' | 'inatividade' | 'substatus' | 'data_especifica' | 'reconquista'
+  condicoes: {
+    etapaOrigem?: string
+    etapaDestino?: string
+    diasInatividade?: number
+    subStatus?: string
+    diasDesdeEvento?: number
+  }
+  acao: {
+    titulo: string
+    descricao: string
+    tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
+    prioridade: 'alta' | 'media' | 'baixa'
+    diasPrazo: number
+    horaPadrao: string
+  }
+  created_at?: string
+  updated_at?: string
+}
+
+export async function getRegrasAutomacao(): Promise<RegraAutomacaoDB[]> {
+  const { data, error } = await supabase
+    .from('regras_automacao')
+    .select('*')
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('Erro ao buscar regras:', error)
+    return []
+  }
+  
+  return (data || []).map(row => ({
+    id: row.id,
+    nome: row.nome,
+    ativa: row.ativa,
+    gatilho: row.gatilho,
+    condicoes: row.condicoes || {},
+    acao: row.acao || {},
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  }))
+}
+
+export async function insertRegraAutomacao(regra: Omit<RegraAutomacaoDB, 'id' | 'created_at' | 'updated_at'>): Promise<RegraAutomacaoDB> {
+  const { data, error } = await supabase
+    .from('regras_automacao')
+    .insert({
+      nome: regra.nome,
+      ativa: regra.ativa,
+      gatilho: regra.gatilho,
+      condicoes: regra.condicoes,
+      acao: regra.acao
+    })
+    .select()
+    .single()
+  
+  if (error) throw error
+  if (!data) throw new Error('Erro ao criar regra')
+  
+  return {
+    id: data.id,
+    nome: data.nome,
+    ativa: data.ativa,
+    gatilho: data.gatilho,
+    condicoes: data.condicoes || {},
+    acao: data.acao || {},
+    created_at: data.created_at,
+    updated_at: data.updated_at
+  }
+}
+
+export async function updateRegraAutomacao(id: number, regra: Partial<RegraAutomacaoDB>): Promise<void> {
+  const updateData: any = {}
+  if (regra.nome !== undefined) updateData.nome = regra.nome
+  if (regra.ativa !== undefined) updateData.ativa = regra.ativa
+  if (regra.gatilho !== undefined) updateData.gatilho = regra.gatilho
+  if (regra.condicoes !== undefined) updateData.condicoes = regra.condicoes
+  if (regra.acao !== undefined) updateData.acao = regra.acao
+  
+  const { error } = await supabase
+    .from('regras_automacao')
+    .update(updateData)
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+export async function deleteRegraAutomacao(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('regras_automacao')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+// ============================================
+// AUTOMAÇÃO DE MENSAGENS (IA)
+// ============================================
+
+export interface MensagemAutomacaoDB {
+  id: number
+  nome: string
+  ativa: boolean
+  gatilho: 'mudanca_etapa' | 'substatus' | 'data_especifica' | 'inatividade'
+  condicoes: {
+    etapaDestino?: string
+    subStatus?: string
+    diasInatividade?: number
+    diasAposEvento?: number
+  }
+  config: {
+    canal: 'whatsapp' | 'email'
+    usarIA: boolean
+    promptIA?: string
+    mensagemFixa?: string
+    instrucoes?: string
+  }
+  created_at?: string
+  updated_at?: string
+}
+
+export async function getMensagensAutomacao(): Promise<MensagemAutomacaoDB[]> {
+  const { data, error } = await supabase
+    .from('mensagens_automacao')
+    .select('*')
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('Erro ao buscar mensagens:', error)
+    return []
+  }
+  
+  return (data || []).map(row => ({
+    id: row.id,
+    nome: row.nome,
+    ativa: row.ativa,
+    gatilho: row.gatilho,
+    condicoes: row.condicoes || {},
+    config: row.config || {},
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  }))
+}
+
+export async function insertMensagemAutomacao(mensagem: Omit<MensagemAutomacaoDB, 'id' | 'created_at' | 'updated_at'>): Promise<MensagemAutomacaoDB> {
+  const { data, error } = await supabase
+    .from('mensagens_automacao')
+    .insert({
+      nome: mensagem.nome,
+      ativa: mensagem.ativa,
+      gatilho: mensagem.gatilho,
+      condicoes: mensagem.condicoes,
+      config: mensagem.config
+    })
+    .select()
+    .single()
+  
+  if (error) throw error
+  if (!data) throw new Error('Erro ao criar mensagem automática')
+  
+  return {
+    id: data.id,
+    nome: data.nome,
+    ativa: data.ativa,
+    gatilho: data.gatilho,
+    condicoes: data.condicoes || {},
+    config: data.config || {},
+    created_at: data.created_at,
+    updated_at: data.updated_at
+  }
+}
+
+export async function updateMensagemAutomacao(id: number, mensagem: Partial<MensagemAutomacaoDB>): Promise<void> {
+  const updateData: any = {}
+  if (mensagem.nome !== undefined) updateData.nome = mensagem.nome
+  if (mensagem.ativa !== undefined) updateData.ativa = mensagem.ativa
+  if (mensagem.gatilho !== undefined) updateData.gatilho = mensagem.gatilho
+  if (mensagem.condicoes !== undefined) updateData.condicoes = mensagem.condicoes
+  if (mensagem.config !== undefined) updateData.config = mensagem.config
+  
+  const { error } = await supabase
+    .from('mensagens_automacao')
+    .update(updateData)
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+export async function deleteMensagemAutomacao(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('mensagens_automacao')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
+
+// ============================================
+// FUNÇÃO PARA PROCESSAR REGRAS E CRIAR TAREFAS
+// ============================================
+
+export async function processarRegrasAutomacao(
+  clienteId: number,
+  toStage: string,
+  fromStage: string,
+  vendedorId: number,
+  nomeCliente: string
+): Promise<Tarefa[]> {
+  const tarefasCriadas: Tarefa[] = []
+  
+  try {
+    // Buscar regras ativas para esta etapa
+    const { data: regras, error } = await supabase
+      .from('regras_automacao')
+      .select('*')
+      .eq('ativa', true)
+      .eq('gatilho', 'mudanca_etapa')
+      .or(`condicoes->>etapaDestino.eq.${toStage},condicoes->>etapaDestino.is.null`)
+    
+    if (error || !regras || regras.length === 0) {
+      return tarefasCriadas
+    }
+    
+    const dataDaqui = (dias: number) => new Date(Date.now() + dias * 86400000).toISOString().split('T')[0]
+    
+    for (const regra of regras) {
+      const condicoes = regra.condicoes || {}
+      
+      // Verificar se a regra se aplica
+      if (condicoes.etapaDestino && condicoes.etapaDestino !== toStage) continue
+      if (condicoes.etapaOrigem && condicoes.etapaOrigem !== fromStage) continue
+      
+      // Substituir {cliente} pelo nome real
+      const titulo = (regra.acao?.titulo || '').replace(/\{cliente\}/g, nomeCliente)
+      const descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
+      
+      // Criar a tarefa
+      const novaTarefa = await insertTarefa({
+        titulo,
+        descricao,
+        data: dataDaqui(regra.acao?.diasPrazo || 7),
+        hora: regra.acao?.horaPadrao || '10:00',
+        tipo: regra.acao?.tipo || 'outro',
+        status: 'pendente',
+        prioridade: regra.acao?.prioridade || 'media',
+        clienteId,
+        vendedorId
+      })
+      
+      tarefasCriadas.push(novaTarefa)
+    }
+  } catch (err) {
+    console.error('Erro ao processar regras de automação:', err)
+  }
+  
+  return tarefasCriadas
+}

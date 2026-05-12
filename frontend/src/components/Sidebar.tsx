@@ -17,6 +17,8 @@ import {
   CloudArrowUpIcon,
   BuildingLibraryIcon,
   AcademicCapIcon,
+  Cog6ToothIcon,
+  ChatBubbleLeftIcon,
 } from '@heroicons/react/24/outline'
 import type { ViewType, Vendedor } from '../types'
 
@@ -32,7 +34,7 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'configuracao-tarefas', 'configuracao-mensagens'],
   vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'treinamento', 'pedidos'],
   sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos'],
 }
@@ -46,6 +48,8 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'pedidos', icon: ShoppingCartIcon, label: 'Pedidos' },
   { id: 'tarefas', icon: ChartBarIcon, label: 'Tarefas' },
   { id: 'mapa', icon: MapIcon, label: 'Mapa' },
+  { id: 'configuracao-tarefas', icon: Cog6ToothIcon, label: '⚙️ Automação Tarefas' },
+  { id: 'configuracao-mensagens', icon: ChatBubbleLeftIcon, label: '💬 Mensagens Auto' },
   { id: 'produtos', icon: CubeIcon, label: 'Produtos' },
   { id: 'templates', icon: DocumentTextIcon, label: 'Templates' },
   { id: 'treinamento', icon: AcademicCapIcon, label: '🎓 Academia de Vendas' },

@@ -8,7 +8,8 @@ import {
   DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
-  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView
+  ProdutosView, PedidosView, AssistenteIAView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
+  ConfiguracaoTarefasView, ConfiguracaoMensagensView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -669,6 +670,10 @@ export default function AppRouter({
         isGerente={loggedUser?.cargo === 'gerente'}
         produtos={produtos}
       />
+    case 'configuracao-tarefas':
+      return <ConfiguracaoTarefasView loggedUser={loggedUser} />
+    case 'configuracao-mensagens':
+      return <ConfiguracaoMensagensView loggedUser={loggedUser} />
     case 'omie':
       // Renderizado abaixo como componente persistente
       return null
