@@ -513,6 +513,56 @@ Como posso ajudar você hoje?`
             ) : (
               /* Editor de Automação */
               <div className="space-y-6">
+                {/* Header do Editor com Botão Fechar */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-indigo-100 rounded-lg">
+                      <CogIcon className="h-6 w-6 text-indigo-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {editando ? 'Editar Automação' : 'Criar Nova Automação'}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {editando ? 'Modifique os dados da automação existente' : 'Configure uma nova automação para otimizar processos'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (formData.nome.trim() || formData.descricao.trim() || formData.acoes.length > 0) {
+                        if (confirm('Tem certeza que deseja fechar sem salvar? Todas as alterações serão perdidas.')) {
+                          setMostrarEditor(false)
+                          setEditando(null)
+                          setFormData({
+                            nome: '',
+                            descricao: '',
+                            tipo: 'mensagem',
+                            gatilhoTipo: 'tempo',
+                            gatilhoConfig: {},
+                            acoes: []
+                          })
+                        }
+                      } else {
+                        setMostrarEditor(false)
+                        setEditando(null)
+                        setFormData({
+                          nome: '',
+                          descricao: '',
+                          tipo: 'mensagem',
+                          gatilhoTipo: 'tempo',
+                          gatilhoConfig: {},
+                          acoes: []
+                        })
+                      }
+                    }}
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Fechar"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+
                 {/* Indicador de Salvamento */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
                   <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -667,12 +717,44 @@ Como posso ajudar você hoje?`
                   )}
                 </div>
 
-                {/* Botões de Ação */}
-                <div className="flex justify-between gap-3 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={() => {
-                      if (formData.nome.trim() || formData.descricao.trim() || formData.acoes.length > 0) {
-                        if (confirm('Tem certeza que deseja sair sem salvar? Todas as alterações serão perdidas.')) {
+                {/* Botões de Ação - Fixo no Bottom */}
+                <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 mt-6 -mx-6 px-6">
+                  <div className="flex justify-between items-center gap-3">
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          if (formData.nome.trim() || formData.descricao.trim() || formData.acoes.length > 0) {
+                            if (confirm('Tem certeza que deseja sair sem salvar? Todas as alterações serão perdidas.')) {
+                              setMostrarEditor(false)
+                              setEditando(null)
+                              setFormData({
+                                nome: '',
+                                descricao: '',
+                                tipo: 'mensagem',
+                                gatilhoTipo: 'tempo',
+                                gatilhoConfig: {},
+                                acoes: []
+                              })
+                            }
+                          } else {
+                            setMostrarEditor(false)
+                            setEditando(null)
+                            setFormData({
+                              nome: '',
+                              descricao: '',
+                              tipo: 'mensagem',
+                              gatilhoTipo: 'tempo',
+                              gatilhoConfig: {},
+                              acoes: []
+                            })
+                          }
+                        }}
+                        className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                      >
+                        Sair sem Salvar
+                      </button>
+                      <button
+                        onClick={() => {
                           setMostrarEditor(false)
                           setEditando(null)
                           setFormData({
@@ -683,46 +765,18 @@ Como posso ajudar você hoje?`
                             gatilhoConfig: {},
                             acoes: []
                           })
-                        }
-                      } else {
-                        setMostrarEditor(false)
-                        setEditando(null)
-                        setFormData({
-                          nome: '',
-                          descricao: '',
-                          tipo: 'mensagem',
-                          gatilhoTipo: 'tempo',
-                          gatilhoConfig: {},
-                          acoes: []
-                        })
-                      }
-                    }}
-                    className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Sair sem Salvar
-                  </button>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        setMostrarEditor(false)
-                        setEditando(null)
-                        setFormData({
-                          nome: '',
-                          descricao: '',
-                          tipo: 'mensagem',
-                          gatilhoTipo: 'tempo',
-                          gatilhoConfig: {},
-                          acoes: []
-                        })
-                      }}
-                      className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Cancelar
-                    </button>
+                        }}
+                        className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                    
+                    {/* BOTÃO SALVAR DESTACADO */}
                     <button
                       onClick={salvarAutomacao}
                       disabled={carregando}
-                      className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg font-medium"
                     >
                       {carregando ? (
                         <>
@@ -731,10 +785,10 @@ Como posso ajudar você hoje?`
                         </>
                       ) : (
                         <>
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V2" />
                           </svg>
-                          {editando ? 'Atualizar' : 'Salvar'} Automação
+                          {editando ? 'ATUALIZAR' : 'SALVAR'} AUTOMAÇÃO
                         </>
                       )}
                     </button>
