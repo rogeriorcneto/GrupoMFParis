@@ -214,12 +214,22 @@ function App() {
 
   // Verificar sessão existente ao montar o componente
   useEffect(() => {
+    // Timeout de segurança: se em 8s não terminou, libera a tela mesmo assim
+    const safetyTimeout = setTimeout(() => {
+      setAuthChecked(true)
+      setIsLoading(false)
+    }, 8000)
+
     const checkSession = async () => {
       try {
         const vendedor = await db.getLoggedVendedor()
         if (vendedor) {
           setLoggedUser(vendedor)
-          await loadAllData()
+          // Liberar tela imediatamente; dados carregam em background
+          setAuthChecked(true)
+          setIsLoading(false)
+          clearTimeout(safetyTimeout)
+          loadAllData().catch(err => logger.error('Erro loadAllData:', err))
           startActiveTimer(vendedor.id)
         }
       } catch {
@@ -227,6 +237,7 @@ function App() {
       } finally {
         setAuthChecked(true)
         setIsLoading(false)
+        clearTimeout(safetyTimeout)
       }
     }
     checkSession()
