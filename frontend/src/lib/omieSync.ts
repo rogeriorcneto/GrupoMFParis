@@ -22,7 +22,7 @@ async function omieCall(group: string, module: string, action: string, params: a
   const res = await fetch(`${BOT_URL}/api/omie/call`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ group, module, action, params: [params] }),
+    body: JSON.stringify({ group, module, action, params }),
   })
   const json = await res.json()
   if (!json.success) throw new Error(json.error || 'Erro chamando Omie')
@@ -34,7 +34,7 @@ async function omieCallAll(group: string, module: string, action: string, result
   const res = await fetch(`${BOT_URL}/api/omie/call-all`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ group, module, action, params: [params], resultKey }),
+    body: JSON.stringify({ group, module, action, params, resultKey }),
   })
   const json = await res.json()
   if (!json.success) throw new Error(json.error || 'Erro chamando Omie (all)')

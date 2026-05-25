@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
 import { getSyncDiff, syncPullClientes, syncPushClientes, syncPushSingleCliente, associarClientesPorCnpj } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
+import { getEmpresas, listarPedidosEmpresa, atualizarRastreioPedido, lancarRastreioPorNF } from '../omie/multi-empresa.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros } from '../omie/pedidos.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
@@ -300,6 +301,58 @@ omieRouter.post('/sync/logistics', rateLimit(3, 60_000), async (_req, res) => {
     res.json({ success: true, data: result })
   } catch (err: any) {
     log.error({ err }, 'Erro no sync logístico Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Multi-Empresa: pedidos + rastreio (replica Apps Script) ───
+
+omieRouter.get('/multi/empresas', (_req, res) => {
+  const empresas = getEmpresas().map(e => ({ id: e.id, nome: e.nome }))
+  res.json({ success: true, data: empresas })
+})
+
+omieRouter.post('/multi/listar-pedidos', rateLimit(30, 60_000), async (req, res) => {
+  const { empresaId, filtro } = req.body
+  if (!empresaId) {
+    res.status(400).json({ success: false, error: 'empresaId obrigatório' })
+    return
+  }
+  try {
+    const pedidos = await listarPedidosEmpresa(empresaId, filtro || {})
+    res.json({ success: true, data: pedidos, total: pedidos.length })
+  } catch (err: any) {
+    log.error({ err, empresaId }, 'Erro ao listar pedidos multi-empresa')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.post('/multi/atualizar-rastreio', rateLimit(30, 60_000), async (req, res) => {
+  const { empresaId, numero_pedido, codigo_rastreio } = req.body
+  if (!empresaId || !numero_pedido || !codigo_rastreio) {
+    res.status(400).json({ success: false, error: 'empresaId, numero_pedido e codigo_rastreio obrigatórios' })
+    return
+  }
+  try {
+    const result = await atualizarRastreioPedido(empresaId, Number(numero_pedido), String(codigo_rastreio))
+    res.json({ success: true, data: result })
+  } catch (err: any) {
+    log.error({ err, empresaId, numero_pedido }, 'Erro ao atualizar rastreio')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.post('/multi/lancar-rastreio-por-nf', rateLimit(30, 60_000), async (req, res) => {
+  const { empresaId, nota_fiscal, codigo_rastreio } = req.body
+  if (!empresaId || !nota_fiscal || !codigo_rastreio) {
+    res.status(400).json({ success: false, error: 'empresaId, nota_fiscal e codigo_rastreio obrigatórios' })
+    return
+  }
+  try {
+    const result = await lancarRastreioPorNF(empresaId, String(nota_fiscal), String(codigo_rastreio))
+    res.json({ success: true, data: result })
+  } catch (err: any) {
+    log.error({ err, empresaId, nota_fiscal }, 'Erro ao lançar rastreio por NF')
     res.status(500).json({ success: false, error: err.message })
   }
 })

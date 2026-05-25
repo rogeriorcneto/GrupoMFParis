@@ -1,4 +1,6 @@
 import React from 'react'
+import { useDarkMode } from '../hooks/useDarkMode'
+import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 
 interface SistemaCard {
   id: string
@@ -93,6 +95,7 @@ interface Props {
 
 export default function GrupoParisHome({ usuario, onSelectSistema, onSignOut }: Props) {
   const categorias = Array.from(new Set(sistemas.map(s => s.categoria)))
+  const { dark, toggleDark } = useDarkMode()
 
   const handleClick = (sistema: SistemaCard) => {
     if (sistema.status === 'disponivel') {
@@ -132,6 +135,13 @@ export default function GrupoParisHome({ usuario, onSelectSistema, onSignOut }: 
             <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold">
               {usuario?.nome?.charAt(0).toUpperCase() || 'U'}
             </div>
+            <button
+              onClick={toggleDark}
+              className="p-2 rounded-lg transition-colors text-white/70 hover:text-white hover:bg-white/10 border border-white/20"
+              title={dark ? 'Modo claro' : 'Modo escuro'}
+            >
+              {dark ? <SunIcon className="h-5 w-5 text-amber-300" /> : <MoonIcon className="h-5 w-5" />}
+            </button>
             <button
               onClick={onSignOut}
               className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors border border-white/20"

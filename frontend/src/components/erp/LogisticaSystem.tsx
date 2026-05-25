@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import ErpLayout from './ErpLayout'
 import OmieSyncButton from './OmieSyncButton'
 import { syncTransportadorasOmie } from '../../lib/omieSync'
+import PedidosOmieView from './PedidosOmieView'
 
 interface Transportadora {
   id: number
@@ -78,6 +79,7 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
 
   const menu = [
     { id: 'dashboard', label: 'Dashboard', icone: '📊' },
+    { id: 'pedidos-omie', label: 'Pedidos & NFe', icone: '📦' },
     { id: 'fretes', label: 'Fretes', icone: '🚚', badge: fretesPendentes },
     { id: 'transportadoras', label: 'Transportadoras', icone: '🏢' },
     { id: 'rastreamento', label: 'Rastreamento', icone: '📍' },
@@ -149,6 +151,10 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
 
         {activeMenu === 'rastreamento' && (
           <RastreamentoView fretes={fretes} />
+        )}
+
+        {activeMenu === 'pedidos-omie' && (
+          <PedidosOmieView />
         )}
       </div>
 
