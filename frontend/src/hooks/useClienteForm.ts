@@ -15,8 +15,12 @@ const emptyForm: FormData = {
   enderecoBairro2: '', enderecoCidade2: '', enderecoEstado2: '', enderecoCep2: '',
   cnaePrimario: '', cnaeSecundario: '', segmento: '',
   redesSociais: '',
+  instagram: '', facebook: '', linkedin: '', website: '',
+  contatoFinanceiroNome: '', contatoFinanceiroTelefone: '',
+  contatoComprasNome: '', contatoComprasTelefone: '',
   valorEstimado: '',
-  produtosInteresse: '', produtosQuantidades: {}, vendedorId: '',
+  produtosInteresse: '', produtosQuantidades: {}, produtosQuantidadesMensais: {},
+  vendedorId: '',
   statusCliente: '', grupoEconomicoId: ''
 }
 
@@ -101,7 +105,6 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     if (isSaving) return
 
     if (!formData.razaoSocial.trim()) { showToast('error', 'Razão Social é obrigatória.'); return }
-    if (!formData.redesSociais.trim()) { showToast('error', 'Redes Sociais é obrigatório.'); return }
 
     const cnpjDigits = formData.cnpj.replace(/\D/g, '')
     if (cnpjDigits.length > 0 && !validarCNPJ(formData.cnpj)) {
@@ -145,13 +148,14 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
 
     const enderecoCompleto = buildEnderecoCompleto(formData)
 
-    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, ...restForm } = formData
+    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, produtosQuantidadesMensais: _pqm, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, ...restForm } = formData
 
     const clienteFields: Partial<Cliente> = {
       ...restForm,
       endereco: enderecoCompleto,
       vendedorId: vIdStr ? Number(vIdStr) : undefined,
       produtosInteresse: produtosArray,
+      produtosQuantidadesMensais: _pqm && Object.keys(_pqm).length > 0 ? _pqm : undefined,
       statusCliente: (_sc || undefined) as Cliente['statusCliente'],
       grupoEconomicoId: _gei ? Number(_gei) : undefined,
     }
@@ -228,8 +232,17 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       cnaeSecundario: cliente.cnaeSecundario || '',
       segmento: cliente.segmento || '',
       redesSociais: cliente.redesSociais || '',
+      instagram: cliente.instagram || '',
+      facebook: cliente.facebook || '',
+      linkedin: cliente.linkedin || '',
+      website: cliente.website || '',
+      contatoFinanceiroNome: cliente.contatoFinanceiroNome || '',
+      contatoFinanceiroTelefone: cliente.contatoFinanceiroTelefone || '',
+      contatoComprasNome: cliente.contatoComprasNome || '',
+      contatoComprasTelefone: cliente.contatoComprasTelefone || '',
       produtosInteresse: cliente.produtosInteresse?.join(', ') || '',
       produtosQuantidades: {},
+      produtosQuantidadesMensais: cliente.produtosQuantidadesMensais || {},
       valorEstimado: cliente.valorEstimado?.toString() || '',
       vendedorId: cliente.vendedorId?.toString() || '',
       statusCliente: cliente.statusCliente || '',

@@ -93,6 +93,22 @@ export interface Cliente {
   longitude?: number
   statusCliente?: 'ativo' | 'em_risco' | 'inativo' | 'prospecto' | 'descartado' | 'bloqueado'
   grupoEconomicoId?: number
+  // Redes sociais — campos individuais (substituem `redesSociais` legado)
+  instagram?: string
+  facebook?: string
+  linkedin?: string
+  // Contatos adicionais
+  contatoFinanceiroNome?: string
+  contatoFinanceiroTelefone?: string
+  contatoComprasNome?: string
+  contatoComprasTelefone?: string
+  // Produtos de Interesse — quantidade mensal estimada por produto
+  produtosQuantidadesMensais?: Record<string, number>
+  // Inativação detalhada
+  motivoInativacao?: string
+  dataInativacao?: string
+  inativadoPor?: number
+  inativadoPorAbandono?: boolean
 }
 
 export interface FormData {
@@ -129,6 +145,18 @@ export interface FormData {
   vendedorId?: string
   statusCliente?: string
   grupoEconomicoId?: string
+  // Redes sociais individuais
+  instagram?: string
+  facebook?: string
+  linkedin?: string
+  website?: string
+  // Contatos adicionais
+  contatoFinanceiroNome?: string
+  contatoFinanceiroTelefone?: string
+  contatoComprasNome?: string
+  contatoComprasTelefone?: string
+  // Quantidade mensal estimada por produto
+  produtosQuantidadesMensais?: Record<string, number>
 }
 
 export interface Interacao {
@@ -377,6 +405,8 @@ export interface ClientesViewProps {
   loggedUser: Vendedor | null
   onNewCliente: () => void
   onEditCliente: (cliente: Cliente) => void
+  /** Clicar no nome do cliente abre a tela de PERFIL (ClientePanel), não o formulário de edição. */
+  onClickCliente?: (cliente: Cliente) => void
   onUpdateCliente?: (id: number, changes: Partial<Cliente>) => Promise<void>
   onImportClientes: (novos: Cliente[]) => void
   onDeleteCliente: (id: number) => void

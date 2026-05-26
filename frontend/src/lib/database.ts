@@ -98,6 +98,18 @@ export function clienteFromDb(row: any): Cliente {
     longitude: row.longitude != null ? Number(row.longitude) : undefined,
     statusCliente: row.status_cliente ?? undefined,
     grupoEconomicoId: row.grupo_economico_id ?? undefined,
+    instagram: row.instagram ?? undefined,
+    facebook: row.facebook ?? undefined,
+    linkedin: row.linkedin ?? undefined,
+    contatoFinanceiroNome: row.contato_financeiro_nome ?? undefined,
+    contatoFinanceiroTelefone: row.contato_financeiro_telefone ?? undefined,
+    contatoComprasNome: row.contato_compras_nome ?? undefined,
+    contatoComprasTelefone: row.contato_compras_telefone ?? undefined,
+    produtosQuantidadesMensais: row.produtos_quantidades_mensais ?? undefined,
+    motivoInativacao: row.motivo_inativacao ?? undefined,
+    dataInativacao: row.data_inativacao ?? undefined,
+    inativadoPor: row.inativado_por ?? undefined,
+    inativadoPorAbandono: row.inativado_por_abandono ?? undefined,
     historicoEtapas: [],
   }
 }
@@ -188,6 +200,18 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.longitude !== undefined) row.longitude = c.longitude
   if (c.statusCliente !== undefined) row.status_cliente = c.statusCliente ?? null
   if (c.grupoEconomicoId !== undefined) row.grupo_economico_id = c.grupoEconomicoId ?? null
+  if (c.instagram !== undefined) row.instagram = c.instagram ?? null
+  if (c.facebook !== undefined) row.facebook = c.facebook ?? null
+  if (c.linkedin !== undefined) row.linkedin = c.linkedin ?? null
+  if (c.contatoFinanceiroNome !== undefined) row.contato_financeiro_nome = c.contatoFinanceiroNome ?? null
+  if (c.contatoFinanceiroTelefone !== undefined) row.contato_financeiro_telefone = c.contatoFinanceiroTelefone ?? null
+  if (c.contatoComprasNome !== undefined) row.contato_compras_nome = c.contatoComprasNome ?? null
+  if (c.contatoComprasTelefone !== undefined) row.contato_compras_telefone = c.contatoComprasTelefone ?? null
+  if (c.produtosQuantidadesMensais !== undefined) row.produtos_quantidades_mensais = c.produtosQuantidadesMensais ?? null
+  if (c.motivoInativacao !== undefined) row.motivo_inativacao = c.motivoInativacao ?? null
+  if (c.dataInativacao !== undefined) row.data_inativacao = c.dataInativacao ?? null
+  if (c.inativadoPor !== undefined) row.inativado_por = c.inativadoPor ?? null
+  if (c.inativadoPorAbandono !== undefined) row.inativado_por_abandono = c.inativadoPorAbandono ?? null
   return row
 }
 

@@ -555,11 +555,30 @@ function App() {
           isSaving={isSaving} isLoadingCep={isLoadingCep} isLoadingCnpj={isLoadingCnpj}
           buscarCep={buscarCep} buscarCnpj={buscarCnpj}
           produtos={produtos} vendedores={vendedores}
-          clientes={clientes}
+          clientes={clientes} pedidos={pedidos}
+          loggedUser={loggedUser}
           onClickNegocio={(c) => { setShowModal(false); setSelectedClientePanel(c) }}
-          onInativarCliente={(clienteId) => {
-            moverCliente(clienteId, 'inativo', {})
+          onInativarCliente={async (clienteId, motivo) => {
+            await moverCliente(clienteId, 'inativo', {
+              motivoInativacao: motivo,
+              dataInativacao: new Date().toISOString(),
+              inativadoPor: loggedUser?.id,
+              inativadoPorAbandono: false,
+              statusCliente: 'inativo',
+            })
             showToast('success', 'Cliente inativado com sucesso!')
+          }}
+          onReativarCliente={async (clienteId) => {
+            const c = clientes.find(x => x.id === clienteId)
+            const etapaAnterior = c?.etapaAnterior || 'prospecção'
+            await moverCliente(clienteId, etapaAnterior, {
+              motivoInativacao: undefined,
+              dataInativacao: undefined,
+              inativadoPor: undefined,
+              inativadoPorAbandono: undefined,
+              statusCliente: 'ativo',
+            })
+            showToast('success', 'Cliente reativado com sucesso!')
           }}
         />
 
@@ -593,6 +612,33 @@ function App() {
             onSolicitarCancelamentoPedido={async (pedidoId, motivo) => {
               await db.solicitarCancelamentoPedido(pedidoId, motivo)
               setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, status: 'cancelamento_solicitado', motivoRecusa: motivo } : p))
+            }}
+            onVerNoFunil={(cli) => {
+              setActiveView('funil')
+              setSelectedClientePanel(cli)
+            }}
+            onExcluirCliente={async (cli) => {
+              try {
+                await db.deleteCliente(cli.id)
+                setClientes(prev => prev.filter(x => x.id !== cli.id))
+                setInteracoes(prev => prev.filter(i => i.clienteId !== cli.id))
+                setTarefas(prev => prev.filter(t => t.clienteId !== cli.id))
+                showToast('success', 'Empresa excluída.')
+              } catch (err) {
+                logger.error('Erro ao excluir cliente:', err)
+                showToast('error', 'Erro ao excluir empresa.')
+              }
+            }}
+            onReativarCliente={async (cli) => {
+              const etapaAnterior = cli.etapaAnterior || 'prospecção'
+              await moverCliente(cli.id, etapaAnterior, {
+                motivoInativacao: undefined,
+                dataInativacao: undefined,
+                inativadoPor: undefined,
+                inativadoPorAbandono: undefined,
+                statusCliente: 'ativo',
+              })
+              showToast('success', 'Cliente reativado com sucesso!')
             }}
           />
         )}

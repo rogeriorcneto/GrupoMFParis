@@ -330,6 +330,7 @@ export default function AppRouter({
         loggedUser={loggedUser}
         onNewCliente={openModal}
         onEditCliente={handleEditCliente}
+        onClickCliente={(c) => setSelectedClientePanel(c)}
         onUpdateCliente={async (id, changes) => {
           try {
             await db.updateCliente(id, changes)

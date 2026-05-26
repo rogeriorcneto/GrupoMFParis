@@ -1,20 +1,86 @@
 import React from 'react'
-import { PlusIcon, AdjustmentsHorizontalIcon, MagnifyingGlassIcon, EllipsisVerticalIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
 
-const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, loggedUser, onNewCliente, onEditCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
+// === Colunas configuráveis ===
+type ColumnKey = 'nome' | 'etapa' | 'vendedor' | 'email' | 'telefone' | 'valor' | 'score' | 'ultimaCompra'
+interface ColumnDef { key: ColumnKey; label: string; defaultVisible: boolean }
+const ALL_COLUMNS: ColumnDef[] = [
+  { key: 'nome', label: 'Nome', defaultVisible: true },
+  { key: 'etapa', label: 'Etapa', defaultVisible: true },
+  { key: 'vendedor', label: 'Vendedor', defaultVisible: true },
+  { key: 'email', label: 'Email', defaultVisible: false },
+  { key: 'telefone', label: 'Telefone', defaultVisible: false },
+  { key: 'valor', label: 'Valor', defaultVisible: true },
+  { key: 'score', label: 'Score', defaultVisible: true },
+  { key: 'ultimaCompra', label: 'Última Compra', defaultVisible: false },
+]
+const COLS_STORAGE_KEY = 'clientesView.visibleColumns'
+const SORT_STORAGE_KEY = 'clientesView.sortBy'
+
+type SortKey = 'nome' | 'dataCadastro' | 'ultimaCompra' | 'valor' | 'score'
+type SortDir = 'asc' | 'desc'
+
+const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, loggedUser, onNewCliente, onEditCliente, onClickCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
+  // Clicar no nome abre o perfil (ClientePanel). Edição via menu/ação dedicada.
+  const openCliente = (c: Cliente) => onClickCliente ? onClickCliente(c) : onEditCliente(c)
   const isGerente = loggedUser?.cargo === 'gerente'
   // Vendedor só vê seus clientes; gerente vê todos
   const scopedClientes = React.useMemo(() =>
     isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
   , [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
+  // Filtros aplicados (efetivos) vs rascunho (no painel)
   const [showFilters, setShowFilters] = React.useState(false)
+  const [showSort, setShowSort] = React.useState(false)
+  const [showColumns, setShowColumns] = React.useState(false)
   const [filterEtapa, setFilterEtapa] = React.useState('')
   const [filterVendedor, setFilterVendedor] = React.useState('')
+  const [filterStatus, setFilterStatus] = React.useState('')
   const [filterScoreMin, setFilterScoreMin] = React.useState('')
   const [filterValorMin, setFilterValorMin] = React.useState('')
+  const [draftEtapa, setDraftEtapa] = React.useState('')
+  const [draftVendedor, setDraftVendedor] = React.useState('')
+  const [draftStatus, setDraftStatus] = React.useState('')
+  const [draftScoreMin, setDraftScoreMin] = React.useState('')
+  const [draftValorMin, setDraftValorMin] = React.useState('')
+  // Ordenação
+  const [sortKey, setSortKey] = React.useState<SortKey>(() => {
+    try {
+      const raw = localStorage.getItem(SORT_STORAGE_KEY)
+      if (raw) { const p = JSON.parse(raw); if (p?.key) return p.key }
+    } catch {}
+    return 'dataCadastro'
+  })
+  const [sortDir, setSortDir] = React.useState<SortDir>(() => {
+    try {
+      const raw = localStorage.getItem(SORT_STORAGE_KEY)
+      if (raw) { const p = JSON.parse(raw); if (p?.dir) return p.dir }
+    } catch {}
+    return 'desc'
+  })
+  React.useEffect(() => {
+    try { localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ key: sortKey, dir: sortDir })) } catch {}
+  }, [sortKey, sortDir])
+  // Colunas visíveis
+  const [visibleCols, setVisibleCols] = React.useState<Record<ColumnKey, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(COLS_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, boolean>
+        const merged = {} as Record<ColumnKey, boolean>
+        ALL_COLUMNS.forEach(c => { merged[c.key] = parsed[c.key] ?? c.defaultVisible })
+        return merged
+      }
+    } catch {}
+    const def = {} as Record<ColumnKey, boolean>
+    ALL_COLUMNS.forEach(c => { def[c.key] = c.defaultVisible })
+    return def
+  })
+  React.useEffect(() => {
+    try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify(visibleCols)) } catch {}
+  }, [visibleCols])
   const [showDeleteAllModal, setShowDeleteAllModal] = React.useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = React.useState('')
   const [isDeleting, setIsDeleting] = React.useState(false)
@@ -27,18 +93,61 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   const PAGE_SIZE = 50
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE)
 
-  React.useEffect(() => { setVisibleCount(PAGE_SIZE) }, [debouncedSearch, filterEtapa, filterVendedor, filterScoreMin, filterValorMin])
+  React.useEffect(() => { setVisibleCount(PAGE_SIZE) }, [debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterScoreMin, filterValorMin, sortKey, sortDir])
 
-  const filteredClientes = scopedClientes.filter(cliente => {
-    const matchSearch = cliente.razaoSocial.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      cliente.contatoNome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-      cliente.cnpj.includes(debouncedSearch)
-    const matchEtapa = !filterEtapa || cliente.etapa === filterEtapa
-    const matchVendedor = !filterVendedor || String(cliente.vendedorId) === filterVendedor
-    const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
-    const matchValor = !filterValorMin || (cliente.valorEstimado || 0) >= Number(filterValorMin)
-    return matchSearch && matchEtapa && matchVendedor && matchScore && matchValor
-  })
+  // Quando abre painel de filtros, copia valores aplicados para o rascunho
+  const openFiltersPanel = () => {
+    setDraftEtapa(filterEtapa)
+    setDraftVendedor(filterVendedor)
+    setDraftStatus(filterStatus)
+    setDraftScoreMin(filterScoreMin)
+    setDraftValorMin(filterValorMin)
+    setShowFilters(true)
+    setShowSort(false); setShowColumns(false)
+  }
+  const aplicarFiltros = () => {
+    setFilterEtapa(draftEtapa)
+    setFilterVendedor(draftVendedor)
+    setFilterStatus(draftStatus)
+    setFilterScoreMin(draftScoreMin)
+    setFilterValorMin(draftValorMin)
+    setShowFilters(false)
+  }
+  const limparFiltros = () => {
+    setDraftEtapa(''); setDraftVendedor(''); setDraftStatus(''); setDraftScoreMin(''); setDraftValorMin('')
+    setFilterEtapa(''); setFilterVendedor(''); setFilterStatus(''); setFilterScoreMin(''); setFilterValorMin('')
+  }
+
+  const filteredClientes = React.useMemo(() => {
+    const filtered = scopedClientes.filter(cliente => {
+      const matchSearch = cliente.razaoSocial.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        cliente.contatoNome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        cliente.cnpj.includes(debouncedSearch)
+      const matchEtapa = !filterEtapa || cliente.etapa === filterEtapa
+      const matchVendedor = !filterVendedor || String(cliente.vendedorId) === filterVendedor
+      const matchStatus = !filterStatus || cliente.statusCliente === filterStatus
+      const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
+      const matchValor = !filterValorMin || (cliente.valorEstimado || 0) >= Number(filterValorMin)
+      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchScore && matchValor
+    })
+    // Sort
+    const dir = sortDir === 'asc' ? 1 : -1
+    const getVal = (c: Cliente): string | number => {
+      switch (sortKey) {
+        case 'nome': return (c.razaoSocial || '').toLowerCase()
+        case 'dataCadastro': return c.id // id cresce com o tempo (proxy para data de cadastro)
+        case 'ultimaCompra': return c.dataUltimoPedido || ''
+        case 'valor': return c.valorEstimado || 0
+        case 'score': return c.score || 0
+      }
+    }
+    return filtered.sort((a, b) => {
+      const va = getVal(a), vb = getVal(b)
+      if (va < vb) return -1 * dir
+      if (va > vb) return 1 * dir
+      return 0
+    })
+  }, [scopedClientes, debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterScoreMin, filterValorMin, sortKey, sortDir])
 
   const etapaConfig: Record<string, { label: string; badge: string; dot: string }> = {
     'prospecção': { label: 'Prospecção', badge: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
@@ -676,7 +785,8 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
     URL.revokeObjectURL(url)
   }
 
-  const filtersActive = !!(filterEtapa || filterVendedor || filterScoreMin || filterValorMin)
+  const filtersActive = !!(filterEtapa || filterVendedor || filterStatus || filterScoreMin || filterValorMin)
+  const sortLabel = ({ nome: 'Nome (A-Z)', dataCadastro: 'Data de Cadastro', ultimaCompra: 'Última Compra', valor: 'Valor', score: 'Score' } as Record<SortKey, string>)[sortKey]
   const totalValor = filteredClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
   const visibleClientes = filteredClientes.slice(0, visibleCount)
   const hasMore = visibleCount < filteredClientes.length
@@ -702,9 +812,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         </button>
       </div>
 
-      {/* Search + Filter + Menu */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 relative">
+      {/* Toolbar: Busca + Filtros | Ordenar | Colunas + Menu */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex-1 relative min-w-[200px]">
           <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -714,13 +824,35 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
+
+        {/* Botão Filtros (com texto) */}
         <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`p-2 rounded-apple border transition-colors flex-shrink-0 ${showFilters || filtersActive ? 'bg-primary-50 text-primary-600 border-primary-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
-          title="Filtros"
+          onClick={() => showFilters ? setShowFilters(false) : openFiltersPanel()}
+          className={`px-3 py-2 rounded-apple border transition-colors flex-shrink-0 flex items-center gap-1.5 text-sm font-medium ${showFilters || filtersActive ? 'bg-primary-50 text-primary-700 border-primary-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
         >
-          <AdjustmentsHorizontalIcon className="h-5 w-5" />
+          <FunnelIcon className="h-4 w-4" />
+          <span>Filtros</span>
+          {filtersActive && <span className="bg-primary-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{[filterEtapa,filterVendedor,filterStatus,filterScoreMin,filterValorMin].filter(Boolean).length}</span>}
         </button>
+
+        {/* Botão Ordenar (com texto) */}
+        <button
+          onClick={() => { setShowSort(s => !s); setShowFilters(false); setShowColumns(false) }}
+          className={`px-3 py-2 rounded-apple border transition-colors flex-shrink-0 flex items-center gap-1.5 text-sm font-medium ${showSort ? 'bg-primary-50 text-primary-700 border-primary-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+        >
+          <ArrowsUpDownIcon className="h-4 w-4" />
+          <span>Ordenar</span>
+        </button>
+
+        {/* Botão Colunas (com texto) */}
+        <button
+          onClick={() => { setShowColumns(c => !c); setShowFilters(false); setShowSort(false) }}
+          className={`px-3 py-2 rounded-apple border transition-colors flex-shrink-0 flex items-center gap-1.5 text-sm font-medium ${showColumns ? 'bg-primary-50 text-primary-700 border-primary-300' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+        >
+          <ViewColumnsIcon className="h-4 w-4" />
+          <span>Colunas</span>
+        </button>
+
         <div className="relative flex-shrink-0">
           <button onClick={() => setShowMenu(!showMenu)} className="p-2 rounded-apple border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors" title="Mais opções">
             <EllipsisVerticalIcon className="h-5 w-5" />
@@ -733,12 +865,12 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                   <span className="text-base">📥</span> Importar CSV
                 </button>
                 <button onClick={() => { handleExportCSV(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                  <span className="text-base">📤</span> Exportar CSV
+                  <span className="text-base">📤</span> Exportar CSV {filtersActive && <span className="text-xs text-gray-400">(filtros ativos)</span>}
                 </button>
                 <button onClick={() => { handleDownloadModelo(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
                   <span className="text-base">📋</span> Baixar modelo CSV
                 </button>
-                {onDeleteAll && clientes.length > 0 && (
+                {isGerente && onDeleteAll && clientes.length > 0 && (
                   <>
                     <div className="border-t border-gray-100 my-1" />
                     <button onClick={() => { setShowDeleteAllModal(true); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
@@ -752,13 +884,13 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         </div>
       </div>
 
-      {/* Filters panel */}
+      {/* Painel: Filtros */}
       {showFilters && (
         <div className="bg-white rounded-apple border border-gray-200 p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Etapa</label>
-              <select value={filterEtapa} onChange={(e) => setFilterEtapa(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+              <select value={draftEtapa} onChange={(e) => setDraftEtapa(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
                 <option value="">Todas</option>
                 <option value="prospecção">Prospecção</option>
                 <option value="amostra">Amostra</option>
@@ -773,25 +905,106 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Vendedor</label>
-              <select value={filterVendedor} onChange={(e) => setFilterVendedor(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+              <select value={draftVendedor} onChange={(e) => setDraftVendedor(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
                 <option value="">Todos</option>
                 {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
               </select>
             </div>
             <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+              <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Todos</option>
+                <option value="ativo">Ativo</option>
+                <option value="em_risco">Em Risco</option>
+                <option value="inativo">Inativo</option>
+                <option value="prospecto">Prospecto</option>
+                <option value="descartado">Descartado</option>
+                <option value="bloqueado">Bloqueado</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Score mín.</label>
-              <input type="number" value={filterScoreMin} onChange={(e) => setFilterScoreMin(e.target.value)} placeholder="0" className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <input type="number" value={draftScoreMin} onChange={(e) => setDraftScoreMin(e.target.value)} placeholder="0" className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Valor mín. (R$)</label>
-              <input type="number" value={filterValorMin} onChange={(e) => setFilterValorMin(e.target.value)} placeholder="0" className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <input type="number" value={draftValorMin} onChange={(e) => setDraftValorMin(e.target.value)} placeholder="0" className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
           </div>
-          {filtersActive && (
-            <button onClick={() => { setFilterEtapa(''); setFilterVendedor(''); setFilterScoreMin(''); setFilterValorMin('') }} className="mt-2.5 text-xs text-primary-600 hover:text-primary-800 font-medium">
-              ✕ Limpar filtros
-            </button>
-          )}
+          <div className="flex items-center justify-end gap-2 mt-4">
+            <button onClick={limparFiltros} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 rounded-apple border border-gray-200 font-medium">Limpar</button>
+            <button onClick={aplicarFiltros} className="px-4 py-1.5 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-apple font-medium">Aplicar filtros</button>
+          </div>
+        </div>
+      )}
+
+      {/* Painel: Ordenar */}
+      {showSort && (
+        <div className="bg-white rounded-apple border border-gray-200 p-4">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ordenar por</p>
+          <div className="space-y-1">
+            {([
+              { k: 'nome', label: 'Nome (A-Z)' },
+              { k: 'dataCadastro', label: 'Data de Cadastro' },
+              { k: 'ultimaCompra', label: 'Última Compra' },
+              { k: 'valor', label: 'Valor' },
+              { k: 'score', label: 'Score' },
+            ] as { k: SortKey; label: string }[]).map(opt => (
+              <button
+                key={opt.k}
+                onClick={() => setSortKey(opt.k)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-apple text-sm transition-colors ${sortKey === opt.k ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+              >
+                <span>{opt.label}</span>
+                {sortKey === opt.k && <CheckIcon className="h-4 w-4" />}
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-gray-100 my-3" />
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Direção</p>
+          <div className="flex gap-2">
+            <button onClick={() => setSortDir('asc')} className={`flex-1 px-3 py-2 rounded-apple text-sm border transition-colors ${sortDir === 'asc' ? 'bg-primary-50 text-primary-700 border-primary-300 font-medium' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>↑ Crescente</button>
+            <button onClick={() => setSortDir('desc')} className={`flex-1 px-3 py-2 rounded-apple text-sm border transition-colors ${sortDir === 'desc' ? 'bg-primary-50 text-primary-700 border-primary-300 font-medium' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>↓ Decrescente</button>
+          </div>
+        </div>
+      )}
+
+      {/* Painel: Colunas */}
+      {showColumns && (
+        <div className="bg-white rounded-apple border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Editar colunas visíveis</p>
+            <button
+              onClick={() => {
+                const def = {} as Record<ColumnKey, boolean>
+                ALL_COLUMNS.forEach(c => { def[c.key] = c.defaultVisible })
+                setVisibleCols(def)
+              }}
+              className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+            >Restaurar padrão</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {ALL_COLUMNS.map(col => (
+              <label key={col.key} className="flex items-center gap-2 px-3 py-2 rounded-apple border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={visibleCols[col.key]}
+                  onChange={() => setVisibleCols(prev => ({ ...prev, [col.key]: !prev[col.key] }))}
+                  disabled={col.key === 'nome'}
+                  className="w-4 h-4 text-primary-600 rounded"
+                />
+                <span className={col.key === 'nome' ? 'text-gray-400' : 'text-gray-700'}>{col.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-2">A preferência é salva localmente para este usuário.</p>
+        </div>
+      )}
+
+      {/* Indicador de ordenação ativa */}
+      {!showSort && (
+        <div className="text-xs text-gray-400">
+          Ordenado por <span className="font-medium text-gray-600">{sortLabel}</span> ({sortDir === 'asc' ? 'crescente' : 'decrescente'})
         </div>
       )}
 
@@ -806,15 +1019,18 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
 
       {/* ===== DESKTOP: Clean table (md+) ===== */}
       {filteredClientes.length > 0 && (
-        <div className="hidden md:block bg-white rounded-apple border border-gray-200">
+        <div className="hidden md:block bg-white rounded-apple border border-gray-200 overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
-                <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Etapa</th>
-                <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider hidden lg:table-cell">Vendedor</th>
-                <th className="text-right py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Valor</th>
-                <th className="text-center py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider w-16">Score</th>
+                {visibleCols.etapa && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Etapa</th>}
+                {visibleCols.vendedor && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Vendedor</th>}
+                {visibleCols.email && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Email</th>}
+                {visibleCols.telefone && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Telefone</th>}
+                {visibleCols.valor && <th className="text-right py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Valor</th>}
+                {visibleCols.score && <th className="text-center py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider w-16">Score</th>}
+                {visibleCols.ultimaCompra && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Última Compra</th>}
                 <th className="w-12"></th>
               </tr>
             </thead>
@@ -824,57 +1040,76 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                 const cfg = etapaConfig[cliente.etapa] || { label: cliente.etapa, badge: 'bg-gray-50 text-gray-700', dot: 'bg-gray-400' }
                 const scoreColor = (cliente.score || 0) >= 70 ? 'text-green-600' : (cliente.score || 0) >= 40 ? 'text-yellow-600' : 'text-gray-400'
                 return (
-                  <tr key={cliente.id} className="hover:bg-gray-50/60 transition-colors group cursor-pointer" onClick={() => onEditCliente(cliente)}>
+                  <tr key={cliente.id} className="hover:bg-gray-50/60 transition-colors group cursor-pointer" onClick={() => openCliente(cliente)}>
                     <td className="py-3 px-4">
                       <p className="font-medium text-gray-900 text-sm leading-tight">{cliente.razaoSocial}</p>
                       <p className="text-xs text-gray-400 mt-0.5 leading-tight">
                         {[cliente.contatoNome, cliente.contatoTelefone].filter(Boolean).join(' · ') || cliente.cnpj || '—'}
                       </p>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${cfg.badge}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                        {cfg.label}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 hidden lg:table-cell" onClick={e => e.stopPropagation()}>
-                      {editingVendedor === cliente.id ? (
-                        <select
-                          autoFocus
-                          className="text-sm bg-white border border-primary-300 rounded-apple px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
-                          value={cliente.vendedorId || ''}
-                          onChange={async (e) => {
-                            const newId = Number(e.target.value)
-                            if (newId && newId !== cliente.vendedorId && onUpdateCliente) {
-                              await onUpdateCliente(cliente.id, { vendedorId: newId })
-                            }
-                            setEditingVendedor(null)
-                          }}
-                          onBlur={() => setEditingVendedor(null)}
-                        >
-                          <option value="">— Sem vendedor —</option>
-                          {vendedores.map(vd => (
-                            <option key={vd.id} value={vd.id}>{vd.nome}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <button
-                          onClick={() => setEditingVendedor(cliente.id)}
-                          className="text-sm text-gray-600 hover:text-primary-700 hover:bg-primary-50 px-2 py-0.5 rounded-apple transition-colors"
-                          title="Clique para trocar vendedor"
-                        >
-                          {v ? v.nome.split(' ')[0] : <span className="text-gray-300">—</span>}
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      {cliente.valorEstimado ? (
-                        <span className="text-sm font-medium text-gray-800">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</span>
-                      ) : <span className="text-xs text-gray-300">—</span>}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className={`text-xs font-bold ${scoreColor}`}>{cliente.score || 0}</span>
-                    </td>
+                    {visibleCols.etapa && (
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${cfg.badge}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                          {cfg.label}
+                        </span>
+                      </td>
+                    )}
+                    {visibleCols.vendedor && (
+                      <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                        {editingVendedor === cliente.id ? (
+                          <select
+                            autoFocus
+                            className="text-sm bg-white border border-primary-300 rounded-apple px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                            value={cliente.vendedorId || ''}
+                            onChange={async (e) => {
+                              const newId = Number(e.target.value)
+                              if (newId && newId !== cliente.vendedorId && onUpdateCliente) {
+                                await onUpdateCliente(cliente.id, { vendedorId: newId })
+                              }
+                              setEditingVendedor(null)
+                            }}
+                            onBlur={() => setEditingVendedor(null)}
+                          >
+                            <option value="">— Sem vendedor —</option>
+                            {vendedores.map(vd => (
+                              <option key={vd.id} value={vd.id}>{vd.nome}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button
+                            onClick={() => setEditingVendedor(cliente.id)}
+                            className="text-sm text-gray-600 hover:text-primary-700 hover:bg-primary-50 px-2 py-0.5 rounded-apple transition-colors"
+                            title="Clique para trocar vendedor"
+                          >
+                            {v ? v.nome.split(' ')[0] : <span className="text-gray-300">—</span>}
+                          </button>
+                        )}
+                      </td>
+                    )}
+                    {visibleCols.email && (
+                      <td className="py-3 px-4 text-sm text-gray-600 max-w-[180px] truncate" title={cliente.contatoEmail}>{cliente.contatoEmail || <span className="text-gray-300">—</span>}</td>
+                    )}
+                    {visibleCols.telefone && (
+                      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">{cliente.contatoTelefone || cliente.contatoCelular || <span className="text-gray-300">—</span>}</td>
+                    )}
+                    {visibleCols.valor && (
+                      <td className="py-3 px-4 text-right">
+                        {cliente.valorEstimado ? (
+                          <span className="text-sm font-medium text-gray-800">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</span>
+                        ) : <span className="text-xs text-gray-300">—</span>}
+                      </td>
+                    )}
+                    {visibleCols.score && (
+                      <td className="py-3 px-4 text-center">
+                        <span className={`text-xs font-bold ${scoreColor}`}>{cliente.score || 0}</span>
+                      </td>
+                    )}
+                    {visibleCols.ultimaCompra && (
+                      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">
+                        {cliente.dataUltimoPedido ? new Date(cliente.dataUltimoPedido).toLocaleDateString('pt-BR') : <span className="text-gray-300">—</span>}
+                      </td>
+                    )}
                     <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
                       <button
                         onClick={() => setDeleteClienteModal(cliente)}
@@ -913,7 +1148,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
               <div
                 key={cliente.id}
                 className="bg-white rounded-apple border border-gray-200 p-3.5 active:bg-gray-50 transition-colors"
-                onClick={() => onEditCliente(cliente)}
+                onClick={() => openCliente(cliente)}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">

@@ -33,6 +33,21 @@ interface ClientePanelProps {
   pedidos?: Pedido[]
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
   onSolicitarCancelamentoPedido?: (pedidoId: number, motivo: string) => Promise<void>
+  /** Redireciona para o Funil já posicionado no card deste cliente. */
+  onVerNoFunil?: (c: Cliente) => void
+  /** Exclui o cliente (apenas Gestor). Ação irreversível. */
+  onExcluirCliente?: (c: Cliente) => void | Promise<void>
+  /** Reativa cliente inativo, voltando à etapa anterior (apenas Gestor). */
+  onReativarCliente?: (c: Cliente) => void | Promise<void>
+}
+
+const STATUS_CLIENTE_BADGE: Record<string, { label: string; cls: string }> = {
+  ativo: { label: 'Ativo', cls: 'bg-green-100 text-green-700 border-green-200' },
+  em_risco: { label: 'Em Risco', cls: 'bg-orange-100 text-orange-700 border-orange-200' },
+  inativo: { label: 'Inativo', cls: 'bg-gray-200 text-gray-700 border-gray-300' },
+  prospecto: { label: 'Prospecto', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+  descartado: { label: 'Descartado', cls: 'bg-red-100 text-red-700 border-red-200' },
+  bloqueado: { label: 'Bloqueado', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
 }
 
 const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
@@ -78,8 +93,15 @@ export default function ClientePanel({
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda,
   setInteracoes, setClientes, setTarefas, addNotificacao,
-  produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido
+  produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido,
+  onVerNoFunil, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
+  const isGerente = loggedUser?.cargo === 'gerente'
+  const [showMaisOpcoesHeader, setShowMaisOpcoesHeader] = useState(false)
+  const [showExcluirConfirm, setShowExcluirConfirm] = useState(false)
+  const [excluirConfirmText, setExcluirConfirmText] = useState('')
+  // Abas do perfil (referência Agendor): Histórico (default) | Negócios
+  const [activeTab, setActiveTab] = useState<'historico' | 'negocios'>('historico')
   const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
@@ -403,17 +425,185 @@ export default function ClientePanel({
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black bg-opacity-30" onClick={onClose} />
       <div className="relative w-full sm:max-w-[95vw] lg:max-w-[80vw] xl:max-w-[75vw] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden animate-slide-in-right sm:my-2 sm:mr-2">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-center justify-between">
+        {/* Header — Perfil do Cliente (referência: Agendor) */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h2 onClick={() => { onEditCliente(c); onClose() }} className="text-lg font-bold text-gray-900 truncate cursor-pointer hover:text-primary-600 hover:underline transition-colors" title="Clique para editar">{c.razaoSocial}</h2>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
+              {/* Tag Status do Cliente */}
+              {(() => {
+                const statusKey = c.statusCliente || (c.etapa === 'inativo' ? 'inativo' : 'prospecto')
+                const stb = STATUS_CLIENTE_BADGE[statusKey] || STATUS_CLIENTE_BADGE.prospecto
+                return <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${stb.cls}`}>{stb.label}</span>
+              })()}
+              {/* Data Última Compra */}
+              {c.dataUltimoPedido && (
+                <span className="text-[11px] text-gray-500">
+                  🛒 Última compra: <strong className="text-gray-700">{new Date(c.dataUltimoPedido).toLocaleDateString('pt-BR')}</strong>
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[c.etapa] || 'bg-gray-100 text-gray-800'}`}>{etapaLabels[c.etapa] || c.etapa}</span>
               <span className="text-xs text-gray-500">Há {diasNaEtapa}d nesta etapa</span>
+              {(() => {
+                const vend = vendedores.find(v => v.id === c.vendedorId)
+                return vend ? (
+                  <span className="text-xs text-gray-600 inline-flex items-center gap-1">
+                    <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">{vend.nome.charAt(0)}</span>
+                    <span>{vend.nome.split(' ')[0]}</span>
+                  </span>
+                ) : null
+              })()}
               {c.score !== undefined && <span className="text-xs font-bold text-gray-600 ml-auto">Score: {c.score}</span>}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-apple ml-2"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
+
+          {/* Ações no canto direito do header */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Atalhos rápidos: Ligação | WhatsApp | E-mail */}
+            {(() => {
+              const fone = (c.contatoCelular || c.contatoTelefone || c.whatsapp || '').replace(/\D/g, '')
+              return (
+                <div className="hidden md:flex items-center gap-1">
+                  {fone && (
+                    <a
+                      href={`tel:+55${fone}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
+                      title="Ligar"
+                    >📞</a>
+                  )}
+                  {fone && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                      title="WhatsApp"
+                    >💬</button>
+                  )}
+                  {c.contatoEmail && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                      title="E-mail"
+                    >📧</button>
+                  )}
+                </div>
+              )
+            })()}
+            {/* VER NO FUNIL */}
+            {onVerNoFunil && (
+              <button
+                onClick={() => { onVerNoFunil(c); onClose() }}
+                className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-700 border border-primary-200 rounded-apple hover:bg-primary-100 transition-colors"
+                title="Abrir o card deste cliente no Funil"
+              >
+                🎯 Ver no Funil
+              </button>
+            )}
+            {/* Menu Mais Opções */}
+            <div className="relative">
+              <button
+                onClick={() => setShowMaisOpcoesHeader(v => !v)}
+                className="px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-apple hover:bg-gray-50"
+                title="Mais opções"
+              >
+                Mais opções ▾
+              </button>
+              {showMaisOpcoesHeader && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowMaisOpcoesHeader(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-apple shadow-lg border border-gray-200 z-40 py-1">
+                    <button
+                      onClick={() => { setShowMaisOpcoesHeader(false); onEditCliente(c); onClose() }}
+                      className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
+                    >
+                      ✏️ Editar Empresa
+                    </button>
+                    {onVerNoFunil && (
+                      <button
+                        onClick={() => { setShowMaisOpcoesHeader(false); onVerNoFunil(c); onClose() }}
+                        className="sm:hidden w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
+                      >
+                        🎯 Ver no Funil
+                      </button>
+                    )}
+                    {isGerente && (
+                      <button
+                        onClick={() => {
+                          setShowMaisOpcoesHeader(false)
+                          // Exporta histórico/timeline em CSV (Excel-compatível).
+                          const linhas: string[] = []
+                          linhas.push(['data', 'tipo', 'assunto', 'descricao', 'automatico'].join(';'))
+                          const interCliente = interacoes.filter(i => i.clienteId === c.id).sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+                          for (const i of interCliente) {
+                            linhas.push([
+                              new Date(i.data).toLocaleString('pt-BR'),
+                              i.tipo,
+                              `"${(i.assunto || '').replace(/"/g, '""')}"`,
+                              `"${(i.descricao || '').replace(/"/g, '""')}"`,
+                              i.automatico ? 'sim' : 'não',
+                            ].join(';'))
+                          }
+                          const tarefasCli = tarefas.filter(t => t.clienteId === c.id)
+                          for (const t of tarefasCli) {
+                            linhas.push([
+                              `${t.data}${t.hora ? ' ' + t.hora : ''}`,
+                              `tarefa-${t.tipo}`,
+                              `"${(t.titulo || '').replace(/"/g, '""')}"`,
+                              `"${(t.descricao || '').replace(/"/g, '""')} [status: ${t.status}]"`,
+                              'não',
+                            ].join(';'))
+                          }
+                          const csv = '\uFEFF' + linhas.join('\n')
+                          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `historico_${(c.razaoSocial || 'cliente').replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`
+                          a.click()
+                          URL.revokeObjectURL(url)
+                        }}
+                        className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
+                      >
+                        📥 Exportar Histórico
+                        <span className="ml-auto text-[9px] text-gray-400 font-medium">GESTOR</span>
+                      </button>
+                    )}
+                    {isGerente && c.etapa === 'inativo' && onReativarCliente && (
+                      <button
+                        onClick={() => {
+                          setShowMaisOpcoesHeader(false)
+                          if (confirm('Reativar este cliente? Ele voltará à etapa anterior.')) {
+                            onReativarCliente(c)
+                            onClose()
+                          }
+                        }}
+                        className="w-full px-3 py-2 text-sm text-green-700 hover:bg-green-50 text-left flex items-center gap-2"
+                      >
+                        ♻️ Reativar Cliente
+                        <span className="ml-auto text-[9px] text-gray-400 font-medium">GESTOR</span>
+                      </button>
+                    )}
+                    {isGerente && onExcluirCliente && (
+                      <>
+                        <div className="border-t border-gray-100 my-1" />
+                        <button
+                          onClick={() => { setShowMaisOpcoesHeader(false); setExcluirConfirmText(''); setShowExcluirConfirm(true) }}
+                          className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left flex items-center gap-2"
+                        >
+                          🗑️ Excluir Empresa
+                          <span className="ml-auto text-[9px] text-gray-400 font-medium">GESTOR</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-apple"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
+          </div>
         </div>
 
         <div className="px-4 sm:px-6 py-4 h-[calc(100dvh-84px)] sm:h-[calc(100%-84px)] overflow-y-auto lg:overflow-hidden">
@@ -940,6 +1130,121 @@ export default function ClientePanel({
 
           <div className="space-y-4 lg:col-span-7 xl:col-span-8 lg:overflow-y-auto lg:pl-1">
 
+          {/* === ABAS: Histórico | Negócios === */}
+          <div className="sticky top-0 z-[5] bg-white border-b border-gray-200 -mx-1 px-1 pb-0 mb-2">
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('historico')}
+                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'historico' ? 'text-primary-700 border-primary-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+              >
+                Ver histórico
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('negocios')}
+                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'negocios' ? 'text-primary-700 border-primary-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+              >
+                Ver negócios
+                {(() => {
+                  const count = (todosPedidos || []).filter(p => p.clienteId === c.id && p.status !== 'cancelado').length
+                  return count > 0 ? <span className="bg-gray-200 text-gray-700 text-[10px] font-bold rounded-full px-1.5">{count}</span> : null
+                })()}
+              </button>
+            </div>
+          </div>
+
+          {/* ===== ABA NEGÓCIOS ===== */}
+          {activeTab === 'negocios' && (() => {
+            const pedidosCli = (todosPedidos || [])
+              .filter(p => p.clienteId === c.id)
+              .sort((a, b) => (b.dataCriacao || '').localeCompare(a.dataCriacao || ''))
+            const total = pedidosCli.filter(p => p.status !== 'cancelado' && p.tipo !== 'bonificacao').reduce((s, p) => s + (p.totalValor || 0), 0)
+            const statusBadge: Record<string, string> = {
+              rascunho: 'bg-gray-100 text-gray-700',
+              enviado: 'bg-yellow-100 text-yellow-700',
+              confirmado: 'bg-green-100 text-green-700',
+              cancelado: 'bg-red-100 text-red-700',
+              cancelamento_solicitado: 'bg-orange-100 text-orange-700',
+            }
+            return (
+              <div className="space-y-3">
+                {/* KPIs */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white rounded-apple border border-gray-200 p-3">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Pedidos</p>
+                    <p className="text-lg font-bold text-gray-900">{pedidosCli.length}</p>
+                  </div>
+                  <div className="bg-white rounded-apple border border-gray-200 p-3">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Faturado</p>
+                    <p className="text-lg font-bold text-green-700">R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="bg-white rounded-apple border border-gray-200 p-3">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider">Propostas</p>
+                    <p className="text-lg font-bold text-indigo-700">{todasPropostas.length}</p>
+                  </div>
+                </div>
+
+                {/* Lista de Pedidos */}
+                <div className="bg-white rounded-apple border border-gray-200">
+                  <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <p className="text-sm font-semibold text-gray-900">🧾 Pedidos do cliente</p>
+                  </div>
+                  {pedidosCli.length === 0 ? (
+                    <p className="text-sm text-gray-400 p-4 text-center">Nenhum pedido registrado ainda.</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {pedidosCli.map(p => (
+                        <div key={p.id} className="px-4 py-2.5 hover:bg-gray-50">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900">{p.numero} {p.tipo === 'bonificacao' && <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">amostra</span>}</p>
+                              <p className="text-[11px] text-gray-500">{new Date(p.dataCriacao).toLocaleDateString('pt-BR')} · {(p.itens || []).length} item(ns)</p>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-sm font-bold text-gray-900">{p.tipo === 'bonificacao' ? '—' : `R$ ${(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>
+                              <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${statusBadge[p.status] || 'bg-gray-100 text-gray-700'}`}>{p.status}</span>
+                            </div>
+                          </div>
+                          {p.itens && p.itens.length > 0 && (
+                            <p className="text-[11px] text-gray-400 mt-1 truncate">
+                              {p.itens.map(it => `${it.quantidade}× ${it.nomeProduto}`).join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Lista de Propostas */}
+                {todasPropostas.length > 0 && (
+                  <div className="bg-white rounded-apple border border-gray-200">
+                    <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-900">📋 Histórico de Propostas</p>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {todasPropostas.map((p, i) => (
+                        <div key={p.id} className={`px-4 py-2.5 ${i === 0 ? 'bg-indigo-50/30' : ''}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900">{p.numero} {i === 0 && <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1 rounded">atual</span>}</p>
+                              <p className="text-[11px] text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR')} · {p.vendedorNome} · {(p.itens || []).length} item(ns)</p>
+                            </div>
+                            <p className="text-sm font-bold text-gray-900 flex-shrink-0">R$ {(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* ===== ABA HISTÓRICO (default) ===== */}
+          {activeTab === 'historico' && <>
+
           {/* === REGISTRAR ATIVIDADE === */}
           <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">📞 Registrar Atividade</h3>
@@ -1335,6 +1640,8 @@ export default function ClientePanel({
             )}
           </div>
 
+          </>}{/* fim aba Histórico */}
+
           </div>
         </div>
 
@@ -1722,6 +2029,46 @@ export default function ClientePanel({
           </div>
         )
       })()}
+
+      {/* Modal: confirmar Excluir Empresa (irreversível) */}
+      {showExcluirConfirm && onExcluirCliente && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowExcluirConfirm(false)}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="text-center mb-3">
+              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Excluir Empresa</h3>
+              <p className="text-sm text-gray-600 mt-1">Você está prestes a excluir <strong>{c.razaoSocial}</strong> permanentemente.</p>
+              <p className="text-xs text-red-600 font-semibold mt-2">Esta ação é IRREVERSÍVEL e removerá interações, tarefas e histórico.</p>
+            </div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Digite <span className="font-bold text-red-600">EXCLUIR</span> para confirmar:</label>
+            <input
+              type="text"
+              value={excluirConfirmText}
+              onChange={(e) => setExcluirConfirmText(e.target.value)}
+              placeholder="Digite EXCLUIR"
+              className="w-full px-3 py-2 border border-gray-300 rounded-apple text-center font-bold focus:outline-none focus:ring-2 focus:ring-red-500"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowExcluirConfirm(false)} className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-apple font-medium text-sm">Cancelar</button>
+              <button
+                onClick={async () => {
+                  if (excluirConfirmText !== 'EXCLUIR') return
+                  await onExcluirCliente(c)
+                  setShowExcluirConfirm(false)
+                  onClose()
+                }}
+                disabled={excluirConfirmText !== 'EXCLUIR'}
+                className={`flex-1 px-3 py-2 rounded-apple font-medium text-sm text-white ${excluirConfirmText === 'EXCLUIR' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-300 cursor-not-allowed'}`}
+              >
+                🗑️ Excluir definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
