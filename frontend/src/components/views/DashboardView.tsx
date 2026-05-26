@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, PieChart, Pie } from 'recharts'
+import WhatsAppIcon from '../icons/WhatsAppIcon'
 import type { Cliente, Vendedor, Interacao, DashboardMetrics, Atividade, Produto, Tarefa, Pedido } from '../../types'
 import { stageLabels } from '../../utils/constants'
 
@@ -524,9 +525,9 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
     const rankReunioes = buildRanking('reuniao')
     const maxFat = rankFaturamento[0]?.valor || 1
 
-    const RankSection: React.FC<{ title: string; icon: string; data: { id: number; nome: string; qtd: number }[]; color: string; suffix?: string }> = ({ title, icon, data, color, suffix = '' }) => (
+    const RankSection: React.FC<{ title: string; icon: React.ReactNode; data: { id: number; nome: string; qtd: number }[]; color: string; suffix?: string }> = ({ title, icon, data, color, suffix = '' }) => (
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
-        <h4 className="text-base font-semibold text-gray-900 mb-3">{icon} {title}</h4>
+        <h4 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">{icon} {title}</h4>
         {data.length === 0 ? <p className="text-sm text-gray-400">Sem dados no período</p> : (
           <div className="space-y-2">
             {data.slice(0, 5).map((v, i) => (
@@ -563,7 +564,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <RankSection title="Ligações" icon="📞" data={rankLigacoes} color="#3B82F6" />
           <RankSection title="Emails" icon="📧" data={rankEmails} color="#8B5CF6" />
-          <RankSection title="WhatsApp" icon="💬" data={rankWhatsapp} color="#22C55E" />
+          <RankSection title="WhatsApp" icon={<WhatsAppIcon variant="filled" className="h-4 w-4" />} data={rankWhatsapp} color="#22C55E" />
           <RankSection title="Reuniões" icon="🤝" data={rankReunioes} color="#F59E0B" />
         </div>
 

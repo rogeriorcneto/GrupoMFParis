@@ -1,4 +1,5 @@
 import React from 'react'
+import WhatsAppIcon from '../icons/WhatsAppIcon'
 import type { Cliente, Interacao, Vendedor, TemplateMsg } from '../../types'
 import { startBulkSend, getBulkStatus, cancelBulkBatch, getBulkBatches } from '../../lib/botApi'
 import type { BulkStatus } from '../../lib/botApi'
@@ -249,8 +250,8 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                     📧 Email
                   </button>
                   <button onClick={() => setCanal('whatsapp')}
-                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-apple transition-all ${canal === 'whatsapp' ? 'bg-green-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                    💬 WhatsApp
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-apple transition-all ${canal === 'whatsapp' ? 'bg-green-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                    <WhatsAppIcon variant={canal === 'whatsapp' ? 'outline' : 'filled'} className="h-4 w-4" /> WhatsApp
                   </button>
                 </div>
 

@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback } from 'react'
+import WhatsAppIcon from '../icons/WhatsAppIcon'
 import {
   XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon,
   ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon,
@@ -329,7 +330,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                       onClick={() => onWhatsApp(cliente)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-500 hover:bg-green-600 text-white rounded-xl transition-all hover:shadow-sm active:scale-95"
                     >
-                      <DevicePhoneMobileIcon className="h-3.5 w-3.5" />
+                      <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
                       WhatsApp
                     </button>
                     <button
@@ -1095,7 +1096,7 @@ const TarefasView: React.FC<{
                 className={`p-2 rounded-xl transition-all ${showWhatsApp ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'}`}
                 title="Meu WhatsApp"
               >
-                <DevicePhoneMobileIcon className="h-4.5 w-4.5 h-5 w-5" />
+                <WhatsAppIcon variant={showWhatsApp ? 'outline' : 'filled'} className="h-5 w-5" />
               </button>
 
               <button

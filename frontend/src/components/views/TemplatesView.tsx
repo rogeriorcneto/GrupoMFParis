@@ -1,5 +1,6 @@
 import React from 'react'
 import { XMarkIcon, PlusIcon } from '@heroicons/react/24/outline'
+import WhatsAppIcon from '../icons/WhatsAppIcon'
 import type { Template } from '../../types'
 
 const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template, 'id'>) => void, onDelete: (id: number) => void }> = ({ templates, onAdd, onDelete }) => {
@@ -62,8 +63,8 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
           <div key={t.id} className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5 hover:shadow-apple transition-shadow">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${t.canal === 'email' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                  {t.canal === 'email' ? '📧 Email' : '💬 WhatsApp'}
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${t.canal === 'email' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                  {t.canal === 'email' ? <>📧 Email</> : <><WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp</>}
                 </span>
                 <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
                   {t.etapa}
@@ -105,8 +106,8 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">{previewTemplate.nome}</h2>
                 <div className="flex gap-2 mt-1">
-                  <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${previewTemplate.canal === 'email' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                    {previewTemplate.canal === 'email' ? '📧 Email' : '💬 WhatsApp'}
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${previewTemplate.canal === 'email' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                    {previewTemplate.canal === 'email' ? <>📧 Email</> : <><WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp</>}
                   </span>
                   <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700">{previewTemplate.etapa}</span>
                 </div>

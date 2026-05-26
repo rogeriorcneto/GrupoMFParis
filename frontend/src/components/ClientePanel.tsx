@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { XMarkIcon } from '@heroicons/react/24/outline'
+import WhatsAppIcon from './icons/WhatsAppIcon'
 import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico } from '../types'
 import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
 import { gerarPropostaPDF } from '../utils/pdfGenerator'
@@ -479,7 +480,7 @@ export default function ClientePanel({
                       onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
                       title="WhatsApp"
-                    >💬</button>
+                    ><WhatsAppIcon variant="outline" className="h-4 w-4" /></button>
                   )}
                   {c.contatoEmail && (
                     <button
@@ -915,7 +916,7 @@ export default function ClientePanel({
               )}
               {phone && (
                 <button onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-apple text-xs font-medium hover:bg-emerald-700 transition-colors">
-                  💬 WhatsApp
+                  <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" /> WhatsApp
                 </button>
               )}
             </div>
@@ -1249,13 +1250,17 @@ export default function ClientePanel({
           <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">📞 Registrar Atividade</h3>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {([['ligacao', '📞', 'Ligação'], ['whatsapp', '💬', 'WhatsApp'], ['email', '📧', 'Email'], ['reuniao', '🤝', 'Reunião'], ['linkedin', '💼', 'LinkedIn']] as const).map(([tipo, icon, label]) => (
+              {([['ligacao', '📞', 'Ligação'], ['whatsapp', 'WA', 'WhatsApp'], ['email', '📧', 'Email'], ['reuniao', '🤝', 'Reunião'], ['linkedin', '💼', 'LinkedIn']] as const).map(([tipo, icon, label]) => (
                 <button key={tipo} onClick={() => {
                   setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo)
                   if (tipo === 'email' && c.contatoEmail) { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
                   if (tipo === 'whatsapp' && phone) { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
                 }} className={`flex flex-col items-center gap-1 p-2 rounded-apple text-xs font-medium transition-all ${panelAtividadeTipo === tipo ? 'bg-primary-100 border-2 border-primary-500 text-primary-700 shadow-sm' : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
-                  <span className="text-lg">{icon}</span>
+                  {tipo === 'whatsapp' ? (
+                    <WhatsAppIcon variant="filled" className="h-5 w-5" />
+                  ) : (
+                    <span className="text-lg">{icon}</span>
+                  )}
                   <span>{label}</span>
                 </button>
               ))}
@@ -1452,7 +1457,7 @@ export default function ClientePanel({
           {/* === WHATSAPP (collapsible) === */}
           <div ref={whatsAppRef} className="bg-gray-50 rounded-apple border border-gray-200">
             <button onClick={() => setShowWhatsApp(!showWhatsApp)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
-              <span>📱 WhatsApp Chat</span>
+              <span className="flex items-center gap-2"><WhatsAppIcon variant="filled" className="h-5 w-5" /> WhatsApp Chat</span>
               <span>{showWhatsApp ? '▲' : '▼'}</span>
             </button>
             {showWhatsApp && (

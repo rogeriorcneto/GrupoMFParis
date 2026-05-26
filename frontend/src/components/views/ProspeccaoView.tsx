@@ -1,5 +1,6 @@
 import React from 'react'
 import { SparklesIcon, MagnifyingGlassIcon, PhoneIcon, GlobeAltIcon, MapPinIcon, StarIcon, ClockIcon } from '@heroicons/react/24/outline'
+import WhatsAppIcon from '../icons/WhatsAppIcon'
 import type { Cliente, Interacao, TemplateMsg, Cadencia, Campanha, JobAutomacao } from '../../types'
 import { placesSearch, placesDetails, placesPhotoUrl, type PlacesSearchResult, type PlacesDetails } from '../../lib/placesApi'
 
@@ -117,8 +118,8 @@ const LeadPlacesEnrich: React.FC<{ lead: Cliente }> = ({ lead }) => {
                 <a href={`tel:${details.phone}`} className="text-sm font-semibold text-green-900">{details.phone}</a>
               </div>
               <a href={`https://wa.me/${details.phone?.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer"
-                className="ml-auto text-xs bg-green-500 text-white px-2 py-1 rounded-lg hover:bg-green-600 whitespace-nowrap">
-                📱 WhatsApp
+                className="ml-auto inline-flex items-center gap-1 text-xs bg-green-500 text-white px-2 py-1 rounded-lg hover:bg-green-600 whitespace-nowrap">
+                <WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp
               </a>
             </div>
           )}

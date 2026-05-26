@@ -8,6 +8,7 @@ import {
   MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon,
   PhoneIcon, PhoneXMarkIcon,
 } from '@heroicons/react/24/outline'
+import WhatsAppIcon from './icons/WhatsAppIcon'
 import type { Tarefa, Cliente, Vendedor, Interacao, Pedido } from '../types'
 import { callAIFull, buildCRMContext } from '../lib/gemini'
 import type { AIMessage, AIUIAction } from '../lib/gemini'
@@ -707,7 +708,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
   const tools = [
     { id: 'buscar' as SidebarTool, icon: MagnifyingGlassIcon, label: 'Buscar Cliente', color: 'text-blue-600' },
-    { id: 'whatsapp' as SidebarTool, icon: DevicePhoneMobileIcon, label: 'WhatsApp', color: 'text-green-600' },
+    { id: 'whatsapp' as SidebarTool, icon: WhatsAppIcon, label: 'WhatsApp', color: 'text-green-600' },
     { id: 'email' as SidebarTool, icon: EnvelopeIcon, label: 'Email', color: 'text-red-500' },
     { id: 'notas' as SidebarTool, icon: PencilSquareIcon, label: 'Observações', color: 'text-amber-600' },
     { id: 'tarefas' as SidebarTool, icon: CheckCircleIcon, label: 'Tarefa Rápida', color: 'text-purple-600' },
@@ -827,7 +828,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 <div className="flex flex-col h-full">
                   {!selectedCliente ? (
                     <div className="text-center py-6">
-                      <DevicePhoneMobileIcon className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <WhatsAppIcon variant="filled" className="h-8 w-8 mx-auto mb-2 opacity-60" />
                       <p className="text-sm text-gray-500">Selecione um cliente primeiro</p>
                       <button onClick={() => setActiveTool('buscar')} className="text-xs text-purple-600 underline mt-1">Buscar cliente</button>
                     </div>
@@ -1418,7 +1419,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                   {selectedCliente.valorEstimado && <p className="text-xs text-gray-600">💰 R$ {selectedCliente.valorEstimado.toLocaleString('pt-BR')}</p>}
                 </div>
                 <div className="flex gap-1 mt-3">
-                  <button onClick={() => setActiveTool('whatsapp')} className="flex-1 px-2 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100">📱 WA</button>
+                  <button onClick={() => setActiveTool('whatsapp')} className="flex-1 px-2 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100 inline-flex items-center justify-center gap-1"><WhatsAppIcon variant="outline" className="h-3 w-3" /> WA</button>
                   <button onClick={() => setActiveTool('email')} className="flex-1 px-2 py-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100">📧 Email</button>
                   <button onClick={() => setActiveTool('notas')} className="flex-1 px-2 py-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100">📝 Nota</button>
                 </div>
