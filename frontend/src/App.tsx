@@ -455,9 +455,9 @@ function App() {
 
   return (
     <div className="h-screen flex bg-gray-50 dark:bg-gray-950">
-      {/* Mobile sidebar backdrop */}
+      {/* Sidebar backdrop (todas as telas) */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}

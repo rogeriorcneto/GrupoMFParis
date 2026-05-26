@@ -74,14 +74,14 @@ export default function Sidebar({
   activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, pendingAprovacoes = 0
 }: SidebarProps) {
   return (
-    <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-r flex flex-col`}>
+    <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-r flex flex-col shadow-xl`}>
       {/* Logo */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
           <img src="/Logo_MFParis.jpg" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
           <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Grupo MF Paris</h1>
         </div>
-        <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-gray-400 hover:text-gray-600 rounded-apple">
+        <button onClick={() => setSidebarOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-apple" title="Fechar menu">
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
