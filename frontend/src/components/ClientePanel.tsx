@@ -425,98 +425,88 @@ export default function ClientePanel({
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black bg-opacity-30" onClick={onClose} />
       <div className="relative w-full sm:max-w-[95vw] lg:max-w-[80vw] xl:max-w-[75vw] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden animate-slide-in-right sm:my-2 sm:mr-2">
-        {/* Header — estilo Agendor (avatar + nome + stars + inline subtitle + Adicionar negócio/Mais opções) */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-5 sm:px-6 py-4 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            {/* Avatar empresa */}
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M3 2.25a.75.75 0 0 0 0 1.5h.75v17.25a.75.75 0 0 0 .75.75h6a.75.75 0 0 0 .75-.75v-3.75h1.5v3.75a.75.75 0 0 0 .75.75h6a.75.75 0 0 0 .75-.75V3.75H21a.75.75 0 0 0 0-1.5H3Zm3 4.5a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75V6.75ZM6.75 9a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75V9.75a.75.75 0 0 0-.75-.75H6.75ZM6 12.75a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75v-.008ZM10.5 6a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75V6.75a.75.75 0 0 0-.75-.75H10.5ZM9.75 9.75A.75.75 0 0 1 10.5 9h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75H10.5a.75.75 0 0 1-.75-.75V9.75ZM10.5 12a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75v-.008a.75.75 0 0 0-.75-.75H10.5ZM13.5 6.75a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75V6.75ZM14.25 9a.75.75 0 0 0-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 0 0 .75-.75V9.75a.75.75 0 0 0-.75-.75h-.008ZM13.5 12.75a.75.75 0 0 1 .75-.75h.008a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75h-.008a.75.75 0 0 1-.75-.75v-.008ZM6 18a.75.75 0 0 1 .75-.75h3.75a.75.75 0 0 1 .75.75v.008a.75.75 0 0 1-.75.75H6.75A.75.75 0 0 1 6 18v-.008Z" clipRule="evenodd" /></svg>
+        {/* Header — Perfil do Cliente (referência: Agendor) */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
+              {/* Tag Status do Cliente */}
+              {(() => {
+                const statusKey = c.statusCliente || (c.etapa === 'inativo' ? 'inativo' : 'prospecto')
+                const stb = STATUS_CLIENTE_BADGE[statusKey] || STATUS_CLIENTE_BADGE.prospecto
+                return <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${stb.cls}`}>{stb.label}</span>
+              })()}
+              {/* Data Última Compra */}
+              {c.dataUltimoPedido && (
+                <span className="text-[11px] text-gray-500">
+                  🛒 Última compra: <strong className="text-gray-700">{new Date(c.dataUltimoPedido).toLocaleDateString('pt-BR')}</strong>
+                </span>
+              )}
             </div>
-
-            <div className="flex-1 min-w-0">
-              {/* Linha 1: nome + estrelas + última compra */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-xl font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
-                {/* Stars baseadas em score (0-100 → 1-5) */}
-                {(() => {
-                  const score = c.score || 0
-                  const stars = score > 0 ? Math.max(1, Math.min(5, Math.round(score / 20))) : 0
-                  return (
-                    <span className="flex items-center gap-0.5" title={score > 0 ? `Score: ${score}` : 'Sem score'}>
-                      {[1, 2, 3, 4, 5].map(i => (
-                        <svg key={i} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-4 h-4 ${i <= stars ? 'text-amber-400' : 'text-gray-200'}`}><path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006Z" clipRule="evenodd" /></svg>
-                      ))}
-                    </span>
-                  )
-                })()}
-                {c.dataUltimoPedido && (
-                  <span className="text-[11px] text-gray-500 ml-1">
-                    🛒 Última compra: <strong className="text-gray-700">{new Date(c.dataUltimoPedido).toLocaleDateString('pt-BR')}</strong>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[c.etapa] || 'bg-gray-100 text-gray-800'}`}>{etapaLabels[c.etapa] || c.etapa}</span>
+              <span className="text-xs text-gray-500">Há {diasNaEtapa}d nesta etapa</span>
+              {(() => {
+                const vend = vendedores.find(v => v.id === c.vendedorId)
+                return vend ? (
+                  <span className="text-xs text-gray-600 inline-flex items-center gap-1">
+                    <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">{vend.nome.charAt(0)}</span>
+                    <span>{vend.nome.split(' ')[0]}</span>
                   </span>
-                )}
-              </div>
-
-              {/* Linha 2: subtitle inline com bullets — status · telefone · email · vendedor */}
-              <div className="flex items-center gap-1.5 mt-1 text-sm text-gray-600 flex-wrap">
-                {(() => {
-                  const statusKey = c.statusCliente || (c.etapa === 'inativo' ? 'inativo' : 'prospecto')
-                  const stb = STATUS_CLIENTE_BADGE[statusKey] || STATUS_CLIENTE_BADGE.prospecto
-                  return <span className="text-gray-700">{stb.label}</span>
-                })()}
-                <span className={`px-1.5 py-0 text-[10px] font-semibold rounded ${etapaCores[c.etapa] || 'bg-gray-100 text-gray-700'}`}>{etapaLabels[c.etapa] || c.etapa}</span>
-                <span className="text-xs text-gray-400">· Há {diasNaEtapa}d</span>
-                {(c.contatoCelular || c.contatoTelefone) && (
-                  <>
-                    <span className="text-gray-300">·</span>
-                    <span className="text-gray-600">{c.contatoCelular || c.contatoTelefone}</span>
-                  </>
-                )}
-                {c.contatoEmail && (
-                  <>
-                    <span className="text-gray-300">·</span>
-                    <span className="text-gray-600 truncate max-w-[220px]">{c.contatoEmail}</span>
-                  </>
-                )}
-                {(() => {
-                  const vend = vendedores.find(v => v.id === c.vendedorId)
-                  if (!vend) return null
-                  return (
-                    <>
-                      <span className="text-gray-300">·</span>
-                      <span className="inline-flex items-center gap-1">
-                        <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">{vend.nome.charAt(0)}</span>
-                        <span className="text-gray-700">{vend.nome.split(' ')[0]}</span>
-                      </span>
-                    </>
-                  )
-                })()}
-              </div>
+                ) : null
+              })()}
+              {c.score !== undefined && <span className="text-xs font-bold text-gray-600 ml-auto">Score: {c.score}</span>}
             </div>
           </div>
 
-          {/* Ações no canto direito do header — estilo Agendor */}
+          {/* Ações no canto direito do header */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Acesso restrito badge (apenas gerente) */}
-            {isGerente && (
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md">
-                🔒 Acesso restrito
-              </span>
-            )}
-            {/* Botão "+ Adicionar negócio" */}
+            {/* Atalhos rápidos: Ligação | WhatsApp | E-mail */}
+            {(() => {
+              const fone = (c.contatoCelular || c.contatoTelefone || c.whatsapp || '').replace(/\D/g, '')
+              return (
+                <div className="hidden md:flex items-center gap-1">
+                  {fone && (
+                    <a
+                      href={`tel:+55${fone}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
+                      title="Ligar"
+                    >📞</a>
+                  )}
+                  {fone && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                      title="WhatsApp"
+                    >💬</button>
+                  )}
+                  {c.contatoEmail && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                      title="E-mail"
+                    >📧</button>
+                  )}
+                </div>
+              )
+            })()}
+            {/* VER NO FUNIL */}
             {onVerNoFunil && (
               <button
                 onClick={() => { onVerNoFunil(c); onClose() }}
-                className="hidden sm:inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-md transition-colors"
+                className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-700 border border-primary-200 rounded-apple hover:bg-primary-100 transition-colors"
                 title="Abrir o card deste cliente no Funil"
               >
-                + Adicionar negócio
+                🎯 Ver no Funil
               </button>
             )}
             {/* Menu Mais Opções */}
             <div className="relative">
               <button
                 onClick={() => setShowMaisOpcoesHeader(v => !v)}
-                className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-apple hover:bg-gray-50"
                 title="Mais opções"
               >
                 Mais opções ▾
@@ -620,43 +610,9 @@ export default function ClientePanel({
           <div className="lg:h-full grid grid-cols-1 lg:grid-cols-12 gap-4">
             <div className="space-y-4 lg:col-span-5 xl:col-span-4 lg:overflow-y-auto lg:pr-1">
 
-          {/* === AÇÕES (estilo Agendor: 3 botões roxos empilhados) === */}
-          <div className="bg-white rounded-apple border border-gray-200 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">Ações</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {c.contatoEmail && (
-                <button
-                  onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M1.5 8.67v8.58a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3V8.67l-8.928 5.493a3 3 0 0 1-3.144 0L1.5 8.67Z" /><path d="M22.5 6.908V6.75a3 3 0 0 0-3-3h-15a3 3 0 0 0-3 3v.158l9.714 5.978a1.5 1.5 0 0 0 1.572 0L22.5 6.908Z" /></svg>
-                  Enviar e-mail
-                </button>
-              )}
-              {phone && (
-                <a
-                  href={`tel:+55${phone}`}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M1.5 4.5a3 3 0 0 1 3-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 0 1-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 0 0 6.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 0 1 1.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 0 1-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5Z" clipRule="evenodd" /></svg>
-                  Fazer ligação
-                </a>
-              )}
-              {phone && (
-                <button
-                  onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm sm:col-span-2"
-                >
-                  <span className="text-base leading-none">💬</span>
-                  Enviar WhatsApp
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* === AÇÕES RÁPIDAS (etapas/funil) === */}
+          {/* === AÇÕES RÁPIDAS === */}
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">⚡ Ações de Etapa</h3>
+            <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
               <button
                 onClick={() => {
