@@ -3,6 +3,13 @@ import { encrypt, decrypt } from './crypto.js'
 import { log } from './logger.js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+export interface OmieEmpresa {
+  nome: string
+  appKey: string
+  appSecret: string
+  ativo: boolean
+}
+
 export interface BotConfigData {
   emailHost: string
   emailPort: number
@@ -15,8 +22,11 @@ export interface BotConfigData {
   emailImapPass: string
   emailImapSecure: boolean
   whatsappNumero: string
+  /** @deprecated Use omieEmpresas instead */
   omieAppKey: string
+  /** @deprecated Use omieEmpresas instead */
   omieAppSecret: string
+  omieEmpresas: OmieEmpresa[]
   twilioAccountSid: string
   twilioAuthToken: string
   twilioPhoneNumber: string
@@ -39,6 +49,7 @@ const DEFAULT_CONFIG: BotConfigData = {
   whatsappNumero: '',
   omieAppKey: '',
   omieAppSecret: '',
+  omieEmpresas: [],
   twilioAccountSid: '',
   twilioAuthToken: '',
   twilioPhoneNumber: '',
@@ -74,6 +85,23 @@ export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData
       return { ...cachedConfig }
     }
 
+    // Carregar array de empresas Omie (multi-empresa)
+    let omieEmpresas: OmieEmpresa[] = []
+    if (data.omie_empresas && Array.isArray(data.omie_empresas)) {
+      omieEmpresas = data.omie_empresas.map((e: any) => ({
+        nome: e.nome || '',
+        appKey: decrypt(e.appKey) || '',
+        appSecret: decrypt(e.appSecret) || '',
+        ativo: e.ativo !== false, // default true
+      })).filter((e: OmieEmpresa) => e.appKey && e.appSecret)
+    }
+    // Fallback: se não tem empresas mas tem config antiga, converte para array
+    const oldKey = decrypt(data.omie_app_key) || ''
+    const oldSecret = decrypt(data.omie_app_secret) || ''
+    if (omieEmpresas.length === 0 && oldKey && oldSecret) {
+      omieEmpresas = [{ nome: 'Empresa Principal', appKey: oldKey, appSecret: oldSecret, ativo: true }]
+    }
+
     cachedConfig = {
       emailHost: data.email_host || process.env.EMAIL_HOST || '',
       emailPort: data.email_port || parseInt(process.env.EMAIL_PORT || '587', 10),
@@ -88,8 +116,9 @@ export async function loadConfig(client?: SupabaseClient): Promise<BotConfigData
         ? !!data.email_imap_secure
         : (String(process.env.EMAIL_IMAP_SECURE || 'true').toLowerCase() === 'true'),
       whatsappNumero: data.whatsapp_numero || '',
-      omieAppKey: data.omie_app_key || '',
-      omieAppSecret: data.omie_app_secret || '',
+      omieAppKey: oldKey,
+      omieAppSecret: oldSecret,
+      omieEmpresas,
       twilioAccountSid: data.twilio_account_sid || process.env.TWILIO_ACCOUNT_SID || '',
       twilioAuthToken: decrypt(data.twilio_auth_token) || process.env.TWILIO_AUTH_TOKEN || '',
       twilioPhoneNumber: data.twilio_phone_number || process.env.TWILIO_PHONE_NUMBER || '',
@@ -133,6 +162,14 @@ export async function saveConfig(data: Partial<BotConfigData>, client?: Supabase
   const updated = { ...current, ...data }
 
   try {
+    // Criptografar array de empresas Omie
+    const omieEmpresasEncrypted = updated.omieEmpresas?.map(e => ({
+      nome: e.nome,
+      appKey: e.appKey ? encrypt(e.appKey) : '',
+      appSecret: e.appSecret ? encrypt(e.appSecret) : '',
+      ativo: e.ativo,
+    })) || []
+
     const { error } = await supabase
       .from('bot_config')
       .upsert({
@@ -150,6 +187,7 @@ export async function saveConfig(data: Partial<BotConfigData>, client?: Supabase
         whatsapp_numero: updated.whatsappNumero,
         omie_app_key: updated.omieAppKey ? encrypt(updated.omieAppKey) : '',
         omie_app_secret: updated.omieAppSecret ? encrypt(updated.omieAppSecret) : '',
+        omie_empresas: omieEmpresasEncrypted,
         twilio_account_sid: updated.twilioAccountSid || '',
         twilio_auth_token: updated.twilioAuthToken ? encrypt(updated.twilioAuthToken) : '',
         twilio_phone_number: updated.twilioPhoneNumber || '',
@@ -192,6 +230,21 @@ export async function getEmailConfig(): Promise<{ host: string; port: number; us
 }
 
 function configFromEnv(): BotConfigData {
+  // Carrega múltiplas empresas Omie de variáveis de ambiente se disponível
+  // Formato: OMIE_EMPRESAS=[{"nome":"X","appKey":"Y","appSecret":"Z"}]
+  let omieEmpresas: OmieEmpresa[] = []
+  if (process.env.OMIE_EMPRESAS) {
+    try {
+      omieEmpresas = JSON.parse(process.env.OMIE_EMPRESAS)
+    } catch { /* ignora */ }
+  }
+  // Fallback: config antiga única
+  const oldKey = process.env.OMIE_APP_KEY || ''
+  const oldSecret = process.env.OMIE_APP_SECRET || ''
+  if (omieEmpresas.length === 0 && oldKey && oldSecret) {
+    omieEmpresas = [{ nome: 'Empresa Principal', appKey: oldKey, appSecret: oldSecret, ativo: true }]
+  }
+
   return {
     emailHost: process.env.EMAIL_HOST || '',
     emailPort: parseInt(process.env.EMAIL_PORT || '587', 10),
@@ -204,8 +257,9 @@ function configFromEnv(): BotConfigData {
     emailImapPass: process.env.EMAIL_IMAP_PASS || '',
     emailImapSecure: String(process.env.EMAIL_IMAP_SECURE || 'true').toLowerCase() === 'true',
     whatsappNumero: '',
-    omieAppKey: process.env.OMIE_APP_KEY || '',
-    omieAppSecret: process.env.OMIE_APP_SECRET || '',
+    omieAppKey: oldKey,
+    omieAppSecret: oldSecret,
+    omieEmpresas,
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',

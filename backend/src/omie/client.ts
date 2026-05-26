@@ -38,10 +38,24 @@ export interface OmieCredentials {
 
 export async function getOmieCredentials(): Promise<OmieCredentials | null> {
   const cfg = await loadConfig()
+  // Prioriza array de empresas, pega a primeira ativa
+  const empresaAtiva = cfg.omieEmpresas.find(e => e.ativo)
+  if (empresaAtiva) {
+    return { appKey: empresaAtiva.appKey, appSecret: empresaAtiva.appSecret }
+  }
+  // Fallback: config antiga
   const appKey = cfg.omieAppKey ? decrypt(cfg.omieAppKey) : ''
   const appSecret = cfg.omieAppSecret ? decrypt(cfg.omieAppSecret) : ''
   if (!appKey || !appSecret) return null
   return { appKey, appSecret }
+}
+
+/** Retorna todas as empresas Omie ativas para sincronização multi-empresa */
+export async function getOmieEmpresas(): Promise<OmieCredentials[]> {
+  const cfg = await loadConfig()
+  return cfg.omieEmpresas
+    .filter(e => e.ativo && e.appKey && e.appSecret)
+    .map(e => ({ appKey: e.appKey, appSecret: e.appSecret }))
 }
 
 /**
@@ -203,3 +217,27 @@ setInterval(() => {
     if (v.expiresAt < now) cache.delete(k)
   }
 }, 5 * 60_000)
+
+/**
+ * Executa uma operação em todas as empresas Omie ativas.
+ * Retorna resultados agregados por empresa.
+ */
+export async function runForAllEmpresas<T>(
+  operation: (creds: OmieCredentials, index: number) => Promise<T>
+): Promise<{ results: T[]; errors: { index: number; error: string }[] }> {
+  const empresas = await getOmieEmpresas()
+  if (empresas.length === 0) {
+    throw new Error('Nenhuma empresa Omie configurada ou ativa')
+  }
+  const results: T[] = []
+  const errors: { index: number; error: string }[] = []
+  for (let i = 0; i < empresas.length; i++) {
+    try {
+      const result = await operation(empresas[i], i)
+      results.push(result)
+    } catch (err: any) {
+      errors.push({ index: i, error: err?.message || String(err) })
+    }
+  }
+  return { results, errors }
+}

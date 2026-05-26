@@ -1,4 +1,4 @@
-import { omieCall, omieCallAllPages, getOmieCredentials } from './client.js'
+import { omieCall, omieCallAllPages, getOmieCredentials, getOmieEmpresas } from './client.js'
 import { supabase } from '../supabase.js'
 import { log } from '../logger.js'
 import type { OmieCliente, OmieClienteListResponse } from './types.js'
@@ -157,8 +157,8 @@ export interface SyncPullResult {
   erros: { cnpj: string; erro: string }[]
 }
 
-export async function syncPullClientes(vendedorIdPadrao?: number): Promise<SyncPullResult> {
-  const creds = await getOmieCredentials()
+export async function syncPullClientes(vendedorIdPadrao?: number, credentials?: { appKey: string; appSecret: string }): Promise<SyncPullResult> {
+  const creds = credentials || await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
   const omieClientes = await omieCallAllPages<OmieCliente>(
@@ -426,4 +426,54 @@ export async function syncPushClientes(): Promise<SyncPushResult> {
 
   log.info({ enviados, erros: erros.length }, 'Sync push CRM → Omie concluído')
   return { enviados, erros }
+}
+
+// ============================================
+// Sync Pull Multi-Empresa — Todas as empresas Omie → CRM
+// ============================================
+
+export interface SyncPullMultiResult extends SyncPullResult {
+  empresas: number
+  empresaResults: Array<{ appKey: string; inseridos: number; atualizados: number; error?: string }>
+}
+
+export async function syncPullClientesMultiEmpresa(vendedorIdPadrao?: number): Promise<SyncPullMultiResult> {
+  const empresas = await getOmieEmpresas()
+  if (empresas.length === 0) throw new Error('Nenhuma empresa Omie configurada')
+
+  let totalInseridos = 0
+  let totalAtualizados = 0
+  const allErros: { cnpj: string; erro: string }[] = []
+  const empresaResults: Array<{ appKey: string; inseridos: number; atualizados: number; error?: string }> = []
+
+  for (const empresa of empresas) {
+    try {
+      const result = await syncPullClientes(vendedorIdPadrao, empresa)
+      totalInseridos += result.inseridos
+      totalAtualizados += result.atualizados
+      allErros.push(...result.erros)
+      empresaResults.push({
+        appKey: empresa.appKey.slice(-8), // últimos 8 dígitos para identificar
+        inseridos: result.inseridos,
+        atualizados: result.atualizados,
+      })
+    } catch (err: any) {
+      log.error({ err, appKey: empresa.appKey }, 'Erro ao sincronizar empresa')
+      empresaResults.push({
+        appKey: empresa.appKey.slice(-8),
+        inseridos: 0,
+        atualizados: 0,
+        error: err?.message || String(err),
+      })
+      // Continua com próxima empresa
+    }
+  }
+
+  return {
+    inseridos: totalInseridos,
+    atualizados: totalAtualizados,
+    erros: allErros,
+    empresas: empresas.length,
+    empresaResults,
+  }
 }

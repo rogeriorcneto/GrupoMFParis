@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } from '../omie/client.js'
-import { getSyncDiff, syncPullClientes, syncPushClientes, syncPushSingleCliente, associarClientesPorCnpj } from '../omie/sync.js'
+import { getSyncDiff, syncPullClientes, syncPullClientesMultiEmpresa, syncPushClientes, syncPushSingleCliente, associarClientesPorCnpj } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { getEmpresas, listarPedidosEmpresa, atualizarRastreioPedido, lancarRastreioPorNF } from '../omie/multi-empresa.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros } from '../omie/pedidos.js'
@@ -65,6 +65,79 @@ omieRouter.get('/status', async (_req, res) => {
     res.json(result)
   } catch (err: any) {
     res.json({ success: false, error: err.message })
+  }
+})
+
+// ─── Config Multi-Empresa ───
+
+omieRouter.post('/config/empresas', rateLimit(5, 60_000), async (req, res) => {
+  const { empresas } = req.body
+
+  if (!Array.isArray(empresas) || empresas.length === 0) {
+    res.status(400).json({ success: false, error: 'Array de empresas é obrigatório.' })
+    return
+  }
+
+  // Validar formato
+  for (const e of empresas) {
+    if (!e.nome || !e.appKey || !e.appSecret) {
+      res.status(400).json({ success: false, error: `Empresa inválida: ${JSON.stringify(e)}` })
+      return
+    }
+  }
+
+  try {
+    // Testar conexão de cada empresa
+    const testes = []
+    for (const e of empresas) {
+      testes.push(testOmieConnection({ appKey: e.appKey, appSecret: e.appSecret }))
+    }
+    const resultados = await Promise.all(testes)
+
+    const erros = resultados.filter(r => !r.success)
+    if (erros.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: `Falha ao conectar ${erros.length} empresa(s): ${erros.map(e => e.error).join(', ')}`,
+      })
+      return
+    }
+
+    // Salvar configuração
+    await saveConfig({
+      omieEmpresas: empresas.map(e => ({
+        nome: e.nome,
+        appKey: e.appKey,
+        appSecret: e.appSecret,
+        ativo: e.ativo !== false,
+      })),
+    }, (req as any).supabase)
+
+    res.json({
+      success: true,
+      message: `${empresas.length} empresa(s) configuradas com sucesso!`,
+      empresas: empresas.map(e => ({ nome: e.nome, appKey: '••••' + e.appKey.slice(-4) })),
+    })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao salvar empresas Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.get('/config/empresas', async (req, res) => {
+  try {
+    const cfg = await loadConfig((req as any).supabase)
+    res.json({
+      success: true,
+      empresas: cfg.omieEmpresas.map(e => ({
+        nome: e.nome,
+        appKey: '••••' + e.appKey.slice(-4),
+        ativo: e.ativo,
+      })),
+      total: cfg.omieEmpresas.length,
+    })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message })
   }
 })
 
@@ -244,7 +317,17 @@ omieRouter.post('/sync/diff', rateLimit(5, 60_000), async (_req, res) => {
 omieRouter.post('/sync/pull', rateLimit(3, 60_000), async (req, res) => {
   const { vendedorIdPadrao } = req.body || {}
   try {
-    const result = await syncPullClientes(vendedorIdPadrao)
+    // Detecta se há múltiplas empresas configuradas
+    const cfg = await loadConfig()
+    const empresasAtivas = cfg.omieEmpresas.filter(e => e.ativo)
+
+    let result
+    if (empresasAtivas.length > 1) {
+      log.info({ empresas: empresasAtivas.length }, 'Sync multi-empresa detectado')
+      result = await syncPullClientesMultiEmpresa(vendedorIdPadrao)
+    } else {
+      result = await syncPullClientes(vendedorIdPadrao)
+    }
     res.json({ success: true, data: result })
   } catch (err: any) {
     log.error({ err }, 'Erro no sync pull Omie → CRM')
