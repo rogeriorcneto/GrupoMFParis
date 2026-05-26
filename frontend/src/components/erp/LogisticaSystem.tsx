@@ -62,8 +62,24 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
         supabase.from('transportadoras').select('*').order('nome'),
         supabase.from('fretes').select('*').order('created_at', { ascending: false })
       ])
-      if (t.data) setTransportadoras(t.data)
-      if (f.data) setFretes(f.data)
+      // Tabelas podem ainda não existir no Supabase (migrations pendentes).
+      // Em vez de logar erro 404, apenas usamos lista vazia.
+      if (t.error) {
+        if (t.error.code !== '42P01' && !/not found|does not exist/i.test(t.error.message || '')) {
+          console.warn('transportadoras:', t.error.message)
+        }
+        setTransportadoras([])
+      } else if (t.data) {
+        setTransportadoras(t.data)
+      }
+      if (f.error) {
+        if (f.error.code !== '42P01' && !/not found|does not exist/i.test(f.error.message || '')) {
+          console.warn('fretes:', f.error.message)
+        }
+        setFretes([])
+      } else if (f.data) {
+        setFretes(f.data)
+      }
     } catch (err) {
       console.error('Erro ao carregar logística:', err)
     } finally {

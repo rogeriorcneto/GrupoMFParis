@@ -67,11 +67,25 @@ export default function GrupoParisShell() {
 
   const fetchUserInfo = async (userId: string) => {
     try {
-      const { data } = await supabase
+      // 1ª tentativa: vincular por auth_id
+      let { data } = await supabase
         .from('vendedores')
         .select('nome, cargo, email')
-        .eq('auth_user_id', userId)
-        .single()
+        .eq('auth_id', userId)
+        .maybeSingle()
+      // Fallback: tentar pelo email da sessão (se vendedor ainda não tiver auth_id vinculado)
+      if (!data) {
+        const { data: { session } } = await supabase.auth.getSession()
+        const email = session?.user?.email
+        if (email) {
+          const { data: byEmail } = await supabase
+            .from('vendedores')
+            .select('nome, cargo, email')
+            .eq('email', email)
+            .maybeSingle()
+          if (byEmail) data = byEmail
+        }
+      }
       if (data) setUsuario(data)
     } catch (err) {
       console.error('Erro ao buscar usuário:', err)
