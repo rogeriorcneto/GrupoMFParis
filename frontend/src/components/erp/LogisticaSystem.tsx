@@ -4,6 +4,7 @@ import ErpLayout from './ErpLayout'
 import OmieSyncButton from './OmieSyncButton'
 import { syncTransportadorasOmie } from '../../lib/omieSync'
 import PedidosOmieView from './PedidosOmieView'
+import SyncOmieView from './SyncOmieView'
 
 interface Transportadora {
   id: number
@@ -83,6 +84,7 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
     { id: 'fretes', label: 'Fretes', icone: '🚚', badge: fretesPendentes },
     { id: 'transportadoras', label: 'Transportadoras', icone: '🏢' },
     { id: 'rastreamento', label: 'Rastreamento', icone: '📍' },
+    { id: 'sync-omie', label: 'Sync Omie', icone: '⚡' },
   ]
 
   return (
@@ -155,6 +157,10 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
 
         {activeMenu === 'pedidos-omie' && (
           <PedidosOmieView />
+        )}
+
+        {activeMenu === 'sync-omie' && (
+          <SyncOmieView />
         )}
       </div>
 

@@ -53,6 +53,104 @@ export interface SyncResult {
   detalhes?: string
 }
 
+// ============================================================
+// Wrappers diretos para os endpoints /api/omie/sync/* do backend
+// (que já existem e usam credenciais Omie únicas configuradas)
+// ============================================================
+
+async function callSyncEndpoint(path: string, body: any = {}): Promise<any> {
+  const headers = await getAuthHeaders()
+  const res = await fetch(`${BOT_URL}/api/omie${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error || `Erro em ${path}`)
+  return json.data
+}
+
+/** Sync clientes Omie → CRM (insere/atualiza). */
+export async function syncClientesOmie(vendedorIdPadrao?: number): Promise<SyncResult> {
+  const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [] }
+  try {
+    const data = await callSyncEndpoint('/sync/pull', vendedorIdPadrao ? { vendedorIdPadrao } : {})
+    result.inseridos = data?.inseridos || 0
+    result.atualizados = data?.atualizados || 0
+    if (data?.erros?.length) result.erros = data.erros.map((e: any) => `${e.cnpj || ''}: ${e.erro || e}`)
+    result.success = true
+    result.detalhes = `${result.inseridos + result.atualizados} clientes processados`
+    return result
+  } catch (err: any) {
+    result.erros.push(err?.message || String(err))
+    return result
+  }
+}
+
+/** Associa clientes do CRM ao Omie via CNPJ (popula `omie_codigo`). */
+export async function syncAssociarClientesPorCnpj(): Promise<SyncResult> {
+  const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [] }
+  try {
+    const data = await callSyncEndpoint('/sync/associar-por-cnpj')
+    result.atualizados = data?.associados || 0
+    result.success = true
+    result.detalhes = `${data?.associados || 0} associados · ${data?.jaVinculados || 0} já vinculados · ${data?.naoEncontradosOmie || 0} não achados no Omie · ${data?.semCnpj || 0} sem CNPJ`
+    if (data?.erros?.length) result.erros = data.erros.map((e: any) => `${e.razaoSocial}: ${e.erro}`)
+    return result
+  } catch (err: any) {
+    result.erros.push(err?.message || String(err))
+    return result
+  }
+}
+
+/** Sync produtos Omie → CRM. */
+export async function syncProdutosOmie(): Promise<SyncResult> {
+  const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [] }
+  try {
+    const data = await callSyncEndpoint('/sync/produtos')
+    result.inseridos = data?.inseridos || 0
+    result.atualizados = data?.atualizados || 0
+    if (data?.erros?.length) result.erros = data.erros.map((e: any) => `${e.codigo || ''}: ${e.erro || e}`)
+    result.success = true
+    result.detalhes = `${result.inseridos + result.atualizados} produtos processados`
+    return result
+  } catch (err: any) {
+    result.erros.push(err?.message || String(err))
+    return result
+  }
+}
+
+/** Sync logística (status pedido, NF, rastreio) para clientes em follow_up. */
+export async function syncLogisticaOmie(): Promise<SyncResult> {
+  const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [] }
+  try {
+    const data = await callSyncEndpoint('/sync/logistics')
+    result.atualizados = data?.atualizados || 0
+    if (data?.erros?.length) result.erros = data.erros.map((e: any) => `Cliente ${e.clienteId}: ${e.erro}`)
+    result.success = true
+    result.detalhes = `${data?.atualizados || 0} atualizados · ${data?.semPedido || 0} sem pedido no Omie`
+    return result
+  } catch (err: any) {
+    result.erros.push(err?.message || String(err))
+    return result
+  }
+}
+
+/** Sincroniza números de pedido (CRM ↔ Omie). */
+export async function syncNumerosPedidoOmie(): Promise<SyncResult> {
+  const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [] }
+  try {
+    const data = await callSyncEndpoint('/sync/numeros-pedido')
+    result.atualizados = data?.atualizados || 0
+    result.success = true
+    result.detalhes = `${data?.atualizados || 0} pedidos sincronizados`
+    return result
+  } catch (err: any) {
+    result.erros.push(err?.message || String(err))
+    return result
+  }
+}
+
 /** Sync contas correntes (bancárias) do Omie */
 export async function syncContasBancariasOmie(): Promise<SyncResult> {
   const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [] }
