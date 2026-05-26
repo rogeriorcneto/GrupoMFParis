@@ -17,26 +17,63 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 // ─── Helper para chamar Omie via backend ─────────────────────────────
+// Timeout padrão para sincronizações longas (10 min)
+const SYNC_TIMEOUT_MS = 10 * 60 * 1000
+
+/**
+ * fetch com AbortController + parse seguro (lida com 504/HTML do Railway)
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = SYNC_TIMEOUT_MS,
+): Promise<any> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal })
+    const text = await res.text()
+    if (!res.ok) {
+      // 504, 502, etc — Railway costuma devolver HTML
+      const snippet = text.slice(0, 200).replace(/<[^>]+>/g, '').trim()
+      throw new Error(
+        `Backend retornou HTTP ${res.status}${snippet ? ': ' + snippet : ''}` +
+        (res.status === 504 ? ' (timeout do servidor — tente sincronizar este passo isoladamente)' : '')
+      )
+    }
+    try {
+      return JSON.parse(text)
+    } catch {
+      throw new Error(`Resposta inválida do backend (não-JSON): ${text.slice(0, 120)}…`)
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw new Error(`Tempo limite excedido (${Math.round(timeoutMs / 60000)} min) — a sincronização pode estar travada no Omie.`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function omieCall(group: string, module: string, action: string, params: any = {}): Promise<any> {
   const headers = await getAuthHeaders()
-  const res = await fetch(`${BOT_URL}/api/omie/call`, {
+  const json = await fetchWithTimeout(`${BOT_URL}/api/omie/call`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ group, module, action, params }),
   })
-  const json = await res.json()
   if (!json.success) throw new Error(json.error || 'Erro chamando Omie')
   return json.data
 }
 
 async function omieCallAll(group: string, module: string, action: string, resultKey: string, params: any = {}): Promise<any[]> {
   const headers = await getAuthHeaders()
-  const res = await fetch(`${BOT_URL}/api/omie/call-all`, {
+  const json = await fetchWithTimeout(`${BOT_URL}/api/omie/call-all`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ group, module, action, params, resultKey }),
   })
-  const json = await res.json()
   if (!json.success) throw new Error(json.error || 'Erro chamando Omie (all)')
   return json.data || []
 }
@@ -60,12 +97,11 @@ export interface SyncResult {
 
 async function callSyncEndpoint(path: string, body: any = {}): Promise<any> {
   const headers = await getAuthHeaders()
-  const res = await fetch(`${BOT_URL}/api/omie${path}`, {
+  const json = await fetchWithTimeout(`${BOT_URL}/api/omie${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   })
-  const json = await res.json()
   if (!json.success) throw new Error(json.error || `Erro em ${path}`)
   return json.data
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   syncClientesOmie,
   syncAssociarClientesPorCnpj,
@@ -132,10 +132,17 @@ export default function SyncOmieView() {
   }
 
   const runStep = async (step: SyncStep): Promise<SyncResult> => {
-    setStates(prev => ({ ...prev, [step.id]: { status: 'running', startedAt: Date.now() } }))
+    const startedAt = Date.now()
+    setStates(prev => ({ ...prev, [step.id]: { status: 'running', startedAt } }))
     log('info', `${step.icone} Iniciando: ${step.titulo}…`)
+    // Heartbeat: a cada 20s avisa que ainda está rodando (sync Omie pode levar minutos)
+    const heartbeat = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000)
+      log('info', `⏳ ${step.titulo}: ainda processando (${elapsed}s)…`)
+    }, 20_000)
     try {
       const result = await step.fn()
+      clearInterval(heartbeat)
       const status: StepStatus = result.success && result.erros.length === 0 ? 'success' : 'error'
       setStates(prev => ({
         ...prev,
@@ -148,6 +155,7 @@ export default function SyncOmieView() {
       }
       return result
     } catch (err: any) {
+      clearInterval(heartbeat)
       const result: SyncResult = { success: false, inseridos: 0, atualizados: 0, erros: [err?.message || String(err)] }
       setStates(prev => ({
         ...prev,
@@ -285,6 +293,11 @@ export default function SyncOmieView() {
                 </div>
               )}
 
+              {/* Contador ao vivo enquanto roda */}
+              {state.status === 'running' && state.startedAt && (
+                <RunningTimer startedAt={state.startedAt} />
+              )}
+
               {/* Botão individual */}
               <button
                 onClick={() => runStep(step)}
@@ -318,6 +331,25 @@ export default function SyncOmieView() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function RunningTimer({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    const tick = () => setElapsed(Math.round((Date.now() - startedAt) / 1000))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [startedAt])
+  const mins = Math.floor(elapsed / 60)
+  const secs = elapsed % 60
+  const tempo = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2 text-xs text-blue-600 dark:text-blue-300">
+      <span className="animate-pulse">⏱</span>
+      <span>Rodando há <strong>{tempo}</strong>… (sync Omie pode levar vários minutos)</span>
     </div>
   )
 }
