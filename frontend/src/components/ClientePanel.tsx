@@ -513,7 +513,7 @@ export default function ClientePanel({
                   {fone && (
                     <button
                       type="button"
-                      onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                      onClick={() => setShowWhatsApp(true)}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
                       title="WhatsApp"
                     ><WhatsAppIcon variant="outline" className="h-4 w-4" /></button>
@@ -1348,43 +1348,86 @@ export default function ClientePanel({
           })()}
 
           {/* === TIMELINE DE ATIVIDADES === */}
-          {clienteInteracoes.length > 0 && (
+          {clienteInteracoes.length > 0 && (() => {
+            // Agrupar por dia (mantendo a ordenação cronológica decrescente já em clienteInteracoesOrdenadas)
+            const grupos: { dia: string; label: string; itens: typeof clienteInteracoesOrdenadas }[] = []
+            const fmtDiaLabel = (d: Date) => {
+              const hoje = new Date(); hoje.setHours(0,0,0,0)
+              const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1)
+              const alvo = new Date(d); alvo.setHours(0,0,0,0)
+              if (alvo.getTime() === hoje.getTime()) return 'Hoje'
+              if (alvo.getTime() === ontem.getTime()) return 'Ontem'
+              return alvo.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+            }
+            for (const inter of clienteInteracoesOrdenadas) {
+              const d = new Date(inter.data)
+              const diaKey = d.toISOString().split('T')[0]
+              const last = grupos[grupos.length - 1]
+              if (last && last.dia === diaKey) last.itens.push(inter)
+              else grupos.push({ dia: diaKey, label: fmtDiaLabel(d), itens: [inter] })
+            }
+            return (
             <div className="space-y-1">
               <div className="flex items-center justify-between px-1 mb-2">
                 <h3 className="text-sm font-semibold text-gray-700">🕐 Histórico de Atividades ({clienteInteracoes.length})</h3>
               </div>
               <div className="relative">
                 {/* linha vertical da timeline */}
-                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
-                <div className="space-y-3">
-                  {[...clienteInteracoesOrdenadas].map(inter => {
+                <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200" />
+                <div className="space-y-4">
+                  {grupos.map(grupo => (
+                    <div key={grupo.dia} className="space-y-2">
+                      {/* Separador de data */}
+                      <div className="flex items-center gap-2 sticky top-0 z-20 bg-white/80 backdrop-blur-sm py-1">
+                        <div className="w-10 flex justify-center">
+                          <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-100 border border-gray-200 rounded-full">
+                            {grupo.label}
+                          </span>
+                        </div>
+                        <div className="flex-1 h-px bg-gray-200" />
+                      </div>
+                      {grupo.itens.map(inter => {
                     const tipo = inter.tipo || 'nota'
                     const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
                     const isPinned = pinnedInteracoes.includes(inter.id)
+                    const hora = new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
                     return (
                       <div key={inter.id} className="flex gap-3">
-                        {/* dot */}
-                        <div className={`relative z-10 flex-shrink-0 w-8 h-8 rounded-full ${cor.dot} bg-opacity-20 border-2 border-white shadow-sm flex items-center justify-center mt-1`}>
-                          <span className={`w-2.5 h-2.5 rounded-full ${cor.dot}`} />
+                        {/* dot com ícone do tipo */}
+                        <div className={`relative z-10 flex-shrink-0 w-10 h-10 rounded-full ${cor.bg} ${cor.border} border-2 shadow-sm flex items-center justify-center text-base mt-0.5`} title={tipoInteracaoLabel[tipo] || tipo}>
+                          <span>{tipoInteracaoIcon[tipo] || '📋'}</span>
                         </div>
                         {/* card */}
-                        <div className={`flex-1 rounded-apple border ${cor.border} ${isPinned ? 'bg-amber-50/60' : 'bg-white'} shadow-sm p-3`}>
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${cor.bg} ${cor.border} border`}>
-                                {tipoInteracaoLabel[tipo] || tipo}
-                              </span>
-                              {inter.automatico && <span className="text-[9px] font-medium bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Auto</span>}
+                        <div className={`flex-1 rounded-apple border ${cor.border} ${isPinned ? 'bg-amber-50/60' : 'bg-white'} shadow-sm overflow-hidden`}>
+                          {/* header do card */}
+                          <div className={`flex items-center justify-between gap-2 px-3 py-2 ${cor.bg} border-b ${cor.border}`}>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="text-xs font-bold text-gray-800">{tipoInteracaoLabel[tipo] || tipo}</span>
+                              <span className="text-[10px] text-gray-500">às {hora}</span>
+                              {inter.automatico && <span className="text-[9px] font-medium bg-white text-gray-500 px-1.5 py-0.5 rounded-full border border-gray-200">Auto</span>}
                             </div>
-                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                              <span className="text-[10px] text-gray-400">{new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                              <button onClick={() => handleTogglePinInteracao(inter.id)} className={`p-1 rounded-full transition-colors ${isPinned ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'}`} title={isPinned ? 'Desafixar' : 'Fixar'}>
-                                📌
-                              </button>
-                            </div>
+                            <button onClick={() => handleTogglePinInteracao(inter.id)} className={`flex-shrink-0 p-1 rounded-full transition-colors ${isPinned ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'}`} title={isPinned ? 'Desafixar' : 'Fixar'}>
+                              📌
+                            </button>
                           </div>
+                          {/* corpo do card */}
+                          <div className="p-3">
                           {inter.assunto && <p className="text-sm font-semibold text-gray-800">{inter.assunto}</p>}
                           {inter.descricao && <p className="text-sm text-gray-600 mt-1 leading-relaxed whitespace-pre-line">{inter.descricao}</p>}
+                          {/* Rodapé: criador + data/hora completa */}
+                          <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+                            <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                              <span className="font-semibold">Por:</span>
+                              {inter.automatico ? (
+                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full font-medium">⚡ Automação</span>
+                              ) : (
+                                <span className="text-gray-700">{vendedor?.nome || 'Sem responsável'}</span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                           {inter.tipo === 'ligacao' && (() => {
                             const diaDaInteracao = (inter.data || '').split('T')[0]
                             const gravacao = gravacoesPorData.get(diaDaInteracao)
@@ -1417,14 +1460,18 @@ export default function ClientePanel({
                               </div>
                             )
                           })()}
+                          </div>
                         </div>
                       </div>
                     )
-                  })}
+                      })}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {/* === TIMELINE (collapsible) === */}
           {c.historicoEtapas && c.historicoEtapas.length > 0 && (
@@ -1451,23 +1498,43 @@ export default function ClientePanel({
             </div>
           )}
 
-          {/* === WHATSAPP (collapsible) === */}
-          <div ref={whatsAppRef} className="bg-gray-50 rounded-apple border border-gray-200">
-            <button onClick={() => setShowWhatsApp(!showWhatsApp)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
-              <span className="flex items-center gap-2"><WhatsAppIcon variant="filled" className="h-5 w-5" /> WhatsApp Chat</span>
-              <span>{showWhatsApp ? '▲' : '▼'}</span>
-            </button>
-            {showWhatsApp && (
-              <div className="px-4 pb-4">
-                <WhatsAppUserPanel
-                  loggedUser={loggedUser}
-                  cliente={c}
-                  showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'WhatsApp' : 'Erro WhatsApp', texto, c.id)}
-                  compact
-                />
+          {/* === WHATSAPP MODAL (separado) === */}
+          {showWhatsApp && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowWhatsApp(false)}>
+              <div
+                ref={whatsAppRef}
+                className="bg-white rounded-apple shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-emerald-50">
+                  <div className="flex items-center gap-2">
+                    <WhatsAppIcon variant="filled" className="h-6 w-6 text-emerald-600" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">WhatsApp — {c.razaoSocial}</p>
+                      {(c.contatoCelular || c.contatoTelefone) && (
+                        <p className="text-xs text-gray-500">{c.contatoCelular || c.contatoTelefone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowWhatsApp(false)}
+                    className="p-1.5 rounded-full hover:bg-emerald-100 text-gray-500 hover:text-gray-800 transition-colors"
+                    title="Fechar"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <WhatsAppUserPanel
+                    loggedUser={loggedUser}
+                    cliente={c}
+                    showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'WhatsApp' : 'Erro WhatsApp', texto, c.id)}
+                    compact
+                  />
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* === EMAIL (collapsible) === */}
           <div ref={emailRef} className="bg-gray-50 rounded-apple border border-gray-200">
