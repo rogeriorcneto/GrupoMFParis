@@ -149,6 +149,7 @@ export default function ClientePanel({
   const [showHistorico, setShowHistorico] = useState(true)
   const [expandedHistoricoGroups, setExpandedHistoricoGroups] = useState<Record<string, boolean>>({})
   const [historicoItemCount, setHistoricoItemCount] = useState<Record<string, number>>({})
+  const [historicoTab, setHistoricoTab] = useState<'todas' | 'fixadas'>('todas')
 
   // Editar Proposta
   const [showEditProposta, setShowEditProposta] = useState(false)
@@ -1347,87 +1348,101 @@ export default function ClientePanel({
             )
           })()}
 
-          {/* === TIMELINE DE ATIVIDADES === */}
+          {/* === HISTÓRICO DE ATIVIDADES === */}
           {clienteInteracoes.length > 0 && (() => {
-            // Agrupar por dia (mantendo a ordenação cronológica decrescente já em clienteInteracoesOrdenadas)
-            const grupos: { dia: string; label: string; itens: typeof clienteInteracoesOrdenadas }[] = []
-            const fmtDiaLabel = (d: Date) => {
+            // Tempo relativo: "Hoje 12:55", "Ontem 10:30", "22/mai 16:08"
+            const fmtRelativo = (data: string) => {
+              const d = new Date(data)
               const hoje = new Date(); hoje.setHours(0,0,0,0)
               const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1)
               const alvo = new Date(d); alvo.setHours(0,0,0,0)
-              if (alvo.getTime() === hoje.getTime()) return 'Hoje'
-              if (alvo.getTime() === ontem.getTime()) return 'Ontem'
-              return alvo.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+              const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+              if (alvo.getTime() === hoje.getTime()) return `Hoje ${hora}`
+              if (alvo.getTime() === ontem.getTime()) return `Ontem ${hora}`
+              const dataFmt = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')
+              return `${dataFmt} ${hora}`
             }
-            for (const inter of clienteInteracoesOrdenadas) {
-              const d = new Date(inter.data)
-              const diaKey = d.toISOString().split('T')[0]
-              const last = grupos[grupos.length - 1]
-              if (last && last.dia === diaKey) last.itens.push(inter)
-              else grupos.push({ dia: diaKey, label: fmtDiaLabel(d), itens: [inter] })
-            }
+            const itens = historicoTab === 'fixadas'
+              ? clienteInteracoesOrdenadas.filter(i => pinnedInteracoes.includes(i.id))
+              : clienteInteracoesOrdenadas
+            const totalFixadas = clienteInteracoes.filter(i => pinnedInteracoes.includes(i.id)).length
             return (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between px-1 mb-2">
-                <h3 className="text-sm font-semibold text-gray-700">🕐 Histórico de Atividades ({clienteInteracoes.length})</h3>
-              </div>
-              <div className="relative">
-                {/* linha vertical da timeline */}
-                <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-200" />
-                <div className="space-y-4">
-                  {grupos.map(grupo => (
-                    <div key={grupo.dia} className="space-y-2">
-                      {/* Separador de data */}
-                      <div className="flex items-center gap-2 sticky top-0 z-20 bg-white/80 backdrop-blur-sm py-1">
-                        <div className="w-10 flex justify-center">
-                          <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 bg-gray-100 border border-gray-200 rounded-full">
-                            {grupo.label}
-                          </span>
-                        </div>
-                        <div className="flex-1 h-px bg-gray-200" />
-                      </div>
-                      {grupo.itens.map(inter => {
-                    const tipo = inter.tipo || 'nota'
-                    const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
-                    const isPinned = pinnedInteracoes.includes(inter.id)
-                    const hora = new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                    return (
-                      <div key={inter.id} className="flex gap-3">
-                        {/* dot com ícone do tipo */}
-                        <div className={`relative z-10 flex-shrink-0 w-10 h-10 rounded-full ${cor.bg} ${cor.border} border-2 shadow-sm flex items-center justify-center text-base mt-0.5`} title={tipoInteracaoLabel[tipo] || tipo}>
-                          <span>{tipoInteracaoIcon[tipo] || '📋'}</span>
-                        </div>
-                        {/* card */}
-                        <div className={`flex-1 rounded-apple border ${cor.border} ${isPinned ? 'bg-amber-50/60' : 'bg-white'} shadow-sm overflow-hidden`}>
-                          {/* header do card */}
-                          <div className={`flex items-center justify-between gap-2 px-3 py-2 ${cor.bg} border-b ${cor.border}`}>
-                            <div className="flex items-center gap-2 flex-wrap min-w-0">
-                              <span className="text-xs font-bold text-gray-800">{tipoInteracaoLabel[tipo] || tipo}</span>
-                              <span className="text-[10px] text-gray-500">às {hora}</span>
-                              {inter.automatico && <span className="text-[9px] font-medium bg-white text-gray-500 px-1.5 py-0.5 rounded-full border border-gray-200">Auto</span>}
+              <div className="space-y-3">
+                {/* Tabs Histórico / Fixadas */}
+                <div className="flex items-center gap-1 border-b border-gray-200">
+                  <button
+                    onClick={() => setHistoricoTab('todas')}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+                      historicoTab === 'todas'
+                        ? 'border-primary-600 text-primary-700'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    🕐 Histórico de atividades
+                    <span className="text-[11px] font-normal text-gray-400">({clienteInteracoes.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setHistoricoTab('fixadas')}
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+                      historicoTab === 'fixadas'
+                        ? 'border-primary-600 text-primary-700'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    📌 Fixadas
+                    <span className="text-[11px] font-normal text-gray-400">({totalFixadas})</span>
+                  </button>
+                </div>
+
+                {/* Lista de cards */}
+                {itens.length === 0 ? (
+                  <div className="text-center py-8 text-sm text-gray-400">
+                    {historicoTab === 'fixadas' ? 'Nenhuma atividade fixada ainda.' : 'Nenhuma atividade registrada.'}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {itens.map(inter => {
+                      const tipo = inter.tipo || 'nota'
+                      const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
+                      const isPinned = pinnedInteracoes.includes(inter.id)
+                      const criador = inter.automatico ? 'Automação' : (vendedor?.nome || '—')
+                      const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
+                      return (
+                        <div key={inter.id} className={`rounded-apple border ${isPinned ? 'border-amber-200 bg-amber-50/30' : 'border-gray-200 bg-white'} hover:border-gray-300 transition-colors`}>
+                          {/* Linha 1: ícone + tipo + criada [tempo] | pin */}
+                          <div className="flex items-center justify-between gap-2 px-3 pt-3">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <div className={`flex-shrink-0 w-8 h-8 rounded-full ${cor.bg} ${cor.border} border flex items-center justify-center text-sm`}>
+                                {tipoInteracaoIcon[tipo] || '📋'}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-bold text-gray-900">{tipoInteracaoLabel[tipo] || tipo}</span>
+                                  {inter.automatico && (
+                                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-purple-50 text-purple-700 border border-purple-200 rounded-full">⚡ Auto</span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-gray-500">Criada {fmtRelativo(inter.data)}</p>
+                              </div>
                             </div>
-                            <button onClick={() => handleTogglePinInteracao(inter.id)} className={`flex-shrink-0 p-1 rounded-full transition-colors ${isPinned ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'}`} title={isPinned ? 'Desafixar' : 'Fixar'}>
+                            <button
+                              onClick={() => handleTogglePinInteracao(inter.id)}
+                              className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${isPinned ? 'text-amber-500 bg-amber-50 hover:bg-amber-100' : 'text-gray-300 hover:text-amber-400 hover:bg-gray-50'}`}
+                              title={isPinned ? 'Desafixar' : 'Fixar'}
+                            >
                               📌
                             </button>
                           </div>
-                          {/* corpo do card */}
-                          <div className="p-3">
-                          {inter.assunto && <p className="text-sm font-semibold text-gray-800">{inter.assunto}</p>}
-                          {inter.descricao && <p className="text-sm text-gray-600 mt-1 leading-relaxed whitespace-pre-line">{inter.descricao}</p>}
-                          {/* Rodapé: criador + data/hora completa */}
-                          <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                              <span className="font-semibold">Por:</span>
-                              {inter.automatico ? (
-                                <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full font-medium">⚡ Automação</span>
-                              ) : (
-                                <span className="text-gray-700">{vendedor?.nome || 'Sem responsável'}</span>
-                              )}
+
+                          {/* Linha 2: descrição/assunto */}
+                          {(inter.assunto || inter.descricao) && (
+                            <div className="px-3 pt-2 pb-1">
+                              {inter.assunto && <p className="text-sm font-medium text-gray-800">{inter.assunto}</p>}
+                              {inter.descricao && <p className="text-sm text-gray-600 mt-0.5 leading-relaxed whitespace-pre-line">{inter.descricao}</p>}
                             </div>
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
+                          )}
+
+                          {/* Gravação de ligação */}
                           {inter.tipo === 'ligacao' && (() => {
                             const diaDaInteracao = (inter.data || '').split('T')[0]
                             const gravacao = gravacoesPorData.get(diaDaInteracao)
@@ -1436,7 +1451,7 @@ export default function ClientePanel({
                             const tid = transcricoes[gravacao.id]
                             const carregando = transcrevendo[gravacao.id]
                             return (
-                              <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-2">
+                              <div className="mx-3 mb-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-2">
                                 {gravacao.arquivo_url && <audio controls src={gravacao.arquivo_url} className="w-full h-8" />}
                                 <div className="flex gap-1.5 flex-wrap">
                                   {gravacao.arquivo_url && (
@@ -1460,16 +1475,41 @@ export default function ClientePanel({
                               </div>
                             )
                           })()}
+
+                          {/* Rodapé: Criada por | Responsáveis */}
+                          <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+                            <div className="flex items-center gap-1.5">
+                              <span>Criada por</span>
+                              <span
+                                className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
+                                  inter.automatico ? 'bg-purple-100 text-purple-700' : 'bg-primary-100 text-primary-700'
+                                }`}
+                                title={criador}
+                              >
+                                {criadorIniciais}
+                              </span>
+                            </div>
+                            {vendedor && (
+                              <>
+                                <span className="text-gray-300">|</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span>Responsável</span>
+                                  <span
+                                    className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold"
+                                    title={vendedor.nome}
+                                  >
+                                    {vendedor.nome.charAt(0).toUpperCase()}
+                                  </span>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    )
-                      })}
-                    </div>
-                  ))}
-                </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
             )
           })()}
 
