@@ -2,6 +2,7 @@ import React from 'react'
 import { PlusIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Vendedor, Cliente } from '../../types'
 import { fetchVendedorHistorico, type VendedorHistoricoItem } from '../../lib/botApi'
+import { formatTelefone } from '../../utils/validators'
 
 function getActiveSecs(id: number): number {
   const base = parseInt(localStorage.getItem(`crm_active_secs_${id}`) || '0', 10)
@@ -405,7 +406,7 @@ const VendedoresView: React.FC<{
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label><input value={newNome} onChange={(e) => setNewNome(e.target.value)} placeholder="Nome completo" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Email *</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="email@empresa.com" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label><input value={newTelefone} onChange={(e) => setNewTelefone(e.target.value)} placeholder="(00) 00000-0000" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label><input type="tel" value={newTelefone} onChange={(e) => setNewTelefone(formatTelefone(e.target.value))} placeholder="(00) 99999-0000" maxLength={16} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Cargo</label><select value={newCargo} onChange={(e) => setNewCargo(e.target.value as Vendedor['cargo'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="vendedor">Vendedor</option><option value="sdr">SDR</option><option value="gerente">Gerente</option></select></div>
               <div className="border-t border-gray-200 pt-4">

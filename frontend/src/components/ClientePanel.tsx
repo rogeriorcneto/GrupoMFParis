@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PencilIcon } from '@heroicons/react/24/outline'
 import WhatsAppIcon from './icons/WhatsAppIcon'
 import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico } from '../types'
 import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
@@ -98,6 +98,7 @@ export default function ClientePanel({
   onVerNoFunil, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
+  const [showVendedorPicker, setShowVendedorPicker] = useState(false)
   const [showMaisOpcoesHeader, setShowMaisOpcoesHeader] = useState(false)
   const [showExcluirConfirm, setShowExcluirConfirm] = useState(false)
   const [excluirConfirmText, setExcluirConfirmText] = useState('')
@@ -268,42 +269,50 @@ export default function ClientePanel({
   })
 
   const handleRegistrarAtividade = async () => {
-    if (!panelAtividadeTipo || !panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora) return
+    if (!panelAtividadeDesc.trim()) return
+    const isNota = panelAtividadeTipo === 'nota'
+    const semTipo = !panelAtividadeTipo
+    if (!isNota && !semTipo && (!panelAtividadePrazo || !panelAtividadeHora)) return
+    if (semTipo && (!panelAtividadePrazo || !panelAtividadeHora)) return
     try {
+      const tipoFinal = (panelAtividadeTipo || 'nota') as Interacao['tipo']
       const savedI = await db.insertInteracao({
-        clienteId: c.id, tipo: panelAtividadeTipo, data: new Date().toISOString(),
-        assunto: `${tipoInteracaoLabel[panelAtividadeTipo]} - ${c.razaoSocial}`,
+        clienteId: c.id, tipo: tipoFinal, data: new Date().toISOString(),
+        assunto: `${tipoInteracaoLabel[tipoFinal] || tipoFinal} - ${c.razaoSocial}`,
         descricao: panelAtividadeDesc.trim(), automatico: false
       })
       setInteracoes(prev => [savedI, ...prev])
 
-      const tarefaTipo: Tarefa['tipo'] =
-        panelAtividadeTipo === 'email' || panelAtividadeTipo === 'whatsapp' || panelAtividadeTipo === 'ligacao' || panelAtividadeTipo === 'reuniao'
-          ? panelAtividadeTipo
-          : panelAtividadeTipo === 'linkedin'
-            ? 'follow-up'
+      if (!isNota) {
+        const tarefaTipo: Tarefa['tipo'] =
+          tipoFinal === 'email' || tipoFinal === 'whatsapp' || tipoFinal === 'ligacao' || tipoFinal === 'reuniao'
+            ? tipoFinal
             : 'outro'
-
-      const savedT = await db.insertTarefa({
-        titulo: `Retorno: ${tipoInteracaoLabel[panelAtividadeTipo]} - ${c.razaoSocial}`,
-        descricao: panelAtividadeDesc.trim(),
-        data: panelAtividadePrazo,
-        hora: panelAtividadeHora,
-        tipo: tarefaTipo,
-        status: 'pendente',
-        prioridade: 'media',
-        clienteId: c.id,
-        vendedorId: c.vendedorId || loggedUser?.id,
-      })
-      setTarefas(prev => [savedT, ...prev])
+        const savedT = await db.insertTarefa({
+          titulo: `Retorno: ${tipoInteracaoLabel[tipoFinal] || tipoFinal} - ${c.razaoSocial}`,
+          descricao: panelAtividadeDesc.trim(),
+          data: panelAtividadePrazo,
+          hora: panelAtividadeHora,
+          tipo: tarefaTipo,
+          status: 'pendente',
+          prioridade: 'media',
+          clienteId: c.id,
+          vendedorId: c.vendedorId || loggedUser?.id,
+        })
+        setTarefas(prev => [savedT, ...prev])
+      }
 
       const hoje = new Date().toISOString().split('T')[0]
       await db.updateCliente(c.id, { ultimaInteracao: hoje })
       setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
     } catch (err) { logger.error('Erro ao registrar atividade:', err) }
+    const label = tipoInteracaoLabel[panelAtividadeTipo] || 'Atividade'
+    const msg = isNota
+      ? `Nota salva para ${c.razaoSocial}`
+      : `${label}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`
+    addNotificacao('success', 'Atividade registrada', msg, c.id)
     setPanelAtividadeTipo('')
     setPanelAtividadeDesc('')
-    addNotificacao('success', 'Atividade registrada', `${tipoInteracaoLabel[panelAtividadeTipo]}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`, c.id)
   }
 
   const REDES_CONFIG: { key: string; label: string; placeholder: string; icon: React.ReactNode; activeColor: string }[] = [
@@ -449,12 +458,39 @@ export default function ClientePanel({
               <span className="text-xs text-gray-500">Há {diasNaEtapa}d nesta etapa</span>
               {(() => {
                 const vend = vendedores.find(v => v.id === c.vendedorId)
-                return vend ? (
-                  <span className="text-xs text-gray-600 inline-flex items-center gap-1">
-                    <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">{vend.nome.charAt(0)}</span>
-                    <span>{vend.nome.split(' ')[0]}</span>
-                  </span>
-                ) : null
+                return (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowVendedorPicker(v => !v)}
+                      className="group text-xs text-gray-600 inline-flex items-center gap-1 hover:text-primary-700 transition-colors"
+                      title="Alterar responsável"
+                    >
+                      {vend && <span className="w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">{vend.nome.charAt(0)}</span>}
+                      <span>{vend ? vend.nome.split(' ')[0] : 'Sem responsável'}</span>
+                      <PencilIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                    {showVendedorPicker && (
+                      <div className="absolute left-0 top-7 z-50 bg-white border border-gray-200 rounded-apple shadow-apple-lg min-w-[160px] py-1">
+                        {vendedores.filter(v => v.ativo).map(v => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={async () => {
+                              setShowVendedorPicker(false)
+                              await db.updateCliente(c.id, { vendedorId: v.id })
+                              setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, vendedorId: v.id } : cl))
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-primary-50 transition-colors ${ c.vendedorId === v.id ? 'font-semibold text-primary-700' : 'text-gray-700' }`}
+                          >
+                            <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{v.nome.charAt(0)}</span>
+                            {v.nome.split(' ')[0]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
               })()}
               {c.score !== undefined && <span className="text-xs font-bold text-gray-600 ml-auto">Score: {c.score}</span>}
             </div>
@@ -902,24 +938,6 @@ export default function ClientePanel({
               </div>
             )}
 
-            {/* Botões de ação de contato */}
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
-              {phone && (
-                <a href={`tel:+55${phone}`} className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-apple text-xs font-medium hover:bg-green-700 transition-colors">
-                  📞 Ligar
-                </a>
-              )}
-              {c.contatoEmail && (
-                <button onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-apple text-xs font-medium hover:bg-blue-700 transition-colors">
-                  📧 Email
-                </button>
-              )}
-              {phone && (
-                <button onClick={() => { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-apple text-xs font-medium hover:bg-emerald-700 transition-colors">
-                  <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" /> WhatsApp
-                </button>
-              )}
-            </div>
           </div>
 
           {/* === PRODUTOS HOMOLOGADOS === */}
@@ -1247,185 +1265,164 @@ export default function ClientePanel({
           {activeTab === 'historico' && <>
 
           {/* === REGISTRAR ATIVIDADE === */}
-          <div className="bg-white rounded-apple border-2 border-primary-200 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">📞 Registrar Atividade</h3>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {([['ligacao', '📞', 'Ligação'], ['whatsapp', 'WA', 'WhatsApp'], ['email', '📧', 'Email'], ['reuniao', '🤝', 'Reunião'], ['linkedin', '💼', 'LinkedIn']] as const).map(([tipo, icon, label]) => (
-                <button key={tipo} onClick={() => {
-                  setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo)
-                  if (tipo === 'email' && c.contatoEmail) { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
-                  if (tipo === 'whatsapp' && phone) { setShowWhatsApp(true); setTimeout(() => whatsAppRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }
-                }} className={`flex flex-col items-center gap-1 p-2 rounded-apple text-xs font-medium transition-all ${panelAtividadeTipo === tipo ? 'bg-primary-100 border-2 border-primary-500 text-primary-700 shadow-sm' : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
-                  {tipo === 'whatsapp' ? (
-                    <WhatsAppIcon variant="filled" className="h-5 w-5" />
-                  ) : (
-                    <span className="text-lg">{icon}</span>
-                  )}
-                  <span>{label}</span>
-                </button>
-              ))}
-            </div>
-            {panelAtividadeTipo && (
-              <div className="space-y-2">
-                <textarea
-                  value={panelAtividadeDesc}
-                  onChange={(e) => setPanelAtividadeDesc(e.target.value)}
-                  placeholder={`Descreva a ${tipoInteracaoLabel[panelAtividadeTipo] || 'atividade'}...`}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                  rows={3}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Prazo da tarefa *</label>
-                    <input
-                      type="date"
-                      value={panelAtividadePrazo}
-                      onChange={(e) => setPanelAtividadePrazo(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Horário *</label>
-                    <input
-                      type="time"
-                      value={panelAtividadeHora}
-                      onChange={(e) => setPanelAtividadeHora(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
+          {(() => {
+            const TIPOS_ATIV = [
+              { tipo: 'nota',     label: 'Nota',      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg> },
+              { tipo: 'email',    label: 'E-mail',    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
+              { tipo: 'ligacao',  label: 'Ligação',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg> },
+              { tipo: 'whatsapp', label: 'WhatsApp',  icon: <WhatsAppIcon variant="filled" className="h-4 w-4" /> },
+              { tipo: 'proposta', label: 'Proposta',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
+              { tipo: 'reuniao',  label: 'Reunião',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
+              { tipo: 'visita',   label: 'Visita',   icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
+            ] as const
+            const isNota = panelAtividadeTipo === 'nota'
+            const semTipo = !panelAtividadeTipo
+            return (
+              <div className="bg-white rounded-apple border border-gray-200 shadow-sm overflow-hidden">
+                {/* Abas de tipo */}
+                <div className="flex flex-wrap border-b border-gray-200 bg-gray-50">
+                  {TIPOS_ATIV.map(({ tipo, label, icon }) => (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo as Interacao['tipo'])}
+                      className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+                        panelAtividadeTipo === tipo
+                          ? 'border-primary-600 text-primary-700 bg-white'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {icon}{label}
+                    </button>
+                  ))}
                 </div>
-                <button onClick={handleRegistrarAtividade} disabled={!panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora} className="w-full px-4 py-2 bg-primary-600 text-white rounded-apple text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                  ✅ Registrar {tipoInteracaoLabel[panelAtividadeTipo]}
-                </button>
+                {/* Textarea sempre visível */}
+                <div className="p-3 space-y-3">
+                  <textarea
+                    value={panelAtividadeDesc}
+                    onChange={(e) => setPanelAtividadeDesc(e.target.value)}
+                    placeholder={
+                      semTipo ? 'Digite uma atividade livre para gerar uma tarefa genérica...'
+                      : isNota ? 'Digite sua nota...'
+                      : `Descreva a ${tipoInteracaoLabel[panelAtividadeTipo] || 'atividade'}...`
+                    }
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                    rows={4}
+                  />
+                  {/* Prazo + Hora: sempre visível, exceto para Nota */}
+                  {!isNota && (
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="flex-1 min-w-[120px]">
+                        <label className="block text-xs text-gray-500 mb-1">Prazo</label>
+                        <input type="date" value={panelAtividadePrazo} onChange={(e) => setPanelAtividadePrazo(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      </div>
+                      <div className="flex-1 min-w-[100px]">
+                        <label className="block text-xs text-gray-500 mb-1">Horário</label>
+                        <input type="time" value={panelAtividadeHora} onChange={(e) => setPanelAtividadeHora(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      </div>
+                      <button
+                        onClick={handleRegistrarAtividade}
+                        disabled={!panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora}
+                        className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {semTipo ? 'Salvar Tarefa' : 'Salvar'}
+                      </button>
+                    </div>
+                  )}
+                  {isNota && (
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleRegistrarAtividade}
+                        disabled={!panelAtividadeDesc.trim()}
+                        className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Salvar Nota
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            )
+          })()}
 
-          {/* === HISTÓRICO DE INTERAÇÕES (grouped by type, collapsible) === */}
+          {/* === TIMELINE DE ATIVIDADES === */}
           {clienteInteracoes.length > 0 && (
-            <div className="bg-gray-50 rounded-apple border border-gray-200">
-              <button onClick={() => setShowHistorico(!showHistorico)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
-                <span>🕐 Histórico ({clienteInteracoes.length})</span>
-                <span className={`transition-transform duration-200 ${showHistorico ? 'rotate-180' : ''}`}>▼</span>
-              </button>
-              {showHistorico && (() => {
-                const grouped: Record<string, typeof clienteInteracoesOrdenadas> = {}
-                for (const inter of clienteInteracoesOrdenadas) {
-                  const tipo = inter.tipo || 'nota'
-                  if (!grouped[tipo]) grouped[tipo] = []
-                  grouped[tipo].push(inter)
-                }
-                const tipoOrder = ['ligacao', 'whatsapp', 'email', 'reuniao', 'instagram', 'linkedin', 'nota']
-                const sortedTypes = Object.keys(grouped).sort((a, b) => {
-                  const ia = tipoOrder.indexOf(a), ib = tipoOrder.indexOf(b)
-                  return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
-                })
-                return (
-                  <div className="px-4 pb-4 space-y-2">
-                    {sortedTypes.map(tipo => {
-                      const items = grouped[tipo]
-                      // Grupos começam abertos por padrão
-                      const isOpen = expandedHistoricoGroups[tipo] !== false
-                      // Quantidade visível: começa em 1, pode ser expandida
-                      const visibleCount = historicoItemCount[tipo] ?? 1
-                      const visibleItems = items.slice(0, visibleCount)
-                      const hasMore = items.length > visibleCount
-                      const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
-                      return (
-                        <div key={tipo} className={`rounded-lg border ${cor.border} overflow-hidden`}>
-                          <button
-                            onClick={() => setExpandedHistoricoGroups(prev => ({ ...prev, [tipo]: isOpen ? false : true }))}
-                            className={`w-full flex items-center justify-between px-3 py-2.5 ${cor.bg} hover:brightness-95 transition-all`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className={`w-2.5 h-2.5 rounded-full ${cor.dot}`} />
-                              <span className="text-sm font-semibold text-gray-800">{tipoInteracaoIcon[tipo] || '📋'} {tipoInteracaoLabel[tipo] || tipo}</span>
-                              <span className="text-xs text-gray-500 font-normal">({items.length})</span>
-                            </div>
-                            <span className={`text-xs text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
-                          </button>
-                          {isOpen && (
-                            <div className="bg-white divide-y divide-gray-100">
-                              {visibleItems.map(inter => {
-                                const isPinned = pinnedInteracoes.includes(inter.id)
-                                return (
-                                  <div key={inter.id} className={`px-3 py-2.5 ${isPinned ? 'bg-amber-50/50' : ''}`}>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-xs font-semibold text-gray-900 truncate">{inter.assunto}</p>
-                                        <p className="text-[10px] text-gray-400 mt-0.5">{new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
-                                      </div>
-                                      <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button onClick={() => handleTogglePinInteracao(inter.id)} className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full border transition-colors ${isPinned ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}>
-                                          {isPinned ? '📌' : '📍'}
-                                        </button>
-                                        {inter.automatico && <span className="px-1 py-0.5 text-[8px] font-medium bg-gray-100 text-gray-400 rounded-full">Auto</span>}
-                                      </div>
-                                    </div>
-                                    {inter.descricao && <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">{inter.descricao}</p>}
-                                    {inter.tipo === 'ligacao' && (() => {
-                                      const diaDaInteracao = (inter.data || '').split('T')[0]
-                                      const gravacao = gravacoesPorData.get(diaDaInteracao)
-                                        || gravacoes.find(g => Math.abs(new Date(g.created_at).getTime() - new Date(inter.data).getTime()) < 24 * 3600 * 1000)
-                                      if (!gravacao) return null
-                                      const tid = transcricoes[gravacao.id]
-                                      const carregando = transcrevendo[gravacao.id]
-                                      return (
-                                        <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-2">
-                                          {gravacao.arquivo_url && (
-                                            <audio controls src={gravacao.arquivo_url} className="w-full h-8" />
-                                          )}
-                                          <div className="flex gap-1.5 flex-wrap">
-                                            {gravacao.arquivo_url && (
-                                              <a
-                                                href={gravacao.arquivo_url}
-                                                download
-                                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-                                              >
-                                                ⬇️ Download
-                                              </a>
-                                            )}
-                                            {!tid && (
-                                              <button
-                                                onClick={() => handleTranscrever(gravacao.id)}
-                                                disabled={carregando}
-                                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
-                                              >
-                                                {carregando ? '⏳ Transcrevendo...' : '🤖 Transcrever com IA'}
-                                              </button>
-                                            )}
-                                            <span className="text-[9px] text-gray-400 self-center">
-                                              {Math.floor((gravacao.duracao_segundos || 0) / 60)}:{String((gravacao.duracao_segundos || 0) % 60).padStart(2, '0')} min
-                                            </span>
-                                          </div>
-                                          {tid && (
-                                            <div className={`rounded-lg p-2 text-[10px] leading-relaxed ${tid.startsWith('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-white text-gray-700 border border-gray-200'}`}>
-                                              <span className="font-semibold block mb-0.5">📝 Transcrição:</span>
-                                              {tid}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )
-                                    })()}
-                                  </div>
-                                )
-                              })}
-                              {hasMore && (
-                                <button
-                                  onClick={() => setHistoricoItemCount(prev => ({ ...prev, [tipo]: (prev[tipo] ?? 1) + 5 }))}
-                                  className="w-full py-2 text-[11px] font-semibold text-primary-600 hover:bg-primary-50 transition-colors"
-                                >
-                                  ↓ Exibir mais ({items.length - visibleCount} restantes)
-                                </button>
-                              )}
-                            </div>
-                          )}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between px-1 mb-2">
+                <h3 className="text-sm font-semibold text-gray-700">🕐 Histórico de Atividades ({clienteInteracoes.length})</h3>
+              </div>
+              <div className="relative">
+                {/* linha vertical da timeline */}
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+                <div className="space-y-3">
+                  {[...clienteInteracoesOrdenadas].map(inter => {
+                    const tipo = inter.tipo || 'nota'
+                    const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
+                    const isPinned = pinnedInteracoes.includes(inter.id)
+                    return (
+                      <div key={inter.id} className="flex gap-3">
+                        {/* dot */}
+                        <div className={`relative z-10 flex-shrink-0 w-8 h-8 rounded-full ${cor.dot} bg-opacity-20 border-2 border-white shadow-sm flex items-center justify-center mt-1`}>
+                          <span className={`w-2.5 h-2.5 rounded-full ${cor.dot}`} />
                         </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
+                        {/* card */}
+                        <div className={`flex-1 rounded-apple border ${cor.border} ${isPinned ? 'bg-amber-50/60' : 'bg-white'} shadow-sm p-3`}>
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${cor.bg} ${cor.border} border`}>
+                                {tipoInteracaoLabel[tipo] || tipo}
+                              </span>
+                              {inter.automatico && <span className="text-[9px] font-medium bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">Auto</span>}
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <span className="text-[10px] text-gray-400">{new Date(inter.data).toLocaleDateString('pt-BR')} às {new Date(inter.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                              <button onClick={() => handleTogglePinInteracao(inter.id)} className={`p-1 rounded-full transition-colors ${isPinned ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'}`} title={isPinned ? 'Desafixar' : 'Fixar'}>
+                                📌
+                              </button>
+                            </div>
+                          </div>
+                          {inter.assunto && <p className="text-sm font-semibold text-gray-800">{inter.assunto}</p>}
+                          {inter.descricao && <p className="text-sm text-gray-600 mt-1 leading-relaxed whitespace-pre-line">{inter.descricao}</p>}
+                          {inter.tipo === 'ligacao' && (() => {
+                            const diaDaInteracao = (inter.data || '').split('T')[0]
+                            const gravacao = gravacoesPorData.get(diaDaInteracao)
+                              || gravacoes.find(g => Math.abs(new Date(g.created_at).getTime() - new Date(inter.data).getTime()) < 24 * 3600 * 1000)
+                            if (!gravacao) return null
+                            const tid = transcricoes[gravacao.id]
+                            const carregando = transcrevendo[gravacao.id]
+                            return (
+                              <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg p-2.5 space-y-2">
+                                {gravacao.arquivo_url && <audio controls src={gravacao.arquivo_url} className="w-full h-8" />}
+                                <div className="flex gap-1.5 flex-wrap">
+                                  {gravacao.arquivo_url && (
+                                    <a href={gravacao.arquivo_url} download className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                                      ⬇️ Download
+                                    </a>
+                                  )}
+                                  {!tid && (
+                                    <button onClick={() => handleTranscrever(gravacao.id)} disabled={carregando}
+                                      className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors">
+                                      {carregando ? '⏳ Transcrevendo...' : '🤖 Transcrever com IA'}
+                                    </button>
+                                  )}
+                                  <span className="text-[9px] text-gray-400 self-center">{Math.floor((gravacao.duracao_segundos || 0) / 60)}:{String((gravacao.duracao_segundos || 0) % 60).padStart(2, '0')} min</span>
+                                </div>
+                                {tid && (
+                                  <div className={`rounded-lg p-2 text-[10px] leading-relaxed ${tid.startsWith('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-white text-gray-700 border border-gray-200'}`}>
+                                    <span className="font-semibold block mb-0.5">📝 Transcrição:</span>{tid}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           )}
 

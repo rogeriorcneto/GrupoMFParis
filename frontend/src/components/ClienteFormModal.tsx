@@ -2,6 +2,7 @@ import React from 'react'
 import { XMarkIcon, ChevronDownIcon, ChevronRightIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Produto, Vendedor, FormData, Pedido } from '../types'
 import { PlacesEnrich } from './PlacesEnrich'
+import { formatTelefone } from '../utils/validators'
 
 const etapaLabels: Record<string, string> = { 'lead': 'Lead', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Am. Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativo', 'perdido': 'Perdido' }
 const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
@@ -38,6 +39,8 @@ const STATUS_CLIENTE_OPTIONS = [
   { value: 'bloqueado', label: 'Bloqueado', color: 'text-purple-700 bg-purple-50 border-purple-200' },
 ]
 
+const PHONE_FIELDS = ['contatoCelular', 'contatoTelefoneFixo', 'contatoTelefone', 'contatoFinanceiroTelefone', 'contatoComprasTelefone']
+
 export default function ClienteFormModal({
   showModal, setShowModal, editingCliente, formData, setFormData,
   handleInputChange, handleSubmit, isSaving,
@@ -45,6 +48,12 @@ export default function ClienteFormModal({
   produtos, vendedores, clientes = [], pedidos = [], loggedUser,
   onClickNegocio, onInativarCliente, onReativarCliente
 }: ClienteFormModalProps) {
+  const handleTelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    const formatted = formatTelefone(value)
+    const synthetic = { ...e, target: { ...e.target, name, value: formatted } } as React.ChangeEvent<HTMLInputElement>
+    handleInputChange(synthetic)
+  }
   const [activeTab, setActiveTab] = React.useState<'dados' | 'negocios'>('dados')
   const [isSearchingGrupo, setIsSearchingGrupo] = React.useState(false)
   const [grupoCnpjInput, setGrupoCnpjInput] = React.useState('')
@@ -153,51 +162,9 @@ export default function ClienteFormModal({
             </button>
           </div>
 
-          {/* Tabs — só aparecem no modo edição */}
-          {editingCliente && (
-            <div className="flex border-b border-gray-200 px-4 sm:px-6">
-              <button type="button" onClick={() => setActiveTab('dados')} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${ activeTab === 'dados' ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700' }`}>📋 Dados</button>
-              <button type="button" onClick={() => setActiveTab('negocios')} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${ activeTab === 'negocios' ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700' }`}>
-                💼 Negócios
-                {negocios.length > 0 && <span className="bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">{negocios.length}</span>}
-              </button>
-            </div>
-          )}
-
-          {/* Aba Negócios */}
-          {activeTab === 'negocios' && editingCliente && (
-            <div className="px-4 sm:px-6 py-4 space-y-2 max-h-[65vh] overflow-y-auto">
-              {negocios.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">Nenhum negócio encontrado.</p>
-              ) : (
-                negocios.map(n => (
-                  <div
-                    key={n.id}
-                    onClick={() => { if (onClickNegocio) { setShowModal(false); onClickNegocio(n) } }}
-                    className={`border border-gray-200 rounded-apple p-3 space-y-1.5 transition-colors ${ onClickNegocio ? 'cursor-pointer hover:border-primary-400 hover:bg-primary-50' : '' } ${ n.id === editingCliente.id ? 'border-primary-400 bg-primary-50' : 'bg-white' }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-gray-400">Ciclo {n.cicloNumero || 1}</span>
-                        {n.id === editingCliente.id && <span className="text-xs bg-primary-100 text-primary-700 font-semibold px-1.5 py-0.5 rounded-full">atual</span>}
-                      </div>
-                      <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[n.etapa] || 'bg-gray-100 text-gray-700'}`}>{etapaLabels[n.etapa] || n.etapa}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-gray-600">
-                      {n.valorProposta != null && <span>💰 R$ {n.valorProposta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>}
-                      {n.dataEntradaEtapa && <span>📅 {new Date(n.dataEntradaEtapa).toLocaleDateString('pt-BR')}</span>}
-                      {n.vendedorId && <span>👤 {vendedores.find(v => v.id === n.vendedorId)?.nome || `Vendedor #${n.vendedorId}`}</span>}
-                      {n.motivoPerda && <span className="col-span-2 text-red-500">❌ {n.motivoPerda}</span>}
-                      {n.statusFollowUp && <span>📊 {n.statusFollowUp}</span>}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className={`px-4 sm:px-6 py-4 ${ activeTab !== 'dados' ? 'hidden' : '' }`}>
+          <form onSubmit={handleSubmit} className="px-4 sm:px-6 py-4">
             <div className="space-y-5">
 
               {/* ── Responsável + Status ── */}
@@ -360,22 +327,22 @@ export default function ClienteFormModal({
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Celular</label>
-                      <input type="tel" name="contatoCelular" value={formData.contatoCelular} onChange={handleInputChange}
+                      <input type="tel" name="contatoCelular" value={formData.contatoCelular} onChange={handleTelChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="(00) 99999-0000" />
+                        placeholder="(00) 99999-0000" maxLength={16} />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Telefone Fixo</label>
-                      <input type="tel" name="contatoTelefoneFixo" value={formData.contatoTelefoneFixo} onChange={handleInputChange}
+                      <input type="tel" name="contatoTelefoneFixo" value={formData.contatoTelefoneFixo} onChange={handleTelChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="(00) 3333-0000" />
+                        placeholder="(00) 3333-0000" maxLength={15} />
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">WhatsApp / Telefone Principal</label>
-                    <input type="tel" name="contatoTelefone" value={formData.contatoTelefone} onChange={handleInputChange}
+                    <input type="tel" name="contatoTelefone" value={formData.contatoTelefone} onChange={handleTelChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                      placeholder="(00) 99999-0000" />
+                      placeholder="(00) 99999-0000" maxLength={16} />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
@@ -396,9 +363,9 @@ export default function ClienteFormModal({
                       <input type="text" name="contatoFinanceiroNome" value={formData.contatoFinanceiroNome || ''} onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         placeholder="Nome do responsável financeiro" />
-                      <input type="tel" name="contatoFinanceiroTelefone" value={formData.contatoFinanceiroTelefone || ''} onChange={handleInputChange}
+                      <input type="tel" name="contatoFinanceiroTelefone" value={formData.contatoFinanceiroTelefone || ''} onChange={handleTelChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="Telefone do financeiro" />
+                        placeholder="(00) 99999-0000" maxLength={16} />
                     </div>
                   </div>
                   <div className="border border-gray-200 rounded-apple p-3 bg-gray-50/40">
@@ -407,9 +374,9 @@ export default function ClienteFormModal({
                       <input type="text" name="contatoComprasNome" value={formData.contatoComprasNome || ''} onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         placeholder="Nome do responsável por compras" />
-                      <input type="tel" name="contatoComprasTelefone" value={formData.contatoComprasTelefone || ''} onChange={handleInputChange}
+                      <input type="tel" name="contatoComprasTelefone" value={formData.contatoComprasTelefone || ''} onChange={handleTelChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="Telefone do comprador" />
+                        placeholder="(00) 99999-0000" maxLength={16} />
                     </div>
                   </div>
                 </div>

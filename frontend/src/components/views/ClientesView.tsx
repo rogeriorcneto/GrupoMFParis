@@ -1,5 +1,5 @@
 import React from 'react'
-import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon, PencilIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
 
@@ -1111,13 +1111,22 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                       </td>
                     )}
                     <td className="py-3 px-2" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={() => setDeleteClienteModal(cliente)}
-                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1 rounded-apple text-sm"
-                        title="Excluir"
-                      >
-                        🗑️
-                      </button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          onClick={() => onEditCliente(cliente)}
+                          className="text-gray-300 hover:text-blue-500 transition-colors p-1 rounded-apple"
+                          title="Editar"
+                        >
+                          <PencilIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteClienteModal(cliente)}
+                          className="text-gray-300 hover:text-red-500 transition-colors p-1 rounded-apple text-sm"
+                          title="Excluir"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

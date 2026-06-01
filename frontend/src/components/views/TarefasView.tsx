@@ -108,7 +108,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
       {/* Barra lateral de prioridade */}
       {!done && (
         <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl ${
-          isOverdue ? 'bg-red-500' : tarefa.prioridade === 'alta' ? 'bg-red-400' : tarefa.prioridade === 'media' ? 'bg-amber-400' : 'bg-gray-300'
+          isOverdue ? 'bg-red-500' : 'bg-green-500'
         }`} />
       )}
 
