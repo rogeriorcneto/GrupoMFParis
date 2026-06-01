@@ -150,33 +150,17 @@ function App() {
   const [vendedores, setVendedores] = useState<Vendedor[]>([])
 
   // Carregar dados essenciais do Supabase após autenticação (core)
+  // Não bloqueia UI: cada fetch atualiza seu próprio estado conforme chega.
   const loadAllData = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      const [
-        clientesData, interacoesData, tarefasData, produtosData,
-        pedidosData, vendedoresData, notificacoesData
-      ] = await Promise.all([
-        db.fetchClientes(),
-        db.fetchInteracoes(),
-        db.fetchTarefas(),
-        db.fetchProdutos(),
-        db.fetchPedidos(),
-        db.fetchVendedores(),
-        db.fetchNotificacoes(),
-      ])
-      setClientes(clientesData)
-      setInteracoes(interacoesData)
-      setTarefas(tarefasData)
-      setProdutos(produtosData)
-      setPedidos(pedidosData)
-      setVendedores(vendedoresData)
-      setDbNotificacoes(notificacoesData)
-    } catch (err) {
-      logger.error('Erro ao carregar dados:', err)
-    } finally {
-      setIsLoading(false)
-    }
+    setIsLoading(false) // garante que a tela esteja liberada
+    // Disparar em paralelo, sem await sequencial — cada um atualiza sua slice ao retornar
+    db.fetchClientes().then(setClientes).catch(err => logger.error('clientes:', err))
+    db.fetchInteracoes().then(setInteracoes).catch(err => logger.error('interacoes:', err))
+    db.fetchTarefas().then(setTarefas).catch(err => logger.error('tarefas:', err))
+    db.fetchProdutos().then(setProdutos).catch(err => logger.error('produtos:', err))
+    db.fetchPedidos().then(setPedidos).catch(err => logger.error('pedidos:', err))
+    db.fetchVendedores().then(setVendedores).catch(err => logger.error('vendedores:', err))
+    db.fetchNotificacoes().then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
   }, [])
 
   // Lazy load de datasets secundários (carregados quando a view é acessada)

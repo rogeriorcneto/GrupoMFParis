@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from './lib/supabase'
 import App from './App'
 import GrupoParisHome from './components/GrupoParisHome'
@@ -25,6 +25,8 @@ export default function GrupoParisShell() {
     setSistemaAtivoState(s)
   }
   const [usuario, setUsuario] = useState<{ nome: string; cargo: string; email: string } | null>(null)
+  // Indica se o CRM já foi aberto pelo menos uma vez nesta sessão (para manter montado em background)
+  const crmEverOpenedRef = useRef(false)
 
   useEffect(() => {
     // Checar sessão atual
@@ -109,16 +111,31 @@ export default function GrupoParisShell() {
     return <App />
   }
 
+  // Outros sistemas ERP
+  const voltarPortal = () => setSistemaAtivo('portal')
+
   // Autenticado: mostra portal ou sistema escolhido
+  // CRM fica montado em background após primeira visita (evita reload completo ao voltar)
+  const crmVisitado = crmEverOpenedRef.current || sistemaAtivo === 'crm'
+  if (sistemaAtivo === 'crm') crmEverOpenedRef.current = true
+
   if (sistemaAtivo === 'portal') {
     return (
-      <GrupoParisHome
-        usuario={usuario}
-        onSelectSistema={(s: SistemaAtivo) => setSistemaAtivo(s)}
-        onSignOut={async () => {
-          await supabase.auth.signOut()
-        }}
-      />
+      <>
+        <GrupoParisHome
+          usuario={usuario}
+          onSelectSistema={(s: SistemaAtivo) => setSistemaAtivo(s)}
+          onSignOut={async () => {
+            await supabase.auth.signOut()
+          }}
+        />
+        {/* Mantém o CRM montado em background se já foi aberto */}
+        {crmVisitado && (
+          <div style={{ display: 'none' }} aria-hidden>
+            <App />
+          </div>
+        )}
+      </>
     )
   }
 
@@ -137,9 +154,6 @@ export default function GrupoParisShell() {
       </>
     )
   }
-
-  // Outros sistemas ERP
-  const voltarPortal = () => setSistemaAtivo('portal')
 
   if (sistemaAtivo === 'logistica') return <LogisticaSystem onVoltar={voltarPortal} />
   if (sistemaAtivo === 'financeiro') return <FinanceiroSystem onVoltar={voltarPortal} />
