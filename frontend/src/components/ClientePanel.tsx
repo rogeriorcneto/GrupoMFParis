@@ -1405,8 +1405,34 @@ export default function ClientePanel({
                       const tipo = inter.tipo || 'nota'
                       const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
                       const isPinned = pinnedInteracoes.includes(inter.id)
-                      const criador = inter.automatico ? 'Automação' : (vendedor?.nome || '—')
+                      const criador = inter.automatico ? 'Automação' : (vendedor?.nome?.split(' ')[0] || '—')
                       const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
+                      const respNome = vendedor?.nome?.split(' ')[0] || '—'
+                      const respIni = (vendedor?.nome?.charAt(0) || '?').toUpperCase()
+                      // Match com tarefa vinculada: mesma clienteId + descricao igual
+                      const tarefaVinculada = clienteTarefas.find(
+                        t => (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 0
+                      )
+                      const prazoData = tarefaVinculada?.data
+                      const prazoHora = tarefaVinculada?.hora
+                      const prazoVencido = prazoData ? (() => {
+                        const agora = new Date()
+                        const prazo = new Date(`${prazoData}T${prazoHora || '23:59'}`)
+                        return prazo.getTime() < agora.getTime() && tarefaVinculada?.status !== 'concluida'
+                      })() : false
+                      const fmtPrazo = (() => {
+                        if (!prazoData) return null
+                        const d = new Date(`${prazoData}T${prazoHora || '00:00'}`)
+                        const hoje = new Date(); hoje.setHours(0,0,0,0)
+                        const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1)
+                        const amanha = new Date(hoje); amanha.setDate(amanha.getDate() + 1)
+                        const alvo = new Date(d); alvo.setHours(0,0,0,0)
+                        const horaTxt = prazoHora ? ` ${prazoHora}` : ''
+                        if (alvo.getTime() === hoje.getTime()) return `Hoje${horaTxt}`
+                        if (alvo.getTime() === ontem.getTime()) return `Ontem${horaTxt}`
+                        if (alvo.getTime() === amanha.getTime()) return `Amanhã${horaTxt}`
+                        return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}${horaTxt}`
+                      })()
                       return (
                         <div key={inter.id} className={`rounded-apple border ${isPinned ? 'border-amber-200 bg-amber-50/30' : 'border-gray-200 bg-white'} hover:border-gray-300 transition-colors`}>
                           {/* Linha 1: ícone + tipo + criada [tempo] | pin */}
@@ -1425,13 +1451,29 @@ export default function ClientePanel({
                                 <p className="text-[11px] text-gray-500">Criada {fmtRelativo(inter.data)}</p>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleTogglePinInteracao(inter.id)}
-                              className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${isPinned ? 'text-amber-500 bg-amber-50 hover:bg-amber-100' : 'text-gray-300 hover:text-amber-400 hover:bg-gray-50'}`}
-                              title={isPinned ? 'Desafixar' : 'Fixar'}
-                            >
-                              📌
-                            </button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {fmtPrazo && (
+                                <span
+                                  className={`px-2 py-1 text-[11px] font-semibold rounded-md border ${
+                                    tarefaVinculada?.status === 'concluida'
+                                      ? 'bg-gray-50 text-gray-500 border-gray-200 line-through'
+                                      : prazoVencido
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}
+                                  title={tarefaVinculada?.status === 'concluida' ? 'Tarefa concluída' : prazoVencido ? 'Vencida' : 'Prazo'}
+                                >
+                                  Prazo: {fmtPrazo}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => handleTogglePinInteracao(inter.id)}
+                                className={`p-1.5 rounded-full transition-colors ${isPinned ? 'text-amber-500 bg-amber-50 hover:bg-amber-100' : 'text-gray-300 hover:text-amber-400 hover:bg-gray-50'}`}
+                                title={isPinned ? 'Desafixar' : 'Fixar'}
+                              >
+                                📌
+                              </button>
+                            </div>
                           </div>
 
                           {/* Linha 2: descrição/assunto */}
@@ -1476,8 +1518,8 @@ export default function ClientePanel({
                             )
                           })()}
 
-                          {/* Rodapé: Criada por | Responsáveis */}
-                          <div className="flex items-center gap-3 px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+                          {/* Rodapé: Criada por | Responsável */}
+                          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
                             <div className="flex items-center gap-1.5">
                               <span>Criada por</span>
                               <span
@@ -1487,6 +1529,9 @@ export default function ClientePanel({
                                 title={criador}
                               >
                                 {criadorIniciais}
+                              </span>
+                              <span className={`font-medium ${inter.automatico ? 'text-purple-700' : 'text-gray-700'}`}>
+                                {criador}
                               </span>
                             </div>
                             {vendedor && (
@@ -1498,8 +1543,9 @@ export default function ClientePanel({
                                     className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold"
                                     title={vendedor.nome}
                                   >
-                                    {vendedor.nome.charAt(0).toUpperCase()}
+                                    {respIni}
                                   </span>
+                                  <span className="font-medium text-gray-700">{respNome}</span>
                                 </div>
                               </>
                             )}
