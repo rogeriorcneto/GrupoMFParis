@@ -273,9 +273,12 @@ export default function ClientePanel({
     if (!panelAtividadeDesc.trim()) return
     const isNota = panelAtividadeTipo === 'nota'
     const semTipo = !panelAtividadeTipo
-    // proposta e visita também precisam de prazo
-    const precisaPrazo = !isNota
+    // proposta/visita/atividades com tipo precisam de prazo; semTipo usa padrão
+    const precisaPrazo = !isNota && !semTipo
     if (precisaPrazo && (!panelAtividadePrazo || !panelAtividadeHora)) return
+    // semTipo: garantir prazo com valor padrão
+    const prazoFinal = panelAtividadePrazo || new Date().toISOString().split('T')[0]
+    const horaFinal = panelAtividadeHora || currentTimeHHMM()
     try {
       // proposta e visita não existem no tipo Interacao — salvar como 'nota' mas ainda gerar tarefa
       const tiposExtraComoNota = ['proposta', 'visita']
@@ -300,8 +303,8 @@ export default function ClientePanel({
         const savedT = await db.insertTarefa({
           titulo: `Retorno: ${labelAtividade} - ${c.razaoSocial}`,
           descricao: panelAtividadeDesc.trim(),
-          data: panelAtividadePrazo,
-          hora: panelAtividadeHora,
+          data: prazoFinal,
+          hora: horaFinal,
           tipo: tarefaTipo,
           status: 'pendente',
           prioridade: 'media',
@@ -1332,8 +1335,8 @@ export default function ClientePanel({
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                     rows={4}
                   />
-                  {/* Prazo + Hora: sempre visível, exceto para Nota */}
-                  {!isNota && (
+                  {/* Prazo + Hora: visível para tipos com data, opcional para semTipo */}
+                  {!isNota && !semTipo && (
                     <div className="flex flex-wrap gap-3 items-end">
                       <div className="flex-1 min-w-[120px]">
                         <label className="block text-xs text-gray-500 mb-1">Prazo</label>
@@ -1354,14 +1357,14 @@ export default function ClientePanel({
                       </button>
                     </div>
                   )}
-                  {isNota && (
+                  {(isNota || semTipo) && (
                     <div className="flex justify-end">
                       <button
                         onClick={handleRegistrarAtividade}
                         disabled={!panelAtividadeDesc.trim()}
                         className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
-                        Salvar Nota
+                        {semTipo ? 'Salvar Tarefa' : 'Salvar Nota'}
                       </button>
                     </div>
                   )}
