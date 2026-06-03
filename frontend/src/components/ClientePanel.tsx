@@ -99,13 +99,14 @@ export default function ClientePanel({
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
   const [showVendedorPicker, setShowVendedorPicker] = useState(false)
+  const [vendedorSearch, setVendedorSearch] = useState('')
   const [showMaisOpcoesHeader, setShowMaisOpcoesHeader] = useState(false)
   const [showExcluirConfirm, setShowExcluirConfirm] = useState(false)
   const [excluirConfirmText, setExcluirConfirmText] = useState('')
   // Abas do perfil (referência Agendor): Histórico (default) | Negócios
   const [activeTab, setActiveTab] = useState<'historico' | 'negocios'>('historico')
   const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
-  const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | ''>('')
+  const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | 'proposta' | 'visita' | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
   const [panelAtividadePrazo, setPanelAtividadePrazo] = useState(new Date().toISOString().split('T')[0])
   const [panelAtividadeHora, setPanelAtividadeHora] = useState(currentTimeHHMM())
@@ -220,7 +221,6 @@ export default function ClientePanel({
       setTranscrevendo(prev => ({ ...prev, [gravacaoId]: false }))
     }
   }, [])
-  const [showTimeline, setShowTimeline] = useState(false)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
 
@@ -273,24 +273,32 @@ export default function ClientePanel({
     if (!panelAtividadeDesc.trim()) return
     const isNota = panelAtividadeTipo === 'nota'
     const semTipo = !panelAtividadeTipo
-    if (!isNota && !semTipo && (!panelAtividadePrazo || !panelAtividadeHora)) return
-    if (semTipo && (!panelAtividadePrazo || !panelAtividadeHora)) return
+    // proposta e visita também precisam de prazo
+    const precisaPrazo = !isNota
+    if (precisaPrazo && (!panelAtividadePrazo || !panelAtividadeHora)) return
     try {
-      const tipoFinal = (panelAtividadeTipo || 'nota') as Interacao['tipo']
+      // proposta e visita não existem no tipo Interacao — salvar como 'nota' mas ainda gerar tarefa
+      const tiposExtraComoNota = ['proposta', 'visita']
+      const isExtra = tiposExtraComoNota.includes(panelAtividadeTipo as string)
+      const tipoInteracao = (isExtra ? 'nota' : (panelAtividadeTipo || 'nota')) as Interacao['tipo']
+      const labelAtividade = panelAtividadeTipo === 'proposta' ? 'Proposta'
+        : panelAtividadeTipo === 'visita' ? 'Visita'
+        : tipoInteracaoLabel[panelAtividadeTipo] || panelAtividadeTipo || 'Atividade'
       const savedI = await db.insertInteracao({
-        clienteId: c.id, tipo: tipoFinal, data: new Date().toISOString(),
-        assunto: `${tipoInteracaoLabel[tipoFinal] || tipoFinal} - ${c.razaoSocial}`,
+        clienteId: c.id, tipo: tipoInteracao, data: new Date().toISOString(),
+        assunto: `${labelAtividade} - ${c.razaoSocial}`,
         descricao: panelAtividadeDesc.trim(), automatico: false
       })
       setInteracoes(prev => [savedI, ...prev])
 
       if (!isNota) {
+        const tipoFinal = tipoInteracao
         const tarefaTipo: Tarefa['tipo'] =
           tipoFinal === 'email' || tipoFinal === 'whatsapp' || tipoFinal === 'ligacao' || tipoFinal === 'reuniao'
             ? tipoFinal
             : 'outro'
         const savedT = await db.insertTarefa({
-          titulo: `Retorno: ${tipoInteracaoLabel[tipoFinal] || tipoFinal} - ${c.razaoSocial}`,
+          titulo: `Retorno: ${labelAtividade} - ${c.razaoSocial}`,
           descricao: panelAtividadeDesc.trim(),
           data: panelAtividadePrazo,
           hora: panelAtividadeHora,
@@ -307,10 +315,12 @@ export default function ClientePanel({
       await db.updateCliente(c.id, { ultimaInteracao: hoje })
       setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
     } catch (err) { logger.error('Erro ao registrar atividade:', err) }
-    const label = tipoInteracaoLabel[panelAtividadeTipo] || 'Atividade'
+    const labelFinal = panelAtividadeTipo === 'proposta' ? 'Proposta'
+      : panelAtividadeTipo === 'visita' ? 'Visita'
+      : tipoInteracaoLabel[panelAtividadeTipo] || 'Atividade'
     const msg = isNota
       ? `Nota salva para ${c.razaoSocial}`
-      : `${label}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`
+      : `${labelFinal}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`
     addNotificacao('success', 'Atividade registrada', msg, c.id)
     setPanelAtividadeTipo('')
     setPanelAtividadeDesc('')
@@ -463,7 +473,7 @@ export default function ClientePanel({
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setShowVendedorPicker(v => !v)}
+                      onClick={() => { setShowVendedorPicker(v => !v); setVendedorSearch('') }}
                       className="group text-xs text-gray-600 inline-flex items-center gap-1 hover:text-primary-700 transition-colors"
                       title="Alterar responsável"
                     >
@@ -472,8 +482,19 @@ export default function ClientePanel({
                       <PencilIcon className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                     {showVendedorPicker && (
-                      <div className="absolute left-0 top-7 z-50 bg-white border border-gray-200 rounded-apple shadow-apple-lg min-w-[160px] py-1">
-                        {vendedores.filter(v => v.ativo).map(v => (
+                      <div className="absolute left-0 top-7 z-50 bg-white border border-gray-200 rounded-apple shadow-apple-lg min-w-[200px]">
+                        <div className="p-2 border-b border-gray-100">
+                          <input
+                            autoFocus
+                            type="text"
+                            placeholder="Pesquisar..."
+                            value={vendedorSearch}
+                            onChange={e => setVendedorSearch(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-primary-400"
+                          />
+                        </div>
+                        <div className="py-1 max-h-48 overflow-y-auto">
+                        {vendedores.filter(v => v.ativo && (!vendedorSearch.trim() || v.nome.toLowerCase().includes(vendedorSearch.toLowerCase()))).map(v => (
                           <button
                             key={v.id}
                             type="button"
@@ -485,9 +506,10 @@ export default function ClientePanel({
                             className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-primary-50 transition-colors ${ c.vendedorId === v.id ? 'font-semibold text-primary-700' : 'text-gray-700' }`}
                           >
                             <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">{v.nome.charAt(0)}</span>
-                            {v.nome.split(' ')[0]}
+                            {v.nome}
                           </button>
                         ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1409,10 +1431,15 @@ export default function ClientePanel({
                       const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
                       const respNome = vendedor?.nome?.split(' ')[0] || '—'
                       const respIni = (vendedor?.nome?.charAt(0) || '?').toUpperCase()
-                      // Match com tarefa vinculada: mesma clienteId + descricao igual
-                      const tarefaVinculada = clienteTarefas.find(
-                        t => (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 0
-                      )
+                      // Match com tarefa vinculada: descrição igual OU título contém assunto da interação
+                      const tarefaVinculada = clienteTarefas.find(t => {
+                        const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 0
+                        const assuntoMatch = inter.assunto && (t.titulo || '').toLowerCase().includes((inter.assunto || '').toLowerCase().slice(0, 20))
+                        return descMatch || assuntoMatch
+                      }) || clienteTarefas.find(t => {
+                        // fallback: tarefa criada no mesmo dia da interação
+                        return t.data === (inter.data || '').split('T')[0]
+                      })
                       const prazoData = tarefaVinculada?.data
                       const prazoHora = tarefaVinculada?.hora
                       const prazoVencido = prazoData ? (() => {
@@ -1427,60 +1454,56 @@ export default function ClientePanel({
                         const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1)
                         const amanha = new Date(hoje); amanha.setDate(amanha.getDate() + 1)
                         const alvo = new Date(d); alvo.setHours(0,0,0,0)
-                        const horaTxt = prazoHora ? ` ${prazoHora}` : ''
+                        const horaHM = prazoHora ? prazoHora.slice(0, 5) : ''
+                        const horaTxt = horaHM ? ` ${horaHM}` : ''
                         if (alvo.getTime() === hoje.getTime()) return `Hoje${horaTxt}`
                         if (alvo.getTime() === ontem.getTime()) return `Ontem${horaTxt}`
                         if (alvo.getTime() === amanha.getTime()) return `Amanhã${horaTxt}`
                         return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}${horaTxt}`
                       })()
                       return (
-                        <div key={inter.id} className={`rounded-apple border ${isPinned ? 'border-amber-200 bg-amber-50/30' : 'border-gray-200 bg-white'} hover:border-gray-300 transition-colors`}>
-                          {/* Linha 1: ícone + tipo + criada [tempo] | pin */}
-                          <div className="flex items-center justify-between gap-2 px-3 pt-3">
+                        <div key={inter.id} className={`group rounded-apple border overflow-hidden ${isPinned ? 'border-amber-200 bg-amber-50/30' : 'border-gray-200 bg-white'} hover:border-gray-300 transition-colors`}>
+
+                          {/* CABEÇALHO: ícone + nome + tipo + badge + data criação */}
+                          <div className={`flex items-center justify-between gap-2 px-3 py-2.5 ${isPinned ? 'bg-amber-50' : 'bg-primary-50'} border-b ${isPinned ? 'border-amber-100' : 'border-primary-100'}`}>
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <div className={`flex-shrink-0 w-8 h-8 rounded-full ${cor.bg} ${cor.border} border flex items-center justify-center text-sm`}>
+                              <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-white border ${cor.border} flex items-center justify-center text-sm shadow-sm`}>
                                 {tipoInteracaoIcon[tipo] || '📋'}
                               </div>
                               <div className="min-w-0">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-primary-500 truncate leading-none mb-0.5">{c.razaoSocial}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-bold text-gray-900">{tipoInteracaoLabel[tipo] || tipo}</span>
+                                  <span className="text-sm font-semibold text-gray-700">{tipoInteracaoLabel[tipo] || tipo}</span>
                                   {inter.automatico && (
-                                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-purple-50 text-purple-700 border border-purple-200 rounded-full">⚡ Auto</span>
+                                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-purple-100 text-purple-700 border border-purple-200 rounded-full">⚡ Auto</span>
                                   )}
                                 </div>
                                 <p className="text-[11px] text-gray-500">Criada {fmtRelativo(inter.data)}</p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {fmtPrazo && (
+                            {fmtPrazo && (
+                              <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
+                                <span className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">Prazo</span>
                                 <span
-                                  className={`px-2 py-1 text-[11px] font-semibold rounded-md border ${
+                                  className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${
                                     tarefaVinculada?.status === 'concluida'
-                                      ? 'bg-gray-50 text-gray-500 border-gray-200 line-through'
+                                      ? 'bg-white/70 text-gray-400 border-gray-200 line-through'
                                       : prazoVencido
-                                      ? 'bg-red-50 text-red-700 border-red-200'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                      ? 'bg-red-500 text-white border-red-600'
+                                      : 'bg-amber-400 text-white border-amber-500'
                                   }`}
                                   title={tarefaVinculada?.status === 'concluida' ? 'Tarefa concluída' : prazoVencido ? 'Vencida' : 'Prazo'}
                                 >
-                                  Prazo: {fmtPrazo}
+                                  📅 {fmtPrazo}
                                 </span>
-                              )}
-                              <button
-                                onClick={() => handleTogglePinInteracao(inter.id)}
-                                className={`p-1.5 rounded-full transition-colors ${isPinned ? 'text-amber-500 bg-amber-50 hover:bg-amber-100' : 'text-gray-300 hover:text-amber-400 hover:bg-gray-50'}`}
-                                title={isPinned ? 'Desafixar' : 'Fixar'}
-                              >
-                                📌
-                              </button>
-                            </div>
+                              </div>
+                            )}
                           </div>
 
-                          {/* Linha 2: descrição/assunto */}
-                          {(inter.assunto || inter.descricao) && (
-                            <div className="px-3 pt-2 pb-1">
-                              {inter.assunto && <p className="text-sm font-medium text-gray-800">{inter.assunto}</p>}
-                              {inter.descricao && <p className="text-sm text-gray-600 mt-0.5 leading-relaxed whitespace-pre-line">{inter.descricao}</p>}
+                          {/* Descrição (sem assunto/label duplicado) */}
+                          {inter.descricao && (
+                            <div className="px-3 py-1.5">
+                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
                             </div>
                           )}
 
@@ -1518,37 +1541,66 @@ export default function ClientePanel({
                             )
                           })()}
 
-                          {/* Rodapé: Criada por | Responsável */}
-                          <div className="flex items-center flex-wrap gap-x-3 gap-y-1 px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
-                            <div className="flex items-center gap-1.5">
-                              <span>Criada por</span>
-                              <span
-                                className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
-                                  inter.automatico ? 'bg-purple-100 text-purple-700' : 'bg-primary-100 text-primary-700'
-                                }`}
-                                title={criador}
-                              >
-                                {criadorIniciais}
-                              </span>
-                              <span className={`font-medium ${inter.automatico ? 'text-purple-700' : 'text-gray-700'}`}>
-                                {criador}
-                              </span>
+                          {/* Rodapé: Criada por | Responsável | pin (hover) */}
+                          <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+                            <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
+                              <div className="flex items-center gap-1.5">
+                                <span>Criada por</span>
+                                <span
+                                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold ${
+                                    inter.automatico ? 'bg-purple-100 text-purple-700' : 'bg-primary-100 text-primary-700'
+                                  }`}
+                                  title={criador}
+                                >
+                                  {criadorIniciais}
+                                </span>
+                                <span className={`font-medium ${inter.automatico ? 'text-purple-700' : 'text-gray-700'}`}>
+                                  {criador}
+                                </span>
+                              </div>
+                              {vendedor && (
+                                <>
+                                  <span className="text-gray-300">|</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span>Responsável</span>
+                                    <span
+                                      className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold"
+                                      title={vendedor.nome}
+                                    >
+                                      {respIni}
+                                    </span>
+                                    <span className="font-medium text-gray-700">{respNome}</span>
+                                  </div>
+                                </>
+                              )}
                             </div>
-                            {vendedor && (
-                              <>
-                                <span className="text-gray-300">|</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span>Responsável</span>
-                                  <span
-                                    className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold"
-                                    title={vendedor.nome}
-                                  >
-                                    {respIni}
-                                  </span>
-                                  <span className="font-medium text-gray-700">{respNome}</span>
-                                </div>
-                              </>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {tarefaVinculada && tarefaVinculada.status !== 'concluida' && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    const agora = new Date().toISOString()
+                                    await db.updateTarefa(tarefaVinculada.id, { status: 'concluida', concluidaEm: agora })
+                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada.id ? { ...t, status: 'concluida', concluidaEm: agora } : t))
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Marcar tarefa como concluída"
+                                >
+                                  ✓ Finalizar
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleTogglePinInteracao(inter.id)}
+                                className={`flex-shrink-0 p-1 rounded-full transition-all ${
+                                  isPinned
+                                    ? 'text-amber-500 opacity-100'
+                                    : 'text-gray-400 opacity-0 group-hover:opacity-100 hover:text-amber-500'
+                                }`}
+                                title={isPinned ? 'Desafixar' : 'Fixar'}
+                              >
+                                📌
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -1560,29 +1612,6 @@ export default function ClientePanel({
           })()}
 
           {/* === TIMELINE (collapsible) === */}
-          {c.historicoEtapas && c.historicoEtapas.length > 0 && (
-            <div className="bg-gray-50 rounded-apple border border-gray-200">
-              <button onClick={() => setShowTimeline(!showTimeline)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
-                <span>🗺️ Jornada no Funil ({c.historicoEtapas.length} etapas)</span>
-                <span>{showTimeline ? '▲' : '▼'}</span>
-              </button>
-              {showTimeline && (
-                <div className="px-4 pb-4">
-                  <div className="relative pl-4 border-l-2 border-gray-300 space-y-3">
-                    {c.historicoEtapas.map((h, i) => (
-                      <div key={i} className="relative">
-                        <div className={`absolute -left-[1.3rem] w-3 h-3 rounded-full ${i === c.historicoEtapas!.length - 1 ? 'bg-primary-600 ring-2 ring-primary-200' : 'bg-gray-400'}`} />
-                        <div className="ml-2">
-                          <p className="text-sm font-medium text-gray-900">{etapaLabels[h.etapa] || h.etapa}</p>
-                          <p className="text-xs text-gray-500">{new Date(h.data).toLocaleDateString('pt-BR')} {h.de && `← ${etapaLabels[h.de] || h.de}`}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* === WHATSAPP MODAL (separado) === */}
           {showWhatsApp && (
