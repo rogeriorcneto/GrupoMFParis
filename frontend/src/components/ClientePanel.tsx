@@ -321,16 +321,20 @@ export default function ClientePanel({
       const hoje = new Date().toISOString().split('T')[0]
       await db.updateCliente(c.id, { ultimaInteracao: hoje })
       setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
-    } catch (err) { logger.error('Erro ao registrar atividade:', err) }
-    const labelFinal = labelMap[panelAtividadeTipo as string] || 'Atividade'
-    const msg = isNota
-      ? `Nota salva para ${c.razaoSocial}`
-      : semTipo
-      ? `Tarefa genérica criada para ${c.razaoSocial}`
-      : `${labelFinal}: ${c.razaoSocial} (prazo ${prazoFinal ? new Date(prazoFinal).toLocaleDateString('pt-BR') : '—'} às ${horaFinal})`
-    addNotificacao('success', 'Atividade registrada', msg, c.id)
-    setPanelAtividadeTipo('')
-    setPanelAtividadeDesc('')
+      // Só limpa e notifica sucesso se chegou aqui sem erro
+      const labelFinal = labelMap[panelAtividadeTipo as string] || 'Atividade'
+      const msg = isNota
+        ? `Nota salva para ${c.razaoSocial}`
+        : semTipo
+        ? `Tarefa genérica criada para ${c.razaoSocial}`
+        : `${labelFinal}: ${c.razaoSocial} (prazo ${prazoFinal ? new Date(prazoFinal).toLocaleDateString('pt-BR') : '—'} às ${horaFinal})`
+      addNotificacao('success', 'Atividade registrada', msg, c.id)
+      setPanelAtividadeTipo('')
+      setPanelAtividadeDesc('')
+    } catch (err) {
+      logger.error('Erro ao registrar atividade:', err)
+      addNotificacao('error', 'Erro ao salvar', 'Não foi possível registrar a atividade. Tente novamente.', c.id)
+    }
   }
 
   const REDES_CONFIG: { key: string; label: string; placeholder: string; icon: React.ReactNode; activeColor: string }[] = [
@@ -1581,20 +1585,32 @@ export default function ClientePanel({
                               )}
                             </div>
                             <div className="flex items-center gap-1">
-                              {tarefaVinculada && tarefaVinculada.status !== 'concluida' && (
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation()
-                                    const agora = new Date().toISOString()
-                                    await db.updateTarefa(tarefaVinculada.id, { status: 'concluida', concluidaEm: agora })
-                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada.id ? { ...t, status: 'concluida', concluidaEm: agora } : t))
-                                  }}
-                                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition-colors opacity-0 group-hover:opacity-100"
-                                  title="Marcar tarefa como concluída"
-                                >
-                                  ✓ Finalizar
-                                </button>
-                              )}
+                              {(() => {
+                                const temTarefaPendente = tarefaVinculada?.status === 'pendente'
+                                const jaFinalizada = tarefaVinculada?.status === 'concluida'
+                                const semTarefa = !tarefaVinculada
+                                const ativo = temTarefaPendente
+                                return (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation()
+                                      if (!ativo) return
+                                      const agora = new Date().toISOString()
+                                      await db.updateTarefa(tarefaVinculada!.id, { status: 'concluida', concluidaEm: agora })
+                                      setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, status: 'concluida', concluidaEm: agora } : t))
+                                    }}
+                                    disabled={!ativo}
+                                    className={`flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors opacity-0 group-hover:opacity-100 ${
+                                      ativo
+                                        ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer'
+                                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-default'
+                                    }`}
+                                    title={jaFinalizada ? 'Já finalizada' : semTarefa ? 'Sem tarefa vinculada' : 'Marcar tarefa como concluída'}
+                                  >
+                                    {jaFinalizada ? '✓ Finalizada' : '✓ Finalizar'}
+                                  </button>
+                                )
+                              })()}
                               <button
                                 onClick={() => handleTogglePinInteracao(inter.id)}
                                 className={`flex-shrink-0 p-1 rounded-full transition-all ${
