@@ -25,6 +25,15 @@ interface UseAutoRulesParams {
 export function useAutoRules({
   clientes, setClientes, interacoes, vendedores, loggedUser, pedidos, setAtividades, addNotificacao
 }: UseAutoRulesParams) {
+  // Refs para ler valores atuais sem ser dependência reativa — evita re-render em loop
+  const clientesRef = useRef(clientes)
+  clientesRef.current = clientes
+  const vendedoresRef = useRef(vendedores)
+  vendedoresRef.current = vendedores
+  const pedidosRef = useRef(pedidos)
+  pedidosRef.current = pedidos
+  const loggedUserRef = useRef(loggedUser)
+  loggedUserRef.current = loggedUser
 
   // Recalculate diasInativo based on ultimaInteracao and persist (runs on mount + every hour)
   const recalcDiasInativo = useCallback(() => {
@@ -56,16 +65,17 @@ export function useAutoRules({
   }, [recalcDiasInativo])
 
   // Auto-atribuir clientes órfãos ao gerente (usuário master)
-  // O gerente de vendas é o dono padrão de todos os clientes até reatribuir manualmente
   const orphanFixRef = useRef(false)
   useEffect(() => {
-    if (orphanFixRef.current || !loggedUser || clientes.length === 0 || vendedores.length === 0) return
-    // Encontrar o gerente (master) — é o dono padrão de todos os clientes sem vendedor
+    if (orphanFixRef.current) return
+    const clientes = clientesRef.current
+    const vendedores = vendedoresRef.current
+    const loggedUser = loggedUserRef.current
+    if (!loggedUser || clientes.length === 0 || vendedores.length === 0) return
     const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo) || loggedUser
     const orfaos = clientes.filter(c => !c.vendedorId)
     if (orfaos.length === 0) { orphanFixRef.current = true; return }
     orphanFixRef.current = true
-    // Atribuir em batch ao gerente e persistir
     setClientes(prev => prev.map(c => !c.vendedorId ? { ...c, vendedorId: gerente.id } : c))
     const persistOrphan = async () => {
       try {
@@ -74,17 +84,17 @@ export function useAutoRules({
       } catch (err) { logger.error('Erro ao atribuir clientes órfãos batch:', err) }
     }
     persistOrphan()
-  }, [clientes, vendedores, loggedUser, setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Item 2: Movimentação automática pelo sistema (prazos vencidos)
   const autoMovedIds = useRef<Set<number>>(new Set())
   const autoMoveRunRef = useRef(false)
   useEffect(() => {
-    // Only run once per data load cycle, not on every clientes change (score, diasInativo, etc.)
-    if (autoMoveRunRef.current || clientes.length === 0) return
+    if (autoMoveRunRef.current) return
+    const clientes = clientesRef.current
+    if (clientes.length === 0) return
     autoMoveRunRef.current = true
-    // Reset after 60s to allow re-check (e.g. if user stays on page for hours)
-    setTimeout(() => { autoMoveRunRef.current = false }, 60000)
+    setTimeout(() => { autoMoveRunRef.current = false }, 3600000) // re-check a cada 1h
 
     const clientesParaMover = getClientsToAutoMove(clientes, autoMovedIds.current)
     if (clientesParaMover.length > 0) {
@@ -108,7 +118,7 @@ export function useAutoRules({
         return { ...c, ...extras }
       }))
       const moveInfo = clientesParaMover.map(m => {
-        const cl = clientes.find(c => c.id === m.id)
+        const cl = clientesRef.current.find(c => c.id === m.id)
         return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', fromStage: m.etapa }
       })
       const persistAutoMoves = async () => {
@@ -137,15 +147,17 @@ export function useAutoRules({
       }
       persistAutoMoves()
     }
-  }, [clientes, addNotificacao, setClientes, setAtividades])
+  }, [addNotificacao, setClientes, setAtividades]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-move para "inativo" — clientes com 90+ dias sem atividade (exceto follow_up/negociacao)
+  // Auto-move para "inativo" — clientes com 90+ dias sem atividade
   const autoInativoIds = useRef<Set<number>>(new Set())
   const autoInativoRunRef = useRef(false)
   useEffect(() => {
-    if (autoInativoRunRef.current || clientes.length === 0) return
+    if (autoInativoRunRef.current) return
+    const clientes = clientesRef.current
+    if (clientes.length === 0) return
     autoInativoRunRef.current = true
-    setTimeout(() => { autoInativoRunRef.current = false }, 60000)
+    setTimeout(() => { autoInativoRunRef.current = false }, 3600000)
 
     const clientesParaInativar = getClientsToAutoInativo(clientes, autoInativoIds.current)
     if (clientesParaInativar.length > 0) {
@@ -161,7 +173,7 @@ export function useAutoRules({
         }
       }))
       const moveInfo = clientesParaInativar.map(m => {
-        const cl = clientes.find(c => c.id === m.id)
+        const cl = clientesRef.current.find(c => c.id === m.id)
         return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente' }
       })
       const persistAutoInativo = async () => {
@@ -183,7 +195,7 @@ export function useAutoRules({
       }
       persistAutoInativo()
     }
-  }, [clientes, addNotificacao, setClientes, setAtividades])
+  }, [addNotificacao, setClientes, setAtividades]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Item 4: Score dinâmico — recalcula automaticamente e persiste (debounced, threshold 5pts)
   // Deps: apenas interacoes. clientes é lido via setClientes funcional para evitar o ciclo
@@ -221,9 +233,12 @@ export function useAutoRules({
   const returnedIds = useRef<Set<number>>(new Set())
   const returnRunRef = useRef(false)
   useEffect(() => {
-    if (returnRunRef.current || clientes.length === 0 || vendedores.length === 0) return
+    if (returnRunRef.current) return
+    const clientes = clientesRef.current
+    const vendedores = vendedoresRef.current
+    if (clientes.length === 0 || vendedores.length === 0) return
     returnRunRef.current = true
-    setTimeout(() => { returnRunRef.current = false }, 60000)
+    setTimeout(() => { returnRunRef.current = false }, 3600000)
 
     const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo)
     if (!gerente) return
@@ -240,7 +255,7 @@ export function useAutoRules({
     }))
 
     const returnInfo = toReturn.map(m => {
-      const cl = clientes.find(c => c.id === m.id)
+      const cl = clientesRef.current.find(c => c.id === m.id)
       return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', vendedorAnterior: cl?.vendedorId }
     })
     const persistReturns = async () => {
@@ -259,15 +274,19 @@ export function useAutoRules({
       }
     }
     persistReturns()
-  }, [clientes, vendedores, addNotificacao, setClientes, setAtividades])
+  }, [addNotificacao, setClientes, setAtividades]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Lead: notificar gerente se lead sem vendedor há 3+ dias ───
   const leadNotifRef = useRef(false)
   useEffect(() => {
-    if (leadNotifRef.current || !loggedUser || loggedUser.cargo !== 'gerente') return
+    if (leadNotifRef.current) return
+    const loggedUser = loggedUserRef.current
+    const clientes = clientesRef.current
+    const vendedores = vendedoresRef.current
+    if (!loggedUser || loggedUser.cargo !== 'gerente') return
     if (clientes.length === 0 || vendedores.length === 0) return
     leadNotifRef.current = true
-    setTimeout(() => { leadNotifRef.current = false }, 3600000) // re-check hourly
+    setTimeout(() => { leadNotifRef.current = false }, 3600000)
 
     const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo)
     if (!gerente) return
@@ -275,20 +294,23 @@ export function useAutoRules({
     for (const lead of staleLeads) {
       addNotificacao('warning', 'Lead sem vendedor', `${lead.razaoSocial} está há ${lead.dias}d sem vendedor atribuído!`, lead.id)
     }
-  }, [clientes, vendedores, loggedUser, addNotificacao])
+  }, [addNotificacao]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Gerente: notificar pedidos pendentes de aprovação há 2+ dias ───
   const pedidoNotifRef = useRef(false)
   useEffect(() => {
-    if (pedidoNotifRef.current || !loggedUser || loggedUser.cargo !== 'gerente') return
+    if (pedidoNotifRef.current) return
+    const loggedUser = loggedUserRef.current
+    const pedidos = pedidosRef.current
+    if (!loggedUser || loggedUser.cargo !== 'gerente') return
     if (pedidos.length === 0) return
     pedidoNotifRef.current = true
     setTimeout(() => { pedidoNotifRef.current = false }, 3600000)
 
     const stale = getPedidosPendingApproval(pedidos)
     for (const p of stale) {
-      const cl = clientes.find(c => c.id === p.clienteId)
+      const cl = clientesRef.current.find(c => c.id === p.clienteId)
       addNotificacao('error', 'Pedido aguardando aprovação', `Pedido ${p.numero}${cl ? ` (${cl.razaoSocial})` : ''} está há ${p.dias}d pendente!`, p.clienteId)
     }
-  }, [pedidos, clientes, loggedUser, addNotificacao])
+  }, [addNotificacao]) // eslint-disable-line react-hooks/exhaustive-deps
 }
