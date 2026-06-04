@@ -813,6 +813,7 @@ export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void
   if (t.prioridade !== undefined) row.prioridade = t.prioridade
   if (t.clienteId !== undefined) row.cliente_id = t.clienteId
   if (t.vendedorId !== undefined) row.vendedor_id = t.vendedorId
+  if ((t as any).concluidaEm !== undefined) row.concluida_em = (t as any).concluidaEm
   const { error } = await supabase.from('tarefas').update(row).eq('id', id)
   if (error) throw error
 }
