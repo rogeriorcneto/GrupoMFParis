@@ -1606,7 +1606,7 @@ export default function ClientePanel({
                                       e.stopPropagation()
                                       if (!ativo) return
                                       const agora = new Date().toISOString()
-                                      await db.updateTarefa(tarefaVinculada!.id, { status: 'concluida', concluidaEm: agora })
+                                      await db.updateTarefa(tarefaVinculada!.id, { status: 'concluida' })
                                       setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, status: 'concluida', concluidaEm: agora } : t))
                                     }}
                                     disabled={!ativo}
