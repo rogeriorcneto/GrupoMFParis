@@ -28,6 +28,8 @@ export default function GrupoParisShell() {
   }
   const [usuario, setUsuario] = useState<{ nome: string; cargo: string; email: string } | null>(null)
   const [vendedorCompleto, setVendedorCompleto] = useState<Vendedor | null>(null)
+  // vendedorReady: true quando fetchUserInfo terminou (com ou sem vendedorCompleto)
+  const [vendedorReady, setVendedorReady] = useState(false)
   // CRM fica montado após primeira abertura — nunca desmonta
   const [crmMontado, setCrmMontado] = useState(() => {
     const saved = localStorage.getItem('gp_sistema_ativo')
@@ -63,6 +65,8 @@ export default function GrupoParisShell() {
       } else if (event === 'SIGNED_OUT') {
         setIsAuthenticated(false)
         setUsuario(null)
+        setVendedorCompleto(null)
+        setVendedorReady(false)
         setSistemaAtivo('portal')
         setCrmMontado(false)
       }
@@ -74,15 +78,39 @@ export default function GrupoParisShell() {
     }
   }, [])
 
-  const fetchUserInfo = async (_userId: string) => {
+  const fetchUserInfo = async (userId: string) => {
     try {
-      const vendedor = await db.getLoggedVendedor()
-      if (vendedor) {
-        setVendedorCompleto(vendedor)
-        setUsuario({ nome: vendedor.nome, cargo: vendedor.cargo, email: vendedor.email })
+      // Tenta pelo auth_user_id primeiro, fallback pelo auth_id, depois pelo email
+      let { data } = await supabase
+        .from('vendedores')
+        .select('*')
+        .eq('auth_user_id', userId)
+        .maybeSingle()
+      if (!data) {
+        const r2 = await supabase.from('vendedores').select('*').eq('auth_id', userId).maybeSingle()
+        if (r2.data) data = r2.data
+      }
+      if (!data) {
+        const { data: { session } } = await supabase.auth.getSession()
+        const email = session?.user?.email
+        if (email) {
+          const r3 = await supabase.from('vendedores').select('*').eq('email', email).maybeSingle()
+          if (r3.data) data = r3.data
+        }
+      }
+      if (data) {
+        setUsuario({ nome: data.nome, cargo: data.cargo, email: data.email })
+        // Tentar buscar o Vendedor completo para passar ao App (evita segunda verificação)
+        try {
+          const v = await db.getLoggedVendedor()
+          if (v) setVendedorCompleto(v)
+          // Se null, App fará sua própria verificação normalmente
+        } catch { /* App fará sua própria verificação */ }
       }
     } catch (err) {
       console.error('Erro ao buscar usuário:', err)
+    } finally {
+      setVendedorReady(true)
     }
   }
 
@@ -106,8 +134,8 @@ export default function GrupoParisShell() {
   // Outros sistemas ERP
   const voltarPortal = () => setSistemaAtivo('portal')
 
-  // Montar CRM na primeira vez que for selecionado e nunca mais desmontar
-  if (sistemaAtivo === 'crm' && !crmMontado) setCrmMontado(true)
+  // Montar CRM na primeira vez que for selecionado — só quando vendedorReady
+  if (sistemaAtivo === 'crm' && !crmMontado && vendedorReady) setCrmMontado(true)
 
   // Portal + CRM oculto em background (se já foi montado)
   if (sistemaAtivo === 'portal') {
@@ -121,7 +149,7 @@ export default function GrupoParisShell() {
           }}
         />
         {/* CRM permanece montado em display:none para não recarregar ao voltar */}
-        {crmMontado && (
+        {crmMontado && vendedorReady && (
           <div style={{ display: 'none' }} aria-hidden>
             <App preloadedUser={vendedorCompleto} />
           </div>
@@ -130,8 +158,18 @@ export default function GrupoParisShell() {
     )
   }
 
-  // Sistema CRM ativo
+  // Sistema CRM ativo — aguardar vendedorReady para evitar flash de login
   if (sistemaAtivo === 'crm') {
+    if (!vendedorReady) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-700 via-purple-800 to-pink-900 flex items-center justify-center">
+          <div className="text-center text-white">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
+            <p>Carregando CRM...</p>
+          </div>
+        </div>
+      )
+    }
     return (
       <>
         {crmMontado && <App preloadedUser={vendedorCompleto} />}

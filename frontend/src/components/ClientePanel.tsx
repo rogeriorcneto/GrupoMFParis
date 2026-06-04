@@ -55,7 +55,7 @@ const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': '
 const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
 const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
-const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação' }
+const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação', proposta: 'Proposta', visita: 'Visita' }
 const tipoInteracaoCor: Record<string, { bg: string; border: string; dot: string }> = {
   ligacao: { bg: 'bg-green-50', border: 'border-green-200', dot: 'bg-green-500' },
   whatsapp: { bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
@@ -279,14 +279,16 @@ export default function ClientePanel({
     // semTipo: garantir prazo com valor padrão
     const prazoFinal = panelAtividadePrazo || new Date().toISOString().split('T')[0]
     const horaFinal = panelAtividadeHora || currentTimeHHMM()
+    const labelMap: Record<string, string> = {
+      proposta: 'Proposta', visita: 'Visita', reuniao: 'Reunião',
+      ligacao: 'Ligação', email: 'E-mail', whatsapp: 'WhatsApp', nota: 'Nota'
+    }
     try {
-      // proposta e visita não existem no tipo Interacao — salvar como 'nota' mas ainda gerar tarefa
+      // tipos que não existem em Interacao['tipo'] — salvar como 'nota'
       const tiposExtraComoNota = ['proposta', 'visita']
       const isExtra = tiposExtraComoNota.includes(panelAtividadeTipo as string)
       const tipoInteracao = (isExtra ? 'nota' : (panelAtividadeTipo || 'nota')) as Interacao['tipo']
-      const labelAtividade = panelAtividadeTipo === 'proposta' ? 'Proposta'
-        : panelAtividadeTipo === 'visita' ? 'Visita'
-        : tipoInteracaoLabel[panelAtividadeTipo] || panelAtividadeTipo || 'Atividade'
+      const labelAtividade = labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade'
       const savedI = await db.insertInteracao({
         clienteId: c.id, tipo: tipoInteracao, data: new Date().toISOString(),
         assunto: `${labelAtividade} - ${c.razaoSocial}`,
@@ -294,11 +296,13 @@ export default function ClientePanel({
       })
       setInteracoes(prev => [savedI, ...prev])
 
-      if (!isNota) {
-        const tipoFinal = tipoInteracao
+      // isNota puro = só salva nota, sem tarefa
+      // semTipo ou outros tipos = gera tarefa
+      const gerarTarefa = !isNota // proposta, visita, reuniao, ligacao, email, whatsapp, semTipo
+      if (gerarTarefa) {
         const tarefaTipo: Tarefa['tipo'] =
-          tipoFinal === 'email' || tipoFinal === 'whatsapp' || tipoFinal === 'ligacao' || tipoFinal === 'reuniao'
-            ? tipoFinal
+          tipoInteracao === 'email' || tipoInteracao === 'whatsapp' || tipoInteracao === 'ligacao' || tipoInteracao === 'reuniao'
+            ? tipoInteracao
             : 'outro'
         const savedT = await db.insertTarefa({
           titulo: `Retorno: ${labelAtividade} - ${c.razaoSocial}`,
@@ -318,12 +322,12 @@ export default function ClientePanel({
       await db.updateCliente(c.id, { ultimaInteracao: hoje })
       setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
     } catch (err) { logger.error('Erro ao registrar atividade:', err) }
-    const labelFinal = panelAtividadeTipo === 'proposta' ? 'Proposta'
-      : panelAtividadeTipo === 'visita' ? 'Visita'
-      : tipoInteracaoLabel[panelAtividadeTipo] || 'Atividade'
+    const labelFinal = labelMap[panelAtividadeTipo as string] || 'Atividade'
     const msg = isNota
       ? `Nota salva para ${c.razaoSocial}`
-      : `${labelFinal}: ${c.razaoSocial} (prazo ${new Date(panelAtividadePrazo).toLocaleDateString('pt-BR')} às ${panelAtividadeHora})`
+      : semTipo
+      ? `Tarefa genérica criada para ${c.razaoSocial}`
+      : `${labelFinal}: ${c.razaoSocial} (prazo ${prazoFinal ? new Date(prazoFinal).toLocaleDateString('pt-BR') : '—'} às ${horaFinal})`
     addNotificacao('success', 'Atividade registrada', msg, c.id)
     setPanelAtividadeTipo('')
     setPanelAtividadeDesc('')
@@ -1330,7 +1334,7 @@ export default function ClientePanel({
                     placeholder={
                       semTipo ? 'Digite uma atividade livre para gerar uma tarefa genérica...'
                       : isNota ? 'Digite sua nota...'
-                      : `Descreva a ${tipoInteracaoLabel[panelAtividadeTipo] || 'atividade'}...`
+                      : `Descreva a ${tipoInteracaoLabel[panelAtividadeTipo as string] || panelAtividadeTipo || 'atividade'}...`
                     }
                     className="w-full px-3 py-2.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                     rows={4}
@@ -1353,7 +1357,7 @@ export default function ClientePanel({
                         disabled={!panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora}
                         className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
-                        {semTipo ? 'Salvar Tarefa' : 'Salvar'}
+                        Salvar Tarefa
                       </button>
                     </div>
                   )}
@@ -1434,14 +1438,13 @@ export default function ClientePanel({
                       const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
                       const respNome = vendedor?.nome?.split(' ')[0] || '—'
                       const respIni = (vendedor?.nome?.charAt(0) || '?').toUpperCase()
-                      // Match com tarefa vinculada: descrição igual OU título contém assunto da interação
+                      // Match com tarefa vinculada: descrição exata OU assunto no título (sem fallback por data)
                       const tarefaVinculada = clienteTarefas.find(t => {
-                        const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 0
-                        const assuntoMatch = inter.assunto && (t.titulo || '').toLowerCase().includes((inter.assunto || '').toLowerCase().slice(0, 20))
+                        const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 10
+                        const tituloLower = (t.titulo || '').toLowerCase()
+                        const assuntoLower = (inter.assunto || '').toLowerCase()
+                        const assuntoMatch = assuntoLower.length > 5 && tituloLower.includes(assuntoLower.slice(0, 30))
                         return descMatch || assuntoMatch
-                      }) || clienteTarefas.find(t => {
-                        // fallback: tarefa criada no mesmo dia da interação
-                        return t.data === (inter.data || '').split('T')[0]
                       })
                       const prazoData = tarefaVinculada?.data
                       const prazoHora = tarefaVinculada?.hora

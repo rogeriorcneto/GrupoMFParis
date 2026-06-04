@@ -101,14 +101,18 @@ function stopActiveTimer() {
 // ────────────────────────────────────────────────────────────────────────────
 
 function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
+  // preloadedUser === undefined: não fornecido, verificar sessão normalmente
+  // preloadedUser === Vendedor: sessão já verificada pelo Shell, pular checkSession
+  // preloadedUser === null: Shell tentou mas não achou, verificar sessão normalmente
+  const hasPreloaded = preloadedUser != null && preloadedUser !== undefined
   const { newVersionAvailable, reloadApp } = useVersionCheck()
   const { dark, toggleDark } = useDarkMode()
-  const [loggedUser, setLoggedUser] = useState<Vendedor | null>(preloadedUser ?? null)
+  const [loggedUser, setLoggedUser] = useState<Vendedor | null>(hasPreloaded ? preloadedUser! : null)
   const [loginUsuario, setLoginUsuario] = useState('')
   const [loginSenha, setLoginSenha] = useState('')
   const [loginError, setLoginError] = useState('')
-  const [authChecked, setAuthChecked] = useState(preloadedUser != null)
-  const [isLoading, setIsLoading] = useState(preloadedUser == null)
+  const [authChecked, setAuthChecked] = useState(hasPreloaded)
+  const [isLoading, setIsLoading] = useState(!hasPreloaded)
   const [toastMsg, setToastMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
 
   const showToast = (tipo: 'success' | 'error', texto: string) => {
@@ -197,12 +201,12 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   }, [activeView, loggedUser, loadSecondaryForView])
 
   // Verificar sessão existente ao montar o componente
-  // Se preloadedUser foi passado, sessão já está verificada — pular checkSession
+  // Se preloadedUser é um Vendedor real, sessão já está verificada — pular checkSession
   useEffect(() => {
-    if (preloadedUser != null) {
+    if (hasPreloaded) {
       // Sessão já verificada pelo Shell — carregar dados diretamente
       loadAllData().catch(err => logger.error('Erro loadAllData:', err))
-      startActiveTimer(preloadedUser.id)
+      startActiveTimer(preloadedUser!.id)
       return
     }
 
