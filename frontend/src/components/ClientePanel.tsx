@@ -1442,6 +1442,16 @@ export default function ClientePanel({
                       const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
                       const respNome = vendedor?.nome?.split(' ')[0] || '—'
                       const respIni = (vendedor?.nome?.charAt(0) || '?').toUpperCase()
+                      // Label real: para notas que são proposta/visita, extrair do assunto ("Proposta - EMPRESA" → "Proposta")
+                      const labelReal = (() => {
+                        if (tipo !== 'nota') return tipoInteracaoLabel[tipo] || tipo
+                        const assunto = inter.assunto || ''
+                        const prefixos = ['Proposta', 'Visita', 'Reunião', 'Ligação', 'E-mail', 'WhatsApp']
+                        for (const p of prefixos) {
+                          if (assunto.startsWith(p + ' - ') || assunto === p) return p
+                        }
+                        return tipoInteracaoLabel['nota'] // "Observação"
+                      })()
                       // Match com tarefa vinculada: descrição exata OU assunto no título (sem fallback por data)
                       const tarefaVinculada = clienteTarefas.find(t => {
                         const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 10
@@ -1483,7 +1493,7 @@ export default function ClientePanel({
                               <div className="min-w-0">
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-primary-500 truncate leading-none mb-0.5">{c.razaoSocial}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-semibold text-gray-700">{tipoInteracaoLabel[tipo] || tipo}</span>
+                                  <span className="text-sm font-semibold text-gray-700">{labelReal}</span>
                                   {inter.automatico && (
                                     <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-purple-100 text-purple-700 border border-purple-200 rounded-full">⚡ Auto</span>
                                   )}
