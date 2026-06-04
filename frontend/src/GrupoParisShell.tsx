@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
+import * as db from './lib/database'
+import type { Vendedor } from './types'
 import App from './App'
 import GrupoParisHome from './components/GrupoParisHome'
 import LogisticaSystem from './components/erp/LogisticaSystem'
@@ -25,8 +27,12 @@ export default function GrupoParisShell() {
     setSistemaAtivoState(s)
   }
   const [usuario, setUsuario] = useState<{ nome: string; cargo: string; email: string } | null>(null)
-  // Indica se o CRM já foi aberto pelo menos uma vez nesta sessão (para manter montado em background)
-  const crmEverOpenedRef = useRef(false)
+  const [vendedorCompleto, setVendedorCompleto] = useState<Vendedor | null>(null)
+  // CRM fica montado após primeira abertura — nunca desmonta
+  const [crmMontado, setCrmMontado] = useState(() => {
+    const saved = localStorage.getItem('gp_sistema_ativo')
+    return saved === 'crm'
+  })
 
   useEffect(() => {
     // Checar sessão atual
@@ -49,15 +55,16 @@ export default function GrupoParisShell() {
     const timeout = setTimeout(() => setAuthChecked(true), 3000)
 
     // Listener de mudanças de autenticação
+    // SIGNED_IN não reseta para portal — mantém o sistema que estava ativo
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setIsAuthenticated(true)
-        setSistemaAtivo('portal') // Após login, vai pro portal
         await fetchUserInfo(session.user.id)
       } else if (event === 'SIGNED_OUT') {
         setIsAuthenticated(false)
         setUsuario(null)
         setSistemaAtivo('portal')
+        setCrmMontado(false)
       }
     })
 
@@ -67,28 +74,13 @@ export default function GrupoParisShell() {
     }
   }, [])
 
-  const fetchUserInfo = async (userId: string) => {
+  const fetchUserInfo = async (_userId: string) => {
     try {
-      // 1ª tentativa: vincular por auth_id
-      let { data } = await supabase
-        .from('vendedores')
-        .select('nome, cargo, email')
-        .eq('auth_id', userId)
-        .maybeSingle()
-      // Fallback: tentar pelo email da sessão (se vendedor ainda não tiver auth_id vinculado)
-      if (!data) {
-        const { data: { session } } = await supabase.auth.getSession()
-        const email = session?.user?.email
-        if (email) {
-          const { data: byEmail } = await supabase
-            .from('vendedores')
-            .select('nome, cargo, email')
-            .eq('email', email)
-            .maybeSingle()
-          if (byEmail) data = byEmail
-        }
+      const vendedor = await db.getLoggedVendedor()
+      if (vendedor) {
+        setVendedorCompleto(vendedor)
+        setUsuario({ nome: vendedor.nome, cargo: vendedor.cargo, email: vendedor.email })
       }
-      if (data) setUsuario(data)
     } catch (err) {
       console.error('Erro ao buscar usuário:', err)
     }
@@ -114,11 +106,10 @@ export default function GrupoParisShell() {
   // Outros sistemas ERP
   const voltarPortal = () => setSistemaAtivo('portal')
 
-  // Autenticado: mostra portal ou sistema escolhido
-  // CRM fica montado em background após primeira visita (evita reload completo ao voltar)
-  const crmVisitado = crmEverOpenedRef.current || sistemaAtivo === 'crm'
-  if (sistemaAtivo === 'crm') crmEverOpenedRef.current = true
+  // Montar CRM na primeira vez que for selecionado e nunca mais desmontar
+  if (sistemaAtivo === 'crm' && !crmMontado) setCrmMontado(true)
 
+  // Portal + CRM oculto em background (se já foi montado)
   if (sistemaAtivo === 'portal') {
     return (
       <>
@@ -129,21 +120,21 @@ export default function GrupoParisShell() {
             await supabase.auth.signOut()
           }}
         />
-        {/* Mantém o CRM montado em background se já foi aberto */}
-        {crmVisitado && (
+        {/* CRM permanece montado em display:none para não recarregar ao voltar */}
+        {crmMontado && (
           <div style={{ display: 'none' }} aria-hidden>
-            <App />
+            <App preloadedUser={vendedorCompleto} />
           </div>
         )}
       </>
     )
   }
 
-  // Sistema CRM: renderiza o App existente (já está autenticado)
+  // Sistema CRM ativo
   if (sistemaAtivo === 'crm') {
     return (
       <>
-        <App />
+        {crmMontado && <App preloadedUser={vendedorCompleto} />}
         <button
           onClick={() => setSistemaAtivo('portal')}
           className="fixed bottom-4 right-4 z-[9999] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg shadow-2xl flex items-center gap-2 font-medium"

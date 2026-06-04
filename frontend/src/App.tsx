@@ -100,15 +100,15 @@ function stopActiveTimer() {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
-function App() {
+function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   const { newVersionAvailable, reloadApp } = useVersionCheck()
   const { dark, toggleDark } = useDarkMode()
-  const [loggedUser, setLoggedUser] = useState<Vendedor | null>(null)
+  const [loggedUser, setLoggedUser] = useState<Vendedor | null>(preloadedUser ?? null)
   const [loginUsuario, setLoginUsuario] = useState('')
   const [loginSenha, setLoginSenha] = useState('')
   const [loginError, setLoginError] = useState('')
-  const [authChecked, setAuthChecked] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
+  const [authChecked, setAuthChecked] = useState(preloadedUser != null)
+  const [isLoading, setIsLoading] = useState(preloadedUser == null)
   const [toastMsg, setToastMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
 
   const showToast = (tipo: 'success' | 'error', texto: string) => {
@@ -197,7 +197,15 @@ function App() {
   }, [activeView, loggedUser, loadSecondaryForView])
 
   // Verificar sessão existente ao montar o componente
+  // Se preloadedUser foi passado, sessão já está verificada — pular checkSession
   useEffect(() => {
+    if (preloadedUser != null) {
+      // Sessão já verificada pelo Shell — carregar dados diretamente
+      loadAllData().catch(err => logger.error('Erro loadAllData:', err))
+      startActiveTimer(preloadedUser.id)
+      return
+    }
+
     // Timeout de segurança: se em 8s não terminou, libera a tela mesmo assim
     const safetyTimeout = setTimeout(() => {
       setAuthChecked(true)
@@ -209,7 +217,6 @@ function App() {
         const vendedor = await db.getLoggedVendedor()
         if (vendedor) {
           setLoggedUser(vendedor)
-          // Liberar tela imediatamente; dados carregam em background
           setAuthChecked(true)
           setIsLoading(false)
           clearTimeout(safetyTimeout)
