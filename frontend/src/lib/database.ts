@@ -751,6 +751,7 @@ export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interac
     assunto: i.assunto || '',
     descricao: i.descricao,
     automatico: i.automatico || false,
+    data: i.data || new Date().toISOString(),
   }).select().single()
   if (error) throw error
   return interacaoFromDb(data)
