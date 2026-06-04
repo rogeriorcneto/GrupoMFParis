@@ -275,10 +275,10 @@ export default function ClientePanel({
     const semTipo = !panelAtividadeTipo
     // proposta/visita/atividades com tipo precisam de prazo; semTipo usa padrão
     const precisaPrazo = !isNota && !semTipo
-    if (precisaPrazo && (!panelAtividadePrazo || !panelAtividadeHora)) return
-    // semTipo: garantir prazo com valor padrão
+    // sempre usa fallback — nunca bloqueia por falta de prazo/hora
     const prazoFinal = panelAtividadePrazo || new Date().toISOString().split('T')[0]
     const horaFinal = panelAtividadeHora || currentTimeHHMM()
+    if (precisaPrazo && !prazoFinal) return
     const labelMap: Record<string, string> = {
       proposta: 'Proposta', visita: 'Visita', reuniao: 'Reunião',
       ligacao: 'Ligação', email: 'E-mail', whatsapp: 'WhatsApp', nota: 'Nota'
@@ -1358,7 +1358,7 @@ export default function ClientePanel({
                       </div>
                       <button
                         onClick={handleRegistrarAtividade}
-                        disabled={!panelAtividadeDesc.trim() || !panelAtividadePrazo || !panelAtividadeHora}
+                        disabled={!panelAtividadeDesc.trim()}
                         className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         Salvar Tarefa
