@@ -110,7 +110,9 @@ export default function AppRouter({
               dataAprovacao: new Date().toISOString(),
               aprovadoPor: loggedUser?.id,
             }
-            if (result.omie?.success) {
+            if (result.omie?.pending) {
+              addNotificacao('success', 'Pedido aprovado ✅', `Pedido ${pedido.numero} aprovado! Enviando ao Omie em background...`, pedido.clienteId)
+            } else if (result.omie?.success) {
               omieUpdate.omieCodigo = String(result.omie.omie_codigo || '')
               omieUpdate.omieErro = undefined
               addNotificacao('success', 'Pedido aprovado + Omie ✅', `Pedido ${pedido.numero} aprovado e enviado ao Omie com sucesso! (Cód: ${result.omie.omie_codigo})`, pedido.clienteId)

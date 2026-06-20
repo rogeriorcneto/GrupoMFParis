@@ -1127,24 +1127,22 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
       return
     }
 
-    // 2. Enviar automaticamente ao Omie
-    const omieResult = await onPedidoAprovado(pedidoId)
+    // 2. Responder IMEDIATAMENTE ao frontend (não bloquear pelo Omie)
+    res.json({ success: true, pedido_aprovado: true, omie: { pending: true } })
 
-    // 3. Salvar resultado do Omie no pedido (erro ou sucesso)
-    try {
-      if (omieResult.success) {
-        await supabase.from('pedidos').update({ omie_erro: null }).eq('id', pedidoId)
-      } else {
-        await supabase.from('pedidos').update({
-          omie_erro: omieResult.error || 'Erro desconhecido ao enviar para o Omie',
-        }).eq('id', pedidoId)
-      }
-    } catch { /* coluna omie_erro pode não existir ainda */ }
-
-    res.json({
-      success: true,
-      pedido_aprovado: true,
-      omie: omieResult,
+    // 3. Enviar ao Omie em background (fire-and-forget)
+    onPedidoAprovado(pedidoId).then(async (omieResult) => {
+      try {
+        if (omieResult.success) {
+          await supabase.from('pedidos').update({ omie_erro: null, omie_codigo: omieResult.omie_codigo || null }).eq('id', pedidoId)
+        } else {
+          await supabase.from('pedidos').update({
+            omie_erro: omieResult.error || 'Erro desconhecido ao enviar para o Omie',
+          }).eq('id', pedidoId)
+        }
+      } catch { /* non-critical */ }
+    }).catch((err) => {
+      log.error({ err, pedidoId }, 'Erro background Omie após aprovação')
     })
   } catch (err: any) {
     log.error({ err, pedidoId }, 'Erro ao aprovar pedido')
