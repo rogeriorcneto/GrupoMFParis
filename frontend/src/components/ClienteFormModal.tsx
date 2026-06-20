@@ -13,7 +13,7 @@ interface ClienteFormModalProps {
   editingCliente: Cliente | null
   formData: FormData
   setFormData: React.Dispatch<React.SetStateAction<FormData>>
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void
+  handleInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void
   handleSubmit: (e: React.FormEvent) => void
   isSaving: boolean
   isLoadingCep: boolean
@@ -31,10 +31,11 @@ interface ClienteFormModalProps {
 }
 
 const STATUS_CLIENTE_OPTIONS = [
+  { value: 'prospecto', label: 'Prospecto', color: 'text-blue-700 bg-blue-50 border-blue-200' },
   { value: 'ativo', label: 'Ativo', color: 'text-green-700 bg-green-50 border-green-200' },
   { value: 'em_risco', label: 'Em Risco', color: 'text-orange-700 bg-orange-50 border-orange-200' },
   { value: 'inativo', label: 'Inativo', color: 'text-gray-600 bg-gray-50 border-gray-200' },
-  { value: 'prospecto', label: 'Prospecto', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  { value: 'inativado', label: 'Inativado', color: 'text-red-700 bg-red-50 border-red-200' },
   { value: 'descartado', label: 'Descartado', color: 'text-red-700 bg-red-50 border-red-200' },
   { value: 'bloqueado', label: 'Bloqueado', color: 'text-purple-700 bg-purple-50 border-purple-200' },
 ]
@@ -310,6 +311,13 @@ export default function ClienteFormModal({
                       <option value="Distribuição">🚚 Distribuição</option>
                       <option value="Consumo">🛒 Consumo</option>
                     </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Descrição</label>
+                    <textarea name="descricao" value={formData.descricao || ''} onChange={handleInputChange}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+                      placeholder="Data de abertura, porte, situação cadastral, quadro de sócios, atividade econômica..." />
                   </div>
                 </div>
               </div>

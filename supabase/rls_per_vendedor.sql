@@ -269,6 +269,26 @@ CREATE POLICY "atividades_insert" ON atividades FOR INSERT WITH CHECK (true);
 -- ============================================
 -- Habilitar Realtime nas tabelas principais
 -- ============================================
-ALTER PUBLICATION supabase_realtime ADD TABLE clientes;
-ALTER PUBLICATION supabase_realtime ADD TABLE interacoes;
-ALTER PUBLICATION supabase_realtime ADD TABLE tarefas;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'clientes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE clientes;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'interacoes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE interacoes;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'tarefas'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE tarefas;
+  END IF;
+END $$;

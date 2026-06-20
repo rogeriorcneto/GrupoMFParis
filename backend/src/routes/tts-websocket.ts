@@ -13,7 +13,7 @@ const router = Router()
 // ── WebSocket Server Setup ─────────────────────────────────────────────────────
 
 let wss: WebSocketServer | null = null
-const TTS_WS_PORT = parseInt(process.env.TTS_WS_PORT || '3002', 10)
+const TTS_WS_PORT = parseInt(process.env.TTS_WS_PORT || '3003', 10)
 
 function initializeWebSocketServer() {
   if (wss) return wss

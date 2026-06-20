@@ -97,6 +97,8 @@ export function clienteFromDb(row: any): Cliente {
     latitude: row.latitude != null ? Number(row.latitude) : undefined,
     longitude: row.longitude != null ? Number(row.longitude) : undefined,
     statusCliente: row.status_cliente ?? undefined,
+    dataUltimaAmostra: row.data_ultima_amostra ?? undefined,
+    dataUltimaVenda: row.data_ultima_venda ?? undefined,
     grupoEconomicoId: row.grupo_economico_id ?? undefined,
     instagram: row.instagram ?? undefined,
     facebook: row.facebook ?? undefined,
@@ -110,6 +112,10 @@ export function clienteFromDb(row: any): Cliente {
     dataInativacao: row.data_inativacao ?? undefined,
     inativadoPor: row.inativado_por ?? undefined,
     inativadoPorAbandono: row.inativado_por_abandono ?? undefined,
+    descricao: row.descricao ?? undefined,
+    criadoEm: row.criado_em ?? undefined,
+    criadoPorNome: row.criado_por_nome ?? undefined,
+    atualizadoEm: row.atualizado_em ?? undefined,
     historicoEtapas: [],
   }
 }
@@ -199,6 +205,8 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.latitude !== undefined) row.latitude = c.latitude
   if (c.longitude !== undefined) row.longitude = c.longitude
   if (c.statusCliente !== undefined) row.status_cliente = c.statusCliente ?? null
+  if (c.dataUltimaAmostra !== undefined) row.data_ultima_amostra = c.dataUltimaAmostra ?? null
+  if (c.dataUltimaVenda !== undefined) row.data_ultima_venda = c.dataUltimaVenda ?? null
   if (c.grupoEconomicoId !== undefined) row.grupo_economico_id = c.grupoEconomicoId ?? null
   if (c.instagram !== undefined) row.instagram = c.instagram ?? null
   if (c.facebook !== undefined) row.facebook = c.facebook ?? null
@@ -212,6 +220,10 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.dataInativacao !== undefined) row.data_inativacao = c.dataInativacao ?? null
   if (c.inativadoPor !== undefined) row.inativado_por = c.inativadoPor ?? null
   if (c.inativadoPorAbandono !== undefined) row.inativado_por_abandono = c.inativadoPorAbandono ?? null
+  if (c.descricao !== undefined) row.descricao = c.descricao ?? null
+  if (c.criadoPorNome !== undefined) row.criado_por_nome = c.criadoPorNome ?? null
+  if (c.criadoEm !== undefined) row.criado_em = c.criadoEm ?? null
+  if (c.atualizadoEm !== undefined) row.atualizado_em = c.atualizadoEm ?? null
   return row
 }
 
@@ -269,11 +281,17 @@ export function interacaoFromDb(row: any): Interacao {
   }
 }
 
+const CONCLUSAO_SEP = '\n[CONCLUSAO]\n'
 export function tarefaFromDb(row: any): Tarefa {
+  const rawDesc: string = row.descricao || ''
+  const sepIdx = rawDesc.indexOf(CONCLUSAO_SEP)
+  const descricao = sepIdx >= 0 ? rawDesc.slice(0, sepIdx) : rawDesc
+  const conclusao = sepIdx >= 0 ? rawDesc.slice(sepIdx + CONCLUSAO_SEP.length) : undefined
   return {
     id: row.id,
     titulo: row.titulo,
-    descricao: row.descricao || '',
+    descricao: descricao || '',
+    conclusao: conclusao || undefined,
     data: row.data,
     hora: row.hora || '',
     tipo: row.tipo,
@@ -281,6 +299,8 @@ export function tarefaFromDb(row: any): Tarefa {
     prioridade: row.prioridade,
     clienteId: row.cliente_id,
     vendedorId: row.vendedor_id,
+    criadoEm: row.created_at || undefined,
+    reagendamentos: row.reagendamentos || undefined,
   }
 }
 
@@ -589,7 +609,7 @@ export async function insertClientesBatch(clientes: Omit<Cliente, 'id'>[]): Prom
 
 export async function updateCliente(id: number, c: Partial<Cliente>): Promise<void> {
   const row = clienteToDb(c)
-  row.updated_at = new Date().toISOString()
+  // Trigger no banco já atualiza atualizado_em; não enviar updated_at (coluna não existe)
   const { error } = await supabase.from('clientes').update(row).eq('id', id)
   if (error) throw error
 }
@@ -601,7 +621,7 @@ export async function updateClientesBatch(updates: { id: number; changes: Partia
     const chunk = updates.slice(i, i + BATCH)
     await Promise.all(chunk.map(({ id, changes }) => {
       const row = clienteToDb(changes)
-      row.updated_at = new Date().toISOString()
+      // Trigger no banco já atualiza atualizado_em
       return supabase.from('clientes').update(row).eq('id', id)
     }))
   }
@@ -657,6 +677,7 @@ export async function moverClienteAtomico(
   if (extras.statusFollowUp !== undefined) extrasDb.status_follow_up = extras.statusFollowUp
   if (extras.statusSatisfacao !== undefined) extrasDb.status_satisfacao = extras.statusSatisfacao
   if (extras.ultimaInteracao !== undefined) extrasDb.ultima_interacao = extras.ultimaInteracao
+  if (extras.vendedorId !== undefined) extrasDb.vendedor_id = extras.vendedorId
 
   const { error } = await supabase.rpc('mover_cliente_atomico', {
     p_cliente_id: clienteId,
@@ -744,6 +765,15 @@ export async function deleteAllClientes(): Promise<void> {
   await batchDelete('clientes', 'id', allClienteIds)
 }
 
+export async function updateInteracao(id: number, changes: { tipo?: Interacao['tipo']; descricao?: string; assunto?: string }): Promise<void> {
+  const row: any = {}
+  if (changes.tipo !== undefined) row.tipo = changes.tipo
+  if (changes.descricao !== undefined) row.descricao = changes.descricao
+  if (changes.assunto !== undefined) row.assunto = changes.assunto
+  const { error } = await supabase.from('interacoes').update(row).eq('id', id)
+  if (error) throw error
+}
+
 export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interacao> {
   const now = i.data || new Date().toISOString()
   // NOTA: a tabela 'interacoes' usa created_at (auto-gerada), NÃO tem coluna 'data'
@@ -787,25 +817,13 @@ export async function fetchTarefas(): Promise<Tarefa[]> {
 }
 
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
-  const { error } = await supabase.from('tarefas').insert({
+  const { data, error } = await supabase.from('tarefas').insert({
     titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora,
     tipo: t.tipo, status: t.status, prioridade: t.prioridade,
     cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
-  })
+  }).select().single()
   if (error) throw error
-  // Objeto local com ID temporario — o ID real vem no proximo fetchTarefas
-  return {
-    id: Date.now(),
-    titulo: t.titulo,
-    descricao: t.descricao || '',
-    data: t.data,
-    hora: t.hora,
-    tipo: t.tipo,
-    status: t.status,
-    prioridade: t.prioridade,
-    clienteId: t.clienteId,
-    vendedorId: t.vendedorId,
-  }
+  return tarefaFromDb(data)
 }
 
 export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise<Tarefa[]> {
@@ -827,7 +845,11 @@ export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise
 export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void> {
   const row: any = {}
   if (t.titulo !== undefined) row.titulo = t.titulo
-  if (t.descricao !== undefined) row.descricao = t.descricao
+  if (t.descricao !== undefined && t.conclusao !== undefined) {
+    row.descricao = t.conclusao ? `${t.descricao}${CONCLUSAO_SEP}${t.conclusao}` : t.descricao
+  } else if (t.descricao !== undefined) {
+    row.descricao = t.descricao
+  }
   if (t.data !== undefined) row.data = t.data
   if (t.hora !== undefined) row.hora = t.hora
   if (t.tipo !== undefined) row.tipo = t.tipo
@@ -835,6 +857,7 @@ export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void
   if (t.prioridade !== undefined) row.prioridade = t.prioridade
   if (t.clienteId !== undefined) row.cliente_id = t.clienteId
   if (t.vendedorId !== undefined) row.vendedor_id = t.vendedorId
+  if (t.reagendamentos !== undefined) row.reagendamentos = t.reagendamentos
   // NOTA: tabela 'tarefas' não tem coluna concluida_em — não enviar
   const { error } = await supabase.from('tarefas').update(row).eq('id', id)
   if (error) throw error

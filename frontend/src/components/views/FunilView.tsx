@@ -934,6 +934,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                 )}
                               </div>
                               {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
+                              {p.omieErro && <p className="text-[9px] text-red-500 leading-tight mt-0.5" title={p.omieErro}>⚠️ {p.omieErro.slice(0, 80)}{p.omieErro.length > 80 ? '…' : ''}</p>}
                             </div>
                           )
                         })()}

@@ -21,7 +21,7 @@ const emptyForm: FormData = {
   valorEstimado: '',
   produtosInteresse: '', produtosQuantidades: {}, produtosQuantidadesMensais: {},
   vendedorId: '',
-  statusCliente: '', grupoEconomicoId: ''
+  statusCliente: '', grupoEconomicoId: '', descricao: ''
 }
 
 interface UseClienteFormParams {
@@ -39,7 +39,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
   const [isLoadingCep, setIsLoadingCep] = useState(false)
   const [isLoadingCnpj, setIsLoadingCnpj] = useState(false)
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     let formatted = value
     if (name === 'cnpj' || name === 'cnpj2') formatted = formatCNPJ(value)
@@ -182,7 +182,8 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
           etapa: 'prospecção',
           vendedorId: vIdStr ? Number(vIdStr) : loggedUser?.id,
           ultimaInteracao: new Date().toISOString().split('T')[0],
-          diasInativo: 0
+          diasInativo: 0,
+          criadoPorNome: loggedUser?.nome || undefined,
         } as Omit<Cliente, 'id'>)
         setClientes(prev => [...prev, savedC])
         const savedI = await db.insertInteracao({
@@ -246,7 +247,8 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       valorEstimado: cliente.valorEstimado?.toString() || '',
       vendedorId: cliente.vendedorId?.toString() || '',
       statusCliente: cliente.statusCliente || '',
-      grupoEconomicoId: cliente.grupoEconomicoId?.toString() || ''
+      grupoEconomicoId: cliente.grupoEconomicoId?.toString() || '',
+      descricao: cliente.descricao || ''
     })
     setShowModal(true)
   }

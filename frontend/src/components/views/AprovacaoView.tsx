@@ -46,6 +46,7 @@ interface AprovacaoViewProps {
   onRecusar: (pedido: Pedido, motivo: string) => Promise<void>
   onConfirmarCancelamento?: (pedido: Pedido) => Promise<void>
   onRejeitarCancelamento?: (pedido: Pedido) => Promise<void>
+  onReenviarOmie?: (pedido: Pedido) => Promise<void>
   showToast: (tipo: 'success' | 'error', texto: string) => void
 }
 
@@ -59,12 +60,13 @@ const catLabel: Record<string, string> = {
 
 export default function AprovacaoView({
   pedidos, clientes, vendedores, loggedUser, onAprovar, onRecusar,
-  onConfirmarCancelamento, onRejeitarCancelamento, showToast,
+  onConfirmarCancelamento, onRejeitarCancelamento, onReenviarOmie, showToast,
 }: AprovacaoViewProps) {
   const [loadingId, setLoadingId] = useState<number | null>(null)
   const [recusandoId, setRecusandoId] = useState<number | null>(null)
   const [motivoRecusa, setMotivoRecusa] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [reenviandoId, setReenviandoId] = useState<number | null>(null)
   const [filtroVendedor, setFiltroVendedor] = useState<number | ''>('')
   const [activeTab, setActiveTab] = useState<'pendentes' | 'cancelamentos' | 'historico' | 'parametros'>('pendentes')
   const [loadingCancelId, setLoadingCancelId] = useState<number | null>(null)
@@ -282,12 +284,35 @@ export default function AprovacaoView({
             )}
             {pedido.status === 'confirmado' && !pedido.omieCodigo && pedido.omieErro && (
               <div className="mt-2 p-2.5 bg-amber-50 rounded-apple border border-amber-300">
-                <div className="flex items-center gap-2">
-                  <XCircleIcon className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                  <p className="text-xs font-semibold text-amber-800">Omie rejeitou o pedido</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <XCircleIcon className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                    <p className="text-xs font-semibold text-amber-800">Omie rejeitou o pedido</p>
+                  </div>
+                  {onReenviarOmie && (
+                    <button
+                      onClick={async () => {
+                        setReenviandoId(pedido.id)
+                        try {
+                          await onReenviarOmie(pedido)
+                          showToast('success', `Pedido ${pedido.numero} enviado ao Omie! ✅`)
+                        } catch {
+                          showToast('error', 'Falha ao reenviar ao Omie.')
+                        } finally {
+                          setReenviandoId(null)
+                        }
+                      }}
+                      disabled={reenviandoId === pedido.id}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition-colors flex-shrink-0"
+                    >
+                      {reenviandoId === pedido.id
+                        ? <><svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando</>
+                        : '🔄 Reenviar ao Omie'
+                      }
+                    </button>
+                  )}
                 </div>
                 <p className="text-xs text-amber-700 mt-1 break-words">{pedido.omieErro}</p>
-                <p className="text-[10px] text-amber-500 mt-1">Corrija os dados e reenvie manualmente em Omie ERP → Acompanhamento</p>
               </div>
             )}
             {pedido.status === 'confirmado' && !pedido.omieCodigo && !pedido.omieErro && (

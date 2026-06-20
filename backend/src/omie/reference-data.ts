@@ -19,6 +19,11 @@ function setCache(key: string, data: any): void {
   memCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL })
 }
 
+export function clearCache(key?: string): void {
+  if (key) memCache.delete(key)
+  else memCache.clear()
+}
+
 // ============================================
 // Cenários Fiscais
 // ============================================
@@ -29,9 +34,11 @@ export interface OmieCenario {
   cPadrao?: string
 }
 
-export async function fetchCenariosFiscais(creds?: OmieCredentials): Promise<OmieCenario[]> {
-  const cached = getCached<OmieCenario[]>('cenarios')
-  if (cached) return cached
+export async function fetchCenariosFiscais(creds?: OmieCredentials, skipCache = false): Promise<OmieCenario[]> {
+  if (!skipCache) {
+    const cached = getCached<OmieCenario[]>('cenarios')
+    if (cached) return cached
+  }
 
   const credentials = creds || await getOmieCredentials()
   if (!credentials) throw new Error('Credenciais Omie não configuradas')
@@ -44,20 +51,23 @@ export async function fetchCenariosFiscais(creds?: OmieCredentials): Promise<Omi
   )
 
   log.info({ responseKeys: Object.keys(response || {}), rawSample: JSON.stringify(response).slice(0, 500) }, '🔍 Omie ListarCenarios resposta bruta')
-  const lista = response.cadastros || response.cenariosCadastro || response.cenario_cadastro || []
-  const cenarios: OmieCenario[] = lista.map((c: any) => ({
-    nCodigo: c.nCodigo || c.codigo || 0,
-    cDescricao: c.cDescricao || c.descricao || '',
-    cPadrao: c.cPadrao || '',
-  }))
+  // Omie retorna a lista em 'cenariosEncontrados' com campos cNome/nCodigo/padrao
+  const lista = response.cenariosEncontrados || response.cadastros || response.cenariosCadastro || response.cenario_cadastro || []
+  const cenarios: OmieCenario[] = lista
+    .filter((c: any) => c.inativo !== 'S')
+    .map((c: any) => ({
+      nCodigo: c.nCodigo || c.codigo || 0,
+      cDescricao: c.cNome || c.cDescricao || c.descricao || '',
+      cPadrao: c.padrao === true ? 'S' : (c.cPadrao || ''),
+    }))
 
   setCache('cenarios', cenarios)
   log.info({ count: cenarios.length, cenarios: cenarios.map(c => ({ id: c.nCodigo, desc: c.cDescricao })) }, 'Cenários fiscais carregados do Omie')
   return cenarios
 }
 
-export async function getCenarioVendas(creds?: OmieCredentials): Promise<number> {
-  const cenarios = await fetchCenariosFiscais(creds)
+export async function getCenarioVendas(creds?: OmieCredentials, skipCache = false): Promise<number> {
+  const cenarios = await fetchCenariosFiscais(creds, skipCache)
   const vendas = cenarios.find(c =>
     c.cPadrao === 'S' ||
     c.cDescricao.toLowerCase().includes('venda') ||
@@ -67,8 +77,8 @@ export async function getCenarioVendas(creds?: OmieCredentials): Promise<number>
   return vendas?.nCodigo || 0
 }
 
-export async function getCenarioAmostra(creds?: OmieCredentials): Promise<number> {
-  const cenarios = await fetchCenariosFiscais(creds)
+export async function getCenarioAmostra(creds?: OmieCredentials, skipCache = false): Promise<number> {
+  const cenarios = await fetchCenariosFiscais(creds, skipCache)
   log.info({ cenarios: cenarios.map(c => ({ id: c.nCodigo, desc: c.cDescricao, padrao: c.cPadrao })) }, '🔍 Cenários fiscais disponíveis no Omie')
   const normalizar = (s: string) =>
     s.toLowerCase()

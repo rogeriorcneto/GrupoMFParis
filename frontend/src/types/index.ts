@@ -91,7 +91,9 @@ export interface Cliente {
   website?: string
   latitude?: number
   longitude?: number
-  statusCliente?: 'ativo' | 'em_risco' | 'inativo' | 'prospecto' | 'descartado' | 'bloqueado'
+  statusCliente?: 'ativo' | 'em_risco' | 'inativo' | 'prospecto' | 'descartado' | 'bloqueado' | 'inativado'
+  dataUltimaAmostra?: string
+  dataUltimaVenda?: string
   grupoEconomicoId?: number
   // Redes sociais — campos individuais (substituem `redesSociais` legado)
   instagram?: string
@@ -109,6 +111,10 @@ export interface Cliente {
   dataInativacao?: string
   inativadoPor?: number
   inativadoPorAbandono?: boolean
+  descricao?: string
+  criadoEm?: string
+  criadoPorNome?: string
+  atualizadoEm?: string
 }
 
 export interface FormData {
@@ -157,6 +163,7 @@ export interface FormData {
   contatoComprasTelefone?: string
   // Quantidade mensal estimada por produto
   produtosQuantidadesMensais?: Record<string, number>
+  descricao?: string
 }
 
 export interface Interacao {
@@ -310,8 +317,10 @@ export interface Tarefa {
   clienteId?: number
   vendedorId?: number
   concluidaEm?: string
+  criadoEm?: string
   reagendamentos?: TarefaReagendamento[]
   origemAutomacaoId?: number // ID da regra de automação que criou esta tarefa
+  conclusao?: string
 }
 
 export interface Vendedor {

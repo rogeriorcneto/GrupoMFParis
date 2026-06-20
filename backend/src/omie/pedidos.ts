@@ -5,6 +5,8 @@ import {
   calcularDataPrevisao,
   garantirVendedorOmie,
   fetchVendedoresOmie,
+  fetchCenariosFiscais,
+  clearCache,
   getCenarioVendas,
   getCenarioAmostra,
   getDepartamentoComercial,
@@ -74,12 +76,15 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
   // 2. Criar/atualizar via UpsertClienteCpfCnpj (dedup nativo por CNPJ)
   log.info({ clienteId, cnpj, razao: cliente.razao_social }, '🔄 Criando/atualizando cliente no Omie...')
 
+  // Email: Omie exige email. Se não tiver, gerar um baseado no CNPJ.
+  const emailFinal = (cliente.contato_email || '').trim() || `${cnpj}@semcontato.grupoparis.com.br`
+
   const omieData = {
     cnpj_cpf: cnpj,
     razao_social: cliente.razao_social || '',
     nome_fantasia: cliente.nome_fantasia || cliente.razao_social || '',
     contato: cliente.contato_nome || '',
-    email: cliente.contato_email || '',
+    email: emailFinal,
     telefone1_numero: (cliente.contato_telefone || '').replace(/\D/g, '').slice(0, 15),
     telefone2_numero: (cliente.contato_celular || '').replace(/\D/g, '').slice(0, 15),
     endereco: cliente.endereco_rua || 'Não informado',
@@ -92,12 +97,38 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
     contribuinte: 'S',
   }
 
-  const response = await omieCall<any>(
-    '/geral/clientes/',
-    'UpsertClienteCpfCnpj',
-    [omieData],
-    { skipCache: true, credentials: creds }
-  )
+  let response: any
+  try {
+    response = await omieCall<any>(
+      '/geral/clientes/',
+      'UpsertClienteCpfCnpj',
+      [omieData],
+      { skipCache: true, credentials: creds }
+    )
+  } catch (firstErr: any) {
+    // Se falhou por cidade/endereço inválido, tentar com endereço mínimo seguro (São Paulo/SP)
+    const errMsg = String(firstErr?.message || '').toLowerCase()
+    const isAddressError = errMsg.includes('cidade') || errMsg.includes('bairro') || errMsg.includes('cep') || errMsg.includes('endereco') || errMsg.includes('endereço') || errMsg.includes('estado')
+    if (!isAddressError) throw firstErr
+
+    log.warn({ clienteId, cnpj, firstErr: firstErr.message }, '⚠️ UpsertClienteCpfCnpj falhou por endereço — retentando com endereço mínimo...')
+    const omieDataMinimo = {
+      ...omieData,
+      endereco: 'Não informado',
+      endereco_numero: 'S/N',
+      complemento: '',
+      bairro: 'Centro',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      cep: '01001000',
+    }
+    response = await omieCall<any>(
+      '/geral/clientes/',
+      'UpsertClienteCpfCnpj',
+      [omieDataMinimo],
+      { skipCache: true, credentials: creds }
+    )
+  }
 
   const codigoOmie = response.codigo_cliente_omie
   if (!codigoOmie) {
@@ -129,6 +160,7 @@ interface ProdutoOmieResult {
   cfopInterno: string
   cfopExterno: string
   pesoKg: number
+  valorUnitario: number
 }
 
 function toNumberSafe(value: any): number {
@@ -165,6 +197,7 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
     cfopInterno: produto?.cfop_interno || '5101',
     cfopExterno: produto?.cfop_externo || '6101',
     pesoKg: pesoFinal,
+    valorUnitario: toNumberSafe(consultaOmie?.valor_unitario) || toNumberSafe(produto?.preco) || 0,
   }
 }
 
@@ -450,6 +483,11 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   // 1. Garantir cliente no Omie
   const codigoClienteOmie = await garantirClienteOmie(pedido.cliente_id)
 
+  // Forçar atualização única dos cenários fiscais (caso recém-criados no Omie),
+  // evitando 2 chamadas concorrentes que disparam o anti-redundância do Omie.
+  clearCache('cenarios')
+  await fetchCenariosFiscais(creds, true)
+
   // 2. Buscar dados de referência do Omie em paralelo
   const [
     codigoVendedorOmie,
@@ -506,7 +544,11 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
         ncm: prodOmie.ncm,
         cfop: cfop,
         quantidade: quantidade,
-        valor_unitario: item.preco,
+        // Omie exige valor_unitario > 0. Em bonificação (preço 0) usa-se o valor
+        // fiscal do produto (cadastro Omie/CRM); fallback mínimo 0.01.
+        valor_unitario: toNumberSafe(item.preco) > 0
+          ? toNumberSafe(item.preco)
+          : (prodOmie.valorUnitario > 0 ? prodOmie.valorUnitario : 0.01),
         tipo_desconto: 'V',
         valor_desconto: 0,
       },
@@ -516,10 +558,8 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
       },
     }
 
-    // Cenário fiscal por item (se tiver)
-    if (cenarioFiscal) {
-      detItem.ide.codigo_cenario_impostos_item = cenarioFiscal
-    }
+    // Cenário fiscal: aplicado apenas no cabeçalho (codigo_cenario_impostos).
+    // Omie rejeita codigo_cenario_impostos_item no 'ide' do item.
 
     // Local de estoque (se tiver)
     if (localEstoque) {
@@ -533,7 +573,10 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   const dataPrevisao = calcularDataPrevisao(7)
 
   // 5. Forma de pagamento → parcelas Omie
-  const formaPagamento = (pedido.forma_pagamento || 'À vista').trim()
+  // Bonificação é grátis (valor 0): força "À vista" pois Omie rejeita parcela com valor 0.
+  const formaPagamento = tipoPedido === 'bonificacao'
+    ? 'À vista'
+    : (pedido.forma_pagamento || 'À vista').trim()
   const { codigo: codigoParcela, usarListaParcelas } = await mapFormaPagamentoToCodigoParcelaOmie(formaPagamento, creds)
 
   // 5. Cabeçalho do pedido
@@ -568,9 +611,11 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   }
 
   // 7. Departamentos: COMERCIAL (Omie WSDL: cCodDepto, nPerc, nValor, nValorFixo)
+  // Omie rejeita nValor=0, então só distribui por departamento quando há valor (vendas).
   const departamentos: any[] = []
-  if (deptoComercial) {
-    departamentos.push({ cCodDepto: deptoComercial, nPerc: 100, nValor: Number(pedido.total_valor) || 0, nValorFixo: 'N' })
+  const valorDepartamento = Number(pedido.total_valor) || 0
+  if (deptoComercial && valorDepartamento > 0) {
+    departamentos.push({ cCodDepto: deptoComercial, nPerc: 100, nValor: valorDepartamento, nValorFixo: 'N' })
   }
 
   // 8. Informações adicionais

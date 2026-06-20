@@ -33,4 +33,12 @@ CREATE POLICY "chat_update" ON chat_mensagens
   );
 
 -- Enable Realtime for this table
-ALTER PUBLICATION supabase_realtime ADD TABLE chat_mensagens;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'chat_mensagens'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE chat_mensagens;
+  END IF;
+END $$;

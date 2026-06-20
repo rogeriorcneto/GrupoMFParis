@@ -36,26 +36,43 @@ interface ClientePanelProps {
   onSolicitarCancelamentoPedido?: (pedidoId: number, motivo: string) => Promise<void>
   /** Redireciona para o Funil já posicionado no card deste cliente. */
   onVerNoFunil?: (c: Cliente) => void
+  /** Redireciona para a página de Tarefas. */
+  onVerTarefas?: () => void
   /** Exclui o cliente (apenas Gestor). Ação irreversível. */
   onExcluirCliente?: (c: Cliente) => void | Promise<void>
   /** Reativa cliente inativo, voltando à etapa anterior (apenas Gestor). */
   onReativarCliente?: (c: Cliente) => void | Promise<void>
 }
 
-const STATUS_CLIENTE_BADGE: Record<string, { label: string; cls: string }> = {
-  ativo: { label: 'Ativo', cls: 'bg-green-100 text-green-700 border-green-200' },
-  em_risco: { label: 'Em Risco', cls: 'bg-orange-100 text-orange-700 border-orange-200' },
-  inativo: { label: 'Inativo', cls: 'bg-gray-200 text-gray-700 border-gray-300' },
-  prospecto: { label: 'Prospecto', cls: 'bg-blue-100 text-blue-700 border-blue-200' },
+const STATUS_CLIENTE_BADGE: Record<string, { label: string; cls: string; title?: string }> = {
+  prospecto: { label: 'Prospecto', cls: 'bg-blue-100 text-blue-700 border-blue-200', title: 'Lead até homologar o produto' },
+  ativo: { label: 'Ativo', cls: 'bg-green-100 text-green-700 border-green-200', title: 'Compra dentro de 30 dias' },
+  em_risco: { label: 'Em Risco', cls: 'bg-orange-100 text-orange-700 border-orange-200', title: 'Última compra entre 31 e 60 dias' },
+  inativo: { label: 'Inativo', cls: 'bg-gray-200 text-gray-700 border-gray-300', title: 'Sem compras há mais de 60 dias' },
+  inativado: { label: 'Inativado', cls: 'bg-red-100 text-red-700 border-red-300', title: 'Inativado manualmente no cadastro' },
   descartado: { label: 'Descartado', cls: 'bg-red-100 text-red-700 border-red-200' },
   bloqueado: { label: 'Bloqueado', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+}
+
+function calcStatusAutomatico(c: { statusCliente?: string; etapa?: string; dataUltimaVenda?: string; etapaAnterior?: string; inativadoPorAbandono?: boolean }): string {
+  if (c.statusCliente === 'inativado') return 'inativado'
+  if (c.statusCliente === 'descartado') return 'descartado'
+  if (c.statusCliente === 'bloqueado') return 'bloqueado'
+  if (c.etapa === 'inativo' && c.inativadoPorAbandono !== true) return 'inativado'
+  if (c.dataUltimaVenda) {
+    const diasSemCompra = Math.floor((Date.now() - new Date(c.dataUltimaVenda).getTime()) / 86400000)
+    if (diasSemCompra <= 30) return 'ativo'
+    if (diasSemCompra <= 60) return 'em_risco'
+    return 'inativo'
+  }
+  return c.statusCliente || 'prospecto'
 }
 
 const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
 const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
 const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
-const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Observação', proposta: 'Proposta', visita: 'Visita' }
+const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Nota', proposta: 'Proposta', visita: 'Visita' }
 const tipoInteracaoCor: Record<string, { bg: string; border: string; dot: string }> = {
   ligacao: { bg: 'bg-green-50', border: 'border-green-200', dot: 'bg-green-500' },
   whatsapp: { bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
@@ -95,7 +112,7 @@ export default function ClientePanel({
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda,
   setInteracoes, setClientes, setTarefas, addNotificacao,
   produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido,
-  onVerNoFunil, onExcluirCliente, onReativarCliente
+  onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
   const [showVendedorPicker, setShowVendedorPicker] = useState(false)
@@ -110,8 +127,20 @@ export default function ClientePanel({
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
   const [panelAtividadePrazo, setPanelAtividadePrazo] = useState(new Date().toISOString().split('T')[0])
   const [panelAtividadeHora, setPanelAtividadeHora] = useState(currentTimeHHMM())
+  const [panelAtividadeFocused, setPanelAtividadeFocused] = useState(false)
+  const [panelAnexo, setPanelAnexo] = useState<File | null>(null)
+  const panelAnexoRef = useRef<HTMLInputElement>(null)
   const [panelContatoSetor, setPanelContatoSetor] = useState(notasEmpresa.setor)
   const [panelInfoAdicional, setPanelInfoAdicional] = useState(notasEmpresa.info)
+  const [editingInfoAdicional, setEditingInfoAdicional] = useState(false)
+  React.useEffect(() => {
+    if (!editingInfoAdicional) {
+      setPanelInfoAdicional(notasEmpresa.info)
+      setPanelContatoSetor(notasEmpresa.setor)
+    }
+  }, [c.notas])
+  const [editingInter, setEditingInter] = useState<{ id: number; tipo: Interacao['tipo']; descricao: string; prazo: string; hora: string; responsavelId: number | '' } | null>(null)
+  const [editingInterSaving, setEditingInterSaving] = useState(false)
   // Redes sociais estruturadas
   type RedesSociaisMap = Record<string, string>
   const parseRedesSociais = (raw: string): RedesSociaisMap => {
@@ -125,6 +154,12 @@ export default function ClientePanel({
   // keep legacy string in sync for other parts that use panelRedesSociais
   const [panelRedesSociais, setPanelRedesSociais] = useState(c.redesSociais || '')
   const [pinnedInteracoes, setPinnedInteracoes] = useState<number[]>([])
+  const [finalizandoInteracaoId, setFinalizandoInteracaoId] = useState<number | null>(null)
+  const [finalizandoObs, setFinalizandoObs] = useState('')
+  const [reagendandoInteracaoId, setReagendandoInteracaoId] = useState<number | null>(null)
+  const [reagendandoMotivo, setReagendandoMotivo] = useState('')
+  const [reagendandoData, setReagendandoData] = useState(new Date().toISOString().split('T')[0])
+  const [reagendandoHora, setReagendandoHora] = useState('')
   const [panelNovaTarefa, setPanelNovaTarefa] = useState(false)
   const [showAllTarefas, setShowAllTarefas] = useState(false)
   const [panelTarefaTitulo, setPanelTarefaTitulo] = useState('')
@@ -132,6 +167,7 @@ export default function ClientePanel({
   const [panelTarefaHora, setPanelTarefaHora] = useState('')
   const [panelTarefaTipo, setPanelTarefaTipo] = useState<Tarefa['tipo']>('follow-up')
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
+  const [panelResponsavelId, setPanelResponsavelId] = useState<number | ''>(c.vendedorId || '')
   const [showCallRecorder, setShowCallRecorder] = useState(false)
   const [showProspeccaoModal, setShowProspeccaoModal] = useState(false)
   const [prospeccaoVendedorId, setProspeccaoVendedorId] = useState<number | ''>('')
@@ -287,18 +323,37 @@ export default function ClientePanel({
       // tipos que não existem em Interacao['tipo'] — salvar como 'nota'
       const tiposExtraComoNota = ['proposta', 'visita']
       const isExtra = tiposExtraComoNota.includes(panelAtividadeTipo as string)
-      const tipoInteracao = (isExtra ? 'nota' : (panelAtividadeTipo || 'nota')) as Interacao['tipo']
-      const labelAtividade = labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade'
+      const tipoInteracao = (isExtra || semTipo ? 'nota' : panelAtividadeTipo) as Interacao['tipo']
+      const labelAtividade = semTipo ? 'Tarefa Genérica' : (labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade')
+
+      // Upload de anexo se houver
+      let anexoUrl: string | null = null
+      let anexoNome: string | null = null
+      if (panelAnexo) {
+        const ext = panelAnexo.name.split('.').pop() || 'bin'
+        const path = `${c.id}/${Date.now()}_${panelAnexo.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+        const { data: upData, error: upErr } = await supabase.storage
+          .from('interacoes-anexos')
+          .upload(path, panelAnexo, { upsert: false })
+        if (!upErr && upData) {
+          const { data: urlData } = supabase.storage.from('interacoes-anexos').getPublicUrl(upData.path)
+          anexoUrl = urlData?.publicUrl || null
+          anexoNome = panelAnexo.name
+        }
+      }
+
+      const descFinal = panelAtividadeDesc.trim() + (anexoUrl ? `\n\n📎 [${anexoNome}](${anexoUrl})` : '')
       const savedI = await db.insertInteracao({
         clienteId: c.id, tipo: tipoInteracao, data: new Date().toISOString(),
         assunto: `${labelAtividade} - ${c.razaoSocial}`,
-        descricao: panelAtividadeDesc.trim(), automatico: false
+        descricao: descFinal, automatico: false
       })
       setInteracoes(prev => [savedI, ...prev])
 
-      // isNota puro = só salva nota, sem tarefa
-      // semTipo ou outros tipos = gera tarefa
-      const gerarTarefa = !isNota // proposta, visita, reuniao, ligacao, email, whatsapp, semTipo
+      // isNota puro (usuário clicou em "Nota") = só salva nota, sem tarefa
+      // semTipo (nenhum tipo selecionado) = gera tarefa genérica
+      // outros tipos = gera tarefa
+      const gerarTarefa = !isNota || semTipo
       if (gerarTarefa) {
         const tarefaTipo: Tarefa['tipo'] =
           tipoInteracao === 'email' || tipoInteracao === 'whatsapp' || tipoInteracao === 'ligacao' || tipoInteracao === 'reuniao'
@@ -313,7 +368,7 @@ export default function ClientePanel({
           status: 'pendente',
           prioridade: 'media',
           clienteId: c.id,
-          vendedorId: c.vendedorId || loggedUser?.id,
+          vendedorId: (panelResponsavelId !== '' ? panelResponsavelId : (c.vendedorId || loggedUser?.id)),
         })
         setTarefas(prev => [savedT, ...prev])
       }
@@ -331,9 +386,14 @@ export default function ClientePanel({
       addNotificacao('success', 'Atividade registrada', msg, c.id)
       setPanelAtividadeTipo('')
       setPanelAtividadeDesc('')
-    } catch (err) {
+      setPanelResponsavelId(c.vendedorId || '')
+      setPanelAnexo(null)
+      setPanelAtividadeFocused(false)
+      if (panelAnexoRef.current) panelAnexoRef.current.value = ''
+    } catch (err: any) {
       logger.error('Erro ao registrar atividade:', err)
-      addNotificacao('error', 'Erro ao salvar', 'Não foi possível registrar a atividade. Tente novamente.', c.id)
+      addNotificacao('error', 'Erro ao salvar', `Não foi possível registrar: ${err?.message || err?.code || 'erro desconhecido'}`, c.id)
+      alert(`Erro ao salvar: ${err?.message || err?.code || JSON.stringify(err)}`)
     }
   }
 
@@ -374,12 +434,12 @@ export default function ClientePanel({
     try {
       await db.updateCliente(c.id, {
         redesSociais: jsonStr || undefined,
-        notas: notas || undefined,
+        notas: notas,
       })
       setClientes(prev => prev.map(cl => cl.id === c.id ? {
         ...cl,
         redesSociais: jsonStr || undefined,
-        notas: notas || undefined,
+        notas: notas,
       } : cl))
       addNotificacao('success', 'Dados atualizados', `Informações de ${c.razaoSocial} atualizadas.`, c.id)
     } catch (err) { logger.error('Erro ao salvar nota:', err) }
@@ -454,9 +514,9 @@ export default function ClientePanel({
   }, [pedidoTipo])
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
-      <div className="absolute inset-0 bg-black bg-opacity-30" onClick={onClose} />
-      <div className="relative w-full sm:max-w-[95vw] lg:max-w-[80vw] xl:max-w-[75vw] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden animate-slide-in-right sm:my-2 sm:mr-2">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-[5vh_5vw]">
+      <div className="absolute inset-0 bg-black bg-opacity-40" onClick={onClose} />
+      <div className="relative w-[90vw] h-[90vh] bg-white shadow-2xl rounded-2xl overflow-hidden">
         {/* Header — Perfil do Cliente (referência: Agendor) */}
         <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -464,14 +524,49 @@ export default function ClientePanel({
               <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
               {/* Tag Status do Cliente */}
               {(() => {
-                const statusKey = c.statusCliente || (c.etapa === 'inativo' ? 'inativo' : 'prospecto')
+                const statusKey = calcStatusAutomatico(c)
                 const stb = STATUS_CLIENTE_BADGE[statusKey] || STATUS_CLIENTE_BADGE.prospecto
-                return <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${stb.cls}`}>{stb.label}</span>
+                return <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${stb.cls}`} title={stb.title}>{stb.label}</span>
               })()}
-              {/* Data Última Compra */}
-              {c.dataUltimoPedido && (
+              {/* Atalhos rápidos inline: Ligação | WhatsApp | E-mail */}
+              {(() => {
+                const fone = (c.contatoCelular || c.contatoTelefone || c.whatsapp || '').replace(/\D/g, '')
+                return (
+                  <div className="flex items-center gap-1">
+                    {fone && (
+                      <button type="button" onClick={() => setShowCallRecorder(true)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors"
+                        title="Ligar">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                      </button>
+                    )}
+                    {fone && (
+                      <button type="button" onClick={() => setShowWhatsApp(true)}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                        title="WhatsApp">
+                        <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {c.contatoEmail && (
+                      <button type="button" onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                        title="E-mail">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+              {/* Última Amostra */}
+              {c.dataUltimaAmostra && (
                 <span className="text-[11px] text-gray-500">
-                  🛒 Última compra: <strong className="text-gray-700">{new Date(c.dataUltimoPedido).toLocaleDateString('pt-BR')}</strong>
+                  🧪 Última amostra: <strong className="text-gray-700">{new Date(c.dataUltimaAmostra).toLocaleDateString('pt-BR')}</strong>
+                </span>
+              )}
+              {/* Última Venda */}
+              {(c.dataUltimaVenda || c.dataUltimoPedido) && (
+                <span className="text-[11px] text-gray-500">
+                  🛒 Última venda: <strong className="text-gray-700">{new Date(c.dataUltimaVenda || c.dataUltimoPedido!).toLocaleDateString('pt-BR')}</strong>
                 </span>
               )}
             </div>
@@ -532,37 +627,17 @@ export default function ClientePanel({
 
           {/* Ações no canto direito do header */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Atalhos rápidos: Ligação | WhatsApp | E-mail */}
-            {(() => {
-              const fone = (c.contatoCelular || c.contatoTelefone || c.whatsapp || '').replace(/\D/g, '')
-              return (
-                <div className="hidden md:flex items-center gap-1">
-                  {fone && (
-                    <a
-                      href={`tel:+55${fone}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-green-50 text-green-700 border border-green-200 hover:bg-green-100"
-                      title="Ligar"
-                    >📞</a>
-                  )}
-                  {fone && (
-                    <button
-                      type="button"
-                      onClick={() => setShowWhatsApp(true)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-                      title="WhatsApp"
-                    ><WhatsAppIcon variant="outline" className="h-4 w-4" /></button>
-                  )}
-                  {c.contatoEmail && (
-                    <button
-                      type="button"
-                      onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-apple bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
-                      title="E-mail"
-                    >📧</button>
-                  )}
-                </div>
-              )
-            })()}
+            {/* VER TAREFAS */}
+            {onVerTarefas && (
+              <button
+                onClick={() => { onVerTarefas(); onClose() }}
+                className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 rounded-apple hover:bg-orange-100 transition-colors"
+                title="Ir para a página de Tarefas"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                Tarefas
+              </button>
+            )}
             {/* VER NO FUNIL */}
             {onVerNoFunil && (
               <button
@@ -677,7 +752,7 @@ export default function ClientePanel({
           </div>
         </div>
 
-        <div className="px-4 sm:px-6 py-4 h-[calc(100dvh-84px)] sm:h-[calc(100%-84px)] overflow-y-auto lg:overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 h-[calc(90vh-84px)] overflow-y-auto lg:overflow-hidden">
           <div className="lg:h-full grid grid-cols-1 lg:grid-cols-12 gap-4">
             <div className="space-y-4 lg:col-span-5 xl:col-span-4 lg:overflow-y-auto lg:pr-1">
 
@@ -912,6 +987,58 @@ export default function ClientePanel({
               <div><p className="text-xs text-gray-500">Nome fantasia</p><p className="font-medium text-gray-900">{c.nomeFantasia || '-'}</p></div>
               <div><p className="text-xs text-gray-500">Segmento</p><p className="font-medium text-gray-900">{c.segmento || '-'}</p></div>
             </div>
+            {c.descricao && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-500 mb-1">Descrição</p>
+                <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">{c.descricao}</p>
+              </div>
+            )}
+          </div>
+
+          {/* === INFORMAÇÕES ADICIONAIS === */}
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900">📋 Informações adicionais</h3>
+              {!editingInfoAdicional && (
+                <button
+                  onClick={() => setEditingInfoAdicional(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-lg border border-gray-200 transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  Editar
+                </button>
+              )}
+            </div>
+            {editingInfoAdicional ? (
+              <>
+                <textarea
+                  autoFocus
+                  value={panelInfoAdicional}
+                  onChange={(e) => setPanelInfoAdicional(e.target.value)}
+                  placeholder="Observações internas sobre responsável, processo de compra, exigências, etc."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                  rows={4}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => { await handleSalvarDadosEmpresa(); setEditingInfoAdicional(false) }}
+                    className="px-4 py-1.5 bg-gray-800 text-white rounded-apple text-xs font-medium hover:bg-gray-900 transition-colors"
+                  >
+                    💾 Salvar
+                  </button>
+                  <button
+                    onClick={() => setEditingInfoAdicional(false)}
+                    className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-apple text-xs font-medium hover:bg-gray-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed min-h-[2rem]">
+                {panelInfoAdicional || <span className="text-gray-400 italic">Nenhuma informação adicionada.</span>}
+              </p>
+            )}
           </div>
 
           {/* === CONTATO E LOCALIZAÇÃO === */}
@@ -1042,9 +1169,6 @@ export default function ClientePanel({
                   )}
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => handleSalvarRedesSociais(rede.key, socialModalValue)} className="flex-1 py-2 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700 transition-colors">Salvar</button>
-                    {redesSociaisMap[rede.key] && (
-                      <button onClick={() => handleSalvarRedesSociais(rede.key, '')} className="px-3 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-medium hover:bg-red-100 transition-colors">Remover</button>
-                    )}
                     <button onClick={() => setSocialModalOpen(null)} className="px-3 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 transition-colors">Cancelar</button>
                   </div>
                 </div>
@@ -1086,98 +1210,29 @@ export default function ClientePanel({
                 })}
               </div>
             </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Informações adicionais</label>
-              <textarea
-                value={panelInfoAdicional}
-                onChange={(e) => setPanelInfoAdicional(e.target.value)}
-                placeholder="Observações internas sobre responsável, processo de compra, exigências, etc."
-                className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                rows={3}
-              />
-            </div>
-            <button onClick={handleSalvarDadosEmpresa} className="px-4 py-1.5 bg-gray-800 text-white rounded-apple text-xs font-medium hover:bg-gray-900 transition-colors">
-              💾 Salvar informações
-            </button>
           </div>
 
-          {/* === DADOS COMERCIAIS === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">💼 Dados Comerciais</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {c.valorEstimado && <div><p className="text-xs text-gray-500">Valor estimado</p><p className="font-bold text-primary-600">R$ {c.valorEstimado.toLocaleString('pt-BR')}</p></div>}
-              {vendedor && <div><p className="text-xs text-gray-500">Vendedor</p><p className="font-medium text-gray-900">{vendedor.nome}</p></div>}
-              {c.valorProposta && <div><p className="text-xs text-gray-500">Valor proposta</p><p className="font-bold text-purple-700">R$ {c.valorProposta.toLocaleString('pt-BR')}</p></div>}
-              {c.dataProposta && <div><p className="text-xs text-gray-500">Data proposta</p><p className="text-gray-900">{new Date(c.dataProposta).toLocaleDateString('pt-BR')}</p></div>}
+          {/* === AUDITORIA === */}
+          {(c.criadoEm || c.atualizadoEm) && (
+            <div className="px-1 space-y-1">
+              {c.criadoEm && (
+                <p className="text-xs text-gray-500">
+                  • Criado por <span className="font-medium text-gray-700">{c.criadoPorNome || 'Sistema'}</span> em{' '}
+                  <span className="font-medium text-gray-700">
+                    {new Date(c.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} às {new Date(c.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </p>
+              )}
+              {c.atualizadoEm && (
+                <p className="text-xs text-gray-500">
+                  • Última atualização em{' '}
+                  <span className="font-medium text-gray-700">
+                    {new Date(c.atualizadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })} às {new Date(c.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </p>
+              )}
             </div>
-          </div>
-
-          {/* === INFO DA ETAPA === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">📊 Info da Etapa</h3>
-            {c.etapa === 'amostra' && (
-              <div className="space-y-1 text-sm">
-                {c.dataEnvioAmostra && <p className="text-gray-700">📦 Amostra enviada em: <span className="font-medium">{new Date(c.dataEnvioAmostra).toLocaleDateString('pt-BR')}</span></p>}
-                {c.statusAmostra && <p className="text-gray-700">Status: <span className="font-medium">{({ enviada: '📤 Enviada', aguardando_resposta: '⏳ Aguardando', aprovada: '✅ Aprovada', rejeitada: '❌ Rejeitada' })[c.statusAmostra]}</span></p>}
-                <p className="text-gray-700">Prazo: <span className="font-medium">{Math.max(30 - (c.dataEnvioAmostra ? Math.floor((Date.now() - new Date(c.dataEnvioAmostra).getTime()) / 86400000) : 0), 0)} dias restantes</span></p>
-              </div>
-            )}
-            {c.etapa === 'proposta' && (
-              <div className="space-y-1 text-sm">
-                {c.valorEstimado && <p className="text-gray-700">💰 Valor: <span className="font-medium">R$ {c.valorEstimado.toLocaleString('pt-BR')}</span></p>}
-                <p className="text-gray-700">Prazo: <span className="font-medium">{Math.max(30 - (c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0), 0)} dias restantes</span></p>
-              </div>
-            )}
-            {c.etapa === 'negociacao' && (
-              <div className="space-y-1 text-sm">
-                {c.valorProposta && <p className="text-gray-700">💰 Proposta: <span className="font-bold">R$ {c.valorProposta.toLocaleString('pt-BR')}</span></p>}
-                {c.dataProposta && <p className="text-gray-700">📅 Enviada em: <span className="font-medium">{new Date(c.dataProposta).toLocaleDateString('pt-BR')}</span></p>}
-              </div>
-            )}
-            {c.etapa === 'amostra_perdida' && (
-              <div className="space-y-1 text-sm">
-                {c.motivoReprovacao && <p className="text-gray-700">❌ Motivo: <span className="font-medium">{c.motivoReprovacao}</span></p>}
-                <p className="text-gray-700">🧪 Tentativas: <span className="font-medium">{c.tentativaAmostra || 0} de 2</span></p>
-                {c.etapaAnterior && <p className="text-gray-700">↩ Veio de: <span className="font-medium">{etapaLabels[c.etapaAnterior]}</span></p>}
-              </div>
-            )}
-            {c.etapa === 'inativo' && (
-              <div className="space-y-1 text-sm">
-                <p className="text-gray-700">💤 Inativo há {c.diasInativo || 0} dias</p>
-                {c.etapaAnterior && <p className="text-gray-700">↩ Veio de: <span className="font-medium">{etapaLabels[c.etapaAnterior]}</span></p>}
-                {c.totalCompras !== undefined && c.totalCompras > 0 && <p className="text-gray-700">🛒 {c.totalCompras} compra(s)</p>}
-              </div>
-            )}
-            {c.etapa === 'lead' && (
-              <div className="space-y-1 text-sm">
-                {c.segmento && <p className="text-gray-700">🏢 Segmento: <span className="font-medium">{c.segmento}</span></p>}
-                {c.localizacao && <p className="text-gray-700">📍 Localização: <span className="font-medium">{c.localizacao}</span></p>}
-                {c.origemLead && <p className="text-gray-700">🌐 Origem: <span className="font-medium">{c.origemLead}</span></p>}
-              </div>
-            )}
-            {c.etapa === 'follow_up' && (
-              <div className="space-y-1 text-sm">
-                {c.omieStatusLogistico && <p className="text-gray-700">Logística: <span className="font-medium">{c.omieStatusLogistico}</span></p>}
-                {c.omieCodigoRastreio && <p className="text-gray-700">📦 Rastreio: <span className="font-medium">{c.omieCodigoRastreio}</span></p>}
-                {c.omieNotaFiscal && <p className="text-gray-700">📄 NF: <span className="font-medium">{c.omieNotaFiscal}</span></p>}
-                {c.dataUltimoPedido && <p className="text-gray-700">📦 Último pedido: <span className="font-medium">{new Date(c.dataUltimoPedido).toLocaleDateString('pt-BR')}</span></p>}
-              </div>
-            )}
-            {c.etapa === 'perdido' && (
-              <div className="space-y-1 text-sm">
-                {c.categoriaPerda && <p className="text-gray-700">Categoria: <span className="font-medium">{catLabels[c.categoriaPerda]}</span></p>}
-                {c.motivoPerda && <p className="text-gray-700">Motivo: <span className="font-medium">{c.motivoPerda}</span></p>}
-                {c.etapaAnterior && <p className="text-gray-700">Veio de: <span className="font-medium">{etapaLabels[c.etapaAnterior]}</span></p>}
-                {c.dataPerda && <p className="text-gray-700">Data: <span className="font-medium">{new Date(c.dataPerda).toLocaleDateString('pt-BR')}</span></p>}
-              </div>
-            )}
-            {c.etapa === 'prospecção' && (
-              <div className="space-y-1 text-sm">
-                <p className="text-gray-700">📅 Em prospecção há {diasNaEtapa} dias</p>
-                {c.diasInativo !== undefined && <p className="text-gray-700">⏳ Última interação: {c.diasInativo} dias atrás</p>}
-              </div>
-            )}
-          </div>
+          )}
 
           </div>
 
@@ -1304,7 +1359,7 @@ export default function ClientePanel({
               { tipo: 'nota',     label: 'Nota',      icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg> },
               { tipo: 'email',    label: 'E-mail',    icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
               { tipo: 'ligacao',  label: 'Ligação',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg> },
-              { tipo: 'whatsapp', label: 'WhatsApp',  icon: <WhatsAppIcon variant="filled" className="h-4 w-4" /> },
+              { tipo: 'whatsapp', label: 'WhatsApp',  icon: <WhatsAppIcon variant="outline" className="h-4 w-4" /> },
               { tipo: 'proposta', label: 'Proposta',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> },
               { tipo: 'reuniao',  label: 'Reunião',  icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
               { tipo: 'visita',   label: 'Visita',   icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg> },
@@ -1319,7 +1374,9 @@ export default function ClientePanel({
                     <button
                       key={tipo}
                       type="button"
-                      onClick={() => setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo as Interacao['tipo'])}
+                      onClick={() => {
+                        setPanelAtividadeTipo(panelAtividadeTipo === tipo ? '' : tipo as Interacao['tipo'])
+                      }}
                       className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                         panelAtividadeTipo === tipo
                           ? 'border-primary-600 text-primary-700 bg-white'
@@ -1332,29 +1389,104 @@ export default function ClientePanel({
                 </div>
                 {/* Textarea sempre visível */}
                 <div className="p-3 space-y-3">
-                  <textarea
-                    value={panelAtividadeDesc}
-                    onChange={(e) => setPanelAtividadeDesc(e.target.value)}
-                    placeholder={
-                      semTipo ? 'Digite uma atividade livre para gerar uma tarefa genérica...'
-                      : isNota ? 'Digite sua nota...'
-                      : `Descreva a ${tipoInteracaoLabel[panelAtividadeTipo as string] || panelAtividadeTipo || 'atividade'}...`
-                    }
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                    rows={4}
-                  />
-                  {/* Prazo + Hora: visível para tipos com data, opcional para semTipo */}
-                  {!isNota && !semTipo && (
+                  <div className="relative">
+                    <textarea
+                      value={panelAtividadeDesc}
+                      onChange={(e) => setPanelAtividadeDesc(e.target.value)}
+                      placeholder={
+                        semTipo ? 'Digite uma atividade livre para gerar uma tarefa genérica...'
+                        : isNota ? 'Digite sua nota...'
+                        : `Descreva a ${tipoInteracaoLabel[panelAtividadeTipo as string] || panelAtividadeTipo || 'atividade'}...`
+                      }
+                      onFocus={() => setPanelAtividadeFocused(true)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                      rows={2}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => panelAnexoRef.current?.click()}
+                      className="absolute bottom-2 right-2 p-1.5 rounded-lg text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                      title="Anexar arquivo"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                    </button>
+                    <input
+                      ref={panelAnexoRef}
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => setPanelAnexo(e.target.files?.[0] || null)}
+                    />
+                  </div>
+                  {panelAnexo && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded-apple text-xs text-primary-700">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                      <span className="truncate flex-1">{panelAnexo.name}</span>
+                      <button type="button" onClick={() => { setPanelAnexo(null); if (panelAnexoRef.current) panelAnexoRef.current.value = '' }} className="text-primary-400 hover:text-red-500 ml-1">✕</button>
+                    </div>
+                  )}
+                  {/* Prazo + Hora + Responsável: visível quando textarea focado */}
+                  {!semTipo && (panelAtividadeFocused || panelAtividadeDesc.trim().length > 0) && (
+                    <div className="flex flex-wrap gap-3 items-end">
+                      {!isNota && (
+                        <div className="flex-1 min-w-[120px]">
+                          <label className="block text-xs text-gray-500 mb-1">Prazo</label>
+                          <input type="date" value={panelAtividadePrazo} onChange={(e) => setPanelAtividadePrazo(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                        </div>
+                      )}
+                      {!isNota && (
+                        <div className="flex-1 min-w-[100px]">
+                          <label className="block text-xs text-gray-500 mb-1">Horário</label>
+                          <input type="time" value={panelAtividadeHora} onChange={(e) => setPanelAtividadeHora(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                        </div>
+                      )}
+                      {!isNota && (
+                        <div className="flex-1 min-w-[140px]">
+                          <label className="block text-xs text-gray-500 mb-1">Responsável</label>
+                          <select
+                            value={panelResponsavelId}
+                            onChange={(e) => setPanelResponsavelId(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                          >
+                            {vendedores.filter(v => v.ativo).map(v => (
+                              <option key={v.id} value={v.id}>{v.nome}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <button
+                        onClick={handleRegistrarAtividade}
+                        disabled={!panelAtividadeDesc.trim()}
+                        className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isNota ? 'Salvar Nota' : 'Salvar Tarefa'}
+                      </button>
+                    </div>
+                  )}
+                  {semTipo && (panelAtividadeFocused || panelAtividadeDesc.trim().length > 0) && (
                     <div className="flex flex-wrap gap-3 items-end">
                       <div className="flex-1 min-w-[120px]">
                         <label className="block text-xs text-gray-500 mb-1">Prazo</label>
-                        <input type="date" value={panelAtividadePrazo} onChange={(e) => setPanelAtividadePrazo(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                        <input type="date" value={panelAtividadePrazo} onChange={(e) => setPanelAtividadePrazo(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
                       </div>
                       <div className="flex-1 min-w-[100px]">
                         <label className="block text-xs text-gray-500 mb-1">Horário</label>
-                        <input type="time" value={panelAtividadeHora} onChange={(e) => setPanelAtividadeHora(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                        <input type="time" value={panelAtividadeHora} onChange={(e) => setPanelAtividadeHora(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                      </div>
+                      <div className="flex-1 min-w-[140px]">
+                        <label className="block text-xs text-gray-500 mb-1">Responsável</label>
+                        <select
+                          value={panelResponsavelId}
+                          onChange={(e) => setPanelResponsavelId(e.target.value === '' ? '' : Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                        >
+                          {vendedores.filter(v => v.ativo).map(v => (
+                            <option key={v.id} value={v.id}>{v.nome}</option>
+                          ))}
+                        </select>
                       </div>
                       <button
                         onClick={handleRegistrarAtividade}
@@ -1365,21 +1497,113 @@ export default function ClientePanel({
                       </button>
                     </div>
                   )}
-                  {(isNota || semTipo) && (
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleRegistrarAtividade}
-                        disabled={!panelAtividadeDesc.trim()}
-                        className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {semTipo ? 'Salvar Tarefa' : 'Salvar Nota'}
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )
           })()}
+
+          {/* === MODAL EDITAR ATIVIDADE === */}
+          {editingInter && (
+            <div className="bg-white rounded-apple border border-primary-200 shadow-md p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-gray-900">✏️ Editar atividade</h3>
+                <button onClick={() => setEditingInter(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+              </div>
+              {/* Abas de tipo */}
+              <div className="flex flex-wrap gap-1 border border-gray-200 rounded-apple p-1 bg-gray-50">
+                {(['nota','email','ligacao','whatsapp','proposta','reuniao','visita'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setEditingInter(prev => prev ? { ...prev, tipo: t === 'visita' || t === 'proposta' ? 'nota' : t } : prev)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors capitalize ${
+                      editingInter.tipo === (t === 'visita' || t === 'proposta' ? 'nota' : t)
+                        ? 'bg-white shadow text-primary-700 border border-primary-200'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {({ nota: 'Nota', email: 'E-mail', ligacao: 'Ligação', whatsapp: 'WhatsApp', proposta: 'Proposta', reuniao: 'Reunião', visita: 'Visita' })[t]}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                autoFocus
+                value={editingInter.descricao}
+                onChange={e => setEditingInter(prev => prev ? { ...prev, descricao: e.target.value } : prev)}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                placeholder="Descrição da atividade..."
+              />
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="flex-1 min-w-[120px]">
+                  <label className="block text-xs text-gray-500 mb-1">Prazo</label>
+                  <input type="date" value={editingInter.prazo}
+                    onChange={e => setEditingInter(prev => prev ? { ...prev, prazo: e.target.value } : prev)}
+                    onClick={e => (e.target as HTMLInputElement).showPicker?.()}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                </div>
+                <div className="flex-1 min-w-[100px]">
+                  <label className="block text-xs text-gray-500 mb-1">Horário</label>
+                  <input type="time" value={editingInter.hora}
+                    onChange={e => setEditingInter(prev => prev ? { ...prev, hora: e.target.value } : prev)}
+                    onClick={e => (e.target as HTMLInputElement).showPicker?.()}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                </div>
+                <div className="flex-1 min-w-[140px]">
+                  <label className="block text-xs text-gray-500 mb-1">Responsável</label>
+                  <select
+                    value={editingInter.responsavelId}
+                    onChange={e => setEditingInter(prev => prev ? { ...prev, responsavelId: e.target.value === '' ? '' : Number(e.target.value) } : prev)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    <option value="">{vendedores.find(v => v.id === (c.vendedorId || loggedUser?.id))?.nome || 'Padrão'}</option>
+                    {vendedores.filter(v => v.ativo).map(v => (
+                      <option key={v.id} value={v.id}>{v.nome}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end pt-1">
+                <button onClick={() => setEditingInter(null)} className="px-4 py-1.5 bg-gray-100 text-gray-600 rounded-apple text-sm font-medium hover:bg-gray-200 transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  disabled={editingInterSaving}
+                  onClick={async () => {
+                    if (!editingInter) return
+                    setEditingInterSaving(true)
+                    try {
+                      await db.updateInteracao(editingInter.id, {
+                        tipo: editingInter.tipo,
+                        descricao: editingInter.descricao,
+                      })
+                      setInteracoes(prev => prev.map(i => i.id === editingInter.id
+                        ? { ...i, tipo: editingInter.tipo, descricao: editingInter.descricao }
+                        : i
+                      ))
+                      // Atualizar tarefa vinculada se prazo/hora mudou
+                      const tarefaV = clienteTarefas.find(t => {
+                        const descMatch = (t.descricao || '').trim() === (interacoes.find(i => i.id === editingInter.id)?.descricao || '').trim()
+                        return descMatch && descMatch
+                      })
+                      if (tarefaV && (editingInter.prazo || editingInter.hora)) {
+                        const updates: Partial<Tarefa> = {}
+                        if (editingInter.prazo) updates.data = editingInter.prazo
+                        if (editingInter.hora) updates.hora = editingInter.hora
+                        if (editingInter.responsavelId) updates.vendedorId = Number(editingInter.responsavelId)
+                        await db.updateTarefa(tarefaV.id, updates)
+                        setTarefas(prev => prev.map(t => t.id === tarefaV.id ? { ...t, ...updates } : t))
+                      }
+                      setEditingInter(null)
+                    } catch { } finally { setEditingInterSaving(false) }
+                  }}
+                  className="px-5 py-1.5 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >
+                  {editingInterSaving ? 'Salvando...' : 'Salvar alterações'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* === HISTÓRICO DE ATIVIDADES === */}
           {clienteInteracoes.length > 0 && (() => {
@@ -1434,32 +1658,43 @@ export default function ClientePanel({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {itens.map(inter => {
+                    {(() => {
+                      // 1-to-1 map: each task can only be claimed by one interação
+                      const interacaoTarefaMap = new Map<number, typeof clienteTarefas[0]>()
+                      const usedTaskIds = new Set<number>()
+                      for (const inter of itens) {
+                        const t = clienteTarefas.find(t => {
+                          if (usedTaskIds.has(t.id)) return false
+                          const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 3
+                          const tituloLower = (t.titulo || '').toLowerCase()
+                          const assuntoLower = (inter.assunto || '').toLowerCase()
+                          const assuntoMatch = assuntoLower.length > 5 && tituloLower.includes(assuntoLower.slice(0, 30))
+                          return descMatch || assuntoMatch
+                        })
+                        if (t) { interacaoTarefaMap.set(inter.id, t); usedTaskIds.add(t.id) }
+                      }
+                      return itens.map(inter => {
                       const tipo = inter.tipo || 'nota'
                       const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
                       const isPinned = pinnedInteracoes.includes(inter.id)
+                      const tarefaVinculada = interacaoTarefaMap.get(inter.id)
                       const criador = inter.automatico ? 'Automação' : (vendedor?.nome?.split(' ')[0] || '—')
                       const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
-                      const respNome = vendedor?.nome?.split(' ')[0] || '—'
-                      const respIni = (vendedor?.nome?.charAt(0) || '?').toUpperCase()
-                      // Label real: para notas que são proposta/visita, extrair do assunto ("Proposta - EMPRESA" → "Proposta")
+                      const responsavelVendedor = tarefaVinculada?.vendedorId
+                        ? (vendedores.find(v => v.id === tarefaVinculada.vendedorId) || vendedor)
+                        : vendedor
+                      const respNome = responsavelVendedor?.nome?.split(' ')[0] || '—'
+                      const respIni = (responsavelVendedor?.nome?.charAt(0) || '?').toUpperCase()
+                      // Label real: para notas que são proposta/visita/tarefa genérica, extrair do assunto
                       const labelReal = (() => {
                         if (tipo !== 'nota') return tipoInteracaoLabel[tipo] || tipo
                         const assunto = inter.assunto || ''
-                        const prefixos = ['Proposta', 'Visita', 'Reunião', 'Ligação', 'E-mail', 'WhatsApp']
+                        const prefixos = ['Tarefa Genérica', 'Proposta', 'Visita', 'Reunião', 'Ligação', 'E-mail', 'WhatsApp']
                         for (const p of prefixos) {
                           if (assunto.startsWith(p + ' - ') || assunto === p) return p
                         }
-                        return tipoInteracaoLabel['nota'] // "Observação"
+                        return tipoInteracaoLabel['nota']
                       })()
-                      // Match com tarefa vinculada: descrição exata OU assunto no título (sem fallback por data)
-                      const tarefaVinculada = clienteTarefas.find(t => {
-                        const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 10
-                        const tituloLower = (t.titulo || '').toLowerCase()
-                        const assuntoLower = (inter.assunto || '').toLowerCase()
-                        const assuntoMatch = assuntoLower.length > 5 && tituloLower.includes(assuntoLower.slice(0, 30))
-                        return descMatch || assuntoMatch
-                      })
                       const prazoData = tarefaVinculada?.data
                       const prazoHora = tarefaVinculada?.hora
                       const prazoVencido = prazoData ? (() => {
@@ -1501,7 +1736,7 @@ export default function ClientePanel({
                                 <p className="text-[11px] text-gray-500">Criada {fmtRelativo(inter.data)}</p>
                               </div>
                             </div>
-                            {fmtPrazo && (
+                            {fmtPrazo && labelReal !== 'Nota' && (
                               <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
                                 <span className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">Prazo</span>
                                 <span
@@ -1509,7 +1744,7 @@ export default function ClientePanel({
                                     tarefaVinculada?.status === 'concluida'
                                       ? 'bg-white/70 text-gray-400 border-gray-200 line-through'
                                       : prazoVencido
-                                      ? 'bg-red-500 text-white border-red-600'
+                                      ? 'bg-red-100 text-red-700 border-red-300'
                                       : 'bg-amber-400 text-white border-amber-500'
                                   }`}
                                   title={tarefaVinculada?.status === 'concluida' ? 'Tarefa concluída' : prazoVencido ? 'Vencida' : 'Prazo'}
@@ -1595,30 +1830,74 @@ export default function ClientePanel({
                               )}
                             </div>
                             <div className="flex items-center gap-1">
-                              {(() => {
+                              {!inter.automatico && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEditingInter({
+                                      id: inter.id,
+                                      tipo: inter.tipo,
+                                      descricao: inter.descricao || '',
+                                      prazo: tarefaVinculada?.data || new Date().toISOString().split('T')[0],
+                                      hora: tarefaVinculada?.hora || currentTimeHHMM(),
+                                      responsavelId: tarefaVinculada?.vendedorId || '',
+                                    })
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border border-gray-200 bg-gray-50 text-gray-500 hover:bg-primary-50 hover:text-primary-700 hover:border-primary-200 transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Editar atividade"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                  Editar
+                                </button>
+                              )}
+                              {labelReal !== 'Nota' && (() => {
                                 const temTarefaPendente = tarefaVinculada?.status === 'pendente'
                                 const jaFinalizada = tarefaVinculada?.status === 'concluida'
                                 const semTarefa = !tarefaVinculada
                                 const ativo = temTarefaPendente
                                 return (
-                                  <button
-                                    onClick={async (e) => {
-                                      e.stopPropagation()
-                                      if (!ativo) return
-                                      const agora = new Date().toISOString()
-                                      await db.updateTarefa(tarefaVinculada!.id, { status: 'concluida' })
-                                      setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, status: 'concluida', concluidaEm: agora } : t))
-                                    }}
-                                    disabled={!ativo}
-                                    className={`flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors opacity-0 group-hover:opacity-100 ${
-                                      ativo
-                                        ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer'
-                                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-default'
-                                    }`}
-                                    title={jaFinalizada ? 'Já finalizada' : semTarefa ? 'Sem tarefa vinculada' : 'Marcar tarefa como concluída'}
-                                  >
-                                    {jaFinalizada ? '✓ Finalizada' : '✓ Finalizar'}
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (!ativo) return
+                                        setFinalizandoInteracaoId(inter.id)
+                                        setFinalizandoObs('')
+                                        setReagendandoInteracaoId(null)
+                                      }}
+                                      disabled={!ativo}
+                                      className={`flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors opacity-0 group-hover:opacity-100 ${
+                                        finalizandoInteracaoId === inter.id
+                                          ? 'border-green-300 bg-green-100 text-green-700 cursor-pointer'
+                                          : ativo
+                                            ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer'
+                                            : 'border-gray-200 bg-gray-50 text-gray-400 cursor-default'
+                                      }`}
+                                      title={jaFinalizada ? 'Já finalizada' : semTarefa ? 'Sem tarefa vinculada' : 'Finalizar tarefa'}
+                                    >
+                                      {jaFinalizada ? '✓ Finalizada' : '✓ Finalizar'}
+                                    </button>
+                                    {ativo && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setReagendandoInteracaoId(inter.id)
+                                          setReagendandoMotivo('')
+                                          setReagendandoData(tarefaVinculada!.data)
+                                          setReagendandoHora(tarefaVinculada!.hora || '')
+                                          setFinalizandoInteracaoId(null)
+                                        }}
+                                        className={`flex items-center gap-1 px-2 py-1 text-[10px] font-semibold rounded-md border transition-colors opacity-0 group-hover:opacity-100 ${
+                                          reagendandoInteracaoId === inter.id
+                                            ? 'border-orange-300 bg-orange-100 text-orange-700'
+                                            : 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 cursor-pointer'
+                                        }`}
+                                        title="Reagendar tarefa"
+                                      >
+                                        ↺ Reagendar
+                                      </button>
+                                    )}
+                                  </>
                                 )
                               })()}
                               <button
@@ -1634,9 +1913,91 @@ export default function ClientePanel({
                               </button>
                             </div>
                           </div>
+                          {/* Painel de finalização com observação */}
+                          {finalizandoInteracaoId === inter.id && (
+                            <div className="mx-3 mb-3 p-3 bg-green-50 border border-green-100 rounded-xl space-y-2">
+                              <p className="text-xs font-semibold text-green-700">✓ Conclusão de tarefa</p>
+                              <textarea
+                                value={finalizandoObs}
+                                onChange={e => setFinalizandoObs(e.target.value)}
+                                rows={2}
+                                placeholder="Conclusão de tarefa (ex: cliente confirmou pedido, reunião realizada...)"
+                                className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-300 placeholder:text-gray-400"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={async () => {
+                                    const agora = new Date().toISOString()
+                                    const updates: any = { status: 'concluida', concluidaEm: agora }
+                                    if (finalizandoObs.trim()) {
+                                      updates.descricao = tarefaVinculada!.descricao || ''
+                                      updates.conclusao = finalizandoObs.trim()
+                                    }
+                                    await db.updateTarefa(tarefaVinculada!.id, updates)
+                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates } : t))
+                                    setFinalizandoInteracaoId(null)
+                                    setFinalizandoObs('')
+                                  }}
+                                  disabled={!finalizandoObs.trim()}
+                                  className="px-3 py-1.5 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                >
+                                  Confirmar
+                                </button>
+                                <button
+                                  onClick={() => { setFinalizandoInteracaoId(null); setFinalizandoObs('') }}
+                                  className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {/* Painel de reagendamento */}
+                          {reagendandoInteracaoId === inter.id && (
+                            <div className="mx-3 mb-3 p-3 bg-orange-50 border border-orange-100 rounded-xl space-y-2">
+                              <p className="text-xs font-semibold text-orange-700">↺ Reagendar tarefa</p>
+                              <textarea
+                                value={reagendandoMotivo}
+                                onChange={e => setReagendandoMotivo(e.target.value)}
+                                rows={2}
+                                placeholder="Motivo do reagendamento (ex: cliente não atendeu)"
+                                className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400"
+                              />
+                              <div className="flex items-center gap-2">
+                                <input type="date" value={reagendandoData} onChange={e => setReagendandoData(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer" />
+                                <input type="time" value={reagendandoHora} onChange={e => setReagendandoHora(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer" />
+                                <button
+                                  disabled={!reagendandoMotivo.trim()}
+                                  onClick={async () => {
+                                    if (!reagendandoMotivo.trim()) return
+                                    const reagendamento = {
+                                      dataOriginal: tarefaVinculada!.data,
+                                      horaOriginal: tarefaVinculada!.hora,
+                                      motivo: reagendandoMotivo.trim(),
+                                      reagendadoEm: new Date().toISOString(),
+                                    }
+                                    const updates = {
+                                      data: reagendandoData,
+                                      hora: reagendandoHora || tarefaVinculada!.hora,
+                                      status: 'pendente' as const,
+                                      reagendamentos: [...(tarefaVinculada!.reagendamentos || []), reagendamento],
+                                    }
+                                    await db.updateTarefa(tarefaVinculada!.id, updates)
+                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates } : t))
+                                    setReagendandoInteracaoId(null)
+                                  }}
+                                  className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                >
+                                  Confirmar
+                                </button>
+                                <button onClick={() => setReagendandoInteracaoId(null)} className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors">Cancelar</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )
-                    })}
+                      })
+                    })()}
                   </div>
                 )}
               </div>

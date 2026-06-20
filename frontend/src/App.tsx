@@ -608,6 +608,10 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
               await db.solicitarCancelamentoPedido(pedidoId, motivo)
               setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, status: 'cancelamento_solicitado', motivoRecusa: motivo } : p))
             }}
+            onVerTarefas={() => {
+              setActiveView('tarefas')
+              setSelectedClientePanel(null)
+            }}
             onVerNoFunil={(cli) => {
               setActiveView('funil')
               setSelectedClientePanel(cli)

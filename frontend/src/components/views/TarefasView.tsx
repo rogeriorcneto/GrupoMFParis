@@ -5,7 +5,7 @@ import {
   ChatBubbleLeftIcon, DevicePhoneMobileIcon, RocketLaunchIcon,
   CheckCircleIcon, ClockIcon, FireIcon, CalendarDaysIcon,
   ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, FunnelIcon, BoltIcon,
-  ExclamationTriangleIcon, ArrowPathIcon, UserCircleIcon,
+  ExclamationTriangleIcon, ArrowPathIcon, BuildingOfficeIcon,
   EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon,
   ArrowUturnRightIcon, ClipboardDocumentListIcon, ArrowTopRightOnSquareIcon, PencilIcon, TrashIcon
 } from '@heroicons/react/24/outline'
@@ -65,6 +65,9 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
   const [motivo, setMotivo] = useState('')
   const [novaData, setNovaData] = useState(tarefa.data)
   const [novaHora, setNovaHora] = useState(tarefa.hora || '')
+  const [reagendarOpen, setReagendarOpen] = useState(false)
+  const [finalizarOpen, setFinalizarOpen] = useState(false)
+  const [obsFinalizacao, setObsFinalizacao] = useState('')
 
   const handleSaveNota = () => {
     if (nota !== (tarefa.descricao || '')) {
@@ -78,18 +81,31 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
     if (!motivo.trim() || !novaData) return
     onReagendar(tarefa, motivo.trim(), novaData, novaHora)
     setMotivo('')
+    setNovaData(tarefa.data)
+    setNovaHora(tarefa.hora || '')
+    setReagendarOpen(false)
   }
   const cfg = TIPO_CONFIG[tarefa.tipo] || TIPO_CONFIG.outro
   const pri = PRIORIDADE_CONFIG[tarefa.prioridade]
   const done = tarefa.status === 'concluida'
 
+  const handleConfirmFinalizar = () => {
+    setCompleting(true)
+    const tarefaFinal = obsFinalizacao.trim()
+      ? { ...tarefa, conclusao: obsFinalizacao.trim() }
+      : tarefa
+    setTimeout(() => {
+      onToggle(tarefaFinal)
+      setCompleting(false)
+      setFinalizarOpen(false)
+      setObsFinalizacao('')
+    }, 400)
+  }
+
   const handleToggle = async () => {
     if (done) { onToggle(tarefa); return }
-    setCompleting(true)
-    setTimeout(() => {
-      onToggle(tarefa)
-      setCompleting(false)
-    }, 400)
+    setFinalizarOpen(o => !o)
+    if (reagendarOpen) setReagendarOpen(false)
   }
 
   return (
@@ -97,7 +113,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
       className={`
         group relative rounded-2xl border transition-all duration-300 overflow-hidden
         ${done
-          ? 'bg-gray-50 border-gray-200 opacity-60'
+          ? cfg.color + ' shadow-sm'
           : isOverdue
             ? 'bg-red-50 border-red-300 shadow-sm shadow-red-100'
             : cfg.color + ' shadow-sm hover:shadow-md'
@@ -112,137 +128,111 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
         }`} />
       )}
 
-      <div className="pl-4 pr-4 pt-4 pb-3">
-        {/* Linha principal */}
-        <div className="flex items-start gap-3">
-          {/* Checkbox animado */}
-          <button
-            onClick={handleToggle}
-            className={`
-              mt-0.5 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center
-              transition-all duration-300 hover:scale-110 active:scale-95
-              ${done
-                ? 'bg-green-500 border-green-500'
-                : 'border-gray-300 hover:border-green-400 hover:bg-green-50'
-              }
-            `}
-          >
-            {done && <CheckCircleSolid className="h-5 w-5 text-white" />}
-          </button>
+      <div className="pl-4 pr-4 pt-3 pb-3">
+        {/* LINHA 1 (topo): meta info à esquerda + data/badge à direita */}
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+          <div className="flex items-center gap-3 flex-wrap text-xs text-gray-400">
+            {vendedor && (
+              <span className="flex items-center gap-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                {vendedor.nome}
+              </span>
+            )}
+            {tarefa.criadoEm && (
+              <span className="flex items-center gap-1">
+                <ClipboardDocumentListIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                Criado em {new Date(tarefa.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </span>
+            )}
+            {cliente && (
+              <span className="flex items-center gap-1 truncate max-w-[200px]">
+                <BuildingOfficeIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                {cliente.razaoSocial}
+              </span>
+            )}
+          </div>
+          {/* Data + badge à direita */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-semibold ${
+              isOverdue && !done
+                ? 'bg-red-100 text-red-700 border border-red-200'
+                : isToday && !done
+                  ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                  : 'bg-gray-100 text-gray-700 border border-gray-200'
+            }`}>
+              <CalendarDaysIcon className="h-3 w-3" />
+              {new Date(tarefa.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+              {tarefa.hora && ` às ${tarefa.hora.slice(0, 5)}`}
+            </span>
+            {done ? (
+              <span className="text-xs px-2 py-0.5 rounded-full border font-medium bg-green-100 text-green-700 border-green-200">
+                ✓ Concluído
+              </span>
+            ) : (
+              <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${pri.badge}`}>
+                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${pri.dot}`} />
+                {pri.label}
+              </span>
+            )}
+            {tarefa.reagendamentos && tarefa.reagendamentos.length > 0 && (() => {
+              const total = tarefa.reagendamentos.length
+              const ultimo = tarefa.reagendamentos[total - 1]
+              return (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full border border-orange-200 cursor-help"
+                  title={`Último motivo: ${ultimo.motivo}\nTotal de reagendamentos: ${total}`}
+                >
+                  <ArrowUturnRightIcon className="h-3 w-3" />
+                  Reagendada
+                </span>
+              )
+            })()}
+            {isOverdue && !done && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full border border-red-200">
+                <ExclamationTriangleIcon className="h-3 w-3" />
+                Atrasada
+              </span>
+            )}
+          </div>
+        </div>
 
-          {/* Conteúdo */}
+        {/* LINHA 2: ícone + título da tarefa */}
+        <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                {/* Tipo + título */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-base">{cfg.icon}</span>
-                  <div className="flex items-center gap-2">
-                    <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'line-through text-gray-400' : ''}`}>
-                      {tarefa.titulo}
-                    </h4>
-                    {/* Indicador de automação */}
-                    {tarefa.origemAutomacaoId && onVerRegraAutomacao && (
-                      <button
-                        onClick={() => onVerRegraAutomacao(tarefa.origemAutomacaoId!)}
-                        className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200 hover:bg-purple-200 transition-colors"
-                        title="Ver regra de automação"
-                      >
-                        <BoltIcon className="h-3 w-3" />
-                        Automática
-                      </button>
-                    )}
-                  </div>
-                  {isOverdue && !done && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full border border-red-200">
-                      <ExclamationTriangleIcon className="h-3 w-3" />
-                      Atrasada
-                    </span>
-                  )}
-                </div>
-
-                {/* Meta info em linha */}
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  {/* PRAZO EM DESTAQUE */}
-                  <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${
-                    isOverdue && !done
-                      ? 'bg-red-100 text-red-700 border border-red-200'
-                      : isToday && !done
-                        ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                        : 'bg-gray-100 text-gray-700 border border-gray-200'
-                  }`}>
-                    <CalendarDaysIcon className="h-3.5 w-3.5" />
-                    {new Date(tarefa.data).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                    {tarefa.hora && ` às ${tarefa.hora}`}
-                  </span>
-
-                  {/* HORA DE EXECUÇÃO (se concluída) */}
-                  {done && tarefa.concluidaEm && (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
-                      <CheckCircleIcon className="h-3.5 w-3.5" />
-                      Executada: {new Date(tarefa.concluidaEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {new Date(tarefa.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  )}
-
-                  {/* PRAZO EM DIAS */}
-                  {!done && (
-                    <span className="flex items-center gap-1 text-xs text-gray-500">
-                      <ClockIcon className="h-3.5 w-3.5" />
-                      {(() => {
-                        const hoje = new Date()
-                        const dataTarefa = new Date(tarefa.data)
-                        const diffDias = Math.ceil((dataTarefa.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-                        if (diffDias === 0) return 'Hoje'
-                        if (diffDias === 1) return 'Amanhã'
-                        if (diffDias === -1) return 'Ontem'
-                        if (diffDias > 0) return `Em ${diffDias} dias`
-                        return `Há ${Math.abs(diffDias)} dias`
-                      })()}
-                    </span>
-                  )}
-
-                  {cliente && (
-                    <span className="flex items-center gap-1 text-xs text-gray-500 truncate max-w-[160px]">
-                      <UserCircleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                      {cliente.razaoSocial}
-                    </span>
-                  )}
-                  {isGerente && vendedor && (
-                    <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-                      {vendedor.nome}
-                    </span>
-                  )}
-                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${pri.badge}`}>
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${pri.dot}`} />
-                    {pri.label}
-                  </span>
-                </div>
-              </div>
-
-              {/* Botões de ação - Editar e Excluir */}
-              <div className="flex items-center gap-1">
-                {/* Botão Editar - abre área expandida */}
-                <button
-                  onClick={() => setExpanded(e => !e)}
-                  className="flex-shrink-0 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title={expanded ? 'Recolher' : 'Editar tarefa'}
-                >
-                  <PencilIcon className="h-4 w-4" />
-                </button>
-
-                {/* Botão Excluir */}
-                {onDeleteTarefa && (
-                  <button
-                    onClick={() => {
-                      if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
-                        onDeleteTarefa(tarefa)
+                  <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'text-gray-500' : ''}`}>
+                    {(() => {
+                      const titulo = tarefa.titulo
+                      if (cliente) {
+                        const idx = titulo.lastIndexOf(' - ')
+                        if (idx > 0) return titulo.slice(0, idx)
                       }
-                    }}
-                    className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Excluir tarefa"
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
+                      return titulo
+                    })()}
+                  </h4>
+                  {tarefa.origemAutomacaoId && onVerRegraAutomacao && (
+                    <button
+                      onClick={() => onVerRegraAutomacao(tarefa.origemAutomacaoId!)}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200 hover:bg-purple-200 transition-colors"
+                      title="Ver regra de automação"
+                    >
+                      <BoltIcon className="h-3 w-3" />
+                      Automática
+                    </button>
+                  )}
+                </div>
+
+                {/* HORA DE EXECUÇÃO (se concluída) */}
+                {done && tarefa.concluidaEm && (
+                  <div className="mt-1">
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-700 border border-green-200 inline-flex">
+                      <CheckCircleIcon className="h-3.5 w-3.5" />
+                      Executada: {new Date(tarefa.concluidaEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} às {new Date(tarefa.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZoneName: undefined })}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
@@ -284,76 +274,167 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </div>
             )}
 
-            {/* Motivo + reagendar — always visible on pending tasks */}
-            {!done && (
-              <div className="mt-3 space-y-2">
+            {/* Observação da tarefa — read-only display */}
+            {tarefa.descricao && (
+              <div className="mt-3">
+                <div className="w-full text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 min-h-[2.5rem]">
+                  {tarefa.descricao}
+                </div>
+              </div>
+            )}
+            {/* Conclusão registrada */}
+            {done && tarefa.conclusao && (
+              <div className="mt-2 px-2.5 py-1.5 bg-green-50 border border-green-100 rounded-lg text-xs text-green-800">
+                <span className="font-semibold">Conclusão:</span> {tarefa.conclusao}
+              </div>
+            )}
+
+            {/* Caixa de finalização com observação */}
+            {finalizarOpen && !done && (
+              <div className="mt-3 p-3 bg-green-50/80 border border-green-100 rounded-xl space-y-2 animate-in slide-in-from-top-1 duration-200">
+                <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
+                  <CheckCircleIcon className="h-3.5 w-3.5" />
+                  Conclusão de tarefa
+                </p>
+                <textarea
+                  value={obsFinalizacao}
+                  onChange={e => setObsFinalizacao(e.target.value)}
+                  rows={2}
+                  placeholder="Conclusão de tarefa (ex: cliente confirmou pedido, reunião realizada...)"
+                  className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-300 placeholder:text-gray-400"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleConfirmFinalizar}
+                    disabled={completing || !obsFinalizacao.trim()}
+                    className="px-3 py-1.5 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-1 whitespace-nowrap"
+                  >
+                    <CheckCircleIcon className="h-3.5 w-3.5" />
+                    {completing ? 'Finalizando...' : 'Confirmar'}
+                  </button>
+                  <button
+                    onClick={() => { setFinalizarOpen(false); setObsFinalizacao('') }}
+                    className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Caixa de reagendamento */}
+            {reagendarOpen && !done && (
+              <div className="mt-3 p-3 bg-orange-50/80 border border-orange-100 rounded-xl space-y-2 animate-in slide-in-from-top-1 duration-200">
+                <p className="text-xs font-semibold text-orange-700 flex items-center gap-1">
+                  <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                  Reagendar tarefa
+                </p>
                 <textarea
                   value={motivo}
                   onChange={e => setMotivo(e.target.value)}
                   rows={2}
-                  placeholder="Motivo / observação (ex: cliente não atendeu, reagendar...)"
-                  className="w-full text-xs text-gray-600 bg-white/70 border border-gray-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400 transition-all"
+                  placeholder="Motivo do reagendamento (ex: cliente não atendeu)"
+                  className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400"
                 />
-                {motivo.trim() && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="date"
-                      value={novaData}
-                      onChange={e => setNovaData(e.target.value)}
-                      className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white"
-                    />
-                    <input
-                      type="time"
-                      value={novaHora}
-                      onChange={e => setNovaHora(e.target.value)}
-                      className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white"
-                    />
-                    <button
-                      onClick={handleConfirmReagendar}
-                      disabled={!novaData}
-                      className="px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-1 whitespace-nowrap"
-                    >
-                      <ArrowUturnRightIcon className="h-3 w-3" />
-                      Reagendar
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={novaData}
+                    onChange={e => setNovaData(e.target.value)}
+                    onClick={e => (e.target as HTMLInputElement).showPicker?.()}
+                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer"
+                  />
+                  <input
+                    type="time"
+                    value={novaHora}
+                    onChange={e => setNovaHora(e.target.value)}
+                    onClick={e => (e.target as HTMLInputElement).showPicker?.()}
+                    className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer"
+                  />
+                </div>
               </div>
             )}
 
-            {/* Botões de ação rápida */}
-            {!done && cliente && (
-              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
+            {/* Rodapé: Finalizar + Ver no Funil + Editar + Excluir */}
+            <div className="flex items-center justify-between gap-2 mt-2">
+              <div className="flex items-center gap-1.5">
+                {/* Quando reagendar está aberto: mostrar Confirmar/Cancelar no lugar dos outros botões */}
+                {reagendarOpen && !done ? (
                   <>
                     <button
-                      onClick={() => onWhatsApp(cliente)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-green-500 hover:bg-green-600 text-white rounded-xl transition-all hover:shadow-sm active:scale-95"
+                      onClick={handleConfirmReagendar}
+                      disabled={!motivo.trim() || !novaData}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-orange-500 text-white rounded-xl hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all hover:shadow-sm active:scale-95"
                     >
-                      <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
-                      WhatsApp
+                      <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                      Confirmar Reagendamento
                     </button>
                     <button
-                      onClick={() => onBot(cliente)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-green-50 text-green-700 border border-green-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
+                      onClick={() => setReagendarOpen(false)}
+                      className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
                     >
-                      <ChatBubbleLeftIcon className="h-3.5 w-3.5" />
-                      Bot
+                      Cancelar
                     </button>
                   </>
+                ) : (
+                  <>
+                    {!done && (
+                      <button
+                        onClick={handleToggle}
+                        disabled={completing}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all hover:shadow-sm active:scale-95 disabled:opacity-50 ${
+                          finalizarOpen
+                            ? 'bg-green-100 text-green-700 border border-green-300'
+                            : 'bg-green-600 hover:bg-green-700 text-white'
+                        }`}
+                      >
+                        <CheckCircleIcon className="h-3.5 w-3.5" />
+                        {completing ? 'Finalizando...' : 'Finalizar Tarefa'}
+                      </button>
+                    )}
+                    {!done && (
+                      <button
+                        onClick={() => { setReagendarOpen(o => !o); if (finalizarOpen) setFinalizarOpen(false) }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition-all hover:shadow-sm active:scale-95 bg-white hover:bg-orange-50 text-orange-700 border border-orange-200"
+                      >
+                        <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+                        Reagendar
+                      </button>
+                    )}
+                    {onVerNoFunil && cliente && (
+                      <button
+                        onClick={() => onVerNoFunil(cliente)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-primary-50 text-primary-700 border border-primary-200 rounded-xl transition-all hover:shadow-sm active:scale-95"
+                        title="Ir para este cliente no funil"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
+                        Ver Card
+                      </button>
+                    )}
+                  </>
                 )}
-                {onVerNoFunil && (
+              </div>
+              {!done && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setExpanded(e => !e)}
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title={expanded ? 'Recolher' : 'Editar tarefa'}
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+                {onDeleteTarefa && (
                   <button
-                    onClick={() => onVerNoFunil(cliente)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-primary-50 text-primary-700 border border-primary-200 rounded-xl transition-all hover:shadow-sm active:scale-95 ml-auto"
-                    title="Ir para este cliente no funil"
+                    onClick={() => { if (confirm('Tem certeza que deseja excluir esta tarefa?')) onDeleteTarefa(tarefa) }}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Excluir tarefa"
                   >
-                    <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
-                    Ver no Funil
+                    <TrashIcon className="h-4 w-4" />
                   </button>
                 )}
               </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -573,7 +654,11 @@ const CalendarioView: React.FC<CalendarioViewProps> = ({ tarefas, clientes, onTa
                   <div className="flex items-start gap-3">
                     <span className="text-lg">{cfg.icon}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{tarefa.titulo}</p>
+                      <p className="font-medium text-gray-900 truncate">{(() => {
+                        const titulo = tarefa.titulo
+                        if (cliente) { const idx = titulo.lastIndexOf(' - '); if (idx > 0) return titulo.slice(0, idx) }
+                        return titulo
+                      })()}</p>
                       <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                         {tarefa.hora && <span>🕐 {tarefa.hora}</span>}
                         {cliente && <span>👤 {cliente.razaoSocial}</span>}
@@ -628,7 +713,7 @@ const TarefasView: React.FC<{
   const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
   // Filtros de data estilo Agendor
   const [dateFilter, setDateFilter] = useState<'todas' | 'semana' | 'hoje' | 'definir'>('hoje')
-  const [statusFilter, setStatusFilter] = useState<'pendentes' | 'finalizadas'>('pendentes')
+  const [statusFilter, setStatusFilter] = useState<'pendentes' | 'finalizadas' | 'todos'>('pendentes')
   const [viewMode, setViewMode] = useState<'listagem' | 'calendario'>('listagem')
   // Estado para pesquisa
   const [searchTerm, setSearchTerm] = useState('')
@@ -803,7 +888,7 @@ const TarefasView: React.FC<{
   const [clienteSearch, setClienteSearch] = useState('')
   const [showClienteList, setShowClienteList] = useState(false)
   const [filterTipo, setFilterTipo] = useState<string>('todos')
-  const [showConcluidas, setShowConcluidas] = useState(false)
+  const [showConcluidas, setShowConcluidas] = useState(true)
   const isGerente = loggedUser?.cargo === 'gerente'
 
   const hoje = new Date().toISOString().split('T')[0]
@@ -884,6 +969,7 @@ const TarefasView: React.FC<{
     } else if (statusFilter === 'finalizadas') {
       filtered = filtered.filter(t => t.status === 'concluida')
     }
+    // 'todos' não filtra por status
 
     // Aplicar filtro de data
     if (dateFilter === 'hoje') {
@@ -901,12 +987,11 @@ const TarefasView: React.FC<{
     }
 
     return filtered
-  }, [minhasTarefas, dateFilter, statusFilter, dateRange, hoje, inicioSemana, fimSemana])
+  }, [minhasTarefas, dateFilter, statusFilter, dateRange, searchTerm, hoje, inicioSemana, fimSemana])
 
   // Segmentar tarefas filtradas
   const { atrasadas, deHoje, futuras, concluidas } = useMemo(() => {
     const pendentes = tarefasFiltradas.filter(t => t.status === 'pendente')
-    const conc = tarefasFiltradas.filter(t => t.status === 'concluida')
 
     const applyTipoFilter = (arr: Tarefa[]) =>
       filterTipo === 'todos' ? arr : arr.filter(t => t.tipo === filterTipo)
@@ -918,6 +1003,16 @@ const TarefasView: React.FC<{
         return horaA.localeCompare(horaB)
       })
 
+    // concluidas sempre de minhasTarefas (ignora statusFilter) — ordenadas por data de conclusão decrescente
+    const concBase = minhasTarefas.filter(t => t.status === 'concluida')
+    const concFiltradas = dateRange
+      ? concBase.filter(t => t.data >= dateRange.start && t.data <= dateRange.end)
+      : dateFilter === 'hoje'
+        ? concBase.filter(t => t.data === hoje)
+        : dateFilter === 'semana'
+          ? concBase.filter(t => t.data >= inicioSemana && t.data <= fimSemana)
+          : concBase
+
     return {
       atrasadas: applyTipoFilter(sortByHora(pendentes.filter(t => t.data < hoje))),
       deHoje: applyTipoFilter(sortByHora(pendentes.filter(t => t.data === hoje))),
@@ -927,10 +1022,12 @@ const TarefasView: React.FC<{
           .sort((a, b) => a.data.localeCompare(b.data) || (a.hora || '').localeCompare(b.hora || ''))
       ),
       concluidas: applyTipoFilter(
-        [...conc].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 30)
+        [...concFiltradas]
+          .sort((a, b) => (b.concluidaEm || b.data).localeCompare(a.concluidaEm || a.data))
+          .slice(0, 50)
       ),
     }
-  }, [tarefasFiltradas, hoje, filterTipo])
+  }, [tarefasFiltradas, minhasTarefas, hoje, filterTipo, dateFilter, dateRange, inicioSemana, fimSemana])
 
   // Stats do dia
   const totalHoje = deHoje.length
@@ -1124,14 +1221,6 @@ const TarefasView: React.FC<{
                 </label>
               )}
 
-              <button
-                onClick={() => setShowModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-primary-600 text-white rounded-xl font-semibold hover:bg-primary-700 shadow-sm transition-all active:scale-95 text-sm"
-              >
-                <PlusIcon className="h-4 w-4" />
-                <span className="hidden sm:inline">Nova Tarefa</span>
-                <span className="sm:hidden">Nova</span>
-              </button>
             </div>
           </div>
         </div>
@@ -1227,7 +1316,7 @@ const TarefasView: React.FC<{
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <span className="text-base">{cfg.icon}</span>
-                            <span className="font-semibold text-gray-700 line-through text-sm">{t.titulo}</span>
+                            <span className="font-semibold text-gray-700 text-sm">{(() => { const idx = t.titulo.lastIndexOf(' - '); return cliente && idx > 0 ? t.titulo.slice(0, idx) : t.titulo })()}</span>
                           </div>
                           <span className="flex-shrink-0 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200">✓ Concluída</span>
                         </div>
@@ -1247,6 +1336,9 @@ const TarefasView: React.FC<{
                         </div>
                         {t.descricao && (
                           <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">📝 {t.descricao}</p>
+                        )}
+                        {t.conclusao && (
+                          <p className="text-xs text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2"><span className="font-semibold">Conclusão:</span> {t.conclusao}</p>
                         )}
                         {t.reagendamentos && t.reagendamentos.length > 0 && (
                           <div className="space-y-1">
@@ -1368,6 +1460,16 @@ const TarefasView: React.FC<{
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Status:</span>
                   <button
+                    onClick={() => setStatusFilter('todos')}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      statusFilter === 'todos'
+                        ? 'bg-gray-800 text-white ring-1 ring-gray-700'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
                     onClick={() => setStatusFilter('pendentes')}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                       statusFilter === 'pendentes'
@@ -1399,7 +1501,8 @@ const TarefasView: React.FC<{
                       type="date"
                       value={dateRange?.start || ''}
                       onChange={(e) => setDateRange(prev => ({ start: e.target.value, end: prev?.end || e.target.value }))}
-                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      onClick={e => (e.target as HTMLInputElement).showPicker?.()}
+                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 cursor-pointer"
                     />
                   </div>
                   <div className="flex items-center gap-2">
@@ -1408,7 +1511,8 @@ const TarefasView: React.FC<{
                       type="date"
                       value={dateRange?.end || ''}
                       onChange={(e) => setDateRange(prev => ({ start: prev?.start || e.target.value, end: e.target.value }))}
-                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300"
+                      onClick={e => (e.target as HTMLInputElement).showPicker?.()}
+                      className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-300 cursor-pointer"
                     />
                   </div>
                   <button
@@ -1552,17 +1656,16 @@ const TarefasView: React.FC<{
           </section>
         )}
 
-        {/* ZONA 2: HOJE */}
+        {/* ZONA 2: HOJE — só exibe se houver tarefas pendentes hoje */}
+        {deHoje.length > 0 && (
         <section>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <FireIcon className="h-5 w-5 text-orange-500" />
               <h2 className="font-bold text-gray-900">Hoje</h2>
-              {deHoje.length > 0 && (
-                <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
-                  {deHoje.length}
-                </span>
-              )}
+              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">
+                {deHoje.length}
+              </span>
             </div>
             <button
               onClick={() => {
@@ -1579,25 +1682,11 @@ const TarefasView: React.FC<{
               Sugerir com IA
             </button>
           </div>
-
-          {deHoje.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 bg-white rounded-2xl border border-dashed border-gray-200">
-              <InboxIcon className="h-10 w-10 text-gray-300 mb-3" />
-              <p className="text-gray-500 font-medium">Nenhuma tarefa para hoje</p>
-              <p className="text-gray-400 text-sm mt-1">Que tal adicionar uma?</p>
-              <button
-                onClick={() => setShowModal(true)}
-                className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-xl text-sm font-semibold hover:bg-primary-700 transition-colors"
-              >
-                + Nova Tarefa
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {deHoje.map(t => renderCard(t, false))}
-            </div>
-          )}
+          <div className="space-y-2">
+            {deHoje.map(t => renderCard(t, false))}
+          </div>
         </section>
+        )}
 
         {/* ZONA 3: PRÓXIMAS (agrupadas por data) */}
         {Object.keys(futurasPorData).length > 0 && (
@@ -1745,11 +1834,11 @@ const TarefasView: React.FC<{
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Data *</label>
-                  <input type="date" value={newData} onChange={(e) => setNewData(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm" />
+                  <input type="date" value={newData} onChange={(e) => setNewData(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm cursor-pointer" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
-                  <input type="time" value={newHora} onChange={(e) => setNewHora(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm" />
+                  <input type="time" value={newHora} onChange={(e) => setNewHora(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm cursor-pointer" />
                 </div>
               </div>
 

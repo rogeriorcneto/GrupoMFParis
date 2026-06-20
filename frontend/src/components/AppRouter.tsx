@@ -14,7 +14,7 @@ import {
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
-import { aprovarPedidoComOmie, cancelarPedidoOmie } from '../lib/botApi'
+import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie } from '../lib/botApi'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -262,6 +262,24 @@ export default function AppRouter({
             addNotificacao('info', 'Cancelamento rejeitado', `Pedido ${pedido.numero} mantido. Cancelamento rejeitado pelo gerente.`, pedido.clienteId)
           } catch (err) { logger.error('Erro ao rejeitar cancelamento:', err); throw err }
         }}
+        onReenviarOmie={async (pedido) => {
+          const result = await enviarPedidoOmie(pedido.id)
+          if (result.success) {
+            const omieCodigo = String(result.omie?.codigo_pedido || result.omie?.omie_codigo || '')
+            const omieNumero = String(result.omie?.numero_pedido || result.omie?.omie_numero || '')
+            setPedidos(prev => prev.map(p => p.id === pedido.id
+              ? { ...p, omieCodigo: omieCodigo || undefined, omieNumero: omieNumero || undefined, omieStatus: 'enviado', omieErro: undefined }
+              : p
+            ))
+            addNotificacao('success', 'Omie ✅', `Pedido ${pedido.numero} enviado ao Omie com sucesso!`, pedido.clienteId)
+          } else {
+            setPedidos(prev => prev.map(p => p.id === pedido.id
+              ? { ...p, omieErro: result.error || 'Erro ao reenviar para o Omie' }
+              : p
+            ))
+            throw new Error(result.error || 'Omie rejeitou o pedido')
+          }
+        }}
       />
     case 'trafico':
       return <TrafegoPagoView loggedUser={loggedUser} />
@@ -454,8 +472,9 @@ export default function AppRouter({
             const tarefaAnterior = tarefas.find(x => x.id === t.id)
             const foiConcluidaAgora = tarefaAnterior?.status !== 'concluida' && t.status === 'concluida'
             
-            await db.updateTarefa(t.id, t)
+            // Atualização otimista: atualiza UI imediatamente antes da resposta do banco
             setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
+            await db.updateTarefa(t.id, t)
             
             // Disparar regras de automação ao concluir tarefa
             if (foiConcluidaAgora && t.clienteId) {
@@ -477,7 +496,10 @@ export default function AppRouter({
                 logger.error('Erro ao processar regras tarefa concluída:', err)
               }
             }
-          } catch (err) { logger.error('Erro ao atualizar tarefa:', err) }
+          } catch (err: any) {
+            logger.error('Erro ao atualizar tarefa:', err)
+            showToast('error', `Erro ao salvar tarefa: ${err?.message || err?.code || 'desconhecido'}`)
+          }
         }}
         onAddTarefa={async (t) => {
           try {
