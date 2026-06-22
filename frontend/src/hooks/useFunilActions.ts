@@ -366,8 +366,9 @@ export function useFunilActions({
         return
       }
 
-      // Sempre cria novo ciclo em Proposta ao perder de negociação
-      if (fromStage === 'negociacao') {
+      // Sempre cria novo ciclo em Proposta ao perder de qualquer etapa do funil
+      const etapasComNovoCiclo = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up', 'prospecção']
+      if (etapasComNovoCiclo.includes(fromStage)) {
         const novoCliente: Omit<Cliente, 'id'> = {
           ...clienteOriginal,
           cnpj: undefined,

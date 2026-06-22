@@ -43,6 +43,7 @@ export function clienteFromDb(row: any): Cliente {
     redesSociais: row.redes_sociais ?? undefined,
     whatsapp: row.whatsapp ?? undefined,
     omieCodigo: row.omie_codigo ?? undefined,
+    agendorCodigo: row.agendor_codigo ?? undefined,
     etapa: row.etapa,
     etapaAnterior: row.etapa_anterior ?? undefined,
     dataEntradaEtapa: row.data_entrada_etapa ?? undefined,
@@ -151,6 +152,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.redesSociais !== undefined) row.redes_sociais = c.redesSociais
   if (c.whatsapp !== undefined) row.whatsapp = c.whatsapp
   if (c.omieCodigo !== undefined) row.omie_codigo = c.omieCodigo
+  if (c.agendorCodigo !== undefined) row.agendor_codigo = c.agendorCodigo
   if (c.etapa !== undefined) row.etapa = c.etapa
   if (c.etapaAnterior !== undefined) row.etapa_anterior = c.etapaAnterior
   if (c.dataEntradaEtapa !== undefined) row.data_entrada_etapa = c.dataEntradaEtapa
@@ -595,16 +597,39 @@ export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
   return clienteFromDb(data)
 }
 
-export async function insertClientesBatch(clientes: Omit<Cliente, 'id'>[]): Promise<Cliente[]> {
+export interface ImportFalha { razaoSocial: string; cnpj?: string; erro: string }
+export interface ImportResult { saved: Cliente[]; falhas: ImportFalha[] }
+
+export async function insertClientesBatch(clientes: Omit<Cliente, 'id'>[]): Promise<ImportResult> {
   const BATCH_SIZE = 100
   const allSaved: Cliente[] = []
+  const falhas: ImportFalha[] = []
+
   for (let i = 0; i < clientes.length; i += BATCH_SIZE) {
-    const batch = clientes.slice(i, i + BATCH_SIZE).map(c => clienteToDb(c))
+    const slice = clientes.slice(i, i + BATCH_SIZE)
+    const batch = slice.map(c => clienteToDb(c))
     const { data, error } = await supabase.from('clientes').insert(batch).select()
-    if (error) throw error
-    if (data) allSaved.push(...data.map(clienteFromDb))
+    if (!error) {
+      if (data) allSaved.push(...data.map(clienteFromDb))
+      continue
+    }
+    // Batch falhou: tenta linha-a-linha para salvar as válidas e identificar as quebradas
+    console.warn(`Batch de clientes falhou (${error.message}). Tentando linha-a-linha...`)
+    for (const c of slice) {
+      const { data: one, error: oneErr } = await supabase.from('clientes').insert(clienteToDb(c)).select().single()
+      if (oneErr) {
+        falhas.push({ razaoSocial: c.razaoSocial, cnpj: c.cnpj, erro: oneErr.message })
+        console.error(`Falha ao inserir "${c.razaoSocial}" (CNPJ: ${c.cnpj || 'N/A'}):`, oneErr.message)
+      } else if (one) {
+        allSaved.push(clienteFromDb(one))
+      }
+    }
   }
-  return allSaved
+
+  if (falhas.length > 0) {
+    console.error(`${falhas.length} cliente(s) não puderam ser importados:`, falhas)
+  }
+  return { saved: allSaved, falhas }
 }
 
 export async function updateCliente(id: number, c: Partial<Cliente>): Promise<void> {
@@ -829,15 +854,31 @@ export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
 export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise<Tarefa[]> {
   const BATCH_SIZE = 100
   const allSaved: Tarefa[] = []
+  const falhas: string[] = []
+  const toRow = (t: Omit<Tarefa, 'id'>) => ({
+    titulo: t.titulo, descricao: t.descricao || null, data: t.data, hora: t.hora || null,
+    tipo: t.tipo, status: t.status, prioridade: t.prioridade,
+    cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
+  })
+
   for (let i = 0; i < tarefas.length; i += BATCH_SIZE) {
-    const batch = tarefas.slice(i, i + BATCH_SIZE).map(t => ({
-      titulo: t.titulo, descricao: t.descricao || null, data: t.data, hora: t.hora || null,
-      tipo: t.tipo, status: t.status, prioridade: t.prioridade,
-      cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
-    }))
+    const slice = tarefas.slice(i, i + BATCH_SIZE)
+    const batch = slice.map(toRow)
     const { data, error } = await supabase.from('tarefas').insert(batch).select()
-    if (error) throw error
-    if (data) allSaved.push(...data.map(tarefaFromDb))
+    if (!error) {
+      if (data) allSaved.push(...data.map(tarefaFromDb))
+      continue
+    }
+
+    for (let j = 0; j < slice.length; j++) {
+      const { data: rowData, error: rowError } = await supabase.from('tarefas').insert(toRow(slice[j])).select().single()
+      if (rowError) falhas.push(`linha ${i + j + 1}: ${rowError.message}`)
+      else if (rowData) allSaved.push(tarefaFromDb(rowData))
+    }
+  }
+
+  if (falhas.length > 0 && allSaved.length === 0) {
+    throw new Error(`${falhas.length} tarefa(s) falharam. Primeiras falhas: ${falhas.slice(0, 5).join(' | ')}`)
   }
   return allSaved
 }

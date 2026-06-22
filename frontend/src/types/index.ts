@@ -37,6 +37,7 @@ export interface Cliente {
   whatsapp?: string
   redesSociais?: string
   omieCodigo?: string
+  agendorCodigo?: string
   etapa: string
   score?: number
   ultimaInteracao?: string
@@ -417,7 +418,7 @@ export interface ClientesViewProps {
   /** Clicar no nome do cliente abre a tela de PERFIL (ClientePanel), não o formulário de edição. */
   onClickCliente?: (cliente: Cliente) => void
   onUpdateCliente?: (id: number, changes: Partial<Cliente>) => Promise<void>
-  onImportClientes: (novos: Cliente[]) => void
+  onImportClientes: (novos: Cliente[]) => Promise<{ inserted: number; updated: number; errors: string[] }> | void
   onDeleteCliente: (id: number) => void
   onDeleteAll?: () => Promise<void>
 }

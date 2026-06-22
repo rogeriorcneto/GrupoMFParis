@@ -703,7 +703,7 @@ const TarefasView: React.FC<{
   pedidos?: Pedido[]
   onUpdateTarefa: (t: Tarefa) => void
   onAddTarefa: (t: Tarefa) => void
-  onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => void
+  onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => Promise<Tarefa[]>
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   onVerNoFunil?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
@@ -727,6 +727,41 @@ const TarefasView: React.FC<{
   const [wsCliente, setWsCliente] = useState<Cliente | null>(null)
   const [activeTab, setActiveTab] = useState<'tarefas' | 'historico'>('tarefas')
 
+  const normalizarEmpresa = (s: string) => s.toLowerCase().trim()
+    .replace(/\b(ltda|me|epp|eireli|s\.?a\.?|s\/a|cia|comercio|comércio|industria|indústria|distribui(dora|cao|ção)?|com\.?|ind\.?|imp\.?|exp\.?)\b/gi, '')
+    .replace(/[.\-\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
+
+  const extrairEmpresaImportada = (tarefa: Tarefa) => {
+    const texto = `${tarefa.titulo || ''}\n${tarefa.descricao || ''}`
+    const match = texto.match(/\[Empresa:\s*([^\]]+)\]/i)
+    if (!match) return { nome: '', codigo: '' }
+    const ref = match[1].trim()
+    const codigo = ref.match(/(?:código|codigo):?\s*(\d+)/i)?.[1] || (/^\d+$/.test(ref) ? ref : '')
+    const nome = ref.replace(/\s*-\s*(?:código|codigo):?\s*\d+\s*$/i, '').replace(/^(?:código|codigo)\s+\d+$/i, '').trim()
+    return { nome, codigo }
+  }
+
+  const getClienteDaTarefa = (tarefa: Tarefa) => {
+    const porId = clientes.find(c => c.id === tarefa.clienteId)
+    if (porId) return porId
+    const { nome, codigo } = extrairEmpresaImportada(tarefa)
+    if (codigo) {
+      const porCodigo = clientes.find(c => (c.agendorCodigo || '').trim() === codigo)
+      if (porCodigo) return porCodigo
+    }
+    if (nome) {
+      const nomeNorm = normalizarEmpresa(nome)
+      return clientes.find(c => {
+        const razaoNorm = normalizarEmpresa(c.razaoSocial)
+        const fantasiaNorm = c.nomeFantasia ? normalizarEmpresa(c.nomeFantasia) : ''
+        return razaoNorm === nomeNorm || fantasiaNorm === nomeNorm ||
+          (nomeNorm.length >= 4 && razaoNorm.length >= 4 && (razaoNorm.includes(nomeNorm) || nomeNorm.includes(razaoNorm))) ||
+          (nomeNorm.length >= 4 && fantasiaNorm.length >= 4 && (fantasiaNorm.includes(nomeNorm) || nomeNorm.includes(fantasiaNorm)))
+      })
+    }
+    return undefined
+  }
+
   const handleExportTarefas = () => {
     const tarefasVisiveis = [...atrasadas, ...deHoje, ...futuras, ...concluidas]
     if (tarefasVisiveis.length === 0) { alert('Nenhuma tarefa para exportar.'); return }
@@ -740,7 +775,7 @@ const TarefasView: React.FC<{
       t.tipo,
       t.status,
       t.prioridade,
-      `"${(clientes.find(c => c.id === t.clienteId)?.razaoSocial || '').replace(/"/g, '""')}"`,
+      `"${(getClienteDaTarefa(t)?.razaoSocial || '').replace(/"/g, '""')}"`,
       `"${(vendedores.find(v => v.id === t.vendedorId)?.nome || '').replace(/"/g, '""')}"`
     ])
     const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\n')
@@ -758,39 +793,87 @@ const TarefasView: React.FC<{
     if (!file || !onImportTarefas) return
     e.target.value = ''
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const text = ev.target?.result as string
-        const lines = text.split(/\r?\n/).filter(l => l.trim())
-        if (lines.length < 2) { alert('CSV vazio'); return }
+        const firstLine = text.split(/\r?\n/)[0] || ''
+        if (!firstLine.trim()) { alert('CSV vazio'); return }
 
-        // Auto-detect separator
-        const header = lines[0]
-        const sep = header.includes('\t') ? '\t' : header.split(';').length > header.split(',').length ? ';' : ','
-        const headers = header.split(sep).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+        // Auto-detect separator a partir do cabeçalho
+        const sep = firstLine.includes('\t') ? '\t' : firstLine.split(';').length > firstLine.split(',').length ? ';' : ','
+
+        // Parser CSV que respeita aspas e campos multi-linha (descrições do Agendor)
+        const parseCsv = (raw: string): string[][] => {
+          const records: string[][] = []
+          let field = '', record: string[] = [], inQuotes = false
+          for (let k = 0; k < raw.length; k++) {
+            const ch = raw[k]
+            if (inQuotes) {
+              if (ch === '"') {
+                if (raw[k + 1] === '"') { field += '"'; k++ }
+                else inQuotes = false
+              } else field += ch
+            } else if (ch === '"') {
+              inQuotes = true
+            } else if (ch === sep) {
+              record.push(field); field = ''
+            } else if (ch === '\n' || ch === '\r') {
+              if (ch === '\r' && raw[k + 1] === '\n') k++
+              record.push(field); field = ''
+              if (record.some(c => c.trim() !== '')) records.push(record)
+              record = []
+            } else field += ch
+          }
+          if (field !== '' || record.length > 0) {
+            record.push(field)
+            if (record.some(c => c.trim() !== '')) records.push(record)
+          }
+          return records
+        }
+
+        const records = parseCsv(text)
+        if (records.length < 2) { alert('CSV vazio'); return }
+        const headers = records[0].map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
 
         const getIdx = (keys: string[]) => headers.findIndex(h => keys.some(k => h.includes(k)))
         const idxDescricao = getIdx(['descrição', 'descricao', 'description'])
         const idxDataAgendamento = getIdx(['data de agendamento', 'agendamento'])
-        const idxDataFinalizacao = getIdx(['data de finalização', 'data de finalizacao', 'finalização', 'finalizacao'])
         const idxTipo = getIdx(['tipo de tarefa', 'tipo'])
         const idxEmpresa = getIdx(['empresa relacionada', 'empresa'])
+        const idxCodigoEmpresa = getIdx(['código da empresa', 'codigo da empresa'])
         const idxResponsavel = getIdx(['usuários responsáveis', 'usuarios responsaveis', 'responsáveis', 'responsaveis'])
         const idxDataCadastro = getIdx(['data de cadastro'])
+        const idxDataFinalizacao = getIdx(['data de finalização', 'data de finalizacao'])
+        const idxUsuarioFinalizou = getIdx(['usuário que finalizou', 'usuario que finalizou'])
 
         if (idxDescricao === -1) { alert('Coluna "Descrição" não encontrada no CSV'); return }
 
-        // Parse date DD/MM/YY or DD/MM/YYYY → YYYY-MM-DD
+        // Parse date "DD/MM/AAAA HH:MM:SS" ou "DD/MM/AA" → YYYY-MM-DD (descarta horário)
         const parseDate = (s: string): string => {
-          if (!s || !s.trim()) return new Date().toISOString().split('T')[0]
-          const clean = s.trim().replace(/^"|"$/g, '')
-          const parts = clean.split('/')
-          if (parts.length === 3) {
-            let [d, m, y] = parts
-            if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y
-            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+          const hoje = new Date().toISOString().split('T')[0]
+          if (!s || !s.trim()) return hoje
+          const clean = s.trim().replace(/^"|"$/g, '').split(/[\sT]/)[0]
+          if (!clean) return hoje
+          if (clean.includes('/')) {
+            const parts = clean.split('/')
+            if (parts.length === 3) {
+              let [d, m, y] = parts
+              if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y
+              const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+              return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : hoje
+            }
+            return hoje
           }
-          return clean
+          if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean
+          const dt = new Date(clean)
+          return isNaN(dt.getTime()) ? hoje : dt.toISOString().split('T')[0]
+        }
+
+        // Extrai a hora "HH:MM" de "DD/MM/AAAA HH:MM:SS" (se houver)
+        const parseHora = (s: string): string => {
+          if (!s) return ''
+          const m = s.match(/(\d{1,2}):(\d{2})/)
+          return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''
         }
 
         // Map tipo de tarefa Agendor → CRM
@@ -810,21 +893,29 @@ const TarefasView: React.FC<{
           .replace(/[.\-\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
 
         const novasTarefas: Omit<Tarefa, 'id'>[] = []
+        const hoje = new Date().toISOString().split('T')[0]
+        let semCliente = 0
 
-        for (let i = 1; i < lines.length; i++) {
-          const vals = lines[i].split(sep).map(v => v.trim().replace(/^"|"$/g, ''))
-          const descricao = vals[idxDescricao] || ''
+        for (let i = 1; i < records.length; i++) {
+          const vals = records[i].map(v => v.trim().replace(/^"|"$/g, ''))
+          const descricao = (vals[idxDescricao] || '').trim()
           if (!descricao) continue
 
-          const dataAgendamento = idxDataAgendamento >= 0 ? parseDate(vals[idxDataAgendamento]) : (idxDataCadastro >= 0 ? parseDate(vals[idxDataCadastro]) : new Date().toISOString().split('T')[0])
-          const dataFinalizacao = idxDataFinalizacao >= 0 ? vals[idxDataFinalizacao]?.trim() : ''
+          const dataRaw = idxDataAgendamento >= 0 ? vals[idxDataAgendamento] : (idxDataCadastro >= 0 ? vals[idxDataCadastro] : '')
+          const dataAgendamento = parseDate(dataRaw)
+          const hora = parseHora(dataRaw)
           const tipoRaw = idxTipo >= 0 ? vals[idxTipo] || '' : ''
-          const empresaRaw = idxEmpresa >= 0 ? vals[idxEmpresa] || '' : ''
+          const empresaRaw = idxEmpresa >= 0 ? (vals[idxEmpresa] || '').trim() : ''
+          const codigoEmpresaRaw = idxCodigoEmpresa >= 0 ? (vals[idxCodigoEmpresa] || '').trim() : ''
           const responsavelRaw = idxResponsavel >= 0 ? vals[idxResponsavel] || '' : ''
 
-          // Match cliente by empresa name (fuzzy)
+          // Match cliente por Código da Empresa do Agendor (exato); fallback por nome apenas se não houver match por código
           let clienteId: number | undefined
-          if (empresaRaw) {
+          if (codigoEmpresaRaw) {
+            const matchCodigo = clientes.find(c => (c.agendorCodigo || '').trim() === codigoEmpresaRaw)
+            if (matchCodigo) clienteId = matchCodigo.id
+          }
+          if (!clienteId && empresaRaw) {
             const empNorm = normalize(empresaRaw)
             const match = clientes.find(c => {
               const razaoNorm = normalize(c.razaoSocial)
@@ -838,6 +929,7 @@ const TarefasView: React.FC<{
             })
             if (match) clienteId = match.id
           }
+          if (!clienteId) semCliente++
 
           // Match vendedor by name
           let vendedorId: number | undefined
@@ -847,12 +939,30 @@ const TarefasView: React.FC<{
             if (vMatch) vendedorId = vMatch.id
           }
 
+          // Status pelo CSV: só concluída se tiver Data de finalização ou Usuário que finalizou
+          const finalizacaoRaw = idxDataFinalizacao >= 0 ? (vals[idxDataFinalizacao] || '') : ''
+          const finalizadorRaw = idxUsuarioFinalizou >= 0 ? (vals[idxUsuarioFinalizou] || '') : ''
+          const concluida = !!(finalizacaoRaw.trim() || finalizadorRaw.trim())
+          const empresaRef = empresaRaw || (codigoEmpresaRaw ? `Código ${codigoEmpresaRaw}` : '')
+          const empresaPrefixo = empresaRaw && codigoEmpresaRaw
+            ? `[Empresa: ${empresaRaw} - Código: ${codigoEmpresaRaw}]`
+            : empresaRef
+              ? `[Empresa: ${empresaRef}]`
+              : ''
+          // Preservar referência da empresa quando não casou com um cliente
+          const descricaoFinal = (!clienteId && empresaPrefixo)
+            ? `${empresaPrefixo}\n${descricao}`
+            : descricao
+          const tituloBase = descricaoFinal.split('\n')[0]
+
           novasTarefas.push({
-            titulo: descricao.length > 100 ? descricao.substring(0, 100) + '...' : descricao,
-            descricao: descricao,
+            titulo: tituloBase.length > 100 ? tituloBase.substring(0, 100) + '...' : tituloBase,
+            descricao: descricaoFinal,
             data: dataAgendamento,
+            hora: hora || undefined,
             tipo: mapTipo(tipoRaw),
-            status: dataFinalizacao ? 'concluida' : 'pendente',
+            status: concluida ? 'concluida' : 'pendente',
+            concluidaEm: concluida ? `${dataAgendamento}T12:00:00` : undefined,
             prioridade: 'media',
             clienteId,
             vendedorId,
@@ -864,14 +974,15 @@ const TarefasView: React.FC<{
         const comCliente = novasTarefas.filter(t => t.clienteId).length
         const comVendedor = novasTarefas.filter(t => t.vendedorId).length
         const pendentes = novasTarefas.filter(t => t.status === 'pendente').length
+        const concluidas = novasTarefas.length - pendentes
 
         setImportStatus(`Importando ${novasTarefas.length} tarefas...`)
-        onImportTarefas(novasTarefas)
-        setImportStatus(`✅ ${novasTarefas.length} tarefas importadas (${comCliente} com cliente, ${comVendedor} com vendedor, ${pendentes} pendentes)`)
+        const saved = await onImportTarefas(novasTarefas)
+        setImportStatus(`✅ ${saved.length} de ${novasTarefas.length} tarefas salvas · ${comCliente} com cliente (${semCliente} sem) · ${comVendedor} com vendedor · ${concluidas} concluídas / ${pendentes} pendentes`)
         setTimeout(() => setImportStatus(null), 8000)
       } catch (err) {
         logger.error('Erro ao importar tarefas:', err)
-        alert('Erro ao processar CSV de tarefas. Verifique o formato.')
+        alert(`Erro ao processar/importar CSV de tarefas: ${err instanceof Error ? err.message : 'verifique o formato.'}`)
         setImportStatus(null)
       }
     }
@@ -948,7 +1059,7 @@ const TarefasView: React.FC<{
     if (searchTerm.trim()) {
       const searchLower = searchTerm.toLowerCase()
       filtered = filtered.filter(t => {
-        const cliente = clientes.find(c => c.id === t.clienteId)
+        const cliente = getClienteDaTarefa(t)
         const clienteNome = cliente?.razaoSocial.toLowerCase() || ''
         const titulo = t.titulo.toLowerCase()
         const descricao = t.descricao?.toLowerCase() || ''
@@ -1106,7 +1217,7 @@ const TarefasView: React.FC<{
   }, [onUpdateTarefa, showToast])
 
   const renderCard = (tarefa: Tarefa, overdue = false) => {
-    const cliente = clientes.find(c => c.id === tarefa.clienteId)
+    const cliente = getClienteDaTarefa(tarefa)
     const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
     return (
       <TarefaCard
@@ -1128,7 +1239,12 @@ const TarefasView: React.FC<{
         onReagendar={handleReagendar}
         isOverdue={overdue}
         isToday={tarefa.data === hoje}
-        onVerNoFunil={onVerNoFunil}
+        onVerNoFunil={cliente && onVerNoFunil ? async (c) => {
+          if (tarefa.clienteId !== c.id) {
+            await onUpdateTarefa({ ...tarefa, clienteId: c.id })
+          }
+          onVerNoFunil(c)
+        } : undefined}
         onDeleteTarefa={onDeleteTarefa}
       />
     )
@@ -1236,7 +1352,7 @@ const TarefasView: React.FC<{
           if (searchTermHistorico.trim()) {
             const searchLower = searchTermHistorico.toLowerCase()
             todas = todas.filter(t => {
-              const cliente = clientes.find(c => c.id === t.clienteId)
+              const cliente = getClienteDaTarefa(t)
               const clienteNome = cliente?.razaoSocial.toLowerCase() || ''
               const titulo = t.titulo.toLowerCase()
               const descricao = t.descricao?.toLowerCase() || ''
@@ -1309,7 +1425,7 @@ const TarefasView: React.FC<{
                 <div className="space-y-3">
                   {/* Concluídas */}
                   {todas.map(t => {
-                    const cliente = clientes.find(c => c.id === t.clienteId)
+                    const cliente = getClienteDaTarefa(t)
                     const cfg = TIPO_CONFIG[t.tipo] || TIPO_CONFIG.outro
                     return (
                       <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2">

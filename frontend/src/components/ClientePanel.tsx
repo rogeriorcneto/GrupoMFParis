@@ -148,7 +148,14 @@ export default function ClientePanel({
     try { const p = JSON.parse(raw); if (typeof p === 'object' && !Array.isArray(p)) return p } catch {}
     return {}
   }
-  const [redesSociaisMap, setRedesSociaisMap] = useState<RedesSociaisMap>(() => parseRedesSociais(c.redesSociais || ''))
+  const [redesSociaisMap, setRedesSociaisMap] = useState<RedesSociaisMap>(() => {
+    const base = parseRedesSociais(c.redesSociais || '')
+    // Merge campos individuais (importados do Agendor/CSV) no mapa JSON
+    if (c.instagram && !base.instagram) base.instagram = c.instagram
+    if (c.facebook  && !base.facebook)  base.facebook  = c.facebook
+    if (c.linkedin  && !base.linkedin)  base.linkedin  = c.linkedin
+    return base
+  })
   const [socialModalOpen, setSocialModalOpen] = useState<string | null>(null)
   const [socialModalValue, setSocialModalValue] = useState('')
   // keep legacy string in sync for other parts that use panelRedesSociais
@@ -161,7 +168,6 @@ export default function ClientePanel({
   const [reagendandoData, setReagendandoData] = useState(new Date().toISOString().split('T')[0])
   const [reagendandoHora, setReagendandoHora] = useState('')
   const [panelNovaTarefa, setPanelNovaTarefa] = useState(false)
-  const [showAllTarefas, setShowAllTarefas] = useState(false)
   const [panelTarefaTitulo, setPanelTarefaTitulo] = useState('')
   const [panelTarefaData, setPanelTarefaData] = useState(new Date().toISOString().split('T')[0])
   const [panelTarefaHora, setPanelTarefaHora] = useState('')
@@ -266,14 +272,46 @@ export default function ClientePanel({
 
   const vendedor = vendedores.find(v => v.id === c.vendedorId)
   const diasNaEtapa = c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0
-  const clienteInteracoes = interacoes.filter(i => i.clienteId === c.id).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  const clienteInteracoesBase = interacoes.filter(i => i.clienteId === c.id)
+  const clienteTarefasBase = tarefas.filter(t => t.clienteId === c.id)
+
+  const tarefasVinculadasIds = new Set<number>()
+  for (const inter of clienteInteracoesBase) {
+    const t = clienteTarefasBase.find(t => {
+      if (tarefasVinculadasIds.has(t.id)) return false
+      const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 3
+      const tituloLower = (t.titulo || '').toLowerCase()
+      const assuntoLower = (inter.assunto || '').toLowerCase()
+      const assuntoMatch = assuntoLower.length > 5 && tituloLower.includes(assuntoLower.slice(0, 30))
+      return descMatch || assuntoMatch
+    })
+    if (t) tarefasVinculadasIds.add(t.id)
+  }
+
+  const clienteInteracoes = [
+    ...clienteInteracoesBase,
+    ...clienteTarefasBase.filter(t => !tarefasVinculadasIds.has(t.id)).map(t => ({
+      id: -t.id,
+      clienteId: c.id,
+      tipo: 'nota' as Interacao['tipo'],
+      assunto: t.titulo,
+      descricao: t.descricao || t.titulo,
+      data: t.criadoEm || `${t.data}T${t.hora || '00:00'}`,
+      automatico: false,
+    } as Interacao)),
+  ].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
   const clienteInteracoesOrdenadas = [...clienteInteracoes].sort((a, b) => {
     const aPinned = pinnedInteracoes.includes(a.id)
     const bPinned = pinnedInteracoes.includes(b.id)
     if (aPinned !== bPinned) return aPinned ? -1 : 1
     return new Date(b.data).getTime() - new Date(a.data).getTime()
   })
-  const clienteTarefas = tarefas.filter(t => t.clienteId === c.id).sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
+  const clienteTarefas = clienteTarefasBase.sort((a, b) => {
+    const aPinned = pinnedInteracoes.includes(-a.id)
+    const bPinned = pinnedInteracoes.includes(-b.id)
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+    return new Date(b.data).getTime() - new Date(a.data).getTime()
+  })
   const enderecoPrincipal = [
     c.enderecoRua,
     c.enderecoNumero,
@@ -451,6 +489,17 @@ export default function ClientePanel({
       localStorage.setItem(`cliente_panel_pins_${c.id}`, JSON.stringify(next))
       return next
     })
+  }
+
+  const handleEditarTarefa = async (tarefa: Tarefa) => {
+    const titulo = window.prompt('Editar título da tarefa', tarefa.titulo)
+    if (titulo === null) return
+    const descricao = window.prompt('Editar descrição da tarefa', tarefa.descricao || '')
+    if (descricao === null) return
+    const updated = { ...tarefa, titulo: titulo.trim() || tarefa.titulo, descricao: descricao.trim() }
+    await db.updateTarefa(tarefa.id, updated)
+    setTarefas(prev => prev.map(t => t.id === tarefa.id ? updated : t))
+    addNotificacao('success', 'Tarefa editada', updated.titulo, c.id)
   }
 
   const handleCriarTarefa = async () => {
@@ -918,7 +967,7 @@ export default function ClientePanel({
                   </button>
                 )
               })()}
-              {['negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
+              {['prospecção', 'proposta', 'amostra', 'amostra_perdida', 'negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
                 <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
               )}
               {c.etapa === 'lead' && !showProspeccaoModal && (
@@ -1069,7 +1118,7 @@ export default function ClientePanel({
               </div>
               <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail}</p></div>
               <div><p className="text-xs text-gray-500">WhatsApp</p><p className="font-medium text-gray-900">{c.whatsapp || c.contatoCelular || c.contatoTelefone || '-'}</p></div>
-              <div><p className="text-xs text-gray-500">Site</p><p className="font-medium text-gray-900 truncate">{c.localizacao || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">Site</p><p className="font-medium text-gray-900 truncate">{c.website || c.localizacao || '-'}</p></div>
             </div>
             <div>
               <p className="text-xs text-gray-500">Endereço</p>
@@ -1662,7 +1711,7 @@ export default function ClientePanel({
                       // 1-to-1 map: each task can only be claimed by one interação
                       const interacaoTarefaMap = new Map<number, typeof clienteTarefas[0]>()
                       const usedTaskIds = new Set<number>()
-                      for (const inter of itens) {
+                      for (const inter of itens.filter(i => i.id > 0)) {
                         const t = clienteTarefas.find(t => {
                           if (usedTaskIds.has(t.id)) return false
                           const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 3
@@ -1675,9 +1724,10 @@ export default function ClientePanel({
                       }
                       return itens.map(inter => {
                       const tipo = inter.tipo || 'nota'
-                      const cor = tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' }
                       const isPinned = pinnedInteracoes.includes(inter.id)
-                      const tarefaVinculada = interacaoTarefaMap.get(inter.id)
+                      const isTaskItem = inter.id < 0
+                      const tarefaVinculada = isTaskItem ? clienteTarefas.find(t => t.id === Math.abs(inter.id)) : interacaoTarefaMap.get(inter.id)
+                      const cor = isTaskItem ? { bg: 'bg-orange-50', border: 'border-orange-200', dot: 'bg-orange-500' } : (tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' })
                       const criador = inter.automatico ? 'Automação' : (vendedor?.nome?.split(' ')[0] || '—')
                       const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
                       const responsavelVendedor = tarefaVinculada?.vendedorId
@@ -1687,6 +1737,7 @@ export default function ClientePanel({
                       const respIni = (responsavelVendedor?.nome?.charAt(0) || '?').toUpperCase()
                       // Label real: para notas que são proposta/visita/tarefa genérica, extrair do assunto
                       const labelReal = (() => {
+                        if (isTaskItem) return 'Tarefa'
                         if (tipo !== 'nota') return tipoInteracaoLabel[tipo] || tipo
                         const assunto = inter.assunto || ''
                         const prefixos = ['Tarefa Genérica', 'Proposta', 'Visita', 'Reunião', 'Ligação', 'E-mail', 'WhatsApp']
@@ -1723,7 +1774,7 @@ export default function ClientePanel({
                           <div className={`flex items-center justify-between gap-2 px-3 py-2.5 ${isPinned ? 'bg-amber-50' : 'bg-primary-50'} border-b ${isPinned ? 'border-amber-100' : 'border-primary-100'}`}>
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                               <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-white border ${cor.border} flex items-center justify-center text-sm shadow-sm`}>
-                                {tipoInteracaoIcon[tipo] || '📋'}
+                                {isTaskItem ? '📋' : (tipoInteracaoIcon[tipo] || '📋')}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-primary-500 truncate leading-none mb-0.5">{c.razaoSocial}</p>
@@ -1834,6 +1885,10 @@ export default function ClientePanel({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    if (inter.id < 0 && tarefaVinculada) {
+                                      handleEditarTarefa(tarefaVinculada)
+                                      return
+                                    }
                                     setEditingInter({
                                       id: inter.id,
                                       tipo: inter.tipo,

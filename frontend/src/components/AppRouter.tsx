@@ -333,7 +333,7 @@ export default function AppRouter({
             }
             if (novos.length > 0) {
               const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
-              const savedNovos = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
+              const { saved: savedNovos } = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
               setClientes(prev => [...prev, ...savedNovos])
             }
             showToast('success', `Funil atualizado: ${updates.length} atualizados, ${novos.length} novos`)
@@ -366,7 +366,19 @@ export default function AppRouter({
             const realmente_novos: Omit<Cliente, 'id'>[] = []
             let atualizados = 0
 
+            // Dedup DENTRO do próprio arquivo: evita inserir o mesmo CNPJ/razão 2x
+            // numa única importação (o índice único do banco pode não estar ativo).
+            const cnpjsEnfileirados = new Set<string>()
+            const razoesEnfileiradas = new Set<string>()
+
             for (const novoCliente of comVendedor) {
+              const cnpjNorm = (novoCliente.cnpj || '').replace(/[^\d]/g, '')
+              const razaoNorm = (novoCliente.razaoSocial || '').toLowerCase().trim()
+
+              // Pular se já enfileirado nesta mesma importação
+              if (cnpjNorm && cnpjsEnfileirados.has(cnpjNorm)) continue
+              if (!cnpjNorm && razaoNorm && razoesEnfileiradas.has(razaoNorm)) continue
+
               // Buscar duplicata por CNPJ
               let existente: Cliente | null = null
               if (novoCliente.cnpj && novoCliente.cnpj.trim()) {
@@ -375,7 +387,7 @@ export default function AppRouter({
               // Se não achou por CNPJ, buscar por razão social exata
               if (!existente && novoCliente.razaoSocial) {
                 const match = clientes.find(c =>
-                  c.razaoSocial.toLowerCase().trim() === novoCliente.razaoSocial.toLowerCase().trim()
+                  c.razaoSocial.toLowerCase().trim() === razaoNorm
                 )
                 if (match) existente = match
               }
@@ -385,6 +397,8 @@ export default function AppRouter({
                 if (ETAPAS_PROPOSTA_OU_POSTERIOR.includes(existente.etapa)) {
                   // Cliente em Proposta ou posterior: permitir duplicata (novo lead em amostra)
                   realmente_novos.push(novoCliente as Omit<Cliente, 'id'>)
+                  if (cnpjNorm) cnpjsEnfileirados.add(cnpjNorm)
+                  else if (razaoNorm) razoesEnfileiradas.add(razaoNorm)
                 } else {
                   // Cliente já existe em etapa anterior → atualizar vendedorId
                   await db.updateCliente(existente.id, { vendedorId: vendedorId })
@@ -393,22 +407,35 @@ export default function AppRouter({
                 }
               } else {
                 realmente_novos.push(novoCliente as Omit<Cliente, 'id'>)
+                if (cnpjNorm) cnpjsEnfileirados.add(cnpjNorm)
+                else if (razaoNorm) razoesEnfileiradas.add(razaoNorm)
               }
             }
 
             // Inserir apenas os realmente novos
             let novosInseridos = 0
+            let falhas: { razaoSocial: string; cnpj?: string; erro: string }[] = []
             if (realmente_novos.length > 0) {
-              const saved = await db.insertClientesBatch(realmente_novos)
-              setClientes(prev => [...prev, ...saved])
-              novosInseridos = saved.length
+              const result = await db.insertClientesBatch(realmente_novos)
+              setClientes(prev => [...prev, ...result.saved])
+              novosInseridos = result.saved.length
+              falhas = result.falhas
             }
 
             const msgs: string[] = []
             if (novosInseridos > 0) msgs.push(`${novosInseridos} novo(s)`)
             if (atualizados > 0) msgs.push(`${atualizados} atualizado(s) para você`)
-            showToast('success', `Importação concluída: ${msgs.join(', ')}`)
-          } catch (err) { logger.error('Erro ao importar:', err); showToast('error', 'Erro ao importar clientes. Verifique o CSV.') }
+            if (falhas.length > 0) {
+              showToast('error', `${falhas.length} falharam. Ex: ${falhas[0].razaoSocial} — ${falhas[0].erro}`)
+            } else {
+              showToast('success', `Importação concluída: ${msgs.join(', ')}`)
+            }
+            return { inserted: novosInseridos, updated: atualizados, errors: falhas.map(f => `${f.razaoSocial}: ${f.erro}`) }
+          } catch (err: any) {
+            logger.error('Erro ao importar:', err)
+            showToast('error', `Erro ao importar: ${err?.message || 'verifique o CSV'}`)
+            return { inserted: 0, updated: 0, errors: [err?.message || 'Erro desconhecido'] }
+          }
         }}
         onDeleteCliente={async (id) => {
           try {
@@ -514,7 +541,12 @@ export default function AppRouter({
             const saved = await db.insertTarefasBatch(novas)
             setTarefas(prev => [...saved, ...prev])
             showToast('success', `${saved.length} tarefa(s) importada(s) com sucesso!`)
-          } catch (err) { logger.error('Erro ao importar tarefas:', err); showToast('error', 'Erro ao importar tarefas. Verifique o CSV.') }
+            return saved
+          } catch (err) {
+            logger.error('Erro ao importar tarefas:', err)
+            showToast('error', 'Erro ao importar tarefas. Verifique o CSV.')
+            throw err
+          }
         }}
       />
     case 'social':

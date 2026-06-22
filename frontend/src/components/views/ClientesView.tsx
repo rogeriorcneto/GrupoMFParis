@@ -203,14 +203,25 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       // Função para parse de data brasileira
       const parseDate = (s: string): string => {
         if (!s || !s.trim()) return ''
-        const clean = s.trim().replace(/^"|"$/g, '')
-        const parts = clean.split('/')
-        if (parts.length === 3) {
-          let [d, m, y] = parts
-          if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y
-          return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+        // Remove aspas e descarta o horário (ex.: "19/06/2026 16:51:26" -> "19/06/2026")
+        const clean = s.trim().replace(/^"|"$/g, '').split(/[\sT]/)[0]
+        if (!clean) return ''
+        // Formato brasileiro DD/MM/AAAA
+        if (clean.includes('/')) {
+          const parts = clean.split('/')
+          if (parts.length === 3) {
+            let [d, m, y] = parts
+            if (y.length === 2) y = (Number(y) > 50 ? '19' : '20') + y
+            const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+            return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : ''
+          }
+          return ''
         }
-        return clean
+        // Formato ISO AAAA-MM-DD (já vem correto do banco/export)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean
+        // Fallback: tenta interpretar via Date
+        const dt = new Date(clean)
+        return isNaN(dt.getTime()) ? '' : dt.toISOString().split('T')[0]
       }
 
       // Função para parse de valor monetário
@@ -295,7 +306,8 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           'enderecoBairro2', 'enderecoCidade2', 'enderecoEstado2', 'enderecoCep2',
           'cnaePrimario', 'cnaeSecundario', 'whatsapp', 'redesSociais',
           'produtosInteresse', 'notas', 'website', 'segmento', 'localizacao',
-          'googlePlaceId', 'googleRating', 'googleReviews', 'latitude', 'longitude'
+          'googlePlaceId', 'googleRating', 'googleReviews', 'latitude', 'longitude',
+          'agendorCodigo'
         ]
 
         camposParaAtualizar.forEach(campo => {
@@ -395,9 +407,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             produtosInteresse = (row['produtos de interesse'] || row['produtos']).split(',').map(p => p.trim()).filter(p => p)
           }
 
-          // Parse de vendedor (nome ou ID)
+          // Parse de vendedor — Agendor usa 'usuário responsável'
           let vendedorId: number | undefined
-          const vendedorNome = row['vendedor'] || row['vendedor nome'] || row['responsavel'] || ''
+          const vendedorNome = row['usuário responsável'] || row['usuario responsavel'] || row['vendedor'] || row['vendedor nome'] || row['responsavel'] || ''
           if (vendedorNome) {
             const vendedorEncontrado = vendedores.find(v => 
               v.nome.toLowerCase().includes(vendedorNome.toLowerCase()) ||
@@ -429,7 +441,11 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             cnaePrimario,
             cnaeSecundario,
             whatsapp: row['whatsapp'] || '',
+            instagram: row['instagram'] || '',
+            facebook: row['facebook'] || '',
+            linkedin: row['linkedin'] || '',
             redesSociais: redesSociaisParts.length > 0 ? redesSociaisParts.join(' | ') : undefined,
+            agendorCodigo: row['código da empresa'] || row['codigo da empresa'] || undefined,
             etapa: 'prospecção',
             score,
             produtosInteresse,
@@ -440,7 +456,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             ultimaInteracao,
             diasInativo: 0,
             website: row['website'] || '',
-            segmento: row['segmento'] || '',
+            segmento: row['setor'] || row['segmento'] || '',
             localizacao: row['localizacao'] || row['região'] || row['regiao'] || '',
             whatsappValido: row['whatsapp'] ? parseBoolean(row['whatsapp válido'] || row['whatsapp validado']) : null,
             vendedorId
@@ -606,13 +622,26 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         return 
       }
 
+      let resultado: { inserted: number; updated: number; errors: string[] } | void
       if (novos.length > 0) {
-        onImportClientes(novos)
+        resultado = await onImportClientes(novos)
       }
 
-      // Montar mensagem de resultado
+      // Montar mensagem de resultado com base no que REALMENTE foi salvo no banco
       let mensagem = `✅ Importação concluída!\n\n`
-      if (novos.length > 0) {
+      if (resultado) {
+        mensagem += `📥 ${resultado.inserted} cliente(s) novo(s) salvo(s) no banco\n`
+        if (resultado.updated > 0) {
+          mensagem += `🔄 ${resultado.updated} cliente(s) atualizado(s)\n`
+        }
+        if (resultado.errors.length > 0) {
+          mensagem += `\n❌ ${resultado.errors.length} cliente(s) NÃO foram salvos. Motivo:\n`
+          resultado.errors.slice(0, 3).forEach(e => { mensagem += `• ${e}\n` })
+          if (resultado.errors.length > 3) {
+            mensagem += `• ... e mais ${resultado.errors.length - 3}\n`
+          }
+        }
+      } else if (novos.length > 0) {
         mensagem += `📥 ${novos.length} cliente(s) novo(s) importado(s)\n`
       }
       if (atualizados.length > 0) {
@@ -631,7 +660,6 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       if (isAgendor) {
         mensagem += `\n📋 Formato Agendor detectado automaticamente.`
       }
-      mensagem += `\n📊 Todos os campos foram mapeados conforme disponível no CSV.`
 
       alert(mensagem)
     e.target.value = ''
@@ -647,7 +675,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       'enderecoComplemento', 'enderecoBairro', 'enderecoCidade', 'enderecoEstado', 'enderecoCep',
       'enderecoRua2', 'enderecoNumero2', 'enderecoComplemento2', 'enderecoBairro2', 
       'enderecoCidade2', 'enderecoEstado2', 'enderecoCep2', 'cnaePrimario', 'cnaeSecundario',
-      'whatsapp', 'redesSociais', 'omieCodigo', 'etapa', 'score', 'ultimaInteracao', 
+      'whatsapp', 'redesSociais', 'omieCodigo', 'agendorCodigo', 'etapa', 'score', 'ultimaInteracao', 
       'diasInativo', 'valorEstimado', 'produtosInteresse', 'vendedorId', 'vendedorNome', 'dataEntradaEtapa',
       'notas', 'origemLead', 'dataEnvioAmostra', 'statusAmostra', 'dataHomologacao',
       'proximoPedidoPrevisto', 'dataProposta', 'valorProposta', 'resultadoAmostra',
@@ -659,7 +687,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       'motivoPerda', 'dataPerda', 'segmento', 'localizacao', 'tentativaAmostra',
       'whatsappValido', 'whatsappJid', 'whatsappValidadoEm', 'novoCiclo', 'cicloNumero',
       'googlePlaceId', 'googleRating', 'googleReviews', 'website', 'latitude', 'longitude',
-      'statusCliente', 'grupoEconomicoId'
+      'statusCliente', 'grupoEconomicoId', 'instagram', 'facebook', 'linkedin', 'descricao'
     ].join(',')
     
     // Função para escapar valores CSV
@@ -705,6 +733,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         escapeCSV(c.whatsapp),
         escapeCSV(c.redesSociais),
         escapeCSV(c.omieCodigo),
+        escapeCSV(c.agendorCodigo),
         escapeCSV(c.etapa),
         escapeCSV(c.score),
         escapeCSV(c.ultimaInteracao),
@@ -760,7 +789,11 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         escapeCSV(c.latitude),
         escapeCSV(c.longitude),
         escapeCSV(c.statusCliente),
-        escapeCSV(c.grupoEconomicoId)
+        escapeCSV(c.grupoEconomicoId),
+        escapeCSV(c.instagram),
+        escapeCSV(c.facebook),
+        escapeCSV(c.linkedin),
+        escapeCSV(c.descricao)
       ].join(',')
     }).join('\n')
     
