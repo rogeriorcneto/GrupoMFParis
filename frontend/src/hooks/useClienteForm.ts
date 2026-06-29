@@ -3,7 +3,6 @@ import type { Cliente, Interacao, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
 import { formatCNPJ, formatTelefone, validarCNPJ } from '../utils/validators'
 import { logger } from '../utils/logger'
-import { omiePushSingleCliente } from '../lib/omieApi'
 
 const emptyForm: FormData = {
   razaoSocial: '', nomeFantasia: '', cnpj: '', cnpj2: '', contatoNome: '',
@@ -150,10 +149,14 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
 
     const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, produtosQuantidadesMensais: _pqm, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, ...restForm } = formData
 
+    const vendedorResponsavelId = loggedUser?.cargo === 'gerente'
+      ? (vIdStr ? Number(vIdStr) : undefined)
+      : loggedUser?.id
+
     const clienteFields: Partial<Cliente> = {
       ...restForm,
       endereco: enderecoCompleto,
-      vendedorId: vIdStr ? Number(vIdStr) : undefined,
+      vendedorId: vendedorResponsavelId,
       produtosInteresse: produtosArray,
       produtosQuantidadesMensais: _pqm && Object.keys(_pqm).length > 0 ? _pqm : undefined,
       statusCliente: (_sc || undefined) as Cliente['statusCliente'],
@@ -165,7 +168,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       if (editingCliente) {
         const updatedFields: Partial<Cliente> = {
           ...clienteFields,
-          vendedorId: vIdStr ? Number(vIdStr) : (editingCliente.vendedorId || loggedUser?.id),
+          vendedorId: vendedorResponsavelId || editingCliente.vendedorId || loggedUser?.id,
         }
         await db.updateCliente(editingCliente.id, updatedFields)
         setClientes(prev => prev.map(c => c.id === editingCliente.id ? { ...c, ...updatedFields } : c))
@@ -180,7 +183,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         const savedC = await db.insertCliente({
           ...clienteFields,
           etapa: 'prospecção',
-          vendedorId: vIdStr ? Number(vIdStr) : loggedUser?.id,
+          vendedorId: vendedorResponsavelId || loggedUser?.id,
           ultimaInteracao: new Date().toISOString().split('T')[0],
           diasInativo: 0,
           criadoPorNome: loggedUser?.nome || undefined,
@@ -192,11 +195,6 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         })
         setInteracoes(prev => [savedI, ...prev])
         showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
-        // Auto-push para o Omie (fire-and-forget, não bloqueia)
-        omiePushSingleCliente(savedC.id).then(r => {
-          if (r.success) logger.log(`Cliente ${savedC.id} enviado ao Omie (código: ${r.omieCodigo})`)
-          else logger.warn(`Omie push falhou para cliente ${savedC.id}: ${r.error}`)
-        }).catch(() => {})
       }
       setFormData({ ...emptyForm })
       setShowModal(false)

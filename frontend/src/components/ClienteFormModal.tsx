@@ -172,13 +172,22 @@ export default function ClienteFormModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Vendedor Responsável</label>
-                  <select name="vendedorId" value={formData.vendedorId || ''} onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
-                    <option value="">Sem vendedor</option>
-                    {vendedores.filter(v => v.ativo).map(v => (
-                      <option key={v.id} value={v.id}>{v.nome} ({v.cargo === 'gerente' ? 'Gerente' : v.cargo === 'sdr' ? 'SDR' : 'Vendedor'})</option>
-                    ))}
-                  </select>
+                  {isGerente ? (
+                    <select name="vendedorId" value={formData.vendedorId || ''} onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm">
+                      <option value="">Sem vendedor</option>
+                      {vendedores.filter(v => v.ativo).map(v => (
+                        <option key={v.id} value={v.id}>{v.nome} ({v.cargo === 'gerente' ? 'Gerente' : v.cargo === 'sdr' ? 'SDR' : 'Vendedor'})</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={loggedUser?.nome || 'Vendedor atual'}
+                      disabled
+                      className="w-full px-3 py-2 border border-gray-200 bg-gray-50 text-gray-500 rounded-apple text-sm cursor-not-allowed"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Status de Cliente</label>

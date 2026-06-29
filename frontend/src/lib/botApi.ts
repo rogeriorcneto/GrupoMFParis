@@ -345,6 +345,7 @@ export interface OmieApprovalResult {
   pedido_aprovado: boolean
   omie: {
     success: boolean
+    pending?: boolean
     error?: string
     omie_codigo?: string
   }

@@ -1807,9 +1807,17 @@ export default function ClientePanel({
                           </div>
 
                           {/* Descrição (sem assunto/label duplicado) */}
-                          {inter.descricao && (
-                            <div className="px-3 py-1.5">
-                              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
+                          {(inter.descricao || tarefaVinculada?.conclusao) && (
+                            <div className="px-3 py-1.5 space-y-2">
+                              {inter.descricao && (
+                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
+                              )}
+                              {tarefaVinculada?.conclusao && (
+                                <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-green-700 mb-1">Conclusão</p>
+                                  <p className="text-sm text-green-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.conclusao}</p>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -1989,7 +1997,7 @@ export default function ClientePanel({
                                       updates.conclusao = finalizandoObs.trim()
                                     }
                                     await db.updateTarefa(tarefaVinculada!.id, updates)
-                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates } : t))
+                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates, conclusao: finalizandoObs.trim() || t.conclusao } : t))
                                     setFinalizandoInteracaoId(null)
                                     setFinalizandoObs('')
                                   }}

@@ -318,7 +318,19 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   useRealtimeSubscription<any>('tarefas', useCallback((payload) => {
     if (payload.eventType === 'INSERT') {
       const newT = db.tarefaFromDb(payload.new)
-      setTarefas(prev => prev.some(t => t.id === newT.id) ? prev : [newT, ...prev])
+      setTarefas(prev => {
+        if (prev.some(t => t.id === newT.id)) return prev
+        const withoutTemp = prev.filter(t => {
+          const tempId = t.id > 1_000_000_000_000
+          const sameTask = t.clienteId === newT.clienteId
+            && t.titulo === newT.titulo
+            && (t.descricao || '') === (newT.descricao || '')
+            && t.data === newT.data
+            && t.status === newT.status
+          return !(tempId && sameTask)
+        })
+        return [newT, ...withoutTemp]
+      })
     } else if (payload.eventType === 'UPDATE') {
       setTarefas(prev => prev.map(t => t.id === payload.new.id ? db.tarefaFromDb(payload.new) : t))
     } else if (payload.eventType === 'DELETE') {

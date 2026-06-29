@@ -36,7 +36,7 @@ interface SidebarProps {
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
   gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens'],
-  vendedor: ['ia', 'funil', 'clientes', 'mapa', 'tarefas', 'produtos', 'templates', 'treinamento', 'pedidos'],
+  vendedor: ['ia', 'funil', 'clientes', 'tarefas', 'templates', 'treinamento'],
   sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos'],
 }
 
