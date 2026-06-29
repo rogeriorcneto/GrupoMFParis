@@ -577,19 +577,13 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
         jidsToCheck.add(lid)
       }
     }
-    // Also include @lid JIDs from the store:
-    // 1. Mapped @lid JIDs that point to another phone → skip (belongs to another chat)
-    // 2. Mapped @lid JIDs that point to this phone → include
-    // 3. Unmapped @lid JIDs → include (likely from the current contact, LID not yet resolved)
+    // Include @lid JIDs only when explicitly mapped to this phone number.
+    // Unmapped @lid JIDs are excluded — they could belong to any contact.
     const allStoreKeys = Array.from(session.messageStore.keys())
     for (const key of allStoreKeys) {
       if (key.endsWith('@lid') && !jidsToCheck.has(key)) {
         const mapped = session.lidMap.get(key)
-        if (mapped) {
-          // Include only if mapped to one of our phone JIDs
-          if (jidsToCheck.has(mapped)) jidsToCheck.add(key)
-        } else {
-          // Unmapped LID — include it (best effort, will be correct once mapped)
+        if (mapped && jidsToCheck.has(mapped)) {
           jidsToCheck.add(key)
         }
       }

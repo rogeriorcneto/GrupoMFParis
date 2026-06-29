@@ -910,14 +910,21 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         // 1. Check session lidMap cache
         const mapped = session.lidMap.get(raw)
         if (mapped) return mapped
-        // 2. Try participant field
+        // 2. Try senderPn field (Baileys 7 provides this for @lid messages)
+        const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
+        if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
+          session.lidMap.set(raw, senderPn)
+          log.info(`🔗 LID mapped via senderPn: ${raw} → ${senderPn}`)
+          return senderPn
+        }
+        // 3. Try participant field
         const participant = msg.key?.participant || (msg as any).participant
         if (participant && participant.endsWith('@s.whatsapp.net')) {
           session.lidMap.set(raw, participant)
           log.info(`🔗 LID mapped: ${raw} → ${participant}`)
           return participant
         }
-        // 3. Try to find matching contact by LID in contacts list
+        // 4. Try to find matching contact by LID in contacts list
         for (const c of session.contacts) {
           if ((c as any).lid === raw) {
             const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
@@ -926,8 +933,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             return phoneJid
           }
         }
-        // 4. Fallback: store under LID key itself (will be picked up by lidMap reverse lookup)
-        log.warn(`⚠️ Could not resolve LID: ${raw} — caching under LID key`)
+        // 5. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
+        log.warn(`⚠️ Could not resolve LID: ${raw} — caching under LID key (not included in chat queries until mapped)`)
         return raw
       }
       // Groups, broadcasts — skip
