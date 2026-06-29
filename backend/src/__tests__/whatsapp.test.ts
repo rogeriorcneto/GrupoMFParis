@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Mock all heavy dependencies before importing
-vi.mock('@whiskeysockets/baileys', () => ({
+vi.mock('baileys', () => ({
   default: vi.fn(),
   DisconnectReason: { loggedOut: 401 },
   fetchLatestBaileysVersion: vi.fn().mockResolvedValue({ version: [2, 2413, 1] }),

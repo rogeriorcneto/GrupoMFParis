@@ -1,5 +1,5 @@
-import type { AuthenticationState, SignalDataTypeMap } from '@whiskeysockets/baileys'
-import { BufferJSON, initAuthCreds } from '@whiskeysockets/baileys'
+import type { AuthenticationState, SignalDataTypeMap } from 'baileys'
+import { BufferJSON, initAuthCreds } from 'baileys'
 import { supabase } from './supabase.js'
 import { log } from './logger.js'
 

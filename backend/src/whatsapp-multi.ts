@@ -3,7 +3,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
   downloadMediaMessage,
-} from '@whiskeysockets/baileys'
+} from 'baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import * as QRCode from 'qrcode'
@@ -46,6 +46,8 @@ export interface UserWhatsAppSession {
   contacts: WAContact[]
   chats: { jid: string; lastMsgTimestamp?: number; unreadCount?: number }[]
   messageStore: Map<string, CachedMessage[]>
+  /** Raw proto messages keyed by message id — used by getMessage for decryption retries */
+  rawMessages: Map<string, any>
   /** Maps @lid JIDs to @s.whatsapp.net JIDs */
   lidMap: Map<string, string>
 }
@@ -137,6 +139,7 @@ function createEmptySession(vendedorId: number): UserWhatsAppSession {
     contacts: [],
     chats: [],
     messageStore: new Map(),
+    rawMessages: new Map(),
     lidMap: new Map(),
   }
 }
@@ -270,7 +273,7 @@ export function generateBrazilianPhoneVariations(formatted: string): string[] {
  * Retorna o JID validado ou null se não encontrar.
  */
 export async function resolveWhatsAppJid(
-  sock: ReturnType<typeof import('@whiskeysockets/baileys').default>,
+  sock: ReturnType<typeof import('baileys').default>,
   rawNumber: string
 ): Promise<{ jid: string; exists: boolean; number: string } | null> {
   const formatted = formatBrazilianPhone(rawNumber)
@@ -674,6 +677,15 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       connectTimeoutMs: 30_000,
       retryRequestDelayMs: 250,
       syncFullHistory: true,
+      // Necessário para reenviar mensagens quando o destinatário pede retry
+      // (sem isso o WhatsApp do destinatário fica preso em "Aguardando esta mensagem")
+      getMessage: async (key) => {
+        const id = key?.id
+        if (id && session.rawMessages.has(id)) {
+          return session.rawMessages.get(id)?.message || undefined
+        }
+        return undefined
+      },
     })
 
     session.sock = sock
@@ -795,8 +807,9 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     sock.ev.on('chats.upsert', (chats) => {
       for (const chat of chats) {
-        if (!isValidContactJid(chat.id)) continue
-        const existing = session.chats.find(x => x.jid === chat.id)
+        const chatId = chat.id
+        if (!chatId || !isValidContactJid(chatId)) continue
+        const existing = session.chats.find(x => x.jid === chatId)
         const ts = typeof chat.conversationTimestamp === 'number'
           ? chat.conversationTimestamp
           : typeof chat.conversationTimestamp === 'object' && chat.conversationTimestamp?.low
@@ -807,17 +820,15 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           existing.unreadCount = chat.unreadCount ?? existing.unreadCount
         } else {
           session.chats.push({
-            jid: chat.id,
+            jid: chatId,
             lastMsgTimestamp: ts,
             unreadCount: chat.unreadCount ?? 0,
           })
         }
         // Also ensure this chat has a contact entry
-        if (isValidContactJid(chat.id)) {
-          const num = chat.id.replace('@s.whatsapp.net', '')
-          if (!session.contacts.find(x => x.jid === chat.id)) {
-            session.contacts.push({ jid: chat.id, name: (chat as any).name || num, number: num })
-          }
+        const num = chatId.replace('@s.whatsapp.net', '')
+        if (!session.contacts.find(x => x.jid === chatId)) {
+          session.contacts.push({ jid: chatId, name: (chat as any).name || num, number: num })
         }
       }
       log.info(`💬 Vendedor ${vendedorId}: ${chats.length} chats recebidos (total: ${session.chats.length})`)
@@ -926,6 +937,18 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
       log.info(`📩 [messages.upsert] vendedor=${vendedorId} type=${type} count=${msgs.length}`)
+
+      // Armazena proto cru para getMessage (retries de descriptografia)
+      for (const msg of msgs) {
+        const id = msg.key?.id
+        if (id && msg.message) {
+          session.rawMessages.set(id, msg)
+          if (session.rawMessages.size > 1000) {
+            const firstKey = session.rawMessages.keys().next().value
+            if (firstKey) session.rawMessages.delete(firstKey)
+          }
+        }
+      }
 
       // History sync (append) — cache in background, don't block event loop
       if (type !== 'notify') {

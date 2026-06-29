@@ -2,7 +2,7 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
-} from '@whiskeysockets/baileys'
+} from 'baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import * as QRCode from 'qrcode'

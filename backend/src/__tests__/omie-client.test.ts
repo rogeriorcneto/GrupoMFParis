@@ -37,6 +37,7 @@ describe('Omie Client', () => {
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
+        omieEmpresas: [],
       })
       const creds = await getOmieCredentials()
       expect(creds).toBeNull()
@@ -49,6 +50,7 @@ describe('Omie Client', () => {
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
+        omieEmpresas: [],
       })
       const creds = await getOmieCredentials()
       expect(creds).toBeNull()
@@ -63,6 +65,7 @@ describe('Omie Client', () => {
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
+        omieEmpresas: [],
       })
       await expect(
         omieCall('/geral/clientes/', 'ListarClientes', [{}])
@@ -215,6 +218,7 @@ describe('Omie Client', () => {
         emailHost: '', emailPort: 587, emailUser: '', emailPass: '',
         emailFrom: '', emailImapHost: '', emailImapPort: 993, emailImapUser: '', emailImapPass: '', emailImapSecure: true, whatsappNumero: '',
         twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: '', twilioTwimlAppSid: '', twilioApiKey: '', twilioApiSecret: '',
+        omieEmpresas: [],
       })
 
       const result = await testOmieConnection()
