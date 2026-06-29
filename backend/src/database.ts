@@ -305,9 +305,25 @@ export async function getVendedorByAuthId(authId: string): Promise<Vendedor | nu
     .from('vendedores')
     .select('*')
     .eq('auth_id', authId)
-    .single()
-  if (error || !data) return null
-  return vendedorFromDb(data)
+    .maybeSingle()
+  if (data) return vendedorFromDb(data)
+
+  const { data: userData } = await supabase.auth.admin.getUserById(authId)
+  const email = userData.user?.email?.trim().toLowerCase()
+  if (!email) return null
+
+  const { data: byEmail } = await supabase
+    .from('vendedores')
+    .select('*')
+    .ilike('email', email)
+    .maybeSingle()
+  if (!byEmail) return null
+
+  if (!byEmail.auth_id) {
+    await supabase.from('vendedores').update({ auth_id: authId }).eq('id', byEmail.id)
+  }
+
+  return vendedorFromDb(byEmail)
 }
 
 // ============================================

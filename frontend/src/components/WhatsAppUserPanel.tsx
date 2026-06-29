@@ -133,6 +133,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         if (pollRef.current) clearInterval(pollRef.current)
         return
       }
+      setError(err?.message || 'Não foi possível consultar o WhatsApp.')
       setBotOnline(false)
     }
   }, [waitingForQR])
@@ -177,7 +178,8 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           autoConnectRef.current = true
           await startConnect()
         }
-      } catch {
+      } catch (err: any) {
+        setError(err?.message || 'Não foi possível iniciar o WhatsApp.')
         setBotOnline(false)
       }
     }
