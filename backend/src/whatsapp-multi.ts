@@ -919,11 +919,17 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     // Handle ALL messages — cache in memory + save new incoming to DB
     // LID→JID resolver: WhatsApp multi-device sends @lid JIDs instead of @s.whatsapp.net
+    // Strips device suffix (:N) from JIDs so messages are cached under canonical JID
+    const normalizeJid = (jid: string): string => {
+      // Remove :N device suffix from @s.whatsapp.net JIDs (e.g. 5531...:0@s.whatsapp.net → 5531...@s.whatsapp.net)
+      return jid.replace(/:\d+(?=@s\.whatsapp\.net)/, '')
+    }
+
     const resolveJid = async (msg: any): Promise<string | null> => {
       const raw = msg.key?.remoteJid
       if (!raw) return null
       // Standard WhatsApp JID
-      if (raw.endsWith('@s.whatsapp.net')) return raw
+      if (raw.endsWith('@s.whatsapp.net')) return normalizeJid(raw)
       // LID JID — resolve to @s.whatsapp.net
       if (raw.endsWith('@lid')) {
         // 1. Check session lidMap cache
@@ -933,32 +939,36 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         try {
           const pn = await sock.signalRepository?.lidMapping?.getPNForLID(raw)
           if (pn && pn.endsWith('@s.whatsapp.net')) {
-            session.lidMap.set(raw, pn)
-            log.info(`🔗 LID mapped via signalRepository: ${raw} → ${pn}`)
-            return pn
+            const normalized = normalizeJid(pn)
+            session.lidMap.set(raw, normalized)
+            log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalized}`)
+            return normalized
           }
         } catch { /* ignore */ }
         // 3. Try senderPn field (Baileys 7 provides this for @lid messages)
         const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
         if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
-          session.lidMap.set(raw, senderPn)
-          log.info(`🔗 LID mapped via senderPn: ${raw} → ${senderPn}`)
-          return senderPn
+          const normalized = normalizeJid(senderPn)
+          session.lidMap.set(raw, normalized)
+          log.info(`🔗 LID mapped via senderPn: ${raw} → ${normalized}`)
+          return normalized
         }
         // 4. Try participant field
         const participant = msg.key?.participant || (msg as any).participant
         if (participant && participant.endsWith('@s.whatsapp.net')) {
-          session.lidMap.set(raw, participant)
-          log.info(`🔗 LID mapped: ${raw} → ${participant}`)
-          return participant
+          const normalized = normalizeJid(participant)
+          session.lidMap.set(raw, normalized)
+          log.info(`🔗 LID mapped: ${raw} → ${normalized}`)
+          return normalized
         }
         // 5. Try to find matching contact by LID in contacts list
         for (const c of session.contacts) {
           if ((c as any).lid === raw) {
             const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
-            session.lidMap.set(raw, phoneJid)
-            log.info(`🔗 LID mapped via contacts: ${raw} → ${phoneJid}`)
-            return phoneJid
+            const normalized = normalizeJid(phoneJid)
+            session.lidMap.set(raw, normalized)
+            log.info(`🔗 LID mapped via contacts: ${raw} → ${normalized}`)
+            return normalized
           }
         }
         // 6. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
