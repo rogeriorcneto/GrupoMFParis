@@ -275,7 +275,7 @@ export function generateBrazilianPhoneVariations(formatted: string): string[] {
 export async function resolveWhatsAppJid(
   sock: ReturnType<typeof import('baileys').default>,
   rawNumber: string
-): Promise<{ jid: string; exists: boolean; number: string } | null> {
+): Promise<{ jid: string; exists: boolean; number: string; lid?: string } | null> {
   const formatted = formatBrazilianPhone(rawNumber)
   if (!formatted) return null
 
@@ -286,11 +286,19 @@ export async function resolveWhatsAppJid(
       const results = await sock.onWhatsApp(num)
       const result = results?.[0]
       if (result?.exists) {
-        log.info(`✅ Número ${rawNumber} → validado como ${result.jid}`)
+        const phoneJid = `${num}@s.whatsapp.net`
+        let lid: string | undefined
+        // Baileys 7 pode retornar JID @lid — sempre enviar para @s.whatsapp.net
+        if (result.jid && result.jid.endsWith('@lid')) {
+          lid = result.jid
+          log.info(`🔗 onWhatsApp retornou LID ${lid} para ${num}, usando ${phoneJid}`)
+        }
+        log.info(`✅ Número ${rawNumber} → validado como ${phoneJid}`)
         return {
-          jid: result.jid,
+          jid: phoneJid,
           exists: true,
           number: num,
+          lid,
         }
       }
     } catch (err) {
@@ -418,6 +426,11 @@ export async function sendUserWhatsAppMessage(
     try {
       const resolved = await resolveWhatsAppJid(session.sock, number)
       jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
+      // Store LID→phone mapping so resolveJid can resolve echoed messages
+      if (resolved?.lid && resolved.jid) {
+        session.lidMap.set(resolved.lid, resolved.jid)
+        log.info(`🔗 Stored LID mapping: ${resolved.lid} → ${resolved.jid}`)
+      }
       if (!resolved) log.warn(`⚠️ resolveWhatsAppJid falhou para ${number}, enviando direto para ${jid}`)
     } catch {
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
@@ -579,6 +592,9 @@ export async function sendUserWhatsAppAudio(
     try {
       const resolved = await resolveWhatsAppJid(session.sock, number)
       jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
+      if (resolved?.lid && resolved.jid) {
+        session.lidMap.set(resolved.lid, resolved.jid)
+      }
     } catch {
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
@@ -612,6 +628,9 @@ export async function sendUserWhatsAppImage(
     try {
       const resolved = await resolveWhatsAppJid(session.sock, number)
       jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
+      if (resolved?.lid && resolved.jid) {
+        session.lidMap.set(resolved.lid, resolved.jid)
+      }
     } catch {
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
@@ -900,31 +919,40 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     // Handle ALL messages — cache in memory + save new incoming to DB
     // LID→JID resolver: WhatsApp multi-device sends @lid JIDs instead of @s.whatsapp.net
-    const resolveJid = (msg: any): string | null => {
+    const resolveJid = async (msg: any): Promise<string | null> => {
       const raw = msg.key?.remoteJid
       if (!raw) return null
       // Standard WhatsApp JID
       if (raw.endsWith('@s.whatsapp.net')) return raw
-      // LID JID — resolve to @s.whatsapp.net using session's persistent lidMap
+      // LID JID — resolve to @s.whatsapp.net
       if (raw.endsWith('@lid')) {
         // 1. Check session lidMap cache
         const mapped = session.lidMap.get(raw)
         if (mapped) return mapped
-        // 2. Try senderPn field (Baileys 7 provides this for @lid messages)
+        // 2. Try Baileys 7 signalRepository LID mapping store
+        try {
+          const pn = await sock.signalRepository?.lidMapping?.getPNForLID(raw)
+          if (pn && pn.endsWith('@s.whatsapp.net')) {
+            session.lidMap.set(raw, pn)
+            log.info(`🔗 LID mapped via signalRepository: ${raw} → ${pn}`)
+            return pn
+          }
+        } catch { /* ignore */ }
+        // 3. Try senderPn field (Baileys 7 provides this for @lid messages)
         const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
         if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
           session.lidMap.set(raw, senderPn)
           log.info(`🔗 LID mapped via senderPn: ${raw} → ${senderPn}`)
           return senderPn
         }
-        // 3. Try participant field
+        // 4. Try participant field
         const participant = msg.key?.participant || (msg as any).participant
         if (participant && participant.endsWith('@s.whatsapp.net')) {
           session.lidMap.set(raw, participant)
           log.info(`🔗 LID mapped: ${raw} → ${participant}`)
           return participant
         }
-        // 4. Try to find matching contact by LID in contacts list
+        // 5. Try to find matching contact by LID in contacts list
         for (const c of session.contacts) {
           if ((c as any).lid === raw) {
             const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
@@ -933,7 +961,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             return phoneJid
           }
         }
-        // 5. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
+        // 6. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
         log.warn(`⚠️ Could not resolve LID: ${raw} — caching under LID key (not included in chat queries until mapped)`)
         return raw
       }
@@ -959,10 +987,10 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
       // History sync (append) — cache in background, don't block event loop
       if (type !== 'notify') {
-        setImmediate(() => {
+        setImmediate(async () => {
           for (const msg of msgs) {
             if (!msg.message) continue
-            const jid = resolveJid(msg)
+            const jid = await resolveJid(msg)
             if (!jid) continue
             cacheMessage(session, jid, msg)
           }
@@ -973,7 +1001,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       // Real-time messages (notify) — cache + save to DB
       for (const msg of msgs) {
         const rawJid = msg.key?.remoteJid
-        const jid = resolveJid(msg)
+        const jid = await resolveJid(msg)
         const fromMe = !!msg.key?.fromMe
         const hasMessage = !!msg.message
         log.info(`📩 [msg] vendedor=${vendedorId} rawJid=${rawJid} resolvedJid=${jid} fromMe=${fromMe} hasMessage=${hasMessage} participant=${msg.key?.participant || 'none'} msgKeys=${msg.message ? Object.keys(msg.message).join(',') : 'none'}`)
