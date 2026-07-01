@@ -286,6 +286,41 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     })
   }, [waStatus.connected, cliente?.id, selectedContact])
 
+  // Poll WA messages every 5s when chat is open
+  useEffect(() => {
+    if (!waStatus.connected) return
+    if (!cliente?.id && !selectedContact) return
+    const chatNumber = selectedContact?.number || (cliente?.whatsapp || cliente?.contatoCelular || cliente?.contatoTelefone || '').replace(/\D/g, '')
+    if (!chatNumber) return
+    const iv = setInterval(() => {
+      fetchWhatsAppChatMessages({ numero: chatNumber, limit: 100 }).then(cached => {
+        if (cached && cached.length > 0) {
+          setMessages(cached.map((m: any) => ({
+            id: m.id || Date.now(),
+            text: m.text,
+            from: m.fromMe ? 'me' as const : 'them' as const,
+            time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+          })))
+        } else {
+          const dbPromise = cliente?.id
+            ? fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
+            : fetchWhatsAppMessages({ numero: chatNumber, limit: 100 })
+          dbPromise.then(dbMsgs => {
+            if (dbMsgs && dbMsgs.length > 0) {
+              setMessages((dbMsgs || []).map((m: any) => ({
+                id: m.id || Date.now(),
+                text: m.mensagem,
+                from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+                time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+              })))
+            }
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    }, 5_000)
+    return () => clearInterval(iv)
+  }, [waStatus.connected, cliente?.id, selectedContact])
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
