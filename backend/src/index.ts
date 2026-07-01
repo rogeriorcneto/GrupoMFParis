@@ -569,6 +569,22 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
       jidsToCheck.add(`${raw}@s.whatsapp.net`)
       jidsToCheck.add(`55${raw}@s.whatsapp.net`)
       if (raw.startsWith('55')) jidsToCheck.add(`${raw.slice(2)}@s.whatsapp.net`)
+      // Brazilian mobile: add variation with/without the 9 digit
+      // e.g. 5531973248705 ↔ 553173248705
+      const with55 = raw.startsWith('55') ? raw : `55${raw}`
+      const without55 = raw.startsWith('55') ? raw.slice(2) : raw
+      if (with55.length === 13 && with55[4] === '9') {
+        jidsToCheck.add(`${with55.slice(0, 4)}${with55.slice(5)}@s.whatsapp.net`)
+      }
+      if (without55.length === 11 && without55[2] === '9') {
+        jidsToCheck.add(`${without55.slice(0, 2)}${without55.slice(3)}@s.whatsapp.net`)
+      }
+      if (with55.length === 12 && with55[4] !== '9') {
+        jidsToCheck.add(`${with55.slice(0, 4)}9${with55.slice(4)}@s.whatsapp.net`)
+      }
+      if (without55.length === 10 && without55[2] !== '9') {
+        jidsToCheck.add(`${without55.slice(0, 2)}9${without55.slice(2)}@s.whatsapp.net`)
+      }
     }
 
     // Find @lid JIDs that map to this phone number via session.lidMap
