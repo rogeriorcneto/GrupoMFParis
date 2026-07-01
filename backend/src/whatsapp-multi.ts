@@ -437,6 +437,13 @@ export async function sendUserWhatsAppMessage(
       log.warn(`⚠️ Erro no resolveWhatsAppJid para ${number}, fallback para ${jid}`)
     }
     log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
+    // Issue privacy token (tctoken) for the contact — needed by WhatsApp multi-device
+    // Without this, new sessions get error 463: "missing tctoken for contact"
+    try {
+      await session.sock.issuePrivacyTokens?.([jid])
+    } catch (e) {
+      log.warn(`⚠️ issuePrivacyTokens falhou para ${jid}: ${(e as any)?.message}`)
+    }
     await session.sock.sendMessage(jid, { text })
     return { success: true }
   } catch (err: any) {
@@ -599,6 +606,9 @@ export async function sendUserWhatsAppAudio(
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
     const buffer = Buffer.from(audioBase64, 'base64')
+    try {
+      await session.sock.issuePrivacyTokens?.([jid])
+    } catch { /* ignore */ }
     await session.sock.sendMessage(jid, {
       audio: buffer,
       mimetype,
@@ -635,6 +645,9 @@ export async function sendUserWhatsAppImage(
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
     const buffer = Buffer.from(imageBase64, 'base64')
+    try {
+      await session.sock.issuePrivacyTokens?.([jid])
+    } catch { /* ignore */ }
     await session.sock.sendMessage(jid, {
       image: buffer,
       mimetype,
