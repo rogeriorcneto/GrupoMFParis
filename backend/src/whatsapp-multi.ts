@@ -764,13 +764,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
         }
 
-        // Baileys 7 bug: QR code pairing never sets creds.registered = true (only link code does).
-        // Without this, the session is treated as new on every restart, losing tctokens.
-        if (!state.creds.registered) {
-          state.creds.registered = true
-          await saveCreds()
-          log.info(`🔑 Vendedor ${vendedorId}: creds.registered set to true and saved`)
-        }
+        // Auto-validation removed: was too heavy (1369 clients × 500ms = 11min blocking).
+        // Validation is now manual-only via the validate-contacts endpoint.
       }
     })
 
@@ -905,13 +900,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     // Handle ALL messages — cache in memory + save new incoming to DB
     // LID→JID resolver: WhatsApp multi-device sends @lid JIDs instead of @s.whatsapp.net
-    const resolveJid = async (msg: any): Promise<string | null> => {
+    const resolveJid = (msg: any): string | null => {
       const raw = msg.key?.remoteJid
       if (!raw) return null
-      // Standard WhatsApp JID — normalize by removing device suffix (:N)
-      if (raw.endsWith('@s.whatsapp.net')) {
-        return raw.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-      }
+      // Standard WhatsApp JID
+      if (raw.endsWith('@s.whatsapp.net')) return raw
       // LID JID — resolve to @s.whatsapp.net using session's persistent lidMap
       if (raw.endsWith('@lid')) {
         // 1. Check session lidMap cache
@@ -940,22 +933,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             return phoneJid
           }
         }
-        // 5. Try Baileys 7 signalRepository LID mapping (USync)
-        try {
-          const lidMapping = (sock as any).signalRepository?.lidMapping
-          if (lidMapping?.getPNForLID) {
-            const pn = await lidMapping.getPNForLID(raw)
-            if (pn && pn.endsWith('@s.whatsapp.net')) {
-              const normalizedPn = pn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-              session.lidMap.set(raw, normalizedPn)
-              log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalizedPn}`)
-              return normalizedPn
-            }
-          }
-        } catch (e) {
-          log.warn(`⚠️ signalRepository LID resolution failed for ${raw}: ${e}`)
-        }
-        // 6. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
+        // 5. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
         log.warn(`⚠️ Could not resolve LID: ${raw} — caching under LID key (not included in chat queries until mapped)`)
         return raw
       }
@@ -981,10 +959,10 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
       // History sync (append) — cache in background, don't block event loop
       if (type !== 'notify') {
-        setImmediate(async () => {
+        setImmediate(() => {
           for (const msg of msgs) {
             if (!msg.message) continue
-            const jid = await resolveJid(msg)
+            const jid = resolveJid(msg)
             if (!jid) continue
             cacheMessage(session, jid, msg)
           }
@@ -995,7 +973,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       // Real-time messages (notify) — cache + save to DB
       for (const msg of msgs) {
         const rawJid = msg.key?.remoteJid
-        const jid = await resolveJid(msg)
+        const jid = resolveJid(msg)
         const fromMe = !!msg.key?.fromMe
         const hasMessage = !!msg.message
         log.info(`📩 [msg] vendedor=${vendedorId} rawJid=${rawJid} resolvedJid=${jid} fromMe=${fromMe} hasMessage=${hasMessage} participant=${msg.key?.participant || 'none'} msgKeys=${msg.message ? Object.keys(msg.message).join(',') : 'none'}`)
