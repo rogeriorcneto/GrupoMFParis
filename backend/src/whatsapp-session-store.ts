@@ -81,6 +81,7 @@ export async function useSupabaseAuthState(prefix = 'bot', options?: { fresh?: b
   // ── saveCreds ─────────────────────────────────────────────────────────────
 
   const saveCreds = async () => {
+    log.info(`💾 saveCreds chamado para ${prefix} — registered=${!!creds.registered}, me=${creds.me?.id || 'none'}`)
     await writeData('creds', creds)
   }
 

@@ -275,7 +275,7 @@ export function generateBrazilianPhoneVariations(formatted: string): string[] {
 export async function resolveWhatsAppJid(
   sock: ReturnType<typeof import('baileys').default>,
   rawNumber: string
-): Promise<{ jid: string; exists: boolean; number: string; lid?: string } | null> {
+): Promise<{ jid: string; exists: boolean; number: string } | null> {
   const formatted = formatBrazilianPhone(rawNumber)
   if (!formatted) return null
 
@@ -286,19 +286,11 @@ export async function resolveWhatsAppJid(
       const results = await sock.onWhatsApp(num)
       const result = results?.[0]
       if (result?.exists) {
-        const phoneJid = `${num}@s.whatsapp.net`
-        let lid: string | undefined
-        // Baileys 7 pode retornar JID @lid — sempre enviar para @s.whatsapp.net
-        if (result.jid && result.jid.endsWith('@lid')) {
-          lid = result.jid
-          log.info(`🔗 onWhatsApp retornou LID ${lid} para ${num}, usando ${phoneJid}`)
-        }
-        log.info(`✅ Número ${rawNumber} → validado como ${phoneJid}`)
+        log.info(`✅ Número ${rawNumber} → validado como ${result.jid}`)
         return {
-          jid: phoneJid,
+          jid: result.jid,
           exists: true,
           number: num,
-          lid,
         }
       }
     } catch (err) {
@@ -426,31 +418,14 @@ export async function sendUserWhatsAppMessage(
     try {
       const resolved = await resolveWhatsAppJid(session.sock, number)
       jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
-      // Store LID→phone mapping so resolveJid can resolve echoed messages
-      if (resolved?.lid && resolved.jid) {
-        session.lidMap.set(resolved.lid, resolved.jid)
-        log.info(`🔗 Stored LID mapping: ${resolved.lid} → ${resolved.jid}`)
-      }
       if (!resolved) log.warn(`⚠️ resolveWhatsAppJid falhou para ${number}, enviando direto para ${jid}`)
     } catch {
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
       log.warn(`⚠️ Erro no resolveWhatsAppJid para ${number}, fallback para ${jid}`)
     }
     log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
-    // Retry logic: first send to a new contact may fail with 463 (missing tctoken).
-    // Baileys automatically issues the token after the failed send, so retry after 2s.
-    try {
-      await session.sock.sendMessage(jid, { text })
-      return { success: true }
-    } catch (err1: any) {
-      const is463 = err1?.message?.includes('463') || err1?.data?.status === 463
-      if (!is463) throw err1
-      log.warn(`⚠️ Erro 463 (tctoken) no primeiro envio para ${jid}, aguardando 2s e tentando novamente...`)
-      await new Promise(r => setTimeout(r, 2000))
-      await session.sock.sendMessage(jid, { text })
-      log.info(`✅ Segunda tentativa de envio para ${jid} bem-sucedida`)
-      return { success: true }
-    }
+    await session.sock.sendMessage(jid, { text })
+    return { success: true }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar mensagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
@@ -604,32 +579,16 @@ export async function sendUserWhatsAppAudio(
     try {
       const resolved = await resolveWhatsAppJid(session.sock, number)
       jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
-      if (resolved?.lid && resolved.jid) {
-        session.lidMap.set(resolved.lid, resolved.jid)
-      }
     } catch {
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
     const buffer = Buffer.from(audioBase64, 'base64')
-    try {
-      await session.sock.sendMessage(jid, {
-        audio: buffer,
-        mimetype,
-        ptt: true,
-      })
-      return { success: true }
-    } catch (err1: any) {
-      const is463 = err1?.message?.includes('463') || err1?.data?.status === 463
-      if (!is463) throw err1
-      log.warn(`⚠️ Erro 463 (tctoken) no primeiro envio de áudio para ${jid}, retry em 2s...`)
-      await new Promise(r => setTimeout(r, 2000))
-      await session.sock.sendMessage(jid, {
-        audio: buffer,
-        mimetype,
-        ptt: true,
-      })
-      return { success: true }
-    }
+    await session.sock.sendMessage(jid, {
+      audio: buffer,
+      mimetype,
+      ptt: true,
+    })
+    return { success: true }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar áudio para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar áudio' }
@@ -653,32 +612,16 @@ export async function sendUserWhatsAppImage(
     try {
       const resolved = await resolveWhatsAppJid(session.sock, number)
       jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
-      if (resolved?.lid && resolved.jid) {
-        session.lidMap.set(resolved.lid, resolved.jid)
-      }
     } catch {
       jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
     }
     const buffer = Buffer.from(imageBase64, 'base64')
-    try {
-      await session.sock.sendMessage(jid, {
-        image: buffer,
-        mimetype,
-        caption: caption || undefined,
-      })
-      return { success: true }
-    } catch (err1: any) {
-      const is463 = err1?.message?.includes('463') || err1?.data?.status === 463
-      if (!is463) throw err1
-      log.warn(`⚠️ Erro 463 (tctoken) no primeiro envio de imagem para ${jid}, retry em 2s...`)
-      await new Promise(r => setTimeout(r, 2000))
-      await session.sock.sendMessage(jid, {
-        image: buffer,
-        mimetype,
-        caption: caption || undefined,
-      })
-      return { success: true }
-    }
+    await session.sock.sendMessage(jid, {
+      image: buffer,
+      mimetype,
+      caption: caption || undefined,
+    })
+    return { success: true }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar imagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar imagem' }
@@ -821,8 +764,13 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
         }
 
-        // Auto-validation removed: was too heavy (1369 clients × 500ms = 11min blocking).
-        // Validation is now manual-only via the validate-contacts endpoint.
+        // Baileys 7 bug: QR code pairing never sets creds.registered = true (only link code does).
+        // Without this, the session is treated as new on every restart, losing tctokens.
+        if (!state.creds.registered) {
+          state.creds.registered = true
+          await saveCreds()
+          log.info(`🔑 Vendedor ${vendedorId}: creds.registered set to true and saved`)
+        }
       }
     })
 
@@ -957,57 +905,55 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
     // Handle ALL messages — cache in memory + save new incoming to DB
     // LID→JID resolver: WhatsApp multi-device sends @lid JIDs instead of @s.whatsapp.net
-    // Strips device suffix (:N) from JIDs so messages are cached under canonical JID
-    const normalizeJid = (jid: string): string => {
-      // Remove :N device suffix from @s.whatsapp.net JIDs (e.g. 5531...:0@s.whatsapp.net → 5531...@s.whatsapp.net)
-      return jid.replace(/:\d+(?=@s\.whatsapp\.net)/, '')
-    }
-
     const resolveJid = async (msg: any): Promise<string | null> => {
       const raw = msg.key?.remoteJid
       if (!raw) return null
-      // Standard WhatsApp JID
-      if (raw.endsWith('@s.whatsapp.net')) return normalizeJid(raw)
-      // LID JID — resolve to @s.whatsapp.net
+      // Standard WhatsApp JID — normalize by removing device suffix (:N)
+      if (raw.endsWith('@s.whatsapp.net')) {
+        return raw.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
+      }
+      // LID JID — resolve to @s.whatsapp.net using session's persistent lidMap
       if (raw.endsWith('@lid')) {
         // 1. Check session lidMap cache
         const mapped = session.lidMap.get(raw)
         if (mapped) return mapped
-        // 2. Try Baileys 7 signalRepository LID mapping store
-        try {
-          const pn = await sock.signalRepository?.lidMapping?.getPNForLID(raw)
-          if (pn && pn.endsWith('@s.whatsapp.net')) {
-            const normalized = normalizeJid(pn)
-            session.lidMap.set(raw, normalized)
-            log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalized}`)
-            return normalized
-          }
-        } catch { /* ignore */ }
-        // 3. Try senderPn field (Baileys 7 provides this for @lid messages)
+        // 2. Try senderPn field (Baileys 7 provides this for @lid messages)
         const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
         if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
-          const normalized = normalizeJid(senderPn)
-          session.lidMap.set(raw, normalized)
-          log.info(`🔗 LID mapped via senderPn: ${raw} → ${normalized}`)
-          return normalized
+          session.lidMap.set(raw, senderPn)
+          log.info(`🔗 LID mapped via senderPn: ${raw} → ${senderPn}`)
+          return senderPn
         }
-        // 4. Try participant field
+        // 3. Try participant field
         const participant = msg.key?.participant || (msg as any).participant
         if (participant && participant.endsWith('@s.whatsapp.net')) {
-          const normalized = normalizeJid(participant)
-          session.lidMap.set(raw, normalized)
-          log.info(`🔗 LID mapped: ${raw} → ${normalized}`)
-          return normalized
+          session.lidMap.set(raw, participant)
+          log.info(`🔗 LID mapped: ${raw} → ${participant}`)
+          return participant
         }
-        // 5. Try to find matching contact by LID in contacts list
+        // 4. Try to find matching contact by LID in contacts list
         for (const c of session.contacts) {
           if ((c as any).lid === raw) {
             const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
-            const normalized = normalizeJid(phoneJid)
-            session.lidMap.set(raw, normalized)
-            log.info(`🔗 LID mapped via contacts: ${raw} → ${normalized}`)
-            return normalized
+            session.lidMap.set(raw, phoneJid)
+            log.info(`🔗 LID mapped via contacts: ${raw} → ${phoneJid}`)
+            return phoneJid
           }
+        }
+        // 5. Try Baileys 7 signalRepository LID mapping (USync)
+        try {
+          const lidMapping = (sock as any).signalRepository?.lidMapping
+          if (lidMapping?.getPNForLID) {
+            const pn = await lidMapping.getPNForLID(raw)
+            if (pn && pn.endsWith('@s.whatsapp.net')) {
+              const normalizedPn = pn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
+              session.lidMap.set(raw, normalizedPn)
+              log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalizedPn}`)
+              return normalizedPn
+            }
+          }
+        } catch (e) {
+          log.warn(`⚠️ signalRepository LID resolution failed for ${raw}: ${e}`)
         }
         // 6. Cannot resolve — cache under LID key (won't be included in chat queries until mapped)
         log.warn(`⚠️ Could not resolve LID: ${raw} — caching under LID key (not included in chat queries until mapped)`)
