@@ -63,6 +63,19 @@ export default function GrupoParisShell() {
         setIsAuthenticated(true)
         await fetchUserInfo(session.user.id)
       } else if (event === 'SIGNED_OUT') {
+        // Retry getSession once — Supabase can fire SIGNED_OUT on transient
+        // token refresh failures (network blip) even when the session is still valid
+        try {
+          await new Promise(r => setTimeout(r, 500))
+          const { data: { session: retrySession } } = await supabase.auth.getSession()
+          if (retrySession?.user) {
+            // Session still valid — this was a transient refresh failure, ignore
+            setIsAuthenticated(true)
+            await fetchUserInfo(retrySession.user.id)
+            return
+          }
+        } catch { /* session truly invalid, proceed with logout */ }
+
         setIsAuthenticated(false)
         setUsuario(null)
         setVendedorCompleto(null)

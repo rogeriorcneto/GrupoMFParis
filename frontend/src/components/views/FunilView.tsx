@@ -325,7 +325,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: 0.60, gerenteOnly: false },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
-    { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: true }
+    { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: false }
   ]
 
   const stages = allStages.filter(s => isGerente || !s.gerenteOnly)
@@ -455,8 +455,16 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     return map
   }, [pedidos])
 
-  const getClientePedidoInfo = (clienteId: number) => {
-    const ps = pedidosByCliente.get(clienteId) || []
+  const getClientePedidoInfo = (cliente: Cliente) => {
+    const allPs = pedidosByCliente.get(cliente.id) || []
+    if (allPs.length === 0) return null
+    // Filter pedidos by card's current etapa — each card is individual
+    let ps = allPs
+    if (cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') {
+      ps = allPs.filter(p => p.tipo === 'bonificacao')
+    } else if (cliente.etapa === 'negociacao' || cliente.etapa === 'follow_up') {
+      ps = allPs.filter(p => p.tipo === 'venda' || !p.tipo)
+    }
     if (ps.length === 0) return null
     const sorted = [...ps].sort((a, b) => new Date(b.dataCriacao).getTime() - new Date(a.dataCriacao).getTime())
     const latest = sorted[0]
@@ -878,7 +886,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         {renderCardInfo(cliente)}
                         {/* Logistics mini-info from pedidos */}
                         {(() => {
-                          const info = getClientePedidoInfo(cliente.id)
+                          const info = getClientePedidoInfo(cliente)
                           if (!info) return null
                           const p = info.latest
                           const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando Aprov. Gerência', confirmado: 'Confirmado', cancelado: 'Cancelado' }

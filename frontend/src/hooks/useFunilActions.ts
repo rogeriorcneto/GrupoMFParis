@@ -403,7 +403,8 @@ export function useFunilActions({
     if (draggedItem) {
       const isRetry = draggedItem.fromStage === 'amostra_perdida'
       const tentativa = isRetry ? (draggedItem.cliente.tentativaAmostra || 0) + 1 : (draggedItem.cliente.tentativaAmostra || 0)
-      moverCliente(draggedItem.cliente.id, 'amostra', {
+      const clienteOriginal = draggedItem.cliente
+      moverCliente(clienteOriginal.id, 'amostra', {
         dataEnvioAmostra: modalAmostraData,
         statusAmostra: 'solicitada',
         tentativaAmostra: tentativa,
@@ -411,6 +412,35 @@ export function useFunilActions({
         dataResultadoAmostra: undefined,
         motivoReprovacao: undefined,
       })
+
+      // Ao entrar em amostra vindo de proposta (1ª tentativa), gera um novo card em Proposta
+      // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up).
+      if (!isRetry && draggedItem.fromStage === 'proposta') {
+        const novoCard: Omit<Cliente, 'id'> = {
+          ...clienteOriginal,
+          cnpj: undefined,
+          etapa: 'proposta',
+          etapaAnterior: 'amostra',
+          novoCiclo: true,
+          cicloNumero: (clienteOriginal.cicloNumero || 1) + 1,
+          statusAmostra: undefined,
+          statusFollowUp: undefined,
+          statusEntrega: undefined,
+          statusFaturamento: undefined,
+          statusSatisfacao: undefined,
+          resultadoAmostra: undefined,
+          dataResultadoAmostra: undefined,
+          valorProposta: undefined,
+          dataProposta: undefined,
+          dataEntradaEtapa: new Date().toISOString(),
+          historicoEtapas: [],
+          vendedorId: loggedUser?.id || clienteOriginal.vendedorId,
+        }
+        db.insertCliente(novoCard).then(cardCriado => {
+          setClientes(prev => [...prev, cardCriado])
+          addNotificacao('info', '🔄 Novo card em Proposta', `${clienteOriginal.razaoSocial}: amostra iniciada em card próprio, novo card criado em Proposta.`, cardCriado.id)
+        }).catch(e => logger.error('Erro ao criar novo card em proposta:', e))
+      }
     }
     setDraggedItem(null); setPendingDrop(null); setShowModalAmostra(false)
   }

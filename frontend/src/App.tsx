@@ -261,9 +261,20 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
       disconnectUserWhatsApp().catch(() => {})
     }
 
-    // Escutar mudanças de auth (login/logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+    // Escutar mudanças de auth (login/logout/token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
+        // Retry getSession once — Supabase can fire SIGNED_OUT on transient
+        // token refresh failures (network blip) even when the session is still valid
+        try {
+          await new Promise(r => setTimeout(r, 500))
+          const { data: { session: retrySession } } = await supabase.auth.getSession()
+          if (retrySession?.user) {
+            // Session still valid — this was a transient refresh failure, ignore
+            return
+          }
+        } catch { /* session truly invalid, proceed with logout */ }
+
         // Desconectar WhatsApp ao fazer logout
         try { await disconnectUserWhatsApp() } catch { /* ignore */ }
         sessionStorage.removeItem('wa_auth_token')

@@ -287,7 +287,7 @@ const ETAPAS: Record<string, { label: string; cor: string }> = {
   '20': { label: 'A faturar',    cor: 'bg-blue-100 text-blue-700' },
   '50': { label: 'Faturado',     cor: 'bg-green-100 text-green-700' },
   '60': { label: 'Encerrado',    cor: 'bg-purple-100 text-purple-700' },
-  '70': { label: 'Cancelado',    cor: 'bg-red-100 text-red-700' },
+  '70': { label: 'Reprovado',    cor: 'bg-red-100 text-red-700' },
   '80': { label: 'Pré-venda',    cor: 'bg-yellow-100 text-yellow-700' },
 }
 function Etapa({ codigo }: { codigo?: string }) {
