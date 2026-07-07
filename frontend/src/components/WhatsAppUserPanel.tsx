@@ -918,7 +918,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[#e5ddd5]" style={{ minHeight: compact ? 200 : 300 }}>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ minHeight: compact ? 200 : 300, backgroundColor: '#e5ddd5' }}>
             {chatLoading && (
               <div className="text-center py-4">
                 <div className="inline-block animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full" />
@@ -939,13 +939,13 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                   </div>
                 ) : msg.from === 'them' ? (
                   <div className="bg-white text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                    <p className="text-[10px] text-gray-500 text-right mt-1">{msg.time}</p>
+                    <p className="whitespace-pre-wrap" style={{ color: '#111827' }}>{msg.text}</p>
+                    <p className="text-[10px] text-right mt-1" style={{ color: '#6b7280' }}>{msg.time}</p>
                   </div>
                 ) : (
-                  <div className="bg-[#dcf8c6] text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
-                    <p className="text-[10px] text-gray-500 text-right mt-1">{msg.time} ✓✓</p>
+                  <div className="text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm" style={{ backgroundColor: '#dcf8c6' }}>
+                    <p className="whitespace-pre-wrap" style={{ color: '#111827' }}>{msg.text}</p>
+                    <p className="text-[10px] text-right mt-1" style={{ color: '#4b5563' }}>{msg.time} ✓✓</p>
                   </div>
                 )}
               </div>
