@@ -710,16 +710,12 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         <button onClick={() => setHideAmostraPerdida(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideAmostraPerdida ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-orange-50 text-orange-600 border-orange-200'}`} title={hideAmostraPerdida ? 'Mostrar Amostra Perdida' : 'Ocultar Amostra Perdida'}>
           🚫
         </button>
-        {isGerente && (
-          <>
-            <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
-              💤
-            </button>
-            <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
-              ❌
-            </button>
-          </>
-        )}
+        <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
+          💤
+        </button>
+        <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
+          ❌
+        </button>
 
         {isGerente && (
           <button

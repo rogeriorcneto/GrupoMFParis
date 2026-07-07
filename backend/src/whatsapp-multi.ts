@@ -425,12 +425,33 @@ async function resolveJidForSending(
   try {
     if (session.sock) {
       const resolved = await resolveWhatsAppJid(session.sock, rawNumber)
-      if (resolved) return resolved.jid
+      log.info(`🔍 [resolveJidForSending] onWhatsApp result: ${JSON.stringify(resolved)}`)
+      if (resolved) {
+        // 2a. Tentar obter o LID correspondente via signalRepository
+        try {
+          const lidMapping = (session.sock as any).signalRepository?.lidMapping
+          if (lidMapping?.getLIDForPN) {
+            const lid = await lidMapping.getLIDForPN(resolved.jid)
+            log.info(`🔍 [resolveJidForSending] getLIDForPN(${resolved.jid}) → ${lid}`)
+            if (lid && lid.endsWith('@lid')) {
+              session.lidMap.set(lid, resolved.jid)
+              log.info(`🔗 LID resolvido via signalRepository: ${resolved.jid} → ${lid}`)
+              return lid
+            }
+          } else {
+            log.warn(`⚠️ signalRepository.lidMapping.getLIDForPN não disponível`)
+          }
+        } catch (e) {
+          log.warn(`⚠️ getLIDForPN falhou para ${resolved.jid}: ${e}`)
+        }
+        return resolved.jid
+      }
     }
-  } catch {
-    // fallback abaixo
+  } catch (e) {
+    log.warn(`⚠️ resolveWhatsAppJid falhou para ${rawNumber}: ${e}`)
   }
   // 3. Fallback: phone JID direto
+  log.warn(`⚠️ [resolveJidForSending] fallback para phone JID: ${phoneJid}`)
   return phoneJid
 }
 
