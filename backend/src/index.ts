@@ -1224,7 +1224,7 @@ app.get('/api/pedidos/:id/status-omie', requireAuth, async (req, res) => {
 
 // ─── Cancelar pedido no CRM e no Omie ───
 
-app.post('/api/pedidos/:id/cancelar', requireAuth, async (req, res) => {
+app.post('/api/pedidos/:id/cancelar', requireAuth, requireGerente, async (req, res) => {
   const pedidoId = parseInt(req.params.id, 10)
   if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
 

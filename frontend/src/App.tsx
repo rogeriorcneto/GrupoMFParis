@@ -100,6 +100,8 @@ function stopActiveTimer() {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
+let _appExplicitSignOut = false
+
 function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   // preloadedUser === undefined: não fornecido, verificar sessão normalmente
   // preloadedUser === Vendedor: sessão já verificada pelo Shell, pular checkSession
@@ -264,6 +266,32 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     // Escutar mudanças de auth (login/logout/token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
+        // Explicit sign-out: skip retry, proceed immediately
+        if (_appExplicitSignOut) {
+          _appExplicitSignOut = false
+          try { await disconnectUserWhatsApp() } catch { /* ignore */ }
+          sessionStorage.removeItem('wa_auth_token')
+          sessionStorage.removeItem('wa_page_alive')
+          stopActiveTimer()
+          const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_active_'))
+          allKeys.forEach(k => localStorage.removeItem(k))
+          setLoggedUser(null)
+          setClientes([])
+          setInteracoes([])
+          setTarefas([])
+          setProdutos([])
+          setPedidos([])
+          setVendedores([])
+          setAtividades([])
+          setTemplates([])
+          setTemplatesMsgs([])
+          setCadencias([])
+          setCampanhas([])
+          setJobs([])
+          secondaryLoaded.current.clear()
+          return
+        }
+
         // Retry getSession once — Supabase can fire SIGNED_OUT on transient
         // token refresh failures (network blip) even when the session is still valid
         try {
@@ -484,6 +512,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
         loggedUser={loggedUser} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         onOpenAI={() => setShowAIModal(true)}
         onSignOut={async () => {
+          _appExplicitSignOut = true
           try { await disconnectUserWhatsApp() } catch { /* ignore */ }
           sessionStorage.removeItem('wa_auth_token')
           sessionStorage.removeItem('wa_page_alive')

@@ -14,6 +14,8 @@ import DocumentosSystem from './components/erp/DocumentosSystem'
 
 type SistemaAtivo = 'portal' | 'crm' | 'logistica' | 'financeiro' | 'producao' | 'rh' | 'bi' | 'documentos' | 'cerebro'
 
+let _explicitSignOut = false
+
 export default function GrupoParisShell() {
   const [authChecked, setAuthChecked] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -63,6 +65,18 @@ export default function GrupoParisShell() {
         setIsAuthenticated(true)
         await fetchUserInfo(session.user.id)
       } else if (event === 'SIGNED_OUT') {
+        // Explicit sign-out: skip retry, proceed immediately
+        if (_explicitSignOut) {
+          _explicitSignOut = false
+          setIsAuthenticated(false)
+          setUsuario(null)
+          setVendedorCompleto(null)
+          setVendedorReady(false)
+          setSistemaAtivo('portal')
+          setCrmMontado(false)
+          return
+        }
+
         // Retry getSession once — Supabase can fire SIGNED_OUT on transient
         // token refresh failures (network blip) even when the session is still valid
         try {
@@ -158,6 +172,7 @@ export default function GrupoParisShell() {
           usuario={usuario}
           onSelectSistema={(s: SistemaAtivo) => setSistemaAtivo(s)}
           onSignOut={async () => {
+            _explicitSignOut = true
             await supabase.auth.signOut()
           }}
         />
