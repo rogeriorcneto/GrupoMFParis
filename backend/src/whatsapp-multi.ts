@@ -403,6 +403,37 @@ export async function validateContactsOnWhatsApp(
   return { total: clientes.length, valid, invalid, errors, details }
 }
 
+/**
+ * Resolve o JID para envio, considerando LID quando disponível.
+ * Novas versões do WhatsApp usam LID (@lid) em vez de phone JID (@s.whatsapp.net).
+ * Se o contato já enviou uma mensagem, o lidMap terá o mapeamento.
+ * Tenta LID primeiro, depois fallback para phone JID via onWhatsApp.
+ */
+async function resolveJidForSending(
+  session: UserWhatsAppSession,
+  rawNumber: string
+): Promise<string> {
+  const phoneJid = formatBrazilianPhone(rawNumber) + '@s.whatsapp.net'
+  // 1. Verificar se já temos um LID mapeado para este phone JID no lidMap
+  for (const [lid, pn] of session.lidMap.entries()) {
+    if (pn === phoneJid) {
+      log.info(`🔗 Usando LID conhecido: ${phoneJid} → ${lid}`)
+      return lid
+    }
+  }
+  // 2. Tentar resolver via onWhatsApp (retorna phone JID válido)
+  try {
+    if (session.sock) {
+      const resolved = await resolveWhatsAppJid(session.sock, rawNumber)
+      if (resolved) return resolved.jid
+    }
+  } catch {
+    // fallback abaixo
+  }
+  // 3. Fallback: phone JID direto
+  return phoneJid
+}
+
 export async function sendUserWhatsAppMessage(
   vendedorId: number,
   number: string,
@@ -413,16 +444,7 @@ export async function sendUserWhatsAppMessage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    // Tentar resolver JID via onWhatsApp; se falhar, usar número formatado direto
-    let jid: string
-    try {
-      const resolved = await resolveWhatsAppJid(session.sock, number)
-      jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
-      if (!resolved) log.warn(`⚠️ resolveWhatsAppJid falhou para ${number}, enviando direto para ${jid}`)
-    } catch {
-      jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
-      log.warn(`⚠️ Erro no resolveWhatsAppJid para ${number}, fallback para ${jid}`)
-    }
+    const jid = await resolveJidForSending(session, number)
     log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
     await session.sock.sendMessage(jid, { text })
     return { success: true }
@@ -575,13 +597,7 @@ export async function sendUserWhatsAppAudio(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    let jid: string
-    try {
-      const resolved = await resolveWhatsAppJid(session.sock, number)
-      jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
-    } catch {
-      jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
-    }
+    const jid = await resolveJidForSending(session, number)
     const buffer = Buffer.from(audioBase64, 'base64')
     await session.sock.sendMessage(jid, {
       audio: buffer,
@@ -608,13 +624,7 @@ export async function sendUserWhatsAppImage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
-    let jid: string
-    try {
-      const resolved = await resolveWhatsAppJid(session.sock, number)
-      jid = resolved ? resolved.jid : formatBrazilianPhone(number) + '@s.whatsapp.net'
-    } catch {
-      jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
-    }
+    const jid = await resolveJidForSending(session, number)
     const buffer = Buffer.from(imageBase64, 'base64')
     await session.sock.sendMessage(jid, {
       image: buffer,
