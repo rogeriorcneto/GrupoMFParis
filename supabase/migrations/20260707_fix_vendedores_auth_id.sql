@@ -11,21 +11,13 @@ select
   v.nome,
   v.email,
   v.auth_id as auth_id_atual,
-  v.auth_user_id as auth_user_id_legado,
   au.id as auth_users_id_pelo_email
 from vendedores v
 left join auth.users au on au.email = v.email
 where v.auth_id is null
-   or v.auth_id <> au.id;
+   or (au.id is not null and v.auth_id <> au.id);
 
--- 2. CORREÇÃO — sincroniza auth_id usando auth_user_id (coluna legada), quando existir e for válido
-update vendedores v
-set auth_id = v.auth_user_id
-where v.auth_id is null
-  and v.auth_user_id is not null
-  and exists (select 1 from auth.users au where au.id = v.auth_user_id);
-
--- 3. CORREÇÃO — para os que ainda ficaram sem auth_id, sincroniza pelo e-mail
+-- 2. CORREÇÃO — sincroniza auth_id pelo e-mail (única fonte confiável)
 update vendedores v
 set auth_id = au.id
 from auth.users au

@@ -460,19 +460,15 @@ export async function getSession() {
 export async function getLoggedVendedor(): Promise<Vendedor | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
-  // Tenta pelo auth_id primeiro, depois auth_user_id, e finalmente por email
+  // Tenta pelo auth_id primeiro, e fallback por email
   let { data } = await supabase
     .from('vendedores')
     .select('*')
     .eq('auth_id', user.id)
     .maybeSingle()
-  if (!data) {
-    const r2 = await supabase.from('vendedores').select('*').eq('auth_user_id', user.id).maybeSingle()
-    if (r2.data) data = r2.data
-  }
   if (!data && user.email) {
-    const r3 = await supabase.from('vendedores').select('*').eq('email', user.email).maybeSingle()
-    if (r3.data) data = r3.data
+    const r2 = await supabase.from('vendedores').select('*').eq('email', user.email).maybeSingle()
+    if (r2.data) data = r2.data
   }
   if (!data) return null
   return vendedorFromDb(data)

@@ -107,22 +107,18 @@ export default function GrupoParisShell() {
 
   const fetchUserInfo = async (userId: string) => {
     try {
-      // Tenta pelo auth_user_id primeiro, fallback pelo auth_id, depois pelo email
+      // Tenta pelo auth_id primeiro, fallback pelo email
       let { data } = await supabase
         .from('vendedores')
         .select('*')
-        .eq('auth_user_id', userId)
+        .eq('auth_id', userId)
         .maybeSingle()
-      if (!data) {
-        const r2 = await supabase.from('vendedores').select('*').eq('auth_id', userId).maybeSingle()
-        if (r2.data) data = r2.data
-      }
       if (!data) {
         const { data: { session } } = await supabase.auth.getSession()
         const email = session?.user?.email
         if (email) {
-          const r3 = await supabase.from('vendedores').select('*').eq('email', email).maybeSingle()
-          if (r3.data) data = r3.data
+          const r2 = await supabase.from('vendedores').select('*').eq('email', email).maybeSingle()
+          if (r2.data) data = r2.data
         }
       }
       if (data) {
