@@ -310,9 +310,9 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     e.target.value = ''
   }
 
-  // Vendedor vê apenas: Prospecção, Amostra, Proposta, Negociação, Follow-up
+  // Vendedor vê: Prospecção, Amostra, Proposta, Negociação, Follow-up, Inativos, Perdido
   // Gerente vê todas: Leads, Prospecção, Amostra, Amostra Perdida, Proposta, Negociação, Follow-up, Inativos, Perdido
-  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up'])
+  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
   const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
   const FUNIL_ETAPAS = isGerente ? GERENTE_ETAPAS : VENDEDOR_ETAPAS
 
@@ -321,7 +321,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10, gerenteOnly: false },
     { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25, gerenteOnly: false },
     { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🚫', prob: 0.05, gerenteOnly: false },
-    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10, gerenteOnly: true },
+    { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10, gerenteOnly: false },
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: 0.60, gerenteOnly: false },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },

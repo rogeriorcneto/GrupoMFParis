@@ -764,6 +764,39 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
         }
 
+        log.info(`📊 [reconnect-check] vendedor=${vendedorId} messageStore=${session.messageStore.size} lidMap=${session.lidMap.size} contacts=${session.contacts.length} chats=${session.chats.length}`)
+
+        // Pré-popular cache do DB para sobreviver a reconexões
+        if (session.messageStore.size === 0) {
+          try {
+            const { fetchRecentWhatsAppMessagesByVendedor } = await import('./database.js')
+            const dbMsgs = await fetchRecentWhatsAppMessagesByVendedor(vendedorId, 50, 50)
+            if (dbMsgs.length > 0) {
+              for (const m of dbMsgs) {
+                const jid = `${m.numero}@s.whatsapp.net`
+                const cached: CachedMessage = {
+                  id: `db-${m.id}`,
+                  fromMe: m.direcao === 'enviada',
+                  text: m.mensagem,
+                  timestamp: m.createdAt ? Math.floor(new Date(m.createdAt).getTime() / 1000) : Math.floor(Date.now() / 1000),
+                  type: (m.tipo as CachedMessage['type']) || 'text',
+                }
+                let chatMsgs = session.messageStore.get(jid)
+                if (!chatMsgs) {
+                  chatMsgs = []
+                  session.messageStore.set(jid, chatMsgs)
+                }
+                if (!chatMsgs.find(x => x.id === cached.id)) {
+                  chatMsgs.push(cached)
+                }
+              }
+              log.info(`📦 Vendedor ${vendedorId}: ${dbMsgs.length} mensagens pré-populadas do DB em ${session.messageStore.size} conversas`)
+            }
+          } catch (dbErr) {
+            log.warn({ err: dbErr }, `Falha ao pré-popular cache do DB para vendedor ${vendedorId}`)
+          }
+        }
+
         // Auto-validation removed: was too heavy (1369 clients × 500ms = 11min blocking).
         // Validation is now manual-only via the validate-contacts endpoint.
       }
@@ -880,16 +913,19 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       if (syncMessages && Array.isArray(syncMessages) && syncMessages.length > 0) {
         log.info(`📨 Vendedor ${vendedorId}: history sync — ${syncMessages.length} mensagens recebidas, cacheando em background...`)
         // Process in next tick to not block contacts/chats sync
-        setImmediate(() => {
+        setImmediate(async () => {
           let msgCount = 0
           for (const msg of syncMessages) {
-            const rawJid = msg.key?.remoteJid
-            if (!rawJid) continue
-            // Accept both @s.whatsapp.net and @lid
-            if (rawJid.endsWith('@g.us') || rawJid.endsWith('@broadcast')) continue
-            const jid = rawJid.endsWith('@s.whatsapp.net') ? rawJid : rawJid
-            cacheMessage(session, jid, msg)
-            msgCount++
+            if (!msg.message) continue
+            try {
+              const jid = await resolveJid(msg)
+              if (!jid) continue
+              cacheMessage(session, jid, msg)
+              msgCount++
+            } catch (err) {
+              log.warn(`Erro ao resolver JID no history sync: ${err}`)
+              continue
+            }
           }
           if (msgCount > 0) {
             log.info(`📨 Vendedor ${vendedorId}: ${msgCount} mensagens cacheadas em background`)
@@ -1012,8 +1048,9 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         const { text, type: msgType } = extractMessageContent(msg)
         if (!text.trim()) continue
 
-        const senderNumber = jid.replace('@s.whatsapp.net', '').replace('@lid', '')
-        log.info(`📩 [msg] SAVING to DB: sender=${senderNumber} type=${msgType} text=${text.substring(0, 50)}`)
+        const rawSenderNumber = jid.replace('@s.whatsapp.net', '').replace('@lid', '')
+        const senderNumber = formatBrazilianPhone(rawSenderNumber)
+        log.info(`📩 [msg] SAVING to DB: sender=${senderNumber} (raw=${rawSenderNumber}) type=${msgType} text=${text.substring(0, 50)}`)
 
         try {
           const { insertWhatsAppMessage, findClienteByPhone } = await import('./database.js')

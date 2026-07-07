@@ -620,9 +620,28 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
 
     // Sort by timestamp ascending and take last N
     merged.sort((a, b) => a.timestamp - b.timestamp)
-    const messages = merged.slice(-lim)
+    let messages = merged.slice(-lim)
 
-    log.info(`🔍 [chat-messages] vendedor=${vendedor.id} chatJid=${chatJid} jidsChecked=${Array.from(jidsToCheck).join(',')} merged=${merged.length} returned=${messages.length} lidMapSize=${session.lidMap.size}`)
+    // Fallback: se cache vazio, buscar do DB
+    if (messages.length === 0 && numero) {
+      try {
+        const normalized = formatBrazilianPhone(String(numero))
+        const dbMsgs = await db.fetchWhatsAppMessages(normalized, lim)
+        if (dbMsgs.length > 0) {
+          messages = dbMsgs.map(m => ({
+            id: String(m.id),
+            fromMe: m.direcao === 'enviada',
+            text: m.mensagem,
+            timestamp: Math.floor(new Date(m.createdAt || Date.now()).getTime() / 1000),
+            type: m.tipo || 'text',
+          }))
+        }
+      } catch (e) {
+        // ignore DB errors, return empty
+      }
+    }
+
+    log.info(`🔍 [chat-messages] vendedor=${vendedor.id} chatJid=${chatJid} jidsChecked=${Array.from(jidsToCheck).join(',')} merged=${merged.length} returned=${messages.length} lidMapSize=${session.lidMap.size}${messages.length > 0 && merged.length === 0 ? ' (from DB)' : ''}`)
     res.json(messages)
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Erro interno' })
@@ -871,6 +890,22 @@ app.get('/api/vendedor/:id/historico', requireAuth, requireGerente, async (req, 
   } catch (err: any) {
     log.error({ err }, 'Erro ao buscar histórico vendedor')
     res.status(500).json({ error: err?.message || 'Erro ao buscar histórico' })
+  }
+})
+
+// Gerente atualiza login (email) e/ou senha de um vendedor
+app.post('/api/vendedores/:id/credentials', requireAuth, requireGerente, rateLimit(10, 60_000), async (req, res) => {
+  const vendedorId = Number(req.params.id)
+  const { email, senha } = req.body || {}
+  if (!vendedorId) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+  if (!email && !senha) { res.status(400).json({ success: false, error: 'Informe email e/ou senha para atualizar' }); return }
+  try {
+    const db = await import('./database.js')
+    await db.updateVendedorCredentials(vendedorId, { email, senha })
+    res.json({ success: true })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao atualizar credenciais do vendedor')
+    res.status(400).json({ success: false, error: err?.message || 'Erro ao atualizar credenciais' })
   }
 })
 

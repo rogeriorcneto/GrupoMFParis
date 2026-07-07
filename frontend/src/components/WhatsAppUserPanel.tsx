@@ -295,24 +295,46 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     const iv = setInterval(() => {
       fetchWhatsAppChatMessages({ numero: chatNumber, limit: 100 }).then(cached => {
         if (cached && cached.length > 0) {
-          setMessages(cached.map((m: any) => ({
+          const incoming = cached.map((m: any) => ({
             id: m.id || Date.now(),
             text: m.text,
             from: m.fromMe ? 'me' as const : 'them' as const,
             time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-          })))
+          }))
+          setMessages(prev => {
+            const seen = new Set(prev.map(m => String(m.id)))
+            const merged = [...prev]
+            for (const m of incoming) {
+              if (!seen.has(String(m.id))) {
+                seen.add(String(m.id))
+                merged.push(m)
+              }
+            }
+            return merged
+          })
         } else {
           const dbPromise = cliente?.id
             ? fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
             : fetchWhatsAppMessages({ numero: chatNumber, limit: 100 })
           dbPromise.then(dbMsgs => {
             if (dbMsgs && dbMsgs.length > 0) {
-              setMessages((dbMsgs || []).map((m: any) => ({
+              const incoming = (dbMsgs || []).map((m: any) => ({
                 id: m.id || Date.now(),
                 text: m.mensagem,
                 from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
                 time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-              })))
+              }))
+              setMessages(prev => {
+                const seen = new Set(prev.map(m => String(m.id)))
+                const merged = [...prev]
+                for (const m of incoming) {
+                  if (!seen.has(String(m.id))) {
+                    seen.add(String(m.id))
+                    merged.push(m)
+                  }
+                }
+                return merged
+              })
             }
           }).catch(() => {})
         }

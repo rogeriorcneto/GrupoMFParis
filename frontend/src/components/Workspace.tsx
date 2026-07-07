@@ -184,7 +184,10 @@ const Workspace: React.FC<WorkspaceProps> = ({
   }, [messages, aiLoading])
 
   useEffect(() => {
-    getUserWhatsAppStatus().then(s => setWaConnected(s.connected)).catch(() => {})
+    const checkStatus = () => getUserWhatsAppStatus().then(s => setWaConnected(s.connected)).catch(() => {})
+    checkStatus()
+    const iv = setInterval(checkStatus, 15_000)
+    return () => clearInterval(iv)
   }, [])
 
   // ─── Register action (all workspace actions logged) ───
@@ -263,12 +266,23 @@ const Workspace: React.FC<WorkspaceProps> = ({
     const iv = setInterval(() => {
       fetchWhatsAppChatMessages({ numero: num, limit: 100 }).then(cached => {
         if (cached && cached.length > 0) {
-          setWaMessages(cached.map((m: any) => ({
+          const incoming = cached.map((m: any) => ({
             id: m.id || Date.now(), text: m.text,
             from: m.fromMe ? 'me' as const : 'them' as const,
             time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
             type: m.type, mediaUrl: m.mediaUrl, mimetype: m.mimetype,
-          })))
+          }))
+          setWaMessages(prev => {
+            const seen = new Set(prev.map(m => String(m.id)))
+            const merged = [...prev]
+            for (const m of incoming) {
+              if (!seen.has(String(m.id))) {
+                seen.add(String(m.id))
+                merged.push(m)
+              }
+            }
+            return merged
+          })
         } else {
           // Fallback: try DB when cache is empty
           const p = selectedCliente.id
@@ -276,12 +290,23 @@ const Workspace: React.FC<WorkspaceProps> = ({
             : fetchWhatsAppMessages({ numero: num, limit: 100 })
           p.then(dbMsgs => {
             if (dbMsgs && dbMsgs.length > 0) {
-              setWaMessages(dbMsgs.map((m: any) => ({
+              const incoming = dbMsgs.map((m: any) => ({
                 id: m.id || Date.now(), text: m.mensagem,
                 from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
                 time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
                 type: m.tipo,
-              })))
+              }))
+              setWaMessages(prev => {
+                const seen = new Set(prev.map(m => String(m.id)))
+                const merged = [...prev]
+                for (const m of incoming) {
+                  if (!seen.has(String(m.id))) {
+                    seen.add(String(m.id))
+                    merged.push(m)
+                  }
+                }
+                return merged
+              })
             }
           }).catch(() => {})
         }

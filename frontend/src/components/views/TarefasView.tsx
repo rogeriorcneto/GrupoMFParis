@@ -1245,7 +1245,7 @@ const TarefasView: React.FC<{
           }
           onVerNoFunil(c)
         } : undefined}
-        onDeleteTarefa={onDeleteTarefa}
+        onDeleteTarefa={isGerente ? onDeleteTarefa : undefined}
       />
     )
   }

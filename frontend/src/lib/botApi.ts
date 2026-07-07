@@ -332,6 +332,21 @@ export async function fetchVendedorHistorico(vendedorId: number, limit = 200): P
   return await res.json()
 }
 
+/** Atualiza email (login) e/ou senha de um vendedor. Somente gerente. */
+export async function updateVendedorCredentials(
+  vendedorId: number,
+  updates: { email?: string; senha?: string }
+): Promise<{ success: boolean; error?: string }> {
+  const res = await authFetch(`${BOT_URL}/api/vendedores/${vendedorId}/credentials`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error || 'Erro ao atualizar credenciais')
+  return data
+}
+
 export async function fetchAllVendedoresHistorico(limit = 500): Promise<{ atividades: VendedorHistoricoItem[] }> {
   const res = await authFetch(`${BOT_URL}/api/vendedores/historico?limit=${limit}`)
   if (!res.ok) throw new Error('Erro ao buscar histórico geral')

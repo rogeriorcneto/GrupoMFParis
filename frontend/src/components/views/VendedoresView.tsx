@@ -1,7 +1,7 @@
 import React from 'react'
 import { PlusIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
 import type { Vendedor, Cliente } from '../../types'
-import { fetchVendedorHistorico, type VendedorHistoricoItem } from '../../lib/botApi'
+import { fetchVendedorHistorico, updateVendedorCredentials, type VendedorHistoricoItem } from '../../lib/botApi'
 import { formatTelefone } from '../../utils/validators'
 
 function getActiveSecs(id: number): number {
@@ -82,6 +82,13 @@ const VendedoresView: React.FC<{
   const [historico, setHistorico] = React.useState<VendedorHistoricoItem[]>([])
   const [historicoLoading, setHistoricoLoading] = React.useState(false)
 
+  const [editingCredenciais, setEditingCredenciais] = React.useState(false)
+  const [editEmail, setEditEmail] = React.useState('')
+  const [editSenha, setEditSenha] = React.useState('')
+  const [credenciaisError, setCredenciaisError] = React.useState('')
+  const [credenciaisSaving, setCredenciaisSaving] = React.useState(false)
+  const [credenciaisSuccess, setCredenciaisSuccess] = React.useState('')
+
   const isManager = loggedUser?.cargo === 'gerente' || loggedUser?.cargo === 'sdr'
   const sessionTimer = useSessionTimer(isManager && selectedVendedorId ? selectedVendedorId : null)
   const onlineStatus = useOnlineStatus(isManager ? vendedores.map(v => v.id) : [])
@@ -153,6 +160,33 @@ const VendedoresView: React.FC<{
     setEditingMetas(false)
   }
 
+  const isGerente = loggedUser?.cargo === 'gerente'
+
+  const handleSaveCredenciais = async () => {
+    if (!selectedVendedor) return
+    if (!editEmail.trim() && !editSenha.trim()) { setCredenciaisError('Informe um novo email e/ou senha'); return }
+    if (editSenha.trim() && editSenha.trim().length < 6) { setCredenciaisError('Senha deve ter pelo menos 6 caracteres'); return }
+    setCredenciaisError('')
+    setCredenciaisSaving(true)
+    try {
+      await updateVendedorCredentials(selectedVendedor.id, {
+        email: editEmail.trim() || undefined,
+        senha: editSenha.trim() || undefined,
+      })
+      if (editEmail.trim() && editEmail.trim() !== selectedVendedor.email) {
+        onUpdateVendedor({ ...selectedVendedor, email: editEmail.trim() })
+      }
+      setCredenciaisSuccess('Credenciais atualizadas com sucesso!')
+      setEditSenha('')
+      setEditingCredenciais(false)
+      setTimeout(() => setCredenciaisSuccess(''), 4000)
+    } catch (err: any) {
+      setCredenciaisError(err?.message || 'Erro ao atualizar credenciais')
+    } finally {
+      setCredenciaisSaving(false)
+    }
+  }
+
   if (selectedVendedor) {
     const m = getVendedorMetrics(selectedVendedor)
     const pctVendas = Math.min((m.valorPipeline / selectedVendedor.metaVendas) * 100, 100)
@@ -217,11 +251,46 @@ const VendedoresView: React.FC<{
         )}
 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🔐 Credenciais de Acesso</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-3 rounded-apple border border-gray-200 bg-gray-50"><p className="text-xs text-gray-500">Email (login)</p><p className="text-sm font-semibold text-gray-900 mt-1">{selectedVendedor.email}</p></div>
-            <div className="p-3 rounded-apple border border-gray-200 bg-gray-50"><p className="text-xs text-gray-500">Senha</p><p className="text-sm font-semibold text-gray-900 mt-1">••••••••</p><p className="text-[10px] text-gray-400 mt-1">Gerenciada pelo Supabase Auth</p></div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">🔐 Credenciais de Acesso</h3>
+            {isGerente && !editingCredenciais && (
+              <button
+                onClick={() => { setEditingCredenciais(true); setEditEmail(selectedVendedor.email); setEditSenha(''); setCredenciaisError('') }}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"
+              >✏️ Editar Login/Senha</button>
+            )}
           </div>
+
+          {credenciaisSuccess && (
+            <div className="mb-4 p-3 rounded-apple bg-green-50 border border-green-200 text-sm text-green-700 font-medium">
+              ✅ {credenciaisSuccess}
+            </div>
+          )}
+
+          {editingCredenciais ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email (login)</label>
+                  <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nova Senha</label>
+                  <input type="password" value={editSenha} onChange={(e) => setEditSenha(e.target.value)} placeholder="Deixe em branco para não alterar" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                </div>
+              </div>
+              {credenciaisError && <p className="text-sm text-red-600 font-medium">{credenciaisError}</p>}
+              <div className="flex gap-2">
+                <button onClick={() => { setEditingCredenciais(false); setCredenciaisError('') }} disabled={credenciaisSaving} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
+                <button onClick={handleSaveCredenciais} disabled={credenciaisSaving} className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-apple hover:bg-primary-700 disabled:opacity-50">{credenciaisSaving ? 'Salvando...' : 'Salvar'}</button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 rounded-apple border border-gray-200 bg-gray-50"><p className="text-xs text-gray-500">Email (login)</p><p className="text-sm font-semibold text-gray-900 mt-1">{selectedVendedor.email}</p></div>
+              <div className="p-3 rounded-apple border border-gray-200 bg-gray-50"><p className="text-xs text-gray-500">Senha</p><p className="text-sm font-semibold text-gray-900 mt-1">••••••••</p><p className="text-[10px] text-gray-400 mt-1">Gerenciada pelo Supabase Auth</p></div>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

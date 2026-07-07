@@ -2,6 +2,7 @@ import { supabase } from './supabase.js'
 import { createClient } from '@supabase/supabase-js'
 import { CONFIG } from './config.js'
 import { log } from './logger.js'
+import { formatBrazilianPhone, generateBrazilianPhoneVariations } from './whatsapp-multi.js'
 
 // ============================================
 // Types (réplica simplificada do frontend)
@@ -342,6 +343,40 @@ export async function fetchVendedorById(id: number): Promise<Vendedor | null> {
   return vendedorFromDb(data)
 }
 
+// Atualiza email e/ou senha de login de um vendedor via Supabase Admin API.
+// Requer service_role key (já configurada no client `supabase` deste arquivo).
+export async function updateVendedorCredentials(
+  vendedorId: number,
+  updates: { email?: string; senha?: string }
+): Promise<void> {
+  const { data: row, error: fetchError } = await supabase
+    .from('vendedores')
+    .select('auth_id, email')
+    .eq('id', vendedorId)
+    .single()
+  if (fetchError || !row) throw new Error('Vendedor não encontrado')
+  if (!row.auth_id) throw new Error('Vendedor não possui login vinculado (auth_id ausente)')
+
+  const authUpdates: { email?: string; password?: string } = {}
+  if (updates.email && updates.email.trim() && updates.email.trim() !== row.email) {
+    authUpdates.email = updates.email.trim()
+  }
+  if (updates.senha && updates.senha.trim()) {
+    if (updates.senha.trim().length < 6) throw new Error('Senha deve ter pelo menos 6 caracteres')
+    authUpdates.password = updates.senha.trim()
+  }
+
+  if (Object.keys(authUpdates).length > 0) {
+    const { error: authError } = await supabase.auth.admin.updateUserById(row.auth_id, authUpdates)
+    if (authError) throw new Error(`Erro ao atualizar credenciais: ${authError.message}`)
+  }
+
+  if (authUpdates.email) {
+    const { error: dbError } = await supabase.from('vendedores').update({ email: authUpdates.email }).eq('id', vendedorId)
+    if (dbError) throw new Error(`Erro ao atualizar email no banco: ${dbError.message}`)
+  }
+}
+
 export async function findVendedorByPhone(phone: string): Promise<Vendedor | null> {
   const clean = phone.replace(/\D/g, '')
   if (!clean) return null
@@ -403,12 +438,24 @@ export async function fetchClienteById(id: number): Promise<Cliente | null> {
 export async function findClienteByPhone(phone: string): Promise<Cliente | null> {
   const clean = phone.replace(/\D/g, '')
   if (!clean) return null
-  // Try whatsapp, contatoCelular, contatoTelefone fields
+
+  const formatted = formatBrazilianPhone(clean)
+  const variations = generateBrazilianPhoneVariations(formatted)
+
+  const orFilter = variations
+    .flatMap(v => [
+      `whatsapp.ilike.%${v}%`,
+      `contato_celular.ilike.%${v}%`,
+      `contato_telefone.ilike.%${v}%`,
+    ])
+    .join(',')
+
   const { data, error } = await supabase
     .from('clientes')
     .select('*')
-    .or(`whatsapp.ilike.%${clean}%,contato_celular.ilike.%${clean}%,contato_telefone.ilike.%${clean}%`)
-    .limit(1)
+    .or(orFilter)
+    .limit(5)
+
   if (error || !data || data.length === 0) return null
   return clienteFromDb(data[0])
 }
@@ -630,7 +677,7 @@ export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'c
 }
 
 export async function fetchWhatsAppMessages(numero: string, limit = 100): Promise<WhatsAppMessage[]> {
-  const cleanNum = numero.replace(/\D/g, '')
+  const cleanNum = formatBrazilianPhone(numero.replace(/\D/g, ''))
   const { data, error } = await supabase
     .from('whatsapp_messages')
     .select('*')
@@ -668,6 +715,45 @@ export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 
     tipo: row.tipo || 'text',
     createdAt: row.created_at,
   }))
+}
+
+/** Busca as últimas N mensagens por conversa para um vendedor, para pré-popular cache após reconexão */
+export async function fetchRecentWhatsAppMessagesByVendedor(
+  vendedorId: number,
+  perChat = 50,
+  maxChats = 50
+): Promise<WhatsAppMessage[]> {
+  const { data, error } = await supabase
+    .from('whatsapp_messages')
+    .select('*')
+    .eq('vendedor_id', vendedorId)
+    .order('created_at', { ascending: false })
+    .limit(perChat * maxChats)
+  if (error) throw error
+  if (!data || data.length === 0) return []
+  // Group by numero, keep last perChat per group
+  const byNumber = new Map<string, any[]>()
+  for (const row of data) {
+    const arr = byNumber.get(row.numero) || []
+    if (arr.length < perChat) arr.push(row)
+    byNumber.set(row.numero, arr)
+  }
+  const result: WhatsAppMessage[] = []
+  for (const arr of byNumber.values()) {
+    for (const row of arr.reverse()) {
+      result.push({
+        id: row.id,
+        numero: row.numero,
+        clienteId: row.cliente_id,
+        vendedorId: row.vendedor_id,
+        direcao: row.direcao,
+        mensagem: row.mensagem,
+        tipo: row.tipo || 'text',
+        createdAt: row.created_at,
+      })
+    }
+  }
+  return result
 }
 
 // ============================================
