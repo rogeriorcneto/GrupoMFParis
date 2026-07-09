@@ -187,7 +187,19 @@ export default function AppRouter({
             await db.recusarPedido(pedido.id, motivo)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
             addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
-            // Pedido recusado: cliente permanece em negociação (não mover)
+            // Se for pedido de bonificação (amostra), mover cliente para amostra_perdida
+            if (pedido.tipo === 'bonificacao') {
+              const cli = clientes.find(c => c.id === pedido.clienteId)
+              if (cli && cli.etapa === 'amostra') {
+                try {
+                  moverCliente(pedido.clienteId, 'amostra_perdida', {
+                    resultadoAmostra: 'reprovada',
+                    dataResultadoAmostra: new Date().toISOString().split('T')[0],
+                    motivoReprovacao: motivo,
+                  })
+                } catch { /* non-critical */ }
+              }
+            }
           } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
         }}
         onConfirmarCancelamento={async (pedido) => {

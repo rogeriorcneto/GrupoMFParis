@@ -938,7 +938,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                     {msg.text}
                   </div>
                 ) : msg.from === 'them' ? (
-                  <div className="bg-white text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
+                  <div className="text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm" style={{ backgroundColor: '#ffffff', color: '#111827' }}>
                     <p className="whitespace-pre-wrap" style={{ color: '#111827' }}>{msg.text}</p>
                     <p className="text-[10px] text-right mt-1" style={{ color: '#6b7280' }}>{msg.time}</p>
                   </div>

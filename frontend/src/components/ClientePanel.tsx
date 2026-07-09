@@ -26,6 +26,7 @@ interface ClientePanelProps {
   onTriggerAmostra: (cliente: Cliente) => void
   onTriggerNegociacao: (cliente: Cliente) => void
   onTriggerPerda: (cliente: Cliente) => void
+  onDeleteTarefa?: (tarefaId: number) => void
   setInteracoes: React.Dispatch<React.SetStateAction<Interacao[]>>
   setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
   setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>
@@ -109,7 +110,7 @@ function composeNotasEmpresa(setor: string, info: string): string {
 export default function ClientePanel({
   cliente: c, interacoes, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
-  onTriggerAmostra, onTriggerNegociacao, onTriggerPerda,
+  onTriggerAmostra, onTriggerNegociacao, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao,
   produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido,
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
@@ -968,7 +969,14 @@ export default function ClientePanel({
                 )
               })()}
               {['prospecção', 'proposta', 'amostra', 'amostra_perdida', 'negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
-                <button onClick={() => { onTriggerPerda(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
+                <button onClick={() => {
+                  if (c.etapa === 'amostra') {
+                    onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] })
+                  } else {
+                    onTriggerPerda(c)
+                  }
+                  onClose()
+                }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
               )}
               {c.etapa === 'lead' && !showProspeccaoModal && (
                 <button
@@ -1768,7 +1776,7 @@ export default function ClientePanel({
                         return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}${horaTxt}`
                       })()
                       return (
-                        <div key={inter.id} className={`group rounded-apple border overflow-hidden ${isPinned ? 'border-amber-200 bg-amber-50/30' : 'border-gray-200 bg-white'} hover:border-gray-300 transition-colors`}>
+                        <div key={inter.id} className={`group rounded-apple border overflow-hidden ${isPinned ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'} hover:border-gray-300 transition-colors`}>
 
                           {/* CABEÇALHO: ícone + nome + tipo + badge + data criação */}
                           <div className={`flex items-center justify-between gap-2 px-3 py-2.5 ${isPinned ? 'bg-amber-50' : 'bg-primary-50'} border-b ${isPinned ? 'border-amber-100' : 'border-primary-100'}`}>
@@ -1974,6 +1982,20 @@ export default function ClientePanel({
                               >
                                 📌
                               </button>
+                              {isGerente && isTaskItem && onDeleteTarefa && (
+                                <button
+                                  onClick={() => {
+                                    const tarefaId = Math.abs(inter.id)
+                                    if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
+                                      onDeleteTarefa(tarefaId)
+                                    }
+                                  }}
+                                  className="flex-shrink-0 p-1 rounded-full text-gray-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-all"
+                                  title="Excluir tarefa"
+                                >
+                                  🗑️
+                                </button>
+                              )}
                             </div>
                           </div>
                           {/* Painel de finalização com observação */}

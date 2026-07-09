@@ -288,6 +288,14 @@ export function useFunilActions({
     }
 
     if (toStage === 'perdido') {
+      if (draggedItem.fromStage === 'amostra') {
+        moverCliente(draggedItem.cliente.id, 'amostra_perdida', {
+          resultadoAmostra: 'reprovada',
+          dataResultadoAmostra: new Date().toISOString().split('T')[0],
+        })
+        setDraggedItem(null)
+        return
+      }
       setPendingDrop({ e, toStage })
       setShowMotivoPerda(true)
       return
@@ -413,9 +421,9 @@ export function useFunilActions({
         motivoReprovacao: undefined,
       })
 
-      // Ao entrar em amostra vindo de proposta (1ª tentativa), gera um novo card em Proposta
-      // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up).
-      if (!isRetry && draggedItem.fromStage === 'proposta') {
+      // Ao entrar em amostra (1ª tentativa), gera um novo card em Proposta
+      // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up e perdido).
+      if (!isRetry) {
         const novoCard: Omit<Cliente, 'id'> = {
           ...clienteOriginal,
           cnpj: undefined,

@@ -643,9 +643,10 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
             onClose={() => setSelectedClientePanel(null)}
             onEditCliente={handleEditCliente}
             onMoverCliente={moverCliente}
-            onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'prospecção' }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}
+            onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}
             onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
             onTriggerPerda={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'perdido' }); setShowMotivoPerda(true) }}
+            onDeleteTarefa={async (tarefaId) => { try { await db.deleteTarefa(tarefaId); setTarefas(prev => prev.filter(t => t.id !== tarefaId)); addNotificacao('success', 'Tarefa excluída', 'Tarefa excluída com sucesso.', selectedClientePanel?.id) } catch (err) { logger.error('Erro ao excluir tarefa:', err); addNotificacao('error', 'Erro', 'Erro ao excluir tarefa') } }}
             setInteracoes={setInteracoes}
             setClientes={setClientes}
             setTarefas={setTarefas}
