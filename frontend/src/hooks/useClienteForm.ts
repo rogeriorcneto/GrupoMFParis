@@ -105,11 +105,24 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     e.preventDefault()
     if (isSaving) return
 
-    if (!formData.razaoSocial.trim()) { showToast('error', 'Razão Social é obrigatória.'); return }
-
     const cnpjDigits = formData.cnpj.replace(/\D/g, '')
-    if (cnpjDigits.length > 0 && !validarCNPJ(formData.cnpj)) {
+    if (!cnpjDigits) {
+      showToast('error', 'CNPJ é obrigatório.')
+      return
+    }
+    if (!validarCNPJ(formData.cnpj)) {
       showToast('error', 'CNPJ inválido. Verifique os dígitos.')
+      return
+    }
+
+    const temTelefone = formData.contatoTelefone.trim() || formData.contatoCelular.trim() || formData.contatoTelefoneFixo.trim()
+    if (!temTelefone) {
+      showToast('error', 'Informe ao menos um telefone de contato.')
+      return
+    }
+
+    if (!formData.enderecoRua.trim()) {
+      showToast('error', 'Endereço (rua) é obrigatório.')
       return
     }
 
