@@ -68,7 +68,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
 
   const buscarCnpj = async (cnpj: string) => {
     const digits = cnpj.replace(/\D/g, '')
-    if (digits.length !== 14) return
+    if (digits.length !== 14) { showToast('error', 'Informe um CNPJ válido com 14 dígitos.'); return }
     setIsLoadingCnpj(true)
     try {
       const data = await fetchCnpjViaBackend(digits)
@@ -94,7 +94,13 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
           : prev.cnaeSecundario,
       }))
       showToast('success', 'Dados preenchidos pela Receita Federal!')
-    } catch { showToast('error', 'Erro ao consultar CNPJ. Verifique a conexão.') } finally { setIsLoadingCnpj(false) }
+    } catch (err: any) {
+      if (err?.message === 'Não autenticado') {
+        showToast('error', 'Sessão expirada. Faça login novamente.')
+      } else {
+        showToast('error', 'Erro ao consultar CNPJ. Verifique a conexão com o servidor.')
+      }
+    } finally { setIsLoadingCnpj(false) }
   }
 
   const buildEnderecoCompleto = (f: FormData) =>

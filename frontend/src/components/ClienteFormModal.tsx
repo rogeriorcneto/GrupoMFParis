@@ -207,7 +207,7 @@ export default function ClienteFormModal({
                 <div className="space-y-3">
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">CNPJ <span className="text-red-500">*</span></label>
                       <div className="flex gap-1">
                         <input type="text" name="cnpj" value={formData.cnpj} onChange={handleInputChange}
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
@@ -265,8 +265,8 @@ export default function ClienteFormModal({
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social *</label>
-                    <input type="text" name="razaoSocial" value={formData.razaoSocial} onChange={handleInputChange} required
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social</label>
+                    <input type="text" name="razaoSocial" value={formData.razaoSocial} onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                       placeholder="Ex: Supermercado BH Ltda" />
                   </div>
@@ -343,7 +343,7 @@ export default function ClienteFormModal({
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Celular</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Celular <span className="text-red-500">*</span></label>
                       <input type="tel" name="contatoCelular" value={formData.contatoCelular} onChange={handleTelChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         placeholder="(00) 99999-0000" maxLength={16} />
@@ -446,7 +446,7 @@ export default function ClienteFormModal({
                       </div>
                     </div>
                     <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Rua / Logradouro</label>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Rua / Logradouro <span className="text-red-500">*</span></label>
                       <input type="text" name="enderecoRua" value={formData.enderecoRua} onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                         placeholder="Rua das Flores" />

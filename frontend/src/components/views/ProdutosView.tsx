@@ -77,7 +77,6 @@ const ProdutosView: React.FC<{
     }
     if (editing) {
       if (isGerente) {
-        console.log('[ProdutosView] Salvando produto (gerente):', { id: editing.id, nome: base.nome, nomeOriginal: editing.nome })
         onUpdate({ ...base, id: editing.id, dataCadastro: editing.dataCadastro })
       } else {
         onUpdate({ ...editing, preco: parseFloat(fPreco) })

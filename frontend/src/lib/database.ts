@@ -1001,13 +1001,10 @@ export async function updateProduto(id: number, p: Partial<Produto>): Promise<Pr
   if (p.margemLucro !== undefined) row.margem_lucro = p.margemLucro
   if (p.ativo !== undefined) row.ativo = p.ativo
   if (p.destaque !== undefined) row.destaque = p.destaque
-  console.log('[updateProduto] Enviando update:', { id, row, nomeEnviado: p.nome })
   const { error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').update(row).eq('id', id); return r })
-  if (error) { console.error('[updateProduto] Erro:', error); throw error }
-  console.log('[updateProduto] Update OK, buscando produto atualizado...')
+  if (error) throw error
   const { data: updated, error: fetchErr } = await withAuthRetry(async () => { const r = await supabase.from('produtos').select('*').eq('id', id).single(); return r })
-  if (fetchErr) { console.error('[updateProduto] Erro ao buscar:', fetchErr); return undefined }
-  console.log('[updateProduto] Produto atualizado:', updated)
+  if (fetchErr) return undefined
   return updated ? produtoFromDb(updated) : undefined
 }
 
