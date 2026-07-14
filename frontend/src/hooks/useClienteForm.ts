@@ -174,11 +174,15 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         }
         await db.updateCliente(editingCliente.id, updatedFields)
         setClientes(prev => prev.map(c => c.id === editingCliente.id ? { ...c, ...updatedFields } : c))
-        const savedI = await db.insertInteracao({
-          clienteId: editingCliente.id, tipo: 'nota', data: new Date().toISOString(),
-          assunto: 'Dados atualizados', descricao: `Cliente atualizado: ${formData.razaoSocial}`, automatico: true
-        })
-        setInteracoes(prev => [savedI, ...prev])
+        try {
+          const savedI = await db.insertInteracao({
+            clienteId: editingCliente.id, tipo: 'nota', data: new Date().toISOString(),
+            assunto: 'Dados atualizados', descricao: `Cliente atualizado: ${formData.razaoSocial}`, automatico: true
+          })
+          setInteracoes(prev => [savedI, ...prev])
+        } catch (err) {
+          logger.error('Cliente atualizado, mas não foi possível registrar a interação:', err)
+        }
         setEditingCliente(null)
         showToast('success', `Cliente "${formData.razaoSocial}" atualizado com sucesso!`)
       } else {
@@ -191,16 +195,24 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
           criadoPorNome: loggedUser?.nome || undefined,
         } as Omit<Cliente, 'id'>)
         setClientes(prev => [...prev, savedC])
-        const savedI = await db.insertInteracao({
-          clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),
-          assunto: 'Novo cliente', descricao: `Cliente cadastrado por ${loggedUser?.nome || 'Sistema'}: ${formData.razaoSocial}`, automatico: true
-        })
-        setInteracoes(prev => [savedI, ...prev])
+        try {
+          const savedI = await db.insertInteracao({
+            clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),
+            assunto: 'Novo cliente', descricao: `Cliente cadastrado por ${loggedUser?.nome || 'Sistema'}: ${formData.razaoSocial}`, automatico: true
+          })
+          setInteracoes(prev => [savedI, ...prev])
+        } catch (err) {
+          logger.error('Cliente cadastrado, mas não foi possível registrar a interação:', err)
+        }
         showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
       }
       setFormData({ ...emptyForm })
       setShowModal(false)
-    } catch (err) { logger.error('Erro ao salvar cliente:', err); showToast('error', 'Erro ao salvar cliente. Tente novamente.') } finally { setIsSaving(false) }
+    } catch (err: any) {
+      logger.error('Erro ao salvar cliente:', err)
+      const detalhe = err?.message ? `: ${err.message}` : ''
+      showToast('error', `Erro ao salvar cliente${detalhe}`)
+    } finally { setIsSaving(false) }
   }
 
   const handleEditCliente = (cliente: Cliente) => {
