@@ -107,6 +107,7 @@ export interface Cliente {
   contatoComprasTelefone?: string
   // Produtos de Interesse — quantidade mensal estimada por produto
   produtosQuantidadesMensais?: Record<string, number>
+  produtosDenegados?: string[]
   // Inativação detalhada
   motivoInativacao?: string
   dataInativacao?: string

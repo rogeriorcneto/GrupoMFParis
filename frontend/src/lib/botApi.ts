@@ -542,3 +542,16 @@ export async function importarLugarComoLead(
     return { success: false, error: err.message }
   }
 }
+
+/** Busca dados de CNPJ via backend (proxy server-side para evitar CORS) */
+export async function fetchCnpjViaBackend(cnpj: string): Promise<any | null> {
+  const digits = cnpj.replace(/\D/g, '')
+  if (digits.length !== 14) return null
+  try {
+    const res = await authFetch(`${BOT_URL}/api/cnpj/${digits}`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}

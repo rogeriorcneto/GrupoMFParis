@@ -225,6 +225,12 @@ export default function ClientePanel({
   // Carregar propostas do cliente
   const [todasPropostas, setTodasPropostas] = useState<PropostaHistorico[]>([])
   const [showPropostasAnteriores, setShowPropostasAnteriores] = useState(false)
+  const [propostasExpandidas, setPropostasExpandidas] = useState<Set<number>>(new Set())
+  const togglePropostaExpandida = (id: number) => setPropostasExpandidas(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
   useEffect(() => {
     fetchPropostasByCliente(c.id)
       .then(list => { setUltimaProposta(list[0] || null); setTodasPropostas(list) })
@@ -878,7 +884,7 @@ export default function ClientePanel({
                           setShowAvaliarAmostra(true)
                         }}
                         className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
-                      >🧪 Avaliar Itens</button>
+                      >🧪 Resultado da Amostra</button>
                     </>
                   )}
                   {!['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(c.statusAmostra || '') && (
@@ -1189,6 +1195,25 @@ export default function ClientePanel({
             )
           })()}
 
+          {/* === PRODUTOS DENEGADOS === */}
+          {(() => {
+            const lista = c.produtosDenegados || []
+            return (
+              <div className="bg-red-50 rounded-apple border border-red-200 p-4 space-y-2">
+                <h3 className="text-sm font-semibold text-red-900">🚫 Produtos Denegados</h3>
+                {lista.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {lista.map(nome => (
+                      <span key={nome} className="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full border border-red-300 font-medium">{nome}</span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-red-700 opacity-70">Nenhum produto denegado registrado.</p>
+                )}
+              </div>
+            )
+          })()}
+
           {/* === PRODUTOS DE INTERESSE === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">📦 Produtos de interesse</h3>
@@ -1385,21 +1410,56 @@ export default function ClientePanel({
                 {/* Lista de Propostas */}
                 {todasPropostas.length > 0 && (
                   <div className="bg-white rounded-apple border border-gray-200">
-                    <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
                       <p className="text-sm font-semibold text-gray-900">📋 Histórico de Propostas</p>
+                      <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{todasPropostas.length} proposta(s)</span>
                     </div>
                     <div className="divide-y divide-gray-100">
-                      {todasPropostas.map((p, i) => (
-                        <div key={p.id} className={`px-4 py-2.5 ${i === 0 ? 'bg-indigo-50/30' : ''}`}>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900">{p.numero} {i === 0 && <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1 rounded">atual</span>}</p>
-                              <p className="text-[11px] text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR')} · {p.vendedorNome} · {(p.itens || []).length} item(ns)</p>
+                      {todasPropostas.map((p, i) => {
+                        const expandida = propostasExpandidas.has(p.id)
+                        return (
+                          <div key={p.id} className={`${i === 0 ? 'bg-indigo-50/30' : ''}`}>
+                            <div className="px-4 py-2.5 flex items-center justify-between gap-2">
+                              <button className="min-w-0 flex-1 text-left" onClick={() => togglePropostaExpandida(p.id)}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-900">{p.numero}</span>
+                                  {i === 0 && <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium">mais recente</span>}
+                                </div>
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                  {new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  {' · '}{p.vendedorNome}
+                                  {p.frete && ` · ${p.frete}`}
+                                  {p.pagamento && ` · ${p.pagamento}`}
+                                  {' · '}{(p.itens || []).length} item(ns)
+                                  {' · '}<span className="text-[10px]">{expandida ? '▲ recolher' : '▼ ver itens'}</span>
+                                </p>
+                              </button>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <p className="text-sm font-bold text-gray-900">R$ {(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                <button
+                                  onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento })}
+                                  className="px-2 py-1 text-[10px] bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 whitespace-nowrap"
+                                  title="Baixar PDF"
+                                >⬇ PDF</button>
+                              </div>
                             </div>
-                            <p className="text-sm font-bold text-gray-900 flex-shrink-0">R$ {(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            {expandida && (
+                              <div className="px-4 pb-3 space-y-1">
+                                <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100">
+                                  {(p.itens || []).map((it, j) => (
+                                    <div key={j} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                                      <span className="text-gray-800 flex-1 truncate">{it.nomeProduto}</span>
+                                      <span className="text-gray-500 mx-3">{it.quantidade} {it.unidade}</span>
+                                      <span className="text-gray-900 font-medium">R$ {(it.preco * it.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {p.observacoes && <p className="text-[11px] text-gray-500 italic">{p.observacoes}</p>}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -2434,18 +2494,32 @@ export default function ClientePanel({
 
         const handleConfirmar = async () => {
           const hoje = new Date().toISOString().split('T')[0]
+          // Calcular homologados e denegados desta avaliação
+          const nomesHomologados = itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === true).map(i => i.nomeProduto)
+          const nomesDenegados = itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === false).map(i => i.nomeProduto)
+          // Atualizar listas acumuladas no cliente
+          const homologadosAtuais = c.produtosDenegados ? [...c.produtosDenegados] : []
+          const denegadosAtuais = c.produtosDenegados ? [...c.produtosDenegados] : []
+          const novosDenegados = Array.from(new Set([...denegadosAtuais, ...nomesDenegados]))
+          const motivosReprovados = itens
+            .map((item, idx) => avaliacaoItens[idx]?.aprovado === false
+              ? `${item.nomeProduto}: ${avaliacaoItens[idx]?.motivo || ''}`
+              : null
+            )
+            .filter(Boolean)
+            .join('; ')
           if (todosAprovados) {
             onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje })
             await criarNovoCicloEmProposta()
           } else {
-            const motivosReprovados = itens
-              .map((item, idx) => avaliacaoItens[idx]?.aprovado === false
-                ? `${item.nomeProduto}: ${avaliacaoItens[idx]?.motivo || ''}`
-                : null
-              )
-              .filter(Boolean)
-              .join('; ')
-            onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: hoje, motivoReprovacao: motivosReprovados })
+            onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: hoje, motivoReprovacao: motivosReprovados, produtosDenegados: novosDenegados })
+          }
+          // Se algum foi homologado (aprovação parcial ou total), persistir no cliente original também
+          if (nomesHomologados.length > 0 && !todosAprovados) {
+            try {
+              await db.updateCliente(c.id, { produtosDenegados: novosDenegados })
+              setClientes(prev => prev.map(cli => cli.id === c.id ? { ...cli, produtosDenegados: novosDenegados } : cli))
+            } catch (err) { logger.error('Erro ao salvar denegados:', err) }
           }
           setShowAvaliarAmostra(false)
           onClose()
@@ -2455,17 +2529,17 @@ export default function ClientePanel({
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4" onClick={() => setShowAvaliarAmostra(false)}>
             <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">🧪 Avaliação de Amostra por Item</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{c.razaoSocial} — Aprove ou reprove cada produto individualmente</p>
+                <h2 className="text-lg font-semibold text-gray-900">🧪 Resultado da Amostra por Item</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{c.razaoSocial} — Classifique cada produto como Homologado ou Denegado</p>
               </div>
 
               {itens.length === 0 ? (
                 <div className="text-center py-6 text-gray-400 text-sm">
                   <p>Nenhum item encontrado no pedido de amostra.</p>
-                  <p className="text-xs mt-1">Use os botões de Aprovar / Reprovar gerais.</p>
+                  <p className="text-xs mt-1">Use os botões gerais de Homologado / Denegado.</p>
                   <div className="flex gap-3 justify-center mt-4">
-                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); await criarNovoCicloEmProposta(); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Aprovar</button>
-                    <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-orange-600 text-white rounded-apple text-sm hover:bg-orange-700">🚫 Reprovar</button>
+                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); await criarNovoCicloEmProposta(); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Homologado</button>
+                    <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">🚫 Denegado</button>
                   </div>
                 </div>
               ) : (
@@ -2473,7 +2547,7 @@ export default function ClientePanel({
                   {itens.map((item, idx) => {
                     const av = avaliacaoItens[idx] || { aprovado: null, motivo: '' }
                     return (
-                      <div key={idx} className={`rounded-apple border p-3 space-y-2 transition-colors ${av.aprovado === true ? 'border-green-300 bg-green-50' : av.aprovado === false ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-gray-50'}`}>
+                      <div key={idx} className={`rounded-apple border p-3 space-y-2 transition-colors ${av.aprovado === true ? 'border-green-300 bg-green-50' : av.aprovado === false ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <p className="text-sm font-medium text-gray-900">{item.nomeProduto}</p>
@@ -2483,11 +2557,11 @@ export default function ClientePanel({
                             <button
                               onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { aprovado: true, motivo: '' } }))}
                               className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === true ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'}`}
-                            >✅ OK</button>
+                            >✅ Homologado</button>
                             <button
                               onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], aprovado: false, motivo: prev[idx]?.motivo || '' } }))}
-                              className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === false ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-orange-700 border-orange-300 hover:bg-orange-50'}`}
-                            >🚫 Reprovar</button>
+                              className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === false ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-700 border-red-300 hover:bg-red-50'}`}
+                            >🚫 Denegado</button>
                           </div>
                         </div>
                         {av.aprovado === false && (
@@ -2495,8 +2569,8 @@ export default function ClientePanel({
                             type="text"
                             value={av.motivo}
                             onChange={e => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], motivo: e.target.value } }))}
-                            placeholder="Motivo da reprovação (obrigatório)..."
-                            className="w-full px-2 py-1.5 border border-orange-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                            placeholder="Motivo da denegação (obrigatório)..."
+                            className="w-full px-2 py-1.5 border border-red-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-red-400"
                             autoFocus
                           />
                         )}
@@ -2512,11 +2586,11 @@ export default function ClientePanel({
                     <p className="text-xs text-gray-500 mb-3">
                       {todosAprovados
                         ? c.etapaAnterior === 'proposta'
-                          ? '✅ Todos aprovados — cliente volta para Proposta e novo card será criado em Proposta'
-                          : '✅ Todos aprovados — cliente será movido para Proposta'
+                          ? '✅ Todos homologados — cliente volta para Proposta e novo card será criado'
+                          : '✅ Todos homologados — cliente será movido para Proposta'
                         : algumReprovado && !todosAprovados
-                          ? '⚠️ Aprovação parcial — cliente será movido para Amostra Perdida com motivos registrados'
-                          : '🚫 Todos reprovados — cliente será movido para Amostra Perdida'}
+                          ? '⚠️ Resultado parcial — cliente será movido para Amostra Perdida, denegados registrados'
+                          : '🚫 Todos denegados — cliente será movido para Amostra Perdida'}
                     </p>
                   )}
                   <div className="flex justify-end gap-3">

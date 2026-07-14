@@ -1405,6 +1405,56 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
   }
 })
 
+// ─── CNPJ Proxy (evita CORS das APIs públicas) ───
+app.get('/api/cnpj/:cnpj', requireAuth, rateLimit(30, 60_000), async (req, res) => {
+  const digits = req.params.cnpj.replace(/\D/g, '')
+  if (digits.length !== 14) { res.status(400).json({ error: 'CNPJ inválido' }); return }
+  try {
+    let data: any = null
+    // Tenta BrasilAPI
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`, {
+        headers: { 'User-Agent': 'CRM-MFParis/1.0' },
+        signal: AbortSignal.timeout(8000),
+      })
+      if (r.ok) data = await r.json()
+    } catch { /* fallback */ }
+    // Fallback: ReceitaWS
+    if (!data) {
+      try {
+        const r2 = await fetch(`https://receitaws.com.br/v1/cnpj/${digits}`, {
+          headers: { 'User-Agent': 'CRM-MFParis/1.0' },
+          signal: AbortSignal.timeout(8000),
+        })
+        if (r2.ok) {
+          const raw = await r2.json()
+          if (raw.status === 'OK') {
+            data = {
+              razao_social: raw.nome,
+              nome_fantasia: raw.fantasia,
+              logradouro: raw.logradouro,
+              numero: raw.numero,
+              complemento: raw.complemento,
+              bairro: raw.bairro,
+              municipio: raw.municipio,
+              uf: raw.uf,
+              cep: raw.cep,
+              cnae_fiscal: raw.atividade_principal?.[0]?.code?.replace(/[^0-9]/g, ''),
+              cnae_fiscal_descricao: raw.atividade_principal?.[0]?.text,
+              cnaes_secundarios: (raw.atividades_secundarias || []).map((a: any) => ({ codigo: a.code?.replace(/[^0-9]/g, ''), descricao: a.text })),
+            }
+          }
+        }
+      } catch { /* sem fallback */ }
+    }
+    if (!data) { res.status(404).json({ error: 'CNPJ não encontrado' }); return }
+    res.json(data)
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar CNPJ')
+    res.status(500).json({ error: 'Erro ao consultar CNPJ' })
+  }
+})
+
 // ─── Start server ───
 
 async function start() {

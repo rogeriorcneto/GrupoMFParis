@@ -109,6 +109,7 @@ export function clienteFromDb(row: any): Cliente {
     contatoComprasNome: row.contato_compras_nome ?? undefined,
     contatoComprasTelefone: row.contato_compras_telefone ?? undefined,
     produtosQuantidadesMensais: row.produtos_quantidades_mensais ?? undefined,
+    produtosDenegados: row.produtos_denegados ?? undefined,
     motivoInativacao: row.motivo_inativacao ?? undefined,
     dataInativacao: row.data_inativacao ?? undefined,
     inativadoPor: row.inativado_por ?? undefined,
@@ -218,6 +219,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.contatoComprasNome !== undefined) row.contato_compras_nome = c.contatoComprasNome ?? null
   if (c.contatoComprasTelefone !== undefined) row.contato_compras_telefone = c.contatoComprasTelefone ?? null
   if (c.produtosQuantidadesMensais !== undefined) row.produtos_quantidades_mensais = c.produtosQuantidadesMensais ?? null
+  if (c.produtosDenegados !== undefined) row.produtos_denegados = c.produtosDenegados ?? null
   if (c.motivoInativacao !== undefined) row.motivo_inativacao = c.motivoInativacao ?? null
   if (c.dataInativacao !== undefined) row.data_inativacao = c.dataInativacao ?? null
   if (c.inativadoPor !== undefined) row.inativado_por = c.inativadoPor ?? null
