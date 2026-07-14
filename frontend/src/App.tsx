@@ -590,6 +590,10 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
             <span className="font-semibold text-gray-600">Rogério Cassiano</span>
             {' '}·{' '}
             <span className="text-gray-500">Software Engineer — Especialista em Inteligência Artificial</span>
+            {' '}·{' '}
+            <span className="font-semibold text-gray-600">Bernardo Nery</span>
+            {' '}·{' '}
+            <span className="text-gray-500">Gerente Comercial</span>
           </p>
         </div>
       </div>
