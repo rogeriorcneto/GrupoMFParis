@@ -70,9 +70,43 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     if (digits.length !== 14) return
     setIsLoadingCnpj(true)
     try {
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`)
-      if (!res.ok) { showToast('error', 'CNPJ não encontrado na Receita Federal.'); return }
-      const data = await res.json()
+      let data: any = null
+
+      // Tenta BrasilAPI primeiro
+      try {
+        const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digits}`)
+        if (res.ok) data = await res.json()
+      } catch { /* fallback */ }
+
+      // Fallback: ReceitaWS
+      if (!data) {
+        try {
+          const res2 = await fetch(`https://receitaws.com.br/v1/cnpj/${digits}`)
+          if (res2.ok) {
+            const raw = await res2.json()
+            if (raw.status === 'OK') {
+              // Normaliza campos para o mesmo formato da BrasilAPI
+              data = {
+                razao_social: raw.nome,
+                nome_fantasia: raw.fantasia,
+                logradouro: raw.logradouro,
+                numero: raw.numero,
+                complemento: raw.complemento,
+                bairro: raw.bairro,
+                municipio: raw.municipio,
+                uf: raw.uf,
+                cep: raw.cep,
+                cnae_fiscal: raw.atividade_principal?.[0]?.code?.replace(/[^0-9]/g, ''),
+                cnae_fiscal_descricao: raw.atividade_principal?.[0]?.text,
+                cnaes_secundarios: (raw.atividades_secundarias || []).map((a: { code: string; text: string }) => ({ codigo: a.code?.replace(/[^0-9]/g, ''), descricao: a.text })),
+              }
+            }
+          }
+        } catch { /* sem fallback */ }
+      }
+
+      if (!data) { showToast('error', 'CNPJ não encontrado na Receita Federal.'); return }
+
       setFormData(prev => ({
         ...prev,
         razaoSocial: data.razao_social || prev.razaoSocial,
