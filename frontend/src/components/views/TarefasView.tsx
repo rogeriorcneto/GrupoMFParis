@@ -1051,7 +1051,7 @@ const TarefasView: React.FC<{
   , [clientes, isGerente, loggedUser?.id])
 
   const minhasTarefas = useMemo(() =>
-    tarefas.filter(t => isGerente ? true : t.vendedorId === loggedUser?.id)
+    tarefas.filter(t => isGerente || t.vendedorId === loggedUser?.id || !t.vendedorId)
   , [tarefas, isGerente, loggedUser?.id])
 
   // Calcular datas da semana
