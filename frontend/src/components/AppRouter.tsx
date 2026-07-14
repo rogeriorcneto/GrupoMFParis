@@ -623,13 +623,15 @@ export default function AppRouter({
           try {
             await db.updateProduto(p.id, p)
             setProdutos(prev => prev.map(x => x.id === p.id ? p : x))
-          } catch (err) { logger.error('Erro ao atualizar produto:', err) }
+            showToast('success', `Produto "${p.nome}" atualizado!`)
+          } catch (err: any) { logger.error('Erro ao atualizar produto:', err); showToast('error', `Erro ao salvar produto${err?.message ? ': ' + err.message : ''}`) }
         }}
         onDelete={async (id) => {
           try {
             await db.deleteProduto(id)
             setProdutos(prev => prev.filter(p => p.id !== id))
-          } catch (err) { logger.error('Erro ao deletar produto:', err) }
+            showToast('success', 'Produto excluído!')
+          } catch (err: any) { logger.error('Erro ao deletar produto:', err); showToast('error', `Erro ao excluir produto${err?.message ? ': ' + err.message : ''}`) }
         }}
         isGerente={loggedUser?.cargo === 'gerente'}
         canEditPrice={loggedUser?.cargo === 'vendedor'}

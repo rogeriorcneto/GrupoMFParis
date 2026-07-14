@@ -440,6 +440,43 @@ function historicoFromDb(row: any): HistoricoEtapa {
 }
 
 // ============================================
+// AUTH RETRY WRAPPER
+// ============================================
+
+/**
+ * Wraps a Supabase operation with automatic session refresh on auth errors.
+ * When the JWT expires (after ~1h), the first request fails with 401/403.
+ * This catches that, refreshes the session, and retries once — avoiding
+ * the need for a manual page reload.
+ */
+async function withAuthRetry<T>(fn: () => Promise<{ data: T | null; error: any }>): Promise<{ data: T | null; error: any }> {
+  let result = await fn()
+  if (!result.error) return result
+
+  // Check if it's an auth error (JWT expired, invalid token, etc.)
+  const errMsg = (result.error?.message || '').toLowerCase()
+  const isAuthError =
+    result.error?.code === 'PGRST301' ||
+    result.error?.status === 401 ||
+    result.error?.status === 403 ||
+    errMsg.includes('jwt') ||
+    errMsg.includes('invalid token') ||
+    errMsg.includes('expired')
+
+  if (!isAuthError) return result
+
+  // Refresh the session and retry once
+  try {
+    const { error: refreshError } = await supabase.auth.refreshSession()
+    if (refreshError) return result // can't refresh, return original error
+    result = await fn()
+  } catch {
+    // refresh failed, return original error
+  }
+  return result
+}
+
+// ============================================
 // AUTH
 // ============================================
 
@@ -593,13 +630,13 @@ export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Prom
   if (!cnpj || cnpj.trim() === '') return null
   let query = supabase.from('clientes').select('*').eq('cnpj', cnpj.trim()).limit(1)
   if (excludeId) query = query.neq('id', excludeId)
-  const { data } = await query
+  const { data } = await withAuthRetry(async () => { const r = await query; return r })
   return data && data.length > 0 ? clienteFromDb(data[0]) : null
 }
 
 export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
   const row = clienteToDb(c)
-  const { data, error } = await supabase.from('clientes').insert(row).select().single()
+  const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('clientes').insert(row).select().single(); return r })
   if (error) throw error
   return clienteFromDb(data)
 }
@@ -642,7 +679,7 @@ export async function insertClientesBatch(clientes: Omit<Cliente, 'id'>[]): Prom
 export async function updateCliente(id: number, c: Partial<Cliente>): Promise<void> {
   const row = clienteToDb(c)
   // Trigger no banco já atualiza atualizado_em; não enviar updated_at (coluna não existe)
-  const { error } = await supabase.from('clientes').update(row).eq('id', id)
+  const { error } = await withAuthRetry(async () => { const r = await supabase.from('clientes').update(row).eq('id', id); return r })
   if (error) throw error
 }
 
@@ -809,13 +846,13 @@ export async function updateInteracao(id: number, changes: { tipo?: Interacao['t
 export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interacao> {
   const now = i.data || new Date().toISOString()
   // NOTA: a tabela 'interacoes' usa created_at (auto-gerada), NÃO tem coluna 'data'
-  const { error } = await supabase.from('interacoes').insert({
+  const { error } = await withAuthRetry(async () => { const r = await supabase.from('interacoes').insert({
     cliente_id: i.clienteId,
     tipo: i.tipo,
     assunto: i.assunto || '',
     descricao: i.descricao,
     automatico: i.automatico || false,
-  })
+  }); return r })
   if (error) throw error
   // Objeto local com ID temporario — o ID real vem no proximo fetchInteracoes
   return {
@@ -939,12 +976,12 @@ export async function fetchProdutos(): Promise<Produto[]> {
 }
 
 export async function insertProduto(p: Omit<Produto, 'id' | 'dataCadastro'>): Promise<Produto> {
-  const { data, error } = await supabase.from('produtos').insert({
+  const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').insert({
     nome: p.nome, descricao: p.descricao, categoria: p.categoria,
     preco: p.preco, unidade: p.unidade, foto: p.foto,
     sku: p.sku, estoque: p.estoque, peso_kg: p.pesoKg,
     margem_lucro: p.margemLucro, ativo: p.ativo, destaque: p.destaque,
-  }).select().single()
+  }).select().single(); return r })
   if (error) throw error
   return produtoFromDb(data)
 }
@@ -963,12 +1000,12 @@ export async function updateProduto(id: number, p: Partial<Produto>): Promise<vo
   if (p.margemLucro !== undefined) row.margem_lucro = p.margemLucro
   if (p.ativo !== undefined) row.ativo = p.ativo
   if (p.destaque !== undefined) row.destaque = p.destaque
-  const { error } = await supabase.from('produtos').update(row).eq('id', id)
+  const { error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').update(row).eq('id', id); return r })
   if (error) throw error
 }
 
 export async function deleteProduto(id: number): Promise<void> {
-  const { error } = await supabase.from('produtos').delete().eq('id', id)
+  const { error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').delete().eq('id', id); return r })
   if (error) throw error
 }
 
