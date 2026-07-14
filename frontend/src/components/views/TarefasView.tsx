@@ -17,6 +17,7 @@ import { insertInteracao, insertAtividade, deleteTarefa } from '../../lib/databa
 import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
+import * as XLSX from 'xlsx'
 
 // ─── Sub-componente: TarefaCard ───────────────────────────────────────────────
 const TIPO_CONFIG: Record<string, { icon: string; label: string; color: string; ring: string }> = {
@@ -795,9 +796,20 @@ const TarefasView: React.FC<{
     const reader = new FileReader()
     reader.onload = async (ev) => {
       try {
-        const text = ev.target?.result as string
+        let text = ''
+        let records: string[][] = []
+        const isExcel = /\.xlsx?$/i.test(file.name)
+
+        if (isExcel) {
+          const workbook = XLSX.read(ev.target?.result as ArrayBuffer, { type: 'array' })
+          const sheet = workbook.Sheets[workbook.SheetNames[0]]
+          records = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+            .map(row => row.map(value => String(value ?? '')))
+        } else {
+          text = ev.target?.result as string
+        }
         const firstLine = text.split(/\r?\n/)[0] || ''
-        if (!firstLine.trim()) { alert('CSV vazio'); return }
+        if (!isExcel && !firstLine.trim()) { alert('Arquivo vazio'); return }
 
         // Auto-detect separator a partir do cabeçalho
         const sep = firstLine.includes('\t') ? '\t' : firstLine.split(';').length > firstLine.split(',').length ? ';' : ','
@@ -831,8 +843,8 @@ const TarefasView: React.FC<{
           return records
         }
 
-        const records = parseCsv(text)
-        if (records.length < 2) { alert('CSV vazio'); return }
+        if (!isExcel) records = parseCsv(text)
+        if (records.length < 2) { alert('Nenhuma tarefa encontrada no arquivo'); return }
         const headers = records[0].map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
 
         const getIdx = (keys: string[]) => headers.findIndex(h => keys.some(k => h.includes(k)))
@@ -938,6 +950,8 @@ const TarefasView: React.FC<{
             const vMatch = vendedores.find(v => v.nome.toLowerCase().includes(respLower) || respLower.includes(v.nome.toLowerCase()))
             if (vMatch) vendedorId = vMatch.id
           }
+          // Tarefas sem responsável no Agendor ficam visíveis para o usuário atual.
+          if (!vendedorId && !isGerente) vendedorId = loggedUser?.id
 
           // Status pelo CSV: só concluída se tiver Data de finalização ou Usuário que finalizou
           const finalizacaoRaw = idxDataFinalizacao >= 0 ? (vals[idxDataFinalizacao] || '') : ''
@@ -978,6 +992,9 @@ const TarefasView: React.FC<{
 
         setImportStatus(`Importando ${novasTarefas.length} tarefas...`)
         const saved = await onImportTarefas(novasTarefas)
+        setDateFilter('todas')
+        setDateRange(null)
+        setStatusFilter('todos')
         setImportStatus(`✅ ${saved.length} de ${novasTarefas.length} tarefas salvas · ${comCliente} com cliente (${semCliente} sem) · ${comVendedor} com vendedor · ${concluidas} concluídas / ${pendentes} pendentes`)
         setTimeout(() => setImportStatus(null), 8000)
       } catch (err) {
@@ -986,7 +1003,8 @@ const TarefasView: React.FC<{
         setImportStatus(null)
       }
     }
-    reader.readAsText(file, 'UTF-8')
+    if (/\.xlsx?$/i.test(file.name)) reader.readAsArrayBuffer(file)
+    else reader.readAsText(file, 'UTF-8')
   }
   const [newTitulo, setNewTitulo] = useState('')
   const [newDescricao, setNewDescricao] = useState('')
@@ -1331,7 +1349,7 @@ const TarefasView: React.FC<{
 
               {onImportTarefas && (
                 <label className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all text-xs font-medium" title="Importar Agendor">
-                  <input type="file" accept=".csv,.txt" className="hidden" onChange={handleImportTarefas} />
+                  <input type="file" accept=".csv,.txt,.xls,.xlsx" className="hidden" onChange={handleImportTarefas} />
                   <ArrowUpTrayIcon className="h-4 w-4" />
                   Agendor
                 </label>
