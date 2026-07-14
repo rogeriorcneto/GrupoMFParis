@@ -23,6 +23,7 @@ import { omieRouter } from './routes/omie.js'
 import { placesRouter } from './routes/places.js'
 import { traficoRouter } from './routes/trafico.js'
 import { leadsRfRouter } from './routes/leads-rf.js'
+import { vendedoresRouter } from './routes/vendedores.js'
 import twilioRouter from './routes/twilio.js'
 import twilioVoiceAiRouter from './routes/twilio-voice-ai.js'
 import ttsRouter from './routes/tts.js'
@@ -1129,6 +1130,7 @@ app.use('/api/omie', requireAuth, requireGerente, omieRouter)
 app.use('/api/places', requireAuth, placesRouter)
 app.use('/api/trafico', requireAuth, requireGerente, traficoRouter)
 app.use('/api/leads-rf', requireAuth, leadsRfRouter)
+app.use('/api/vendedores', requireAuth, requireGerente, vendedoresRouter)
 
 // ─── Pedido → Omie (automático ao aprovar) ───
 

@@ -59,11 +59,12 @@ export default function GrupoParisShell() {
     const timeout = setTimeout(() => setAuthChecked(true), 3000)
 
     // Listener de mudanças de autenticação
-    // SIGNED_IN não reseta para portal — mantém o sistema que estava ativo
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // IMPORTANTE: NUNCA usar async/await dentro deste callback — causa deadlock no lock interno do GoTrueClient
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setIsAuthenticated(true)
-        await fetchUserInfo(session.user.id)
+        // Async fora do callback para não segurar o lock
+        setTimeout(() => { fetchUserInfo(session.user.id).catch(() => {}) }, 0)
       } else if (event === 'SIGNED_OUT') {
         // Explicit sign-out: skip retry, proceed immediately
         if (_explicitSignOut) {
@@ -77,25 +78,25 @@ export default function GrupoParisShell() {
           return
         }
 
-        // Retry getSession once — Supabase can fire SIGNED_OUT on transient
-        // token refresh failures (network blip) even when the session is still valid
-        try {
-          await new Promise(r => setTimeout(r, 500))
-          const { data: { session: retrySession } } = await supabase.auth.getSession()
-          if (retrySession?.user) {
-            // Session still valid — this was a transient refresh failure, ignore
-            setIsAuthenticated(true)
-            await fetchUserInfo(retrySession.user.id)
-            return
-          }
-        } catch { /* session truly invalid, proceed with logout */ }
-
+        // Non-explicit sign-out: limpar UI imediatamente, retry async fora do lock
         setIsAuthenticated(false)
         setUsuario(null)
         setVendedorCompleto(null)
         setVendedorReady(false)
         setSistemaAtivo('portal')
         setCrmMontado(false)
+
+        // Retry em setTimeout — NUNCA chamar supabase.auth.getSession() dentro do callback
+        setTimeout(async () => {
+          try {
+            await new Promise(r => setTimeout(r, 500))
+            const { data: { session: retrySession } } = await supabase.auth.getSession()
+            if (retrySession?.user) {
+              setIsAuthenticated(true)
+              await fetchUserInfo(retrySession.user.id)
+            }
+          } catch { /* session truly invalid, logout already done */ }
+        }, 0)
       }
     })
 

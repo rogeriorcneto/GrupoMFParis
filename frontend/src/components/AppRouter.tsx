@@ -576,7 +576,7 @@ export default function AppRouter({
       return <VendedoresView vendedores={vendedores} clientes={clientes} loggedUser={loggedUser}
         onAddVendedor={async (email, senha, vendedorData) => {
           try {
-            const saved = await db.createVendedorWithAuth(email, senha, vendedorData)
+            const saved = await db.createVendedorViaBackend(email, senha, vendedorData)
             setVendedores(prev => [...prev, saved])
             addNotificacao('success', 'Vendedor cadastrado', `${vendedorData.nome} já pode fazer login com ${email}`)
             showToast('success', `Vendedor "${vendedorData.nome}" cadastrado com sucesso!`)

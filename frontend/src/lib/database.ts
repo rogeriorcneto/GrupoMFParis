@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type {
   Cliente, Interacao, Tarefa, Produto, Pedido, Vendedor,
@@ -534,38 +533,23 @@ export async function insertVendedor(v: Omit<Vendedor, 'id'>): Promise<Vendedor>
   return vendedorFromDb(data)
 }
 
-// Cria um usuário no Supabase Auth + insere na tabela vendedores com auth_id
-export async function createVendedorWithAuth(
+// Cria um vendedor via backend (Service Role Admin API) — não afeta a sessão do gerente
+export async function createVendedorViaBackend(
   email: string,
   password: string,
   vendedorData: Omit<Vendedor, 'id' | 'usuario' | 'senha'>
 ): Promise<Vendedor> {
-  // Usar um cliente separado para o signUp, para não deslogar o gerente atual
-  const tempClient = createClient(
-    import.meta.env.VITE_SUPABASE_URL as string,
-    import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-    { auth: { storageKey: 'sb-temp-signup', persistSession: false } }
-  )
-
-  // 1. Criar o auth user
-  const { data: authData, error: authError } = await tempClient.auth.signUp({
-    email,
-    password,
-    options: { data: { nome: vendedorData.nome, cargo: vendedorData.cargo } }
+  const { authFetch } = await import('./botApi.js')
+  const res = await authFetch(`${import.meta.env.VITE_BOT_URL || 'http://localhost:3002'}/api/vendedores`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, vendedorData }),
   })
-  if (authError) throw new Error(`Erro ao criar login: ${authError.message}`)
-  if (!authData.user) throw new Error('Erro inesperado ao criar usuário')
-
-  // 2. Inserir na tabela vendedores COM auth_id
-  const { data, error } = await supabase.from('vendedores').insert({
-    auth_id: authData.user.id,
-    nome: vendedorData.nome, email, telefone: vendedorData.telefone,
-    cargo: vendedorData.cargo, avatar: vendedorData.avatar,
-    meta_vendas: vendedorData.metaVendas, meta_leads: vendedorData.metaLeads,
-    meta_conversao: vendedorData.metaConversao, ativo: vendedorData.ativo,
-  }).select().single()
-  if (error) throw new Error(`Erro ao salvar vendedor: ${error.message}`)
-  return vendedorFromDb(data)
+  const json = await res.json()
+  if (!json.success || !json.data) {
+    throw new Error(json.error || 'Erro ao criar vendedor')
+  }
+  return vendedorFromDb(json.data)
 }
 
 export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<void> {
@@ -628,9 +612,11 @@ export async function fetchClientes(): Promise<Cliente[]> {
 
 export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Promise<Cliente | null> {
   if (!cnpj || cnpj.trim() === '') return null
-  let query = supabase.from('clientes').select('*').eq('cnpj', cnpj.trim()).limit(1)
-  if (excludeId) query = query.neq('id', excludeId)
-  const { data } = await withAuthRetry(async () => { const r = await query; return r })
+  const { data } = await withAuthRetry(async () => {
+    let q = supabase.from('clientes').select('*').eq('cnpj', cnpj.trim()).limit(1)
+    if (excludeId) q = q.neq('id', excludeId)
+    return q
+  })
   return data && data.length > 0 ? clienteFromDb(data[0]) : null
 }
 
@@ -839,7 +825,7 @@ export async function updateInteracao(id: number, changes: { tipo?: Interacao['t
   if (changes.tipo !== undefined) row.tipo = changes.tipo
   if (changes.descricao !== undefined) row.descricao = changes.descricao
   if (changes.assunto !== undefined) row.assunto = changes.assunto
-  const { error } = await supabase.from('interacoes').update(row).eq('id', id)
+  const { error } = await withAuthRetry(async () => { const r = await supabase.from('interacoes').update(row).eq('id', id); return r })
   if (error) throw error
 }
 
@@ -1147,9 +1133,9 @@ export async function fetchTemplates(): Promise<Template[]> {
 }
 
 export async function insertTemplate(t: Omit<Template, 'id'>): Promise<Template> {
-  const { data, error } = await supabase.from('templates').insert({
+  const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('templates').insert({
     nome: t.nome, canal: t.canal, etapa: t.etapa, assunto: t.assunto, corpo: t.corpo,
-  }).select().single()
+  }).select().single(); return r })
   if (error) throw error
   return templateFromDb(data)
 }
@@ -1170,9 +1156,9 @@ export async function fetchTemplateMsgs(): Promise<TemplateMsg[]> {
 }
 
 export async function insertTemplateMsg(t: Omit<TemplateMsg, 'id'>): Promise<TemplateMsg> {
-  const { data, error } = await supabase.from('templates_msgs').insert({
+  const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('templates_msgs').insert({
     canal: t.canal, nome: t.nome, conteudo: t.conteudo,
-  }).select().single()
+  }).select().single(); return r })
   if (error) throw error
   return templateMsgFromDb(data)
 }
@@ -1265,9 +1251,9 @@ export async function fetchAtividades(): Promise<Atividade[]> {
 }
 
 export async function insertAtividade(a: Omit<Atividade, 'id'>): Promise<Atividade> {
-  const { data, error } = await supabase.from('atividades').insert({
+  const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('atividades').insert({
     tipo: a.tipo, descricao: a.descricao, vendedor_nome: a.vendedorNome,
-  }).select().single()
+  }).select().single(); return r })
   if (error) throw error
   return atividadeFromDb(data)
 }

@@ -264,11 +264,41 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     }
 
     // Escutar mudanças de auth (login/logout/token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // IMPORTANTE: NUNCA usar async/await dentro deste callback — causa deadlock no lock do Supabase Auth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         // Explicit sign-out: skip retry, proceed immediately
         if (_appExplicitSignOut) {
           _appExplicitSignOut = false
+          setTimeout(async () => {
+            try { await disconnectUserWhatsApp() } catch { /* ignore */ }
+            sessionStorage.removeItem('wa_auth_token')
+            sessionStorage.removeItem('wa_page_alive')
+            stopActiveTimer()
+            const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_active_'))
+            allKeys.forEach(k => localStorage.removeItem(k))
+            setLoggedUser(null)
+            setClientes([]); setInteracoes([]); setTarefas([]); setProdutos([])
+            setPedidos([]); setVendedores([]); setAtividades([]); setTemplates([])
+            setTemplatesMsgs([]); setCadencias([]); setCampanhas([]); setJobs([])
+            secondaryLoaded.current.clear()
+          }, 0)
+          return
+        }
+
+        // Retry getSession once — Supabase can fire SIGNED_OUT on transient
+        // token refresh failures (network blip) even when the session is still valid
+        setTimeout(async () => {
+          try {
+            await new Promise(r => setTimeout(r, 500))
+            const { data: { session: retrySession } } = await supabase.auth.getSession()
+            if (retrySession?.user) {
+              // Session still valid — this was a transient refresh failure, ignore
+              return
+            }
+          } catch { /* session truly invalid, proceed with logout */ }
+
+          // Desconectar WhatsApp ao fazer logout
           try { await disconnectUserWhatsApp() } catch { /* ignore */ }
           sessionStorage.removeItem('wa_auth_token')
           sessionStorage.removeItem('wa_page_alive')
@@ -276,55 +306,11 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_active_'))
           allKeys.forEach(k => localStorage.removeItem(k))
           setLoggedUser(null)
-          setClientes([])
-          setInteracoes([])
-          setTarefas([])
-          setProdutos([])
-          setPedidos([])
-          setVendedores([])
-          setAtividades([])
-          setTemplates([])
-          setTemplatesMsgs([])
-          setCadencias([])
-          setCampanhas([])
-          setJobs([])
+          setClientes([]); setInteracoes([]); setTarefas([]); setProdutos([])
+          setPedidos([]); setVendedores([]); setAtividades([]); setTemplates([])
+          setTemplatesMsgs([]); setCadencias([]); setCampanhas([]); setJobs([])
           secondaryLoaded.current.clear()
-          return
-        }
-
-        // Retry getSession once — Supabase can fire SIGNED_OUT on transient
-        // token refresh failures (network blip) even when the session is still valid
-        try {
-          await new Promise(r => setTimeout(r, 500))
-          const { data: { session: retrySession } } = await supabase.auth.getSession()
-          if (retrySession?.user) {
-            // Session still valid — this was a transient refresh failure, ignore
-            return
-          }
-        } catch { /* session truly invalid, proceed with logout */ }
-
-        // Desconectar WhatsApp ao fazer logout
-        try { await disconnectUserWhatsApp() } catch { /* ignore */ }
-        sessionStorage.removeItem('wa_auth_token')
-        sessionStorage.removeItem('wa_page_alive')
-        // Clear session timer on logout
-        stopActiveTimer()
-        const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_active_'))
-        allKeys.forEach(k => localStorage.removeItem(k))
-        setLoggedUser(null)
-        setClientes([])
-        setInteracoes([])
-        setTarefas([])
-        setProdutos([])
-        setPedidos([])
-        setVendedores([])
-        setAtividades([])
-        setTemplates([])
-        setTemplatesMsgs([])
-        setCadencias([])
-        setCampanhas([])
-        setJobs([])
-        secondaryLoaded.current.clear()
+        }, 0)
       }
     })
 
@@ -511,13 +497,22 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
         activeView={activeView} setActiveView={setActiveView}
         loggedUser={loggedUser} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         onOpenAI={() => setShowAIModal(true)}
-        onSignOut={async () => {
+        onSignOut={() => {
           _appExplicitSignOut = true
-          try { await disconnectUserWhatsApp() } catch { /* ignore */ }
+          setLoggedUser(null)
+          setClientes([]); setInteracoes([]); setTarefas([]); setProdutos([])
+          setPedidos([]); setVendedores([]); setAtividades([]); setTemplates([])
+          setTemplatesMsgs([]); setCadencias([]); setCampanhas([]); setJobs([])
+          secondaryLoaded.current.clear()
           sessionStorage.removeItem('wa_auth_token')
           sessionStorage.removeItem('wa_page_alive')
-          await db.signOut()
-          setLoggedUser(null)
+          stopActiveTimer()
+          const allKeys = Object.keys(localStorage).filter(k => k.startsWith('crm_active_'))
+          allKeys.forEach(k => localStorage.removeItem(k))
+          setTimeout(() => {
+            disconnectUserWhatsApp().catch(() => {})
+            db.signOut().catch(() => {})
+          }, 0)
         }}
         pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado').length : 0}
       />

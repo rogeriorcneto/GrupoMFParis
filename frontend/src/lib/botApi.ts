@@ -549,19 +549,8 @@ export async function fetchCnpjViaBackend(cnpj: string): Promise<any | null> {
   if (digits.length !== 14) return null
   try {
     const res = await authFetch(`${BOT_URL}/api/cnpj/${digits}`)
-    if (!res.ok) return null
     return await res.json()
-  } catch (err: any) {
-    if (err?.message === 'AUTH_EXPIRED') {
-      try {
-        const { data } = await supabase.auth.refreshSession()
-        if (data.session) {
-          const res = await authFetch(`${BOT_URL}/api/cnpj/${digits}`)
-          if (!res.ok) return null
-          return await res.json()
-        }
-      } catch { return null }
-    }
+  } catch {
     return null
   }
 }

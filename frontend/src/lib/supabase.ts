@@ -12,7 +12,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Bypass do Navigator LockManager (que causava timeout entre abas/instâncias)
     lock: async (_name: string, _acquireTimeout: number, fn: () => Promise<any>) => fn(),
   },
 })

@@ -161,7 +161,6 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         logger.error('Erro ao verificar CNPJ duplicado:', err)
       }
     }
-
     const produtosArray = formData.produtosInteresse
       ? formData.produtosInteresse.split(',').map(p => p.trim()).filter(p => p)
       : []
