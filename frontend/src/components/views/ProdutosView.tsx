@@ -33,6 +33,7 @@ const ProdutosView: React.FC<{
   const [fMargemLucro, setFMargemLucro] = React.useState('')
   const [fAtivo, setFAtivo] = React.useState(true)
   const [fDestaque, setFDestaque] = React.useState(false)
+  const [fOmieCodigo, setFOmieCodigo] = React.useState('')
   const podeEditarPreco = isGerente || canEditPrice
 
   const filtered = produtos.filter(p => {
@@ -46,14 +47,14 @@ const ProdutosView: React.FC<{
     setEditing(null)
     setFNome(''); setFDescricao(''); setFCategoria('sacaria'); setFPreco(''); setFUnidade('kg')
     setFFoto(''); setFSku(''); setFEstoque(''); setFPesoKg(''); setFMargemLucro('')
-    setFAtivo(true); setFDestaque(false); setShowModal(true)
+    setFAtivo(true); setFDestaque(false); setFOmieCodigo(''); setShowModal(true)
   }
 
   const openEdit = (p: Produto) => {
     setEditing(p)
     setFNome(p.nome); setFDescricao(p.descricao); setFCategoria(p.categoria); setFPreco(String(p.preco)); setFUnidade('kg')
     setFFoto(p.foto); setFSku(p.sku || ''); setFEstoque(p.estoque !== undefined ? String(p.estoque) : ''); setFPesoKg(p.pesoKg !== undefined ? String(p.pesoKg) : ''); setFMargemLucro(p.margemLucro !== undefined ? String(p.margemLucro) : '')
-    setFAtivo(p.ativo); setFDestaque(p.destaque); setShowModal(true)
+    setFAtivo(p.ativo); setFDestaque(p.destaque); setFOmieCodigo(p.omieCodigo || ''); setShowModal(true)
   }
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,7 +71,7 @@ const ProdutosView: React.FC<{
     const base = {
       nome: fNome.trim(), descricao: fDescricao.trim(), categoria: fCategoria,
       preco: parseFloat(fPreco), unidade: 'kg', foto: fFoto,
-      sku: fSku.trim() || undefined, estoque: fEstoque ? parseInt(fEstoque) : undefined,
+      sku: fSku.trim() || undefined, omieCodigo: fOmieCodigo.trim() || undefined, estoque: fEstoque ? parseInt(fEstoque) : undefined,
       pesoKg: fPesoKg ? parseFloat(fPesoKg) : undefined, margemLucro: fMargemLucro ? parseFloat(fMargemLucro) : undefined,
       ativo: fAtivo, destaque: fDestaque,
     }
@@ -243,6 +244,7 @@ const ProdutosView: React.FC<{
                 <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Descrição *</label><textarea value={fDescricao} onChange={(e) => setFDescricao(e.target.value)} rows={3} placeholder="Descrição detalhada do produto..." className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label><select value={fCategoria} onChange={(e) => setFCategoria(e.target.value as Produto['categoria'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="sacaria">Sacaria 25kg</option><option value="okey_lac">Okey Lac 25kg</option><option value="varejo_lacteo">Varejo Lácteo</option><option value="cafe">Café</option><option value="outros">Outros</option></select></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">SKU</label><input value={fSku} onChange={(e) => setFSku(e.target.value)} placeholder="CONG-001" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Código Omie</label><input value={fOmieCodigo} onChange={(e) => setFOmieCodigo(e.target.value)} placeholder="12345" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Preço (R$) *</label><input type="number" step="0.01" value={fPreco} onChange={(e) => setFPreco(e.target.value)} placeholder="0,00" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Unidade *</label><input value="kg" disabled className="w-full px-3 py-2 border border-gray-300 rounded-apple bg-gray-100 text-gray-600 cursor-not-allowed" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Estoque</label><input type="number" value={fEstoque} onChange={(e) => setFEstoque(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>

@@ -979,14 +979,14 @@ export async function insertProduto(p: Omit<Produto, 'id' | 'dataCadastro'>): Pr
   const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').insert({
     nome: p.nome, descricao: p.descricao, categoria: p.categoria,
     preco: p.preco, unidade: p.unidade, foto: p.foto,
-    sku: p.sku, estoque: p.estoque, peso_kg: p.pesoKg,
+    sku: p.sku, omie_codigo: p.omieCodigo, estoque: p.estoque, peso_kg: p.pesoKg,
     margem_lucro: p.margemLucro, ativo: p.ativo, destaque: p.destaque,
   }).select().single(); return r })
   if (error) throw error
   return produtoFromDb(data)
 }
 
-export async function updateProduto(id: number, p: Partial<Produto>): Promise<void> {
+export async function updateProduto(id: number, p: Partial<Produto>): Promise<Produto | undefined> {
   const row: any = {}
   if (p.nome !== undefined) row.nome = p.nome
   if (p.descricao !== undefined) row.descricao = p.descricao
@@ -995,13 +995,15 @@ export async function updateProduto(id: number, p: Partial<Produto>): Promise<vo
   if (p.unidade !== undefined) row.unidade = p.unidade
   if (p.foto !== undefined) row.foto = p.foto
   if (p.sku !== undefined) row.sku = p.sku
+  if (p.omieCodigo !== undefined) row.omie_codigo = p.omieCodigo
   if (p.estoque !== undefined) row.estoque = p.estoque
   if (p.pesoKg !== undefined) row.peso_kg = p.pesoKg
   if (p.margemLucro !== undefined) row.margem_lucro = p.margemLucro
   if (p.ativo !== undefined) row.ativo = p.ativo
   if (p.destaque !== undefined) row.destaque = p.destaque
-  const { error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').update(row).eq('id', id); return r })
+  const { data: updated, error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').update(row).eq('id', id).select().single(); return r })
   if (error) throw error
+  return updated ? produtoFromDb(updated) : undefined
 }
 
 export async function deleteProduto(id: number): Promise<void> {

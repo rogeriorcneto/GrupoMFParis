@@ -621,8 +621,12 @@ export default function AppRouter({
         }}
         onUpdate={async (p) => {
           try {
-            await db.updateProduto(p.id, p)
-            setProdutos(prev => prev.map(x => x.id === p.id ? p : x))
+            const updated = await db.updateProduto(p.id, p)
+            if (updated) {
+              setProdutos(prev => prev.map(x => x.id === p.id ? updated : x))
+            } else {
+              setProdutos(prev => prev.map(x => x.id === p.id ? p : x))
+            }
             showToast('success', `Produto "${p.nome}" atualizado!`)
           } catch (err: any) { logger.error('Erro ao atualizar produto:', err); showToast('error', `Erro ao salvar produto${err?.message ? ': ' + err.message : ''}`) }
         }}
