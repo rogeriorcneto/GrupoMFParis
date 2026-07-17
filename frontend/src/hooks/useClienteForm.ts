@@ -240,6 +240,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       nomeFantasia: cliente.nomeFantasia || '',
       cnpj: cliente.cnpj,
       cnpj2: cliente.cnpj2 || '',
+      inscricaoEstadual: (cliente as any).inscricaoEstadual || '',
       contatoNome: cliente.contatoNome,
       contatoTelefone: cliente.contatoTelefone,
       contatoCelular: cliente.contatoCelular || '',
