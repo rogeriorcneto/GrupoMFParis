@@ -18,6 +18,13 @@ interface PropostaPdfOptions {
 
 const LOGO_PATH = '/Logo_MFParis.jpg'
 
+const EMISSOR = {
+  nome: 'DMS COMERCIO E DISTRIBUICAO DE CAFE LTDA',
+  cnpj: '33.174.960/0001-27',
+  endereco: 'Rua Beta, 347, Vila Paris, Contagem - MG, 32372-090',
+  email: 'vendas@mfparis.com.br',
+}
+
 function formatCurrency(value: number): string {
   return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -114,11 +121,11 @@ export async function gerarPropostaPDF(
   doc.text('PROPOSTA', headX, y + 5)
 
   doc.setFontSize(12)
-  doc.text((cliente.razaoSocial || '').toUpperCase(), headX, y + 12)
+  doc.text(EMISSOR.nome, headX, y + 12)
 
   doc.setFontSize(8.5)
-  doc.text(`CNPJ: ${cliente.cnpj || '-'}`, headX, y + 18)
-  doc.text(getClienteEndereco(cliente) || 'Endereço não informado', headX, y + 24)
+  doc.text(`CNPJ: ${EMISSOR.cnpj}`, headX, y + 18)
+  doc.text(EMISSOR.endereco, headX, y + 24)
   doc.text(`${formatDateLong(now)} | Valida até: ${formatDate(validade)}`, headX, y + 30)
 
   y += 42
@@ -133,12 +140,13 @@ export async function gerarPropostaPDF(
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8.3)
     doc.setTextColor(31, 41, 55)
-    doc.text(safePdfText(title), x, y)
+    const titleLines = doc.splitTextToSize(safePdfText(title), Math.max(10, width - 1))
+    doc.text(titleLines, x, y)
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(75, 85, 99)
-    let lineY = y + 5
+    let lineY = y + titleLines.length * 4.2 + 1
     for (const line of lines) {
       if (!line.trim()) continue
       const wrapped = doc.splitTextToSize(safePdfText(line), Math.max(10, width - 1))
@@ -152,7 +160,7 @@ export async function gerarPropostaPDF(
 
   const col1Bottom = drawInfoCol(
     `Proposta enviada por ${vendedorNome}`,
-    ['Email: vendas@mfparis.com.br'],
+    [`Email: ${EMISSOR.email}`],
     col1X,
     colWidth
   )
@@ -194,11 +202,11 @@ export async function gerarPropostaPDF(
   doc.roundedRect(margin, y, usableWidth, 8, 0.8, 0.8, 'F')
 
   const colItem = margin + 2
-  const colUnit = margin + 92
-  const colQtd = margin + 120
-  const colTotal = margin + 138
-  const colDesc = margin + 154
-  const colTotalDesc = pageWidth - margin - 1
+  const colUnit = margin + 82
+  const colQtd = margin + 111
+  const colDesc = margin + 132
+  const colTotal = pageWidth - margin - 2
+  const itemWidth = colUnit - colItem - 3
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
@@ -206,38 +214,37 @@ export async function gerarPropostaPDF(
   doc.text('Item', colItem, y + 5)
   doc.text('Preço unitário', colUnit, y + 5)
   doc.text('Quantidade', colQtd, y + 5)
-  doc.text('Total', colTotal, y + 5)
   doc.text('Desconto', colDesc, y + 5)
-  doc.text('Total c/ desc.', colTotalDesc, y + 5, { align: 'right' })
+  doc.text('Total', colTotal, y + 5, { align: 'right' })
 
   y += 12
   let subtotal = 0
   const desconto = 0
 
   for (const item of itens) {
-    const itemTotal = item.preco * item.quantidade
+    const itemTotal = Number(item.preco || 0) * Number(item.quantidade || 0)
     subtotal += itemTotal
+    const itemLines = doc.splitTextToSize(safePdfText(`${item.sku || item.produtoId} - ${item.nomeProduto}`), itemWidth)
+    const rowHeight = Math.max(7, itemLines.length * 4.2 + 2)
 
-    if (y > 255) {
+    if (y + rowHeight > 255) {
       doc.addPage()
       y = 20
     }
 
-    const itemNome = `${item.sku || item.produtoId} - ${item.nomeProduto}`
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(8)
     doc.setTextColor(31, 41, 55)
-    doc.text(doc.splitTextToSize(itemNome, 82), colItem, y)
+    doc.text(itemLines, colItem, y)
 
     doc.setFont('helvetica', 'normal')
     doc.setTextColor(75, 85, 99)
-    doc.text(formatCurrency(item.preco), colUnit, y)
+    doc.text(formatCurrency(Number(item.preco || 0)), colUnit, y)
     doc.text(String(item.quantidade), colQtd, y)
-    doc.text(formatCurrency(itemTotal), colTotal, y)
     doc.text('R$ 0,00', colDesc, y)
-    doc.text(formatCurrency(itemTotal), colTotalDesc, y, { align: 'right' })
+    doc.text(formatCurrency(itemTotal), colTotal, y, { align: 'right' })
 
-    y += 7
+    y += rowHeight
   }
 
   y += 5

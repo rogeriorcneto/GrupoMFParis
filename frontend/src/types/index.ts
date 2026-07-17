@@ -11,6 +11,7 @@ export interface Cliente {
   razaoSocial: string
   nomeFantasia?: string
   cnpj: string
+  inscricaoEstadual?: string
   cnpj2?: string
   contatoNome: string
   contatoTelefone: string
@@ -123,6 +124,7 @@ export interface FormData {
   razaoSocial: string
   nomeFantasia: string
   cnpj: string
+  inscricaoEstadual: string
   cnpj2: string
   contatoNome: string
   contatoTelefone: string

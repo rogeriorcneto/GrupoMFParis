@@ -114,6 +114,15 @@ export default function Sidebar({
             </button>
           ))}
 
+        <a
+          href="/simulador.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-apple transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+        >
+          <span className="mr-3 text-lg">💰</span>
+          <span className="flex-1 text-left">Tabela de Preços</span>
+        </a>
 
       </nav>
 

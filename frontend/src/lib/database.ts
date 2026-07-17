@@ -16,6 +16,7 @@ export function clienteFromDb(row: any): Cliente {
     razaoSocial: row.razao_social ?? '',
     nomeFantasia: row.nome_fantasia ?? undefined,
     cnpj: row.cnpj ?? '',
+    inscricaoEstadual: row.inscricao_estadual ?? undefined,
     contatoNome: row.contato_nome ?? '',
     contatoTelefone: row.contato_telefone ?? '',
     contatoCelular: row.contato_celular ?? undefined,
@@ -126,6 +127,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.razaoSocial !== undefined) row.razao_social = c.razaoSocial
   if (c.nomeFantasia !== undefined) row.nome_fantasia = c.nomeFantasia
   if (c.cnpj !== undefined) row.cnpj = c.cnpj
+  if (c.inscricaoEstadual !== undefined) row.inscricao_estadual = c.inscricaoEstadual ?? null
   if (c.contatoNome !== undefined) row.contato_nome = c.contatoNome
   if (c.contatoTelefone !== undefined) row.contato_telefone = c.contatoTelefone
   if (c.contatoCelular !== undefined) row.contato_celular = c.contatoCelular

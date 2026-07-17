@@ -1,6 +1,6 @@
 import * as db from './database.js'
-import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.js'
 import { sendEmail, getEmailStatus } from './email.js'
+import { sendUserWhatsAppMessage, getUserWhatsAppStatus } from './whatsapp-multi.js'
 import { log } from './logger.js'
 
 // ── Types ──
@@ -16,6 +16,7 @@ export interface BulkRequest {
   body: string            // message body (HTML for email, plain for WA)
   templateId?: number     // optional template id
   targets: BulkTarget[]
+  vendedorId: number
   vendedorNome: string
   delayMs?: number        // throttle between sends (default: 1500ms email, 3000ms WA)
 }
@@ -118,7 +119,7 @@ async function processBatch(batchId: string, req: BulkRequest): Promise<void> {
 
   // Pre-check channel availability
   if (req.canal === 'whatsapp') {
-    const waStatus = getWhatsAppStatus()
+    const waStatus = getUserWhatsAppStatus(req.vendedorId)
     if (!waStatus.connected) {
       batch.status = 'done'
       batch.finishedAt = new Date().toISOString()
@@ -188,7 +189,7 @@ async function processBatch(batchId: string, req: BulkRequest): Promise<void> {
           batch.errors.push({ clienteId: target.clienteId, to: target.to, error: result.error || 'Erro desconhecido' })
         }
       } else if (req.canal === 'whatsapp') {
-        const result = await sendWhatsAppMessage(target.to, message)
+        const result = await sendUserWhatsAppMessage(req.vendedorId, target.to, message)
         if (result.success) {
           batch.sent++
           // Register interaction

@@ -42,39 +42,49 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
 
   if (error || !cliente) throw new Error(`Cliente ${clienteId} não encontrado no CRM`)
 
-  // Se já tem código Omie vinculado, retornar
-  if (cliente.omie_codigo) {
-    return parseInt(cliente.omie_codigo, 10)
-  }
-
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  const cnpj = (cliente.cnpj || '').replace(/\D/g, '')
+  const cnpj = String(cliente.cnpj || '').replace(/\D/g, '')
   if (!cnpj) throw new Error(`Cliente ${clienteId} (${cliente.razao_social}) não tem CNPJ. Cadastre o CNPJ primeiro.`)
 
-  // 1. Buscar se já existe no Omie por CNPJ (evita duplicata)
+  // Sempre consultar pelo CNPJ: o código salvo no CRM pode estar desatualizado.
+  let busca: any
   try {
-    const busca = await omieCall<any>(
+    busca = await omieCall<any>(
       '/geral/clientes/',
       'ListarClientes',
       [{ pagina: 1, registros_por_pagina: 5, clientesFiltro: { cnpj_cpf: cnpj } }],
       { skipCache: true, credentials: creds }
     )
-    const encontrado = busca?.clientes_cadastro?.[0]
-    if (encontrado?.codigo_cliente_omie) {
-      const codigoOmie = encontrado.codigo_cliente_omie
-      await supabase.from('clientes').update({ omie_codigo: String(codigoOmie) }).eq('id', clienteId)
-      log.info({ clienteId, codigoOmie, cnpj }, '🔗 Cliente já existia no Omie — vinculado ao CRM')
-      return codigoOmie
-    }
-  } catch {
-    // Busca falhou — seguir com Upsert (que cria se necessário)
-    log.info({ clienteId, cnpj }, '⚠️ Busca prévia no Omie falhou, tentando Upsert...')
+  } catch (err: any) {
+    throw new Error(`Não foi possível consultar o cliente pelo CNPJ ${cnpj} no Omie: ${err?.message || 'erro de comunicação'}`)
   }
 
-  // 2. Criar/atualizar via UpsertClienteCpfCnpj (dedup nativo por CNPJ)
-  log.info({ clienteId, cnpj, razao: cliente.razao_social }, '🔄 Criando/atualizando cliente no Omie...')
+  const encontrado = busca?.clientes_cadastro?.find((item: any) => {
+    const cnpjOmie = String(item?.cnpj_cpf || '').replace(/\D/g, '')
+    return !cnpjOmie || cnpjOmie === cnpj
+  })
+
+  if (encontrado?.codigo_cliente_omie) {
+    const codigoOmie = Number(encontrado.codigo_cliente_omie)
+    if (!Number.isInteger(codigoOmie) || codigoOmie <= 0) {
+      throw new Error(`Omie retornou código inválido para o cliente CNPJ ${cnpj}`)
+    }
+    if (String(cliente.omie_codigo || '') !== String(codigoOmie)) {
+      await supabase.from('clientes').update({ omie_codigo: String(codigoOmie) }).eq('id', clienteId)
+    }
+    log.info({ clienteId, codigoOmie, cnpj }, '🔗 Cliente localizado por CNPJ no Omie — código sincronizado no CRM')
+    return codigoOmie
+  }
+
+  // Não criar outro registro se já havia um vínculo no CRM, mas o Omie não o encontrou.
+  if (cliente.omie_codigo) {
+    throw new Error(`Cliente CNPJ ${cnpj} não foi encontrado no Omie, embora o CRM tenha o código ${cliente.omie_codigo}. Verifique o cadastro antes de enviar.`)
+  }
+
+  // 2. Criar via Upsert somente quando o CNPJ realmente não existe no Omie.
+  log.info({ clienteId, cnpj, razao: cliente.razao_social }, '🔄 Cliente não encontrado por CNPJ — criando no Omie...')
 
   // Email: Omie exige email. Se não tiver, gerar um baseado no CNPJ.
   const emailFinal = (cliente.contato_email || '').trim() || `${cnpj}@semcontato.grupoparis.com.br`
@@ -94,6 +104,7 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
     cidade: cliente.endereco_cidade || 'São Paulo',
     estado: cliente.endereco_estado || 'SP',
     cep: (cliente.endereco_cep || '01001000').replace(/\D/g, ''),
+    inscricao_estadual: cliente.inscricao_estadual || '',
     contribuinte: 'S',
   }
 
@@ -176,6 +187,36 @@ function pesoFromNomeProduto(nome: string): number {
   const match = normalized.match(/(\d+(?:[\.,]\d+)?)\s*kg\b/)
   if (!match) return 0
   return toNumberSafe(match[1])
+}
+
+function normalizarUf(value: any): string {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  const estados: Record<string, string> = {
+    'ACRE': 'AC', 'ALAGOAS': 'AL', 'AMAPA': 'AP', 'AMAZONAS': 'AM', 'BAHIA': 'BA',
+    'CEARA': 'CE', 'DISTRITO FEDERAL': 'DF', 'ESPIRITO SANTO': 'ES', 'GOIAS': 'GO',
+    'MARANHAO': 'MA', 'MATO GROSSO': 'MT', 'MATO GROSSO DO SUL': 'MS', 'MINAS GERAIS': 'MG',
+    'PARA': 'PA', 'PARAIBA': 'PB', 'PARANA': 'PR', 'PERNAMBUCO': 'PE', 'PIAUI': 'PI',
+    'RIO DE JANEIRO': 'RJ', 'RIO GRANDE DO NORTE': 'RN', 'RIO GRANDE DO SUL': 'RS',
+    'RONDONIA': 'RO', 'RORAIMA': 'RR', 'SANTA CATARINA': 'SC', 'SAO PAULO': 'SP',
+    'SERGIPE': 'SE', 'TOCANTINS': 'TO',
+  }
+  const uf = estados[normalized] || normalized
+  if (!/^[A-Z]{2}$/.test(uf)) throw new Error(`UF inválida ou não informada: "${value || ''}"`)
+  return uf
+}
+
+function calcularPesoTotal(quantidade: number, pesoKg: number, unidade: string): number {
+  if (quantidade <= 0) throw new Error('Quantidade do item deve ser maior que zero')
+  // Se temos peso unitário (do Omie, CRM ou nome do produto), multiplica pela quantidade.
+  if (pesoKg > 0) return quantidade * pesoKg
+  const unidadeNormalizada = String(unidade || '').trim().toUpperCase()
+  // Fallback: quando a unidade é KG e não temos peso unitário, a quantidade é o próprio peso.
+  if (unidadeNormalizada === 'KG' || unidadeNormalizada === 'KGS') return quantidade
+  throw new Error(`Peso unitário não informado para produto vendido em ${unidade || 'unidade'}`)
 }
 
 function buildMetaProduto(produto: any, consultaOmie?: any) {
@@ -467,16 +508,19 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     .eq('id', pedido.cliente_id)
     .single()
 
-  const estadoCliente = (cliente?.endereco_estado || '').toUpperCase()
-  // Se endereço de entrega diferente, usar estado da entrega para CFOP
+  const estadoCliente = normalizarUf(cliente?.endereco_estado)
+  // Se endereço de entrega diferente, usar o estado da entrega para CFOP.
   const estadoEntrega = pedido.endereco_diferente && pedido.endereco_entrega_estado
-    ? pedido.endereco_entrega_estado.toUpperCase()
+    ? normalizarUf(pedido.endereco_entrega_estado)
     : estadoCliente
-  const estadoEmpresa = await getEstadoEmpresa(creds)
+  const estadoEmpresa = normalizarUf(await getEstadoEmpresa(creds))
   const isIntraEstado = estadoEntrega === estadoEmpresa
 
-  // Tipo do pedido: 'venda' ou 'bonificacao'
-  const tipoPedido = pedido.tipo || 'venda'
+  // Tipo do pedido: somente venda ou bonificação podem ser enviados ao Omie.
+  const tipoPedido = String(pedido.tipo || 'venda').trim().toLowerCase()
+  if (tipoPedido !== 'venda' && tipoPedido !== 'bonificacao') {
+    throw new Error(`Tipo de pedido inválido para envio ao Omie: "${pedido.tipo || ''}"`)
+  }
 
   log.info({ pedidoId, clienteId: pedido.cliente_id, qtdItens: itens.length, tipoPedido, estadoEntrega, estadoEmpresa, isIntraEstado }, '📦 Preparando pedido para Omie...')
 
@@ -528,8 +572,10 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     if (prodOmie.especieVolume) especieVolume = prodOmie.especieVolume
     if (prodOmie.marca) marcaVolumes = prodOmie.marca
 
-    const cfop = isIntraEstado ? prodOmie.cfopInterno : prodOmie.cfopExterno
-    const pesoTotal = quantidade
+    const cfop = tipoPedido === 'bonificacao'
+      ? (isIntraEstado ? '5910' : '6910')
+      : (isIntraEstado ? '5101' : '6101')
+    const pesoTotal = calcularPesoTotal(quantidade, prodOmie.pesoKg, prodOmie.unidade)
 
     const detItem: any = {
       ide: {
@@ -660,8 +706,6 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   } else {
     const parcelas = gerarParcelas(formaPagamento, totalPedido, dataPrevisao)
     omiePedido.lista_parcelas = { parcela: parcelas }
-    // Quando enviamos lista_parcelas, usar código 999 para o Omie não sobrescrever as datas
-    cabecalho.codigo_parcela = '999'
     log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas com datas explícitas enviadas para Omie')
   }
 

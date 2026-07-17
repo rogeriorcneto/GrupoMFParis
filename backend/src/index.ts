@@ -1054,6 +1054,7 @@ app.get('/api/email/inbox', requireAuth, rateLimit(30, 60_000), async (req, res)
 
 app.post('/api/bulk/send', requireAuth, rateLimit(5, 60_000), async (req, res) => {
   const { canal, subject, body, templateId, targets, vendedorNome, delayMs } = req.body
+  const userId = (req as any).userId
 
   if (!canal || !targets || !Array.isArray(targets) || targets.length === 0) {
     res.status(400).json({ success: false, error: 'Campos obrigatórios: canal, targets[]' })
@@ -1072,9 +1073,18 @@ app.post('/api/bulk/send', requireAuth, rateLimit(5, 60_000), async (req, res) =
     return
   }
 
+  const db = await import('./database.js')
+  const vendedor = await db.getVendedorByAuthId(userId)
+  if (!vendedor) {
+    res.status(404).json({ success: false, error: 'Vendedor não encontrado' })
+    return
+  }
+
   const batchId = startBulkDispatch({
     canal, subject, body: body || '', templateId, targets,
-    vendedorNome: vendedorNome || 'Sistema', delayMs,
+    vendedorId: vendedor.id,
+    vendedorNome: vendedorNome || vendedor.nome || 'Sistema',
+    delayMs,
   })
 
   res.json({ success: true, batchId })

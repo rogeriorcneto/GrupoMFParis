@@ -951,7 +951,7 @@ export default function ClientePanel({
                 </>
               )}
               {c.etapa === 'follow_up' && (() => {
-                const pedidoCancelavel = (todosPedidos || []).find(p => p.clienteId === c.id && (p.status === 'confirmado' || p.status === 'enviado') && !['faturado', 'expedido', 'entregue'].includes(p.omieStatus || ''))
+                const pedidoCancelavel = (todosPedidos || []).find(p => p.clienteId === c.id && (p.status === 'confirmado' || p.status === 'enviado' || p.status === 'cancelamento_solicitado') && !['faturado', 'expedido', 'entregue'].includes(p.omieStatus || ''))
                 if (!pedidoCancelavel) return null
                 const jaSolicitado = pedidoCancelavel.status === 'cancelamento_solicitado'
                 return (
@@ -1357,6 +1357,13 @@ export default function ClientePanel({
               cancelado: 'bg-red-100 text-red-700',
               cancelamento_solicitado: 'bg-orange-100 text-orange-700',
             }
+            const statusLabel: Record<string, string> = {
+              rascunho: 'Rascunho',
+              enviado: 'Aguardando aprovação',
+              confirmado: 'Aprovado',
+              cancelado: 'Cancelado',
+              cancelamento_solicitado: 'Cancelamento pendente',
+            }
             return (
               <div className="space-y-3">
                 {/* KPIs */}
@@ -1393,7 +1400,7 @@ export default function ClientePanel({
                             </div>
                             <div className="text-right flex-shrink-0">
                               <p className="text-sm font-bold text-gray-900">{p.tipo === 'bonificacao' ? '—' : `R$ ${(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>
-                              <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${statusBadge[p.status] || 'bg-gray-100 text-gray-700'}`}>{p.status}</span>
+                              <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${statusBadge[p.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel[p.status] || p.status}</span>
                             </div>
                           </div>
                           {p.itens && p.itens.length > 0 && (

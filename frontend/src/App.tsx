@@ -379,6 +379,9 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
       if (updP.status === 'confirmado' && loggedUser?.cargo !== 'gerente') {
         addNotificacao('success', '✅ Pedido aprovado!', `Pedido #${updP.numero} foi aprovado pelo gerente`)
       }
+      if (updP.status === 'cancelamento_solicitado' && loggedUser?.cargo === 'gerente') {
+        addNotificacao('warning', '🚫 Cancelamento aguardando aprovação', `Pedido #${updP.numero} solicita cancelamento`, updP.clienteId ?? undefined)
+      }
     } else if (payload.eventType === 'DELETE') {
       setPedidos(prev => prev.filter(p => p.id !== payload.old.id))
     }
@@ -514,7 +517,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
             db.signOut().catch(() => {})
           }, 0)
         }}
-        pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado').length : 0}
+        pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado' || p.status === 'cancelamento_solicitado').length : 0}
       />
 
       {/* Main Content */}

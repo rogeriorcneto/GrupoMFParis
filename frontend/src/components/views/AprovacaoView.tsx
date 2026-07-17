@@ -214,7 +214,7 @@ export default function AprovacaoView({
                 )}
                 {!showActions && (
                   <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${pedido.status === 'confirmado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
-                    {pedido.status === 'confirmado' ? '✅ Aprovado' : '❌ Recusado'}
+                    {pedido.status === 'confirmado' ? '✅ Aprovado' : '❌ Cancelado'}
                   </span>
                 )}
               </div>

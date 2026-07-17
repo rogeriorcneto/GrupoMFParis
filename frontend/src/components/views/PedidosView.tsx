@@ -185,8 +185,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     })
     .sort((a, b) => new Date(b.dataCriacao).getTime() - new Date(a.dataCriacao).getTime())
 
-  const statusBadge = (s: Pedido['status']) => ({ rascunho: 'bg-gray-100 text-gray-700', enviado: 'bg-amber-100 text-amber-800', confirmado: 'bg-green-100 text-green-800', cancelado: 'bg-red-100 text-red-800' }[s])
-  const statusLabel = (s: Pedido['status']) => ({ rascunho: 'Rascunho', enviado: 'Ag. aprovacao', confirmado: 'Aprovado', cancelado: 'Recusado' }[s])
+  const statusBadge = (s: Pedido['status']) => ({ rascunho: 'bg-gray-100 text-gray-700', enviado: 'bg-amber-100 text-amber-800', confirmado: 'bg-green-100 text-green-800', cancelado: 'bg-red-100 text-red-800', cancelamento_solicitado: 'bg-orange-100 text-orange-800' }[s])
+  const statusLabel = (s: Pedido['status']) => ({ rascunho: 'Rascunho', enviado: 'Ag. aprovacao', confirmado: 'Aprovado', cancelado: 'Cancelado', cancelamento_solicitado: 'Cancelamento pendente' }[s])
   const tipoBadge = (t?: Pedido['tipo']) => (t === 'bonificacao' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800')
   const tipoLabel = (t?: Pedido['tipo']) => (t === 'bonificacao' ? 'Amostra' : 'Venda')
   const catLabel: Record<string, string> = { sacaria: 'Sacaria 25kg', okey_lac: 'Okey Lac 25kg', varejo_lacteo: 'Varejo Lacteo', cafe: 'Cafe', outros: 'Outros' }
@@ -515,7 +515,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="flex items-center gap-2 px-1 pb-2 flex-shrink-0">
             <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
-              <option value="">Todos</option><option value="rascunho">Rascunho</option><option value="enviado">Enviado</option><option value="confirmado">Confirmado</option><option value="cancelado">Cancelado</option>
+              <option value="">Todos</option><option value="rascunho">Rascunho</option><option value="enviado">Enviado</option><option value="confirmado">Confirmado</option><option value="cancelado">Cancelado</option><option value="cancelamento_solicitado">Cancelamento pendente</option>
             </select>
             <select value={filtroCliente} onChange={(e) => setFiltroCliente(e.target.value)} className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
               <option value="">Todos os clientes</option>

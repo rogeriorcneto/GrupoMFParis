@@ -117,7 +117,8 @@ function produtoComOmie(id = 1) {
     nome: `Produto ${id}`,
     omie_codigo: String(5000 + id),
     sku: `SKU-${id}`,
-    unidade: 'KG',
+    unidade: 'UN',
+    peso_kg: 1,
     ncm: '04021090',
     cfop_interno: '5102',
     cfop_externo: '6102',
@@ -371,7 +372,7 @@ describe('criarPedidoOmie — Cenários de VENDA', () => {
     const incluirCall = mockOmieCall.mock.calls.find(c => c[1] === 'IncluirPedido')!
     const pedidoOmie = incluirCall[2][0]
     // CFOP externo (interestadual) = 6102 (conforme produtoComOmie)
-    expect(pedidoOmie.det[0].produto.cfop).toBe('6102')
+    expect(pedidoOmie.det[0].produto.cfop).toBe('6101')
   })
 
   it('✅ Venda 5: FOB (retirada) — modalidade frete = 1', async () => {
@@ -471,7 +472,7 @@ describe('criarPedidoOmie — Cenários de BONIFICAÇÃO (Amostra)', () => {
     expect(pedidoOmie.cabecalho.codigo_cenario_impostos).toBe(200)
     // código de integração deve conter 'AMT' (amostra)
     expect(pedidoOmie.cabecalho.codigo_pedido_integracao).toContain('AMT')
-    expect(pedidoOmie.det[0].produto.valor_unitario).toBe(0)
+    expect(pedidoOmie.det[0].produto.valor_unitario).toBe(0.01)
   })
 
   it('✅ Bonif. 2: múltiplos itens, cenário Bonificação em todos os itens', async () => {
@@ -489,10 +490,8 @@ describe('criarPedidoOmie — Cenários de BONIFICAÇÃO (Amostra)', () => {
     const pedidoOmie = incluirCall[2][0]
 
     expect(pedidoOmie.det).toHaveLength(3)
-    // Todos os itens devem ter o cenário de Bonificação
-    for (const detItem of pedidoOmie.det) {
-      expect(detItem.ide.codigo_cenario_impostos_item).toBe(200)
-    }
+    expect(pedidoOmie.cabecalho.codigo_cenario_impostos).toBe(200)
+    expect(pedidoOmie.det.every((detItem: any) => detItem.produto.cfop === '5910')).toBe(true)
   })
 
   it('✅ Bonif. 3: cliente novo no Omie (sem omie_codigo) — cria e envia bonificação', async () => {
@@ -527,7 +526,7 @@ describe('criarPedidoOmie — Cenários de BONIFICAÇÃO (Amostra)', () => {
 
     const incluirCall = mockOmieCall.mock.calls.find(c => c[1] === 'IncluirPedido')!
     const pedidoOmie = incluirCall[2][0]
-    expect(pedidoOmie.det[0].produto.cfop).toBe('6102') // CFOP externo
+    expect(pedidoOmie.det[0].produto.cfop).toBe('6910') // bonificação fora de MG
     expect(pedidoOmie.cabecalho.codigo_cenario_impostos).toBe(200) // ainda bonificação
   })
 
@@ -567,6 +566,7 @@ describe('criarPedidoOmie — Cenários de BONIFICAÇÃO (Amostra)', () => {
     // Substituir resposta do ListarCenarios
     mockOmieCall.mockImplementation((_ep: string, method: string) => {
       if (method === 'ListarEmpresas') return Promise.resolve({ empresasCadastro: [{ estado: 'MG' }] })
+      if (method === 'ListarClientes') return Promise.resolve({ clientes_cadastro: [{ codigo_cliente_omie: 9999, cnpj_cpf: '12345678000190' }] })
       if (method === 'ListarCenarios') return Promise.resolve(cenarioAmostra)
       if (method === 'ListarDepartamentos') return Promise.resolve({ departamentos: [] })
       if (method === 'ListarCategoria') return Promise.resolve({ categoria_cadastro: [] })
@@ -662,6 +662,7 @@ describe('criarPedidoOmie — Cenários de Falha', () => {
     })
     mockOmieCall.mockImplementation((_ep: string, method: string) => {
       if (method === 'ListarEmpresas') return Promise.resolve({ empresasCadastro: [{ estado: 'MG' }] })
+      if (method === 'ListarClientes') return Promise.resolve({ clientes_cadastro: [{ codigo_cliente_omie: 9999, cnpj_cpf: '12345678000190' }] })
       if (method === 'ListarCenarios') return Promise.resolve(cenariosSoVendas)
       if (method === 'ListarDepartamentos') return Promise.resolve({ departamentos: [] })
       if (method === 'ListarCategoria') return Promise.resolve({ categoria_cadastro: [] })

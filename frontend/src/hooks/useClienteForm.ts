@@ -6,7 +6,7 @@ import { logger } from '../utils/logger'
 import { fetchCnpjViaBackend } from '../lib/botApi'
 
 const emptyForm: FormData = {
-  razaoSocial: '', nomeFantasia: '', cnpj: '', cnpj2: '', contatoNome: '',
+  razaoSocial: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '', cnpj2: '', contatoNome: '',
   contatoTelefone: '', contatoCelular: '', contatoTelefoneFixo: '',
   contatoEmail: '',
   enderecoRua: '', enderecoNumero: '', enderecoComplemento: '',

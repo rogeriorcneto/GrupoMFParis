@@ -34,6 +34,7 @@ export function omieToDbRow(omie: OmieCliente): Record<string, any> {
     razao_social: omie.razao_social || '',
     nome_fantasia: omie.nome_fantasia || '',
     cnpj: omie.cnpj_cpf || '',
+    inscricao_estadual: omie.inscricao_estadual || '',
     contato_nome: omie.contato || '',
     contato_email: omie.email || '',
     contato_telefone: omie.telefone1_numero || '',
