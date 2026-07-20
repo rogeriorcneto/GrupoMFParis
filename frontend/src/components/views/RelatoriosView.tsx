@@ -3,56 +3,10 @@ import { SparklesIcon } from '@heroicons/react/24/outline'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade } from '../../types'
 import { stageLabels } from '../../utils/constants'
+import { calcularDuracoesEtapas, diasEtapaAtual, EtapaDuracao } from '../../utils/etapas'
 
 type Periodo = '7d' | '30d' | '90d' | 'total'
 const periodoLabels: Record<Periodo, string> = { '7d': '7 dias', '30d': '30 dias', '90d': '90 dias', 'total': 'Todo período' }
-
-interface EtapaDuracao {
-  etapa: string
-  dias: number
-  entrada: string
-  saida?: string
-  clienteId: number
-  clienteNome: string
-  vendedorId?: number
-  vendedorNome?: string
-}
-
-function calcularDuracoesEtapas(cliente: Cliente, agora = new Date()): { etapa: string; dias: number; entrada: string; saida?: string }[] {
-  const now = agora.getTime()
-  const hist = [...(cliente.historicoEtapas || [])].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
-  const result: { etapa: string; dias: number; entrada: string; saida?: string }[] = []
-
-  if (hist.length > 0) {
-    // tempo na etapa inicial, antes da primeira movimentação registrada
-    const startInitial = cliente.criadoEm ? new Date(cliente.criadoEm).getTime() : new Date(hist[0].data).getTime()
-    const endInitial = new Date(hist[0].data).getTime()
-    result.push({ etapa: hist[0].de || 'lead', dias: Math.max(0, Math.floor((endInitial - startInitial) / 86400000)), entrada: new Date(startInitial).toISOString(), saida: hist[0].data })
-
-    // tempo nas etapas intermediárias (cada 'de' é a etapa anterior ao registro)
-    for (let i = 1; i < hist.length; i++) {
-      const start = new Date(hist[i - 1].data).getTime()
-      const end = new Date(hist[i].data).getTime()
-      result.push({ etapa: hist[i].de, dias: Math.max(0, Math.floor((end - start) / 86400000)), entrada: hist[i - 1].data, saida: hist[i].data })
-    }
-
-    // tempo na etapa atual (última movimentação até agora)
-    const lastStart = new Date(hist[hist.length - 1].data).getTime()
-    result.push({ etapa: cliente.etapa, dias: Math.max(0, Math.floor((now - lastStart) / 86400000)), entrada: hist[hist.length - 1].data })
-  } else {
-    const start = cliente.dataEntradaEtapa ? new Date(cliente.dataEntradaEtapa).getTime() : (cliente.criadoEm ? new Date(cliente.criadoEm).getTime() : now)
-    result.push({ etapa: cliente.etapa, dias: Math.max(0, Math.floor((now - start) / 86400000)), entrada: new Date(start).toISOString() })
-  }
-
-  return result
-}
-
-function diasEtapaAtual(cliente: Cliente, agora = new Date()): number {
-  const now = agora.getTime()
-  const hist = [...(cliente.historicoEtapas || [])].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
-  const start = hist.length > 0 ? new Date(hist[hist.length - 1].data).getTime() : (cliente.dataEntradaEtapa ? new Date(cliente.dataEntradaEtapa).getTime() : (cliente.criadoEm ? new Date(cliente.criadoEm).getTime() : now))
-  return Math.max(0, Math.floor((now - start) / 86400000))
-}
 
 const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], interacoes: Interacao[], produtos?: Produto[], pedidos?: Pedido[], tarefas?: Tarefa[], atividades?: Atividade[] }> = ({ clientes, vendedores, interacoes, produtos = [], pedidos = [], tarefas = [], atividades = [] }) => {
   const [periodo, setPeriodo] = React.useState<Periodo>('total')

@@ -3,10 +3,11 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, R
 import WhatsAppIcon from '../icons/WhatsAppIcon'
 import type { Cliente, Vendedor, Interacao, DashboardMetrics, Atividade, Produto, Tarefa, Pedido } from '../../types'
 import { stageLabels } from '../../utils/constants'
+import { calcularDuracoesEtapas } from '../../utils/etapas'
 
 // ── Types ──
 type PeriodoTipo = 'hoje' | 'mes' | 'ano'
-type TabKey = 'saude' | 'crescimento' | 'produtos' | 'mercado' | 'clientes' | 'funil' | 'equipe' | 'competitiva'
+type TabKey = 'saude' | 'crescimento' | 'produtos' | 'mercado' | 'clientes' | 'funil' | 'equipe' | 'competitiva' | 'comercial'
 
 const TAB_LIST: { key: TabKey; label: string; icon: string }[] = [
   { key: 'saude', label: 'Saúde', icon: '💊' },
@@ -17,6 +18,7 @@ const TAB_LIST: { key: TabKey; label: string; icon: string }[] = [
   { key: 'funil', label: 'Funil', icon: '🔽' },
   { key: 'equipe', label: 'Equipe', icon: '🏆' },
   { key: 'competitiva', label: 'Competitiva', icon: '⚔️' },
+  { key: 'comercial', label: 'Comercial', icon: '📊' },
 ]
 
 const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -155,6 +157,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
   const fi = useMemo(() => interacoes.filter(i => inRange(i.data)), [interacoes, inRange])
   const fp = useMemo(() => pedidos.filter(p => inRange(p.dataCriacao)), [pedidos, inRange])
   const fpConfirmed = useMemo(() => fp.filter(p => p.status === 'confirmado'), [fp])
+  const ft = useMemo(() => tarefas.filter(t => inRange(t.data)), [tarefas, inRange])
 
   // ── Global computed data ──
   const computed = useMemo(() => {
@@ -626,10 +629,229 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores,
     )
   }
 
+  const renderComercial = () => {
+    const confirmedAll = pedidos.filter(p => p.status === 'confirmado')
+    const activeIds = new Set(fpConfirmed.map(p => p.clienteId))
+    const ativos = activeIds.size
+    const receita = fpConfirmed.reduce((s, p) => s + p.totalValor, 0)
+    const clienteMap = new Map(clientes.map(c => [c.id, c]))
+
+    const firstPurchase: Record<number, string> = {}
+    confirmedAll.forEach(p => { if (!firstPurchase[p.clienteId] || p.dataCriacao < firstPurchase[p.clienteId]) firstPurchase[p.clienteId] = p.dataCriacao })
+    const novos = Object.entries(firstPurchase).filter(([, d]) => inRange(d)).length
+    const perdidos = fc.filter(c => c.etapa === 'perdido').length
+
+    let retencao = 0, churn = 0
+    const rangeMs = range.end.getTime() - range.start.getTime()
+    const prevStart = new Date(range.start.getTime() - rangeMs)
+    const prevIds = new Set(confirmedAll.filter(p => { const d = new Date(p.dataCriacao); return d >= prevStart && d < range.start }).map(p => p.clienteId))
+    const mantidos = [...prevIds].filter(id => activeIds.has(id)).length
+    retencao = prevIds.size > 0 ? (mantidos / prevIds.size) * 100 : 0
+    churn = prevIds.size > 0 ? ((prevIds.size - mantidos) / prevIds.size) * 100 : 0
+
+    const purchaseCounts: Record<number, number> = {}
+    confirmedAll.forEach(p => { purchaseCounts[p.clienteId] = (purchaseCounts[p.clienteId] || 0) + 1 })
+    const recompraClientes = [...activeIds].filter(id => (purchaseCounts[id] || 0) >= 2).length
+    const taxaRecompra = ativos > 0 ? (recompraClientes / ativos) * 100 : 0
+    const freqMedia = ativos > 0 ? fpConfirmed.length / ativos : 0
+    const receitaMedia = ativos > 0 ? receita / ativos : 0
+
+    const clientRev = new Map<number, number>()
+    fpConfirmed.forEach(p => clientRev.set(p.clienteId, (clientRev.get(p.clienteId) || 0) + p.totalValor))
+    const revArr = Array.from(clientRev.entries()).sort((a, b) => b[1] - a[1])
+    const totalRev = revArr.reduce((s, [, v]) => s + v, 0)
+    let cum = 0, classeA = 0, classeB = 0, classeC = 0
+    revArr.forEach(([, v]) => { cum += v; if (cum / (totalRev || 1) <= 0.8) classeA++; else if (cum / (totalRev || 1) <= 0.95) classeB++; else classeC++ })
+    const top10Rev = revArr.slice(0, 10).reduce((s, [, v]) => s + v, 0)
+    const concentracaoTop10 = totalRev > 0 ? (top10Rev / totalRev) * 100 : 0
+
+    const leadsGerados = fc.length
+    const prospeccoes = fi.filter(i => ['ligacao', 'email', 'whatsapp'].includes(i.tipo)).length
+    const diagnosticos = fi.filter(i => i.tipo === 'reuniao').length
+    const propostasEnviadas = fc.filter(c => inRange(c.dataProposta)).length
+    const testesRealizados = fc.filter(c => inRange(c.dataEnvioAmostra)).length
+    const negociacoes = fc.filter(c => c.etapa === 'negociacao').length
+    const pedidosFech = fpConfirmed.length
+    const taxaConversaoFunil = leadsGerados > 0 ? (pedidosFech / leadsGerados) * 100 : 0
+    const temposFech: number[] = []
+    fc.filter(c => c.etapa === 'follow_up' && c.criadoEm && c.dataEntradaEtapa).forEach(c => {
+      const dias = Math.max(0, Math.floor((new Date(c.dataEntradaEtapa!).getTime() - new Date(c.criadoEm!).getTime()) / 86400000))
+      if (dias > 0) temposFech.push(dias)
+    })
+    const tempoMedioFech = temposFech.length > 0 ? Math.round(temposFech.reduce((a, b) => a + b, 0) / temposFech.length) : 0
+
+    const statsEquipe = vendedores.filter(v => v.ativo).map(v => {
+      const cv = fc.filter(c => c.vendedorId === v.id)
+      const pv = fpConfirmed.filter(p => p.vendedorId === v.id)
+      const faturamento = pv.reduce((s, p) => s + p.totalValor, 0)
+      const volume = pv.reduce((s, p) => s + p.itens.reduce((is, it) => is + it.quantidade, 0), 0)
+      const oport = cv.length
+      const ganhos = cv.filter(c => c.etapa === 'follow_up').length
+      const taxaConv = oport > 0 ? (ganhos / oport) * 100 : 0
+      const ligacoes = fi.filter(i => i.tipo === 'ligacao' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
+      const emails = fi.filter(i => i.tipo === 'email' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
+      const whats = fi.filter(i => i.tipo === 'whatsapp' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
+      const reunioes = fi.filter(i => i.tipo === 'reuniao' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
+      const visitas = ft.filter(t => t.tipo === 'reuniao' && t.vendedorId === v.id).length
+      const propostas = cv.filter(c => c.dataProposta).length
+      return { id: v.id, nome: v.nome.split(' ')[0], faturamento, volume, taxaConv, ligacoes, emails, whats, reunioes, visitas, propostas }
+    }).filter(v => v.faturamento > 0 || v.ligacoes > 0 || v.emails > 0 || v.whats > 0 || v.reunioes > 0 || v.visitas > 0 || v.propostas > 0 || v.volume > 0)
+
+    const perdasList = fc.filter(c => c.etapa === 'perdido')
+    const totalPerdas = perdasList.length
+    const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
+    const catColors: Record<string, string> = { preco: '#EAB308', prazo: '#F97316', qualidade: '#3B82F6', concorrencia: '#EF4444', sem_resposta: '#6B7280', outro: '#A855F7' }
+    const perdasCat = Object.entries(perdasList.reduce((acc, c) => { const k = c.categoriaPerda || 'outro'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).map(([k, v]) => ({ name: catLabels[k] || k, value: v, fill: catColors[k] || '#6B7280' }))
+    const motivosFreq = Object.entries(perdasList.reduce((acc, c) => { if (c.motivoPerda) acc[c.motivoPerda] = (acc[c.motivoPerda] || 0) + 1; return acc }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    const telaStages = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
+    const telaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up' }
+    const vendTela = vendedores.filter(v => v.ativo).map(v => {
+      const clientesV = clientes.filter(c => c.vendedorId === v.id)
+      const duracoes: Record<string, number[]> = {}
+      telaStages.forEach(s => { duracoes[s] = [] })
+      clientesV.forEach(c => {
+        calcularDuracoesEtapas(c).filter(d => telaStages.includes(d.etapa)).forEach(d => { duracoes[d.etapa].push(d.dias) })
+      })
+      const medias = telaStages.map(s => ({
+        etapa: s,
+        media: duracoes[s].length > 0 ? Math.round(duracoes[s].reduce((a, b) => a + b, 0) / duracoes[s].length) : 0,
+        qtd: duracoes[s].length,
+      }))
+      return { id: v.id, nome: v.nome, medias, totalClientes: clientesV.length }
+    }).filter(v => v.totalClientes > 0)
+
+    return (
+      <div className="space-y-8">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">5. Indicadores de Clientes</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <KPI label="Clientes Ativos" value={ativos} sub="com compra no período" color="text-green-700" />
+            <KPI label="Novos Clientes" value={novos} sub="primeira compra" color="text-blue-700" />
+            <KPI label="Clientes Perdidos" value={perdidos} sub="no funil" color="text-red-600" />
+            <KPI label="Taxa Retenção" value={`${retencao.toFixed(1)}%`} sub="base mantida" color={retencao >= 80 ? 'text-green-700' : 'text-red-600'} />
+            <KPI label="Taxa Churn" value={`${churn.toFixed(1)}%`} sub="base perdida" color={churn <= 20 ? 'text-green-700' : 'text-red-600'} />
+            <KPI label="Taxa Recompra" value={`${taxaRecompra.toFixed(1)}%`} sub="clientes recorrentes" color="text-purple-700" />
+            <KPI label="Freq. Média Compra" value={freqMedia.toFixed(1)} sub="pedidos / cliente ativo" color="text-indigo-700" />
+            <KPI label="Receita Média / Cliente" value={fmt(receitaMedia)} sub="valor da carteira" color="text-amber-700" />
+            <KPI label="Clientes Classe A" value={classeA} sub="80% da receita" color="text-emerald-700" />
+            <KPI label="Concentração Top 10" value={`${concentracaoTop10.toFixed(1)}%`} sub="do faturamento" color="text-rose-700" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Evolução da Base</h3>
+              <ResponsiveContainer width="100%" height={220}><BarChart data={[{ name: 'Ativos', valor: ativos }, { name: 'Novos', valor: novos }, { name: 'Perdidos', valor: perdidos }]}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="valor" fill="#3B82F6" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>
+            </div>
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Classificação ABC</h3>
+              {revArr.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem pedidos confirmados</p> : <ResponsiveContainer width="100%" height={220}><PieChart><Pie data={[{ name: 'Classe A', value: classeA, fill: '#22C55E' }, { name: 'Classe B', value: classeB, fill: '#F59E0B' }, { name: 'Classe C', value: classeC, fill: '#EF4444' }]} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`}><Cell fill="#22C55E" /><Cell fill="#F59E0B" /><Cell fill="#EF4444" /></Pie><Tooltip /></PieChart></ResponsiveContainer>}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">6. Funil Comercial</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <KPI label="Leads Gerados" value={leadsGerados} sub="volume no período" />
+            <KPI label="Prospecções" value={prospeccoes} sub="abordagens" color="text-blue-700" />
+            <KPI label="Diagnósticos" value={diagnosticos} sub="reuniões levantamento" color="text-indigo-700" />
+            <KPI label="Propostas Enviadas" value={propostasEnviadas} sub="com data de proposta" color="text-purple-700" />
+            <KPI label="Testes de Produto" value={testesRealizados} sub="amostras enviadas" color="text-amber-700" />
+            <KPI label="Negociações Abertas" value={negociacoes} sub="em curso" color="text-cyan-700" />
+            <KPI label="Pedidos Fechados" value={pedidosFech} sub="confirmados" color="text-green-700" />
+            <KPI label="Conversão Funil" value={`${taxaConversaoFunil.toFixed(1)}%`} sub="pedidos / leads" color="text-emerald-700" />
+            <KPI label="Tempo Médio Fechamento" value={tempoMedioFech > 0 ? `${tempoMedioFech} dias` : '—'} sub="ciclo médio" color="text-pink-700" />
+          </div>
+          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Volume por Etapa do Funil</h3>
+            <ResponsiveContainer width="100%" height={240}><BarChart data={[{ name: 'Leads', valor: leadsGerados }, { name: 'Prospecções', valor: prospeccoes }, { name: 'Diagnósticos', valor: diagnosticos }, { name: 'Propostas', valor: propostasEnviadas }, { name: 'Testes', valor: testesRealizados }, { name: 'Negociações', valor: negociacoes }, { name: 'Pedidos', valor: pedidosFech }]}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="valor" fill="#6366F1" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">7. Performance da Equipe Comercial</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Faturamento por Vendedor</h3>
+              {statsEquipe.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : <ResponsiveContainer width="100%" height={240}><BarChart data={statsEquipe.map(v => ({ name: v.nome, valor: v.faturamento }))} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis type="number" tickFormatter={(v: number) => `R$ ${(v / 1000).toFixed(0)}k`} /><YAxis dataKey="name" type="category" width={100} /><Tooltip formatter={(v: number) => [fmt(v), 'Faturamento']} /><Bar dataKey="valor" fill="#22C55E" radius={[0, 6, 6, 0]} /></BarChart></ResponsiveContainer>}
+            </div>
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Atividades por Vendedor</h3>
+              {statsEquipe.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : <ResponsiveContainer width="100%" height={240}><BarChart data={statsEquipe.map(v => ({ name: v.nome, ligações: v.ligacoes, emails: v.emails, whatsapp: v.whats, reuniões: v.reunioes, visitas: v.visitas, propostas: v.propostas }))}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" /><YAxis allowDecimals={false} /><Tooltip /><Legend /><Bar dataKey="ligações" fill="#3B82F6" /><Bar dataKey="emails" fill="#8B5CF6" /><Bar dataKey="whatsapp" fill="#22C55E" /><Bar dataKey="reuniões" fill="#F59E0B" /><Bar dataKey="visitas" fill="#14B8A6" /><Bar dataKey="propostas" fill="#EC4899" /></BarChart></ResponsiveContainer>}
+            </div>
+          </div>
+          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6 overflow-x-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Ranking de Vendedores</h3>
+            <table className="min-w-full">
+              <thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Vendedor</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Faturamento</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Volume</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Conversão</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Ligações</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Emails</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Whats</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Reuniões</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Visitas</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Propostas</th></tr></thead>
+              <tbody>{statsEquipe.sort((a, b) => b.faturamento - a.faturamento).map(v => (<tr key={v.id} className="border-b border-gray-100"><td className="py-2 px-3 text-sm font-medium text-gray-900">{v.nome}</td><td className="py-2 px-3 text-sm text-right font-bold text-green-700">{fmt(v.faturamento)}</td><td className="py-2 px-3 text-sm text-right">{v.volume}</td><td className="py-2 px-3 text-sm text-right">{v.taxaConv.toFixed(1)}%</td><td className="py-2 px-3 text-sm text-right">{v.ligacoes}</td><td className="py-2 px-3 text-sm text-right">{v.emails}</td><td className="py-2 px-3 text-sm text-right">{v.whats}</td><td className="py-2 px-3 text-sm text-right">{v.reunioes}</td><td className="py-2 px-3 text-sm text-right">{v.visitas}</td><td className="py-2 px-3 text-sm text-right">{v.propostas}</td></tr>))}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">8. Inteligência Competitiva</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <KPI label="Negócios Perdidos" value={totalPerdas} sub="no período" color="text-red-600" />
+            <KPI label="Perdas por Preço" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'preco').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-yellow-600" />
+            <KPI label="Perdas por Prazo" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'prazo').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-orange-600" />
+            <KPI label="Perdas por Qualidade" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'qualidade').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-blue-600" />
+            <KPI label="Perdas por Concorrência" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'concorrencia').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-red-600" />
+            <KPI label="Preço Médio Mercado" value="—" sub="dados não coletados" color="text-gray-400" />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Principais Motivos de Perda</h3>
+              {perdasCat.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Nenhuma perda no período</p> : <ResponsiveContainer width="100%" height={240}><PieChart><Pie data={perdasCat} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>{perdasCat.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>}
+            </div>
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Motivos de Perda mais Citados</h3>
+              {motivosFreq.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Nenhum motivo registrado</p> : (
+                <div className="space-y-2">
+                  {motivosFreq.map(([motivo, qtd]) => (<div key={motivo} className="flex items-center justify-between py-1 border-b border-gray-100"><span className="text-sm text-gray-700 truncate flex-1 pr-3" title={motivo}>{motivo}</span><span className="text-sm font-bold text-red-600">{qtd}</span></div>))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tempo de Tela por Vendedor */}
+        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">⏱️ Tempo de Tela por Vendedor</h3>
+          <p className="text-sm text-gray-500 mb-4">Média de dias que os clientes de cada vendedor ficam em cada etapa</p>
+          {vendTela.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados de movimentação por vendedor</p> : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 text-xs font-medium text-gray-600 sticky left-0 bg-white">Vendedor</th>{telaStages.map(s => (<th key={s} className="text-center py-2 px-2 text-xs font-medium text-gray-600 min-w-[90px]">{telaLabels[s]}</th>))}</tr></thead>
+                <tbody>
+                  {vendTela.map(v => (
+                    <tr key={v.id} className="border-b border-gray-100">
+                      <td className="py-2 px-3 text-sm font-medium text-gray-900 sticky left-0 bg-white">{v.nome}</td>
+                      {v.medias.map(m => (
+                        <td key={m.etapa} className="py-2 px-2 text-center text-sm">
+                          {m.qtd > 0 ? (
+                            <div className="flex flex-col items-center">
+                              <span className="font-bold text-gray-900">{m.media}d</span>
+                              <span className="text-[10px] text-gray-400">{m.qtd} cliente{m.qtd !== 1 ? 's' : ''}</span>
+                            </div>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const tabRenderers: Record<TabKey, () => React.ReactNode> = {
     saude: renderSaude, crescimento: renderCrescimento, produtos: renderProdutos,
     mercado: renderMercado, clientes: renderClientes, funil: renderFunil,
-    equipe: renderEquipe, competitiva: renderCompetitiva,
+    equipe: renderEquipe, competitiva: renderCompetitiva, comercial: renderComercial,
   }
 
   // ── Main Render ──
