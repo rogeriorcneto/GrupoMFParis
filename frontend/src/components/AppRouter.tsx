@@ -594,7 +594,7 @@ export default function AppRouter({
         }}
       />
     case 'relatorios':
-      return <RelatoriosView clientes={clientes} vendedores={vendedores} interacoes={interacoes} produtos={produtos} />
+      return <RelatoriosView clientes={clientes} vendedores={vendedores} interacoes={interacoes} produtos={produtos} pedidos={pedidos} tarefas={tarefas} atividades={atividades} />
     case 'templates':
       return <TemplatesView templates={templates}
         onAdd={async (t) => {
