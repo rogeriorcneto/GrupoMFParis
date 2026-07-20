@@ -50,6 +50,8 @@ export interface UserWhatsAppSession {
   rawMessages: Map<string, any>
   /** Maps @lid JIDs to @s.whatsapp.net JIDs */
   lidMap: Map<string, string>
+  /** IDs of messages already persisted by the CRM send endpoint */
+  outgoingMessageIds: Set<string>
 }
 
 export interface UserWhatsAppStatus {
@@ -69,6 +71,7 @@ const MAX_SESSIONS = 20
 const INACTIVE_TIMEOUT = 24 * 60 * 60 * 1000 // 24h
 
 const sessions = new Map<number, UserWhatsAppSession>()
+const reconnectTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
 // Cleanup inactive sessions every hour
 let cleanupInterval: ReturnType<typeof setInterval> | null = null
@@ -108,16 +111,12 @@ async function fetchVersionSafe(): Promise<{ version: [number, number, number] }
 export function startSessionCleanup(): void {
   if (cleanupInterval) return
   cleanupInterval = setInterval(() => {
-    const now = Date.now()
     for (const [vendedorId, session] of sessions) {
-      if (session.status === 'connected' && session.startTime) {
-        if (now - session.startTime > INACTIVE_TIMEOUT) {
-          log.info(`⏰ Sessão WhatsApp do vendedor ${vendedorId} expirou (24h). Desconectando.`)
-          disconnectUserWhatsApp(vendedorId).catch(() => {})
-        }
+      if (session.status === 'connected') {
+        log.debug(`Sessão WhatsApp do vendedor ${vendedorId} permanece ativa`)
       }
     }
-  }, 60 * 60 * 1000) // every hour
+  }, 60 * 60 * 1000)
 }
 
 export function stopSessionCleanup(): void {
@@ -141,6 +140,7 @@ function createEmptySession(vendedorId: number): UserWhatsAppSession {
     messageStore: new Map(),
     rawMessages: new Map(),
     lidMap: new Map(),
+    outgoingMessageIds: new Set(),
   }
 }
 
@@ -412,7 +412,7 @@ export async function validateContactsOnWhatsApp(
 async function resolveJidForSending(
   session: UserWhatsAppSession,
   rawNumber: string
-): Promise<string> {
+): Promise<string | null> {
   const phoneJid = formatBrazilianPhone(rawNumber) + '@s.whatsapp.net'
   // 1. Verificar se já temos um LID mapeado para este phone JID no lidMap
   for (const [lid, pn] of session.lidMap.entries()) {
@@ -450,9 +450,8 @@ async function resolveJidForSending(
   } catch (e) {
     log.warn(`⚠️ resolveWhatsAppJid falhou para ${rawNumber}: ${e}`)
   }
-  // 3. Fallback: phone JID direto
-  log.warn(`⚠️ [resolveJidForSending] fallback para phone JID: ${phoneJid}`)
-  return phoneJid
+  log.warn(`⚠️ [resolveJidForSending] número não validado: ${phoneJid}`)
+  return null
 }
 
 export async function sendUserWhatsAppMessage(
@@ -465,9 +464,18 @@ export async function sendUserWhatsAppMessage(
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
   try {
+    const sock = session.sock
     const jid = await resolveJidForSending(session, number)
+    if (!jid) {
+      return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
+    }
+    if (sessions.get(vendedorId) !== session || session.sock !== sock || session.status !== 'connected') {
+      return { success: false, error: 'WhatsApp reconectando. Tente enviar novamente em instantes.' }
+    }
     log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
-    await session.sock.sendMessage(jid, { text })
+    const sent = await sock.sendMessage(jid, { text })
+    if (sent?.key?.id) session.outgoingMessageIds.add(sent.key.id)
+    log.info({ messageId: sent?.key?.id, jid }, `📨 Mensagem aceita pelo WhatsApp para vendedor ${vendedorId}`)
     return { success: true }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar mensagem para ${number}`)
@@ -619,6 +627,9 @@ export async function sendUserWhatsAppAudio(
   }
   try {
     const jid = await resolveJidForSending(session, number)
+    if (!jid) {
+      return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
+    }
     const buffer = Buffer.from(audioBase64, 'base64')
     await session.sock.sendMessage(jid, {
       audio: buffer,
@@ -646,9 +657,11 @@ export async function sendUserWhatsAppImage(
   }
   try {
     const jid = await resolveJidForSending(session, number)
+    if (!jid) {
+      return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
+    }
     const buffer = Buffer.from(imageBase64, 'base64')
-    await session.sock.sendMessage(jid, {
-      image: buffer,
+    await session.sock.sendMessage(jid, {      image: buffer,
       mimetype,
       caption: caption || undefined,
     })
@@ -661,18 +674,14 @@ export async function sendUserWhatsAppImage(
 
 export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
   const existing = sessions.get(vendedorId)
-  if (existing && existing.status === 'connected') {
-    log.warn(`WhatsApp do vendedor ${vendedorId} já está conectado`)
+  if (existing && (existing.status === 'connected' || existing.status === 'connecting' || existing.status === 'qr')) {
+    log.warn(`WhatsApp do vendedor ${vendedorId} já está conectado ou conectando`)
     return
   }
 
-  // Se já está "connecting" ou "qr", limpar antes de reconectar
-  if (existing && (existing.status === 'connecting' || existing.status === 'qr')) {
-    if (existing.sock) {
-      try { existing.sock.end(undefined) } catch { /* ignore */ }
-      existing.sock = null
-    }
-    sessions.delete(vendedorId)
+  if (reconnectTimers.has(vendedorId)) {
+    log.warn(`Reconexão WhatsApp do vendedor ${vendedorId} já está agendada`)
+    return
   }
 
   // Check max sessions limit
@@ -726,12 +735,15 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       const { connection, lastDisconnect, qr } = update
 
       if (qr) {
+        if (sessions.get(vendedorId) !== session || session.sock !== sock) return
         session.status = 'qr'
         session.qrDataUrl = await QRCode.toDataURL(qr, { width: 300, margin: 2 })
         log.info(`📷 QR Code gerado para vendedor ${vendedorId}`)
       }
 
       if (connection === 'close') {
+        if (sessions.get(vendedorId) !== session || session.sock !== sock) return
+
         session.qrDataUrl = null
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
         const errorMsg = (lastDisconnect?.error as Boom)?.message || 'unknown'
@@ -754,20 +766,24 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           }
           sessions.delete(vendedorId)
         } else if (isRestartRequired || session.reconnectAttempts < MAX_RECONNECT) {
-          // Desconexão temporária: reconectar com credenciais salvas
           session.reconnectAttempts++
-          log.info(`🔄 Reconectando vendedor ${vendedorId} (tentativa ${session.reconnectAttempts}/${MAX_RECONNECT})...`)
-          if (session.sock) {
-            try { session.sock.end(undefined) } catch { /* ignore */ }
-            session.sock = null
+          session.status = 'disconnected'
+          session.connectedNumber = null
+          session.startTime = null
+          session.sock = null
+
+          if (!reconnectTimers.has(vendedorId)) {
+            log.info(`🔄 Reconectando vendedor ${vendedorId} (tentativa ${session.reconnectAttempts}/${MAX_RECONNECT})...`)
+            const delay = Math.min(2_000 * session.reconnectAttempts, 10_000)
+            const timer = setTimeout(() => {
+              reconnectTimers.delete(vendedorId)
+              if (sessions.get(vendedorId) !== session || session.status !== 'disconnected') return
+              connectUserWhatsApp(vendedorId).catch(err => {
+                log.error({ err }, `Falha ao reconectar vendedor ${vendedorId}`)
+              })
+            }, delay)
+            reconnectTimers.set(vendedorId, timer)
           }
-          sessions.delete(vendedorId)
-          // Delay antes de reconectar
-          setTimeout(() => {
-            connectUserWhatsApp(vendedorId).catch(err => {
-              log.error({ err }, `Falha ao reconectar vendedor ${vendedorId}`)
-            })
-          }, 2000)
         } else {
           // Esgotou tentativas de reconexão
           log.warn(`⚠️ Vendedor ${vendedorId}: máximo de reconexões atingido`)
@@ -784,6 +800,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       }
 
       if (connection === 'open') {
+        if (sessions.get(vendedorId) !== session || session.sock !== sock) return
         session.status = 'connected'
         session.qrDataUrl = null
         session.reconnectAttempts = 0
@@ -834,7 +851,20 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     })
 
     // Save credentials on update
-    sock.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', () => {
+      if (sessions.get(vendedorId) === session && session.sock === sock) {
+        return saveCreds()
+      }
+    })
+
+    sock.ev.on('messages.update', (updates) => {
+      if (sessions.get(vendedorId) !== session || session.sock !== sock) return
+      for (const { key, update } of updates) {
+        if (key.fromMe) {
+          log.info({ messageId: key.id, jid: key.remoteJid, status: update.status }, `📬 Status de entrega da mensagem do vendedor ${vendedorId}`)
+        }
+      }
+    })
 
     // ── Contacts & Chats sync ──
     // Helper: verifica se JID é um contato individual válido (não grupo, broadcast, ou LID)
@@ -1075,7 +1105,9 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         log.info(`📩 [msg] CACHED in session for jid=${jid}, store size=${session.messageStore.get(jid)?.length || 0}`)
 
         // Save incoming messages to DB
-        if (msg.key.fromMe) continue
+        const messageId = msg.key?.id
+        const wasSentByCrm = !!(fromMe && messageId && session.outgoingMessageIds.delete(messageId))
+        if (wasSentByCrm) continue
         const { text, type: msgType } = extractMessageContent(msg)
         if (!text.trim()) continue
 
@@ -1090,11 +1122,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             numero: senderNumber,
             clienteId: cliente?.id,
             vendedorId: vendedorId,
-            direcao: 'recebida',
+            direcao: msg.key.fromMe ? 'enviada' : 'recebida',
             mensagem: text.trim(),
             tipo: msgType,
           })
-          log.info(`📩 [msg] SAVED to DB OK: sender=${senderNumber} clienteId=${cliente?.id}`)
+          log.info(`📩 [msg] SAVED to DB OK: sender=${senderNumber} clienteId=${cliente?.id} fromMe=${fromMe}`)
         } catch (dbErr) {
           log.error({ err: dbErr }, `Erro ao salvar mensagem recebida (vendedor ${vendedorId})`)
         }

@@ -73,12 +73,10 @@ export async function sendWhatsAppMessage(number: string, text: string): Promise
     // Validar número via WhatsApp antes de enviar
     const resolved = await resolveWhatsAppJid(sock, number)
     if (!resolved) {
-      // Fallback: tentar enviar direto com formato básico (pode falhar silenciosamente)
-      const jid = formatBrazilianPhone(number) + '@s.whatsapp.net'
-      await sock.sendMessage(jid, { text })
-      return { success: true }
+      return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
-    await sock.sendMessage(resolved.jid, { text })
+    const sent = await sock.sendMessage(resolved.jid, { text })
+    log.info({ messageId: sent?.key?.id, jid: resolved.jid }, '📨 Mensagem aceita pelo WhatsApp principal')
     return { success: true }
   } catch (err: any) {
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
@@ -204,6 +202,14 @@ export async function connectWhatsApp(): Promise<void> {
 
     // Save credentials on update
     sock.ev.on('creds.update', saveCreds)
+
+    sock.ev.on('messages.update', (updates) => {
+      for (const { key, update } of updates) {
+        if (key.fromMe) {
+          log.info({ messageId: key.id, jid: key.remoteJid, status: update.status }, '📬 Status de entrega da mensagem do WhatsApp principal')
+        }
+      }
+    })
 
     // Handle incoming messages
     sock.ev.on('messages.upsert', async ({ messages, type }) => {

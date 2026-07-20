@@ -901,25 +901,13 @@ export async function fetchTarefas(): Promise<Tarefa[]> {
 }
 
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
-  const { error } = await supabase.from('tarefas').insert({
+  const { data, error } = await supabase.from('tarefas').insert({
     titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora,
     tipo: t.tipo, status: t.status, prioridade: t.prioridade,
     cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
-  })
+  }).select().single()
   if (error) throw error
-  return {
-    id: Date.now(),
-    titulo: t.titulo,
-    descricao: t.descricao,
-    data: t.data,
-    hora: t.hora,
-    tipo: t.tipo,
-    status: t.status,
-    prioridade: t.prioridade,
-    clienteId: t.clienteId,
-    vendedorId: t.vendedorId,
-    criadoEm: new Date().toISOString(),
-  }
+  return tarefaFromDb(data)
 }
 
 export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise<Tarefa[]> {

@@ -545,7 +545,7 @@ export default function AppRouter({
         onAddTarefa={async (t) => {
           try {
             const saved = await db.insertTarefa(t)
-            setTarefas(prev => [saved, ...prev])
+            setTarefas(prev => prev.some(existing => existing.id === saved.id) ? prev : [saved, ...prev])
           } catch (err) { logger.error('Erro ao criar tarefa:', err) }
         }}
         onImportTarefas={async (novas) => {

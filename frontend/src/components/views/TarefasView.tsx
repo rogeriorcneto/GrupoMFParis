@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react'
+import React, { useMemo, useState, useCallback, useRef } from 'react'
 import WhatsAppIcon from '../icons/WhatsAppIcon'
 import {
   XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon,
@@ -703,7 +703,7 @@ const TarefasView: React.FC<{
   interacoes?: Interacao[]
   pedidos?: Pedido[]
   onUpdateTarefa: (t: Tarefa) => void
-  onAddTarefa: (t: Tarefa) => void
+  onAddTarefa: (t: Tarefa) => void | Promise<void>
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => Promise<Tarefa[]>
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   onVerNoFunil?: (cliente: Cliente) => void
@@ -1174,27 +1174,34 @@ const TarefasView: React.FC<{
     })
   }, [onUpdateTarefa])
 
-  const handleAddTarefa = () => {
-    if (!newTitulo.trim()) return
-    onAddTarefa({
-      id: Date.now(),
-      titulo: newTitulo.trim(),
-      descricao: newDescricao.trim() || undefined,
-      data: newData,
-      hora: newHora.trim() || undefined,
-      tipo: newTipo,
-      status: 'pendente',
-      prioridade: newPrioridade,
-      clienteId: typeof newClienteId === 'number' ? newClienteId : undefined,
-      vendedorId: typeof newVendedorId === 'number' ? newVendedorId : undefined
-    })
-    setNewTitulo('')
-    setNewDescricao('')
-    setNewHora('')
-    setNewVendedorId(loggedUser?.id ?? '')
-    setNewClienteId('')
-    setClienteSearch('')
-    setShowModal(false)
+  const taskCreationRef = useRef(false)
+
+  const handleAddTarefa = async () => {
+    if (!newTitulo.trim() || taskCreationRef.current) return
+    taskCreationRef.current = true
+    try {
+      await onAddTarefa({
+        id: Date.now(),
+        titulo: newTitulo.trim(),
+        descricao: newDescricao.trim() || undefined,
+        data: newData,
+        hora: newHora.trim() || undefined,
+        tipo: newTipo,
+        status: 'pendente',
+        prioridade: newPrioridade,
+        clienteId: typeof newClienteId === 'number' ? newClienteId : undefined,
+        vendedorId: typeof newVendedorId === 'number' ? newVendedorId : undefined
+      })
+      setNewTitulo('')
+      setNewDescricao('')
+      setNewHora('')
+      setNewVendedorId(loggedUser?.id ?? '')
+      setNewClienteId('')
+      setClienteSearch('')
+      setShowModal(false)
+    } finally {
+      taskCreationRef.current = false
+    }
   }
 
   const formatDataLabel = (data: string) => {

@@ -272,6 +272,8 @@ export default function ClientePanel({
   }, [])
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
+  const [produtoInteresseBusca, setProdutoInteresseBusca] = useState('')
+  const [salvandoProdutosInteresse, setSalvandoProdutosInteresse] = useState(false)
 
   // Refs for scroll-to
   const whatsAppRef = useRef<HTMLDivElement>(null)
@@ -319,6 +321,19 @@ export default function ClientePanel({
     if (aPinned !== bPinned) return aPinned ? -1 : 1
     return new Date(b.data).getTime() - new Date(a.data).getTime()
   })
+  const atualizarProdutosInteresse = async (produtosInteresse: string[]) => {
+    if (salvandoProdutosInteresse) return
+    setSalvandoProdutosInteresse(true)
+    try {
+      await db.updateCliente(c.id, { produtosInteresse })
+      setClientes(prev => prev.map(cliente => cliente.id === c.id ? { ...cliente, produtosInteresse } : cliente))
+    } catch (err) {
+      logger.error('Erro ao atualizar produtos de interesse:', err)
+      addNotificacao('error', 'Erro ao salvar', 'Não foi possível atualizar os produtos de interesse.', c.id)
+    } finally {
+      setSalvandoProdutosInteresse(false)
+    }
+  }
   const enderecoPrincipal = [
     c.enderecoRua,
     c.enderecoNumero,
@@ -1132,7 +1147,7 @@ export default function ClientePanel({
               </div>
               <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail}</p></div>
               <div><p className="text-xs text-gray-500">WhatsApp</p><p className="font-medium text-gray-900">{c.whatsapp || c.contatoCelular || c.contatoTelefone || '-'}</p></div>
-              <div><p className="text-xs text-gray-500">Site</p><p className="font-medium text-gray-900 truncate">{c.website || c.localizacao || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">Site</p>{c.website ? <a href={/^https?:\/\//i.test(c.website) ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" className="font-medium text-primary-700 hover:text-primary-800 hover:underline truncate block" title={c.website}>{c.website}</a> : <p className="font-medium text-gray-900 truncate">{c.localizacao || '-'}</p>}</div>
             </div>
             <div>
               <p className="text-xs text-gray-500">Endereço</p>
@@ -1215,15 +1230,29 @@ export default function ClientePanel({
           })()}
 
           {/* === PRODUTOS DE INTERESSE === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">📦 Produtos de interesse</h3>
             {c.produtosInteresse && c.produtosInteresse.length > 0 ? (
               <div className="flex flex-wrap gap-1">
-                {c.produtosInteresse.map(p => <span key={p} className="px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full border border-primary-100">{p}</span>)}
+                {c.produtosInteresse.map(p => <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full border border-primary-100">{p}<button type="button" onClick={() => atualizarProdutosInteresse(c.produtosInteresse!.filter(nome => nome !== p))} disabled={salvandoProdutosInteresse} className="font-bold text-primary-500 hover:text-red-600 disabled:opacity-50" aria-label={`Remover ${p}`}>×</button></span>)}
               </div>
             ) : (
               <p className="text-xs text-gray-500">Nenhum produto de interesse registrado.</p>
             )}
+            <div className="relative">
+              <input value={produtoInteresseBusca} onChange={e => setProdutoInteresseBusca(e.target.value)} placeholder="Buscar e adicionar produto" className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              {produtoInteresseBusca.trim() && (
+                <div className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-apple border border-gray-200 bg-white shadow-lg">
+                  {(produtos || []).filter(produto => produto.nome.toLowerCase().includes(produtoInteresseBusca.trim().toLowerCase()) && !(c.produtosInteresse || []).includes(produto.nome)).slice(0, 8).map(produto => <button key={produto.id} type="button" onClick={() => { atualizarProdutosInteresse([...(c.produtosInteresse || []), produto.nome]); setProdutoInteresseBusca('') }} disabled={salvandoProdutosInteresse} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 disabled:opacity-50">{produto.nome}</button>)}
+                  {(produtos || []).filter(produto => produto.nome.toLowerCase().includes(produtoInteresseBusca.trim().toLowerCase()) && !(c.produtosInteresse || []).includes(produto.nome)).length === 0 && <p className="px-3 py-2 text-xs text-gray-500">Nenhum produto disponível.</p>}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900">📋 Histórico de tarefas ({clienteTarefas.length})</h3>
+            {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <div className="space-y-2 max-h-72 overflow-y-auto pr-1">{clienteTarefas.map(tarefa => <div key={tarefa.id} className="rounded-apple border border-gray-200 bg-white px-3 py-2"><div className="flex items-start justify-between gap-2"><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">{new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}</p></div>)}</div>}
           </div>
 
           {/* === REDES E INFO ADICIONAIS === */}
