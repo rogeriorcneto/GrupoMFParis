@@ -26,6 +26,7 @@ export interface Cliente {
   razaoSocial: string
   nomeFantasia?: string
   cnpj: string
+  cpf?: string
   contatoNome: string
   contatoTelefone: string
   contatoEmail: string
@@ -141,6 +142,7 @@ function clienteFromDb(row: any): Cliente {
     razaoSocial: row.razao_social,
     nomeFantasia: row.nome_fantasia || '',
     cnpj: row.cnpj || '',
+    cpf: row.cpf || '',
     contatoNome: row.contato_nome || '',
     contatoTelefone: row.contato_telefone || '',
     contatoEmail: row.contato_email || '',
@@ -184,6 +186,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.razaoSocial !== undefined) row.razao_social = c.razaoSocial
   if (c.nomeFantasia !== undefined) row.nome_fantasia = c.nomeFantasia
   if (c.cnpj !== undefined) row.cnpj = c.cnpj
+  if (c.cpf !== undefined) row.cpf = c.cpf
   if (c.contatoNome !== undefined) row.contato_nome = c.contatoNome
   if (c.contatoTelefone !== undefined) row.contato_telefone = c.contatoTelefone
   if (c.contatoEmail !== undefined) row.contato_email = c.contatoEmail

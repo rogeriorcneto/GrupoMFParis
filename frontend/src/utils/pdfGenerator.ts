@@ -13,7 +13,7 @@ interface PropostaItem {
 interface PropostaPdfOptions {
   formaPagamento?: string
   tipoFrete?: 'CIF' | 'FOB' | ''
-  prazoEntrega?: string
+  dataLancamento?: string
 }
 
 const LOGO_PATH = '/Logo_MFParis.jpg'
@@ -93,6 +93,9 @@ export async function gerarPropostaPDF(
   const now = new Date()
   const validade = new Date(now)
   validade.setDate(validade.getDate() + 15)
+  const dataLancamento = options.dataLancamento ? new Date(options.dataLancamento) : now
+  const prazoEntrega = new Date(Number.isNaN(dataLancamento.getTime()) ? now : dataLancamento)
+  prazoEntrega.setDate(prazoEntrega.getDate() + 7)
   let y = 16
 
   const logoDataUrl = await loadLogoDataUrl()
@@ -274,7 +277,7 @@ export async function gerarPropostaPDF(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.2)
   doc.setTextColor(75, 85, 99)
-  doc.text(`PRAZO: ${options.prazoEntrega || '28/35/42 dias'}`, margin, y)
+  doc.text(`Prazo de entrega: até ${formatDate(prazoEntrega)} (7 dias após o lançamento)`, margin, y)
   y += 4.8
   doc.text(`Condição de entrega: ${options.tipoFrete || 'A combinar'}`, margin, y)
   y += 4.8

@@ -4,10 +4,11 @@ import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
 
 // === Colunas configuráveis ===
-type ColumnKey = 'nome' | 'etapa' | 'vendedor' | 'email' | 'telefone' | 'valor' | 'score' | 'ultimaCompra'
+type ColumnKey = 'nome' | 'cnpj' | 'etapa' | 'vendedor' | 'email' | 'telefone' | 'valor' | 'score' | 'ultimaCompra'
 interface ColumnDef { key: ColumnKey; label: string; defaultVisible: boolean }
 const ALL_COLUMNS: ColumnDef[] = [
   { key: 'nome', label: 'Nome', defaultVisible: true },
+  { key: 'cnpj', label: 'CNPJ', defaultVisible: true },
   { key: 'etapa', label: 'Etapa', defaultVisible: true },
   { key: 'vendedor', label: 'Vendedor', defaultVisible: true },
   { key: 'email', label: 'Email', defaultVisible: false },
@@ -70,7 +71,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       if (raw) {
         const parsed = JSON.parse(raw) as Record<string, boolean>
         const merged = {} as Record<ColumnKey, boolean>
-        ALL_COLUMNS.forEach(c => { merged[c.key] = parsed[c.key] ?? c.defaultVisible })
+        ALL_COLUMNS.forEach(c => { merged[c.key] = c.key === 'cnpj' ? true : (parsed[c.key] ?? c.defaultVisible) })
         return merged
       }
     } catch {}
@@ -120,9 +121,21 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
 
   const filteredClientes = React.useMemo(() => {
     const filtered = scopedClientes.filter(cliente => {
-      const matchSearch = cliente.razaoSocial.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        cliente.contatoNome.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        cliente.cnpj.includes(debouncedSearch)
+      const searchLower = debouncedSearch.toLowerCase()
+      const searchCnpj = debouncedSearch.replace(/\D/g, '')
+      const clienteCnpj = String(cliente.cnpj || '')
+      const clienteCnpjSecundario = String(cliente.cnpj2 || '')
+      const clienteCpf = String(cliente.cpf || '')
+      const matchSearch = cliente.razaoSocial.toLowerCase().includes(searchLower) ||
+        cliente.contatoNome.toLowerCase().includes(searchLower) ||
+        clienteCnpj.toLowerCase().includes(searchLower) ||
+        clienteCnpjSecundario.toLowerCase().includes(searchLower) ||
+        clienteCpf.toLowerCase().includes(searchLower) ||
+        (searchCnpj.length > 0 && (
+          clienteCnpj.replace(/\D/g, '').includes(searchCnpj) ||
+          clienteCnpjSecundario.replace(/\D/g, '').includes(searchCnpj) ||
+          clienteCpf.replace(/\D/g, '').includes(searchCnpj)
+        ))
       const matchEtapa = !filterEtapa || cliente.etapa === filterEtapa
       const matchVendedor = !filterVendedor || String(cliente.vendedorId) === filterVendedor
       const matchStatus = !filterStatus || cliente.statusCliente === filterStatus
@@ -1057,6 +1070,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
+                {visibleCols.cnpj && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">CNPJ</th>}
                 {visibleCols.etapa && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Etapa</th>}
                 {visibleCols.vendedor && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Vendedor</th>}
                 {visibleCols.email && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Email</th>}
@@ -1080,6 +1094,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                         {[cliente.contatoNome, cliente.contatoTelefone].filter(Boolean).join(' · ') || cliente.cnpj || '—'}
                       </p>
                     </td>
+                    {visibleCols.cnpj && (
+                      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">{cliente.cnpj || <span className="text-gray-300">—</span>}</td>
+                    )}
                     {visibleCols.etapa && (
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${cfg.badge}`}>

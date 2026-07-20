@@ -16,6 +16,7 @@ export function clienteFromDb(row: any): Cliente {
     razaoSocial: row.razao_social ?? '',
     nomeFantasia: row.nome_fantasia ?? undefined,
     cnpj: row.cnpj ?? '',
+    cpf: row.cpf ?? undefined,
     inscricaoEstadual: row.inscricao_estadual ?? undefined,
     contatoNome: row.contato_nome ?? '',
     contatoTelefone: row.contato_telefone ?? '',
@@ -84,6 +85,7 @@ export function clienteFromDb(row: any): Cliente {
     origemLead: row.origem_lead ?? undefined,
     notas: row.notas ?? undefined,
     segmento: row.segmento ?? undefined,
+    classeCliente: row.classe_cliente ?? undefined,
     localizacao: row.localizacao ?? undefined,
     tentativaAmostra: row.tentativa_amostra ?? 0,
     whatsappValido: row.whatsapp_valido ?? null,
@@ -127,6 +129,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.razaoSocial !== undefined) row.razao_social = c.razaoSocial
   if (c.nomeFantasia !== undefined) row.nome_fantasia = c.nomeFantasia
   if (c.cnpj !== undefined) row.cnpj = c.cnpj
+  if (c.cpf !== undefined) row.cpf = c.cpf ?? null
   if (c.inscricaoEstadual !== undefined) row.inscricao_estadual = c.inscricaoEstadual ?? null
   if (c.contatoNome !== undefined) row.contato_nome = c.contatoNome
   if (c.contatoTelefone !== undefined) row.contato_telefone = c.contatoTelefone
@@ -195,6 +198,7 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.origemLead !== undefined) row.origem_lead = c.origemLead
   if (c.notas !== undefined) row.notas = c.notas
   if (c.segmento !== undefined) row.segmento = c.segmento
+  if (c.classeCliente !== undefined) row.classe_cliente = c.classeCliente ?? null
   if (c.localizacao !== undefined) row.localizacao = c.localizacao
   if (c.tentativaAmostra !== undefined) row.tentativa_amostra = c.tentativaAmostra
   if (c.whatsappValido !== undefined) row.whatsapp_valido = c.whatsappValido
@@ -588,6 +592,29 @@ async function fetchAllPages<T>(table: string, extraQuery?: (q: any) => any): Pr
     from += PAGE_SIZE
   }
   return allRows
+}
+
+export interface ClasseCliente {
+  id: number
+  nome: string
+}
+
+export async function fetchClassesClientes(): Promise<ClasseCliente[]> {
+  const { data, error } = await withAuthRetry(async () => {
+    const result = await supabase.from('classes_clientes').select('id, nome').order('nome')
+    return result
+  })
+  if (error) throw error
+  return (data || []).map((row: any) => ({ id: Number(row.id), nome: row.nome }))
+}
+
+export async function insertClasseCliente(nome: string): Promise<ClasseCliente> {
+  const { data, error } = await withAuthRetry(async () => {
+    const result = await supabase.from('classes_clientes').insert({ nome: nome.trim() }).select('id, nome').single()
+    return result
+  })
+  if (error) throw error
+  return { id: Number(data.id), nome: data.nome }
 }
 
 export async function fetchClientes(): Promise<Cliente[]> {

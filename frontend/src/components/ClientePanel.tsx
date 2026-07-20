@@ -853,7 +853,7 @@ export default function ClientePanel({
                             {p.pagamento && <p className="text-[9px] text-gray-400">{p.pagamento}</p>}
                           </div>
                           <button
-                            onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento })}
+                            onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento, dataLancamento: p.criadoEm })}
                             className="flex-shrink-0 px-2 py-1 text-[10px] bg-indigo-600 text-white rounded hover:bg-indigo-700"
                             title="Baixar PDF"
                           >
@@ -1444,7 +1444,7 @@ export default function ClientePanel({
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <p className="text-sm font-bold text-gray-900">R$ {(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                 <button
-                                  onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento })}
+                                  onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento, dataLancamento: p.criadoEm })}
                                   className="px-2 py-1 text-[10px] bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 whitespace-nowrap"
                                   title="Baixar PDF"
                                 >⬇ PDF</button>

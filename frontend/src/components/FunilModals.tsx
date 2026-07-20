@@ -210,7 +210,7 @@ export default function FunilModals({
         p.observacoes,
         p.vendedorNome,
         p.numero,
-        { formaPagamento: p.pagamento, tipoFrete: p.frete as 'CIF' | 'FOB' | '' }
+        { formaPagamento: p.pagamento, tipoFrete: p.frete as 'CIF' | 'FOB' | '', dataLancamento: p.criadoEm }
       )
     } catch {
       showToast?.('error', 'Erro ao baixar PDF.')

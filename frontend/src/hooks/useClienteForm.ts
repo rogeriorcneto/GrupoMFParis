@@ -1,19 +1,19 @@
 import { useState } from 'react'
 import type { Cliente, Interacao, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
-import { formatCNPJ, formatTelefone, validarCNPJ } from '../utils/validators'
+import { formatCNPJ, formatCPF, formatTelefone, validarCNPJ, validarCPF } from '../utils/validators'
 import { logger } from '../utils/logger'
 import { fetchCnpjViaBackend } from '../lib/botApi'
 
 const emptyForm: FormData = {
-  razaoSocial: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '', cnpj2: '', contatoNome: '',
+  razaoSocial: '', nomeFantasia: '', cnpj: '', cpf: '', inscricaoEstadual: '', cnpj2: '', contatoNome: '',
   contatoTelefone: '', contatoCelular: '', contatoTelefoneFixo: '',
   contatoEmail: '',
   enderecoRua: '', enderecoNumero: '', enderecoComplemento: '',
   enderecoBairro: '', enderecoCidade: '', enderecoEstado: '', enderecoCep: '',
   enderecoRua2: '', enderecoNumero2: '', enderecoComplemento2: '',
   enderecoBairro2: '', enderecoCidade2: '', enderecoEstado2: '', enderecoCep2: '',
-  cnaePrimario: '', cnaeSecundario: '', segmento: '',
+  cnaePrimario: '', cnaeSecundario: '', segmento: '', classeCliente: '',
   redesSociais: '',
   instagram: '', facebook: '', linkedin: '', website: '',
   contatoFinanceiroNome: '', contatoFinanceiroTelefone: '',
@@ -43,6 +43,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     const { name, value } = e.target
     let formatted = value
     if (name === 'cnpj' || name === 'cnpj2') formatted = formatCNPJ(value)
+    if (name === 'cpf') formatted = formatCPF(value)
     if (name === 'contatoTelefone' || name === 'contatoCelular' || name === 'contatoTelefoneFixo') formatted = formatTelefone(value)
     if (name === 'enderecoCep' || name === 'enderecoCep2') formatted = value.replace(/\D/g, '').replace(/^(\d{5})(\d)/, '$1-$2').substring(0, 9)
     setFormData(prev => ({ ...prev, [name]: formatted }))
@@ -112,12 +113,17 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     if (isSaving) return
 
     const cnpjDigits = formData.cnpj.replace(/\D/g, '')
-    if (!cnpjDigits) {
-      showToast('error', 'CNPJ é obrigatório.')
+    const cpfDigits = formData.cpf.replace(/\D/g, '')
+    if (!cnpjDigits && !cpfDigits) {
+      showToast('error', 'Informe um CNPJ ou CPF.')
       return
     }
-    if (!validarCNPJ(formData.cnpj)) {
+    if (cnpjDigits && !validarCNPJ(formData.cnpj)) {
       showToast('error', 'CNPJ inválido. Verifique os dígitos.')
+      return
+    }
+    if (cpfDigits && !validarCPF(formData.cpf)) {
+      showToast('error', 'CPF inválido. Verifique os dígitos.')
       return
     }
 
@@ -239,6 +245,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       razaoSocial: cliente.razaoSocial,
       nomeFantasia: cliente.nomeFantasia || '',
       cnpj: cliente.cnpj,
+      cpf: cliente.cpf || '',
       cnpj2: cliente.cnpj2 || '',
       inscricaoEstadual: (cliente as any).inscricaoEstadual || '',
       contatoNome: cliente.contatoNome,
@@ -263,6 +270,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       cnaePrimario: cliente.cnaePrimario || '',
       cnaeSecundario: cliente.cnaeSecundario || '',
       segmento: cliente.segmento || '',
+      classeCliente: cliente.classeCliente || '',
       redesSociais: cliente.redesSociais || '',
       instagram: cliente.instagram || '',
       facebook: cliente.facebook || '',

@@ -11,6 +11,7 @@ export interface Cliente {
   razaoSocial: string
   nomeFantasia?: string
   cnpj: string
+  cpf?: string
   inscricaoEstadual?: string
   cnpj2?: string
   contatoNome: string
@@ -80,6 +81,7 @@ export interface Cliente {
   motivoPerda?: string
   dataPerda?: string
   segmento?: string
+  classeCliente?: string
   localizacao?: string
   tentativaAmostra?: number
   whatsappValido?: boolean | null
@@ -124,6 +126,7 @@ export interface FormData {
   razaoSocial: string
   nomeFantasia: string
   cnpj: string
+  cpf: string
   inscricaoEstadual: string
   cnpj2: string
   contatoNome: string
@@ -148,6 +151,7 @@ export interface FormData {
   cnaePrimario: string
   cnaeSecundario: string
   segmento: string
+  classeCliente: string
   redesSociais: string
   valorEstimado?: string
   produtosInteresse: string

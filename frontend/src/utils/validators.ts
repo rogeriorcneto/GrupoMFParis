@@ -11,6 +11,14 @@ export function formatCNPJ(v: string): string {
   return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
 }
 
+export function formatCPF(v: string): string {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+}
+
 /**
  * Normaliza número de telefone para formato WhatsApp brasileiro: 55 + DDD + número (10-11 dígitos)
  * Exemplos:
@@ -76,6 +84,18 @@ export function validarCNPJ(cnpj: string): boolean {
     return resto < 2 ? 0 : 11 - resto
   }
   return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
+}
+
+export function validarCPF(cpf: string): boolean {
+  const d = cpf.replace(/\D/g, '')
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
+  const calc = (length: number) => {
+    let sum = 0
+    for (let i = 0; i < length; i++) sum += Number(d[i]) * (length + 1 - i)
+    const remainder = (sum * 10) % 11
+    return remainder === 10 ? 0 : remainder
+  }
+  return calc(9) === Number(d[9]) && calc(10) === Number(d[10])
 }
 
 export function calcularScore(
