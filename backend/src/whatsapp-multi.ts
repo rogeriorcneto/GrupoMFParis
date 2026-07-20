@@ -50,7 +50,6 @@ export interface UserWhatsAppSession {
   rawMessages: Map<string, any>
   /** Maps @lid JIDs to @s.whatsapp.net JIDs */
   lidMap: Map<string, string>
-  /** IDs of messages already persisted by the CRM send endpoint */
   outgoingMessageIds: Set<string>
 }
 
