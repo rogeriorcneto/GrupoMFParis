@@ -173,7 +173,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
 
     const enderecoCompleto = buildEnderecoCompleto(formData)
 
-    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, produtosQuantidadesMensais: _pqm, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, ...restForm } = formData
+    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, produtosQuantidadesMensais: _pqm, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, classeCliente: _cc, ...restForm } = formData
 
     const vendedorResponsavelId = loggedUser?.cargo === 'gerente'
       ? (vIdStr ? Number(vIdStr) : undefined)

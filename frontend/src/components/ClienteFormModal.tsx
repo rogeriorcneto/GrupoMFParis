@@ -3,7 +3,6 @@ import { XMarkIcon, ChevronDownIcon, ChevronRightIcon, MagnifyingGlassIcon, Plus
 import type { Cliente, Produto, Vendedor, FormData, Pedido } from '../types'
 import { PlacesEnrich } from './PlacesEnrich'
 import { formatTelefone } from '../utils/validators'
-import * as db from '../lib/database'
 
 const etapaLabels: Record<string, string> = { 'lead': 'Lead', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Am. Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativo', 'perdido': 'Perdido' }
 const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
@@ -70,10 +69,6 @@ export default function ClienteFormModal({
   const [showInativarModal, setShowInativarModal] = React.useState(false)
   const [motivoInativacao, setMotivoInativacao] = React.useState('')
   const [showMaisOpcoes, setShowMaisOpcoes] = React.useState(false)
-  const [classesClientes, setClassesClientes] = React.useState<db.ClasseCliente[]>([])
-  const [novaClasse, setNovaClasse] = React.useState('')
-  const [classeError, setClasseError] = React.useState('')
-  const [isSavingClasse, setIsSavingClasse] = React.useState(false)
   const isGerente = loggedUser?.cargo === 'gerente'
 
   React.useEffect(() => {
@@ -129,32 +124,6 @@ export default function ClienteFormModal({
   }
 
   React.useEffect(() => { if (showModal) setActiveTab('dados') }, [showModal])
-
-  React.useEffect(() => {
-    if (!showModal) return
-    db.fetchClassesClientes().then(setClassesClientes).catch(() => setClasseError('Não foi possível carregar as classes.'))
-  }, [showModal])
-
-  const adicionarClasse = async () => {
-    const nome = novaClasse.trim()
-    if (!nome) return
-    if (classesClientes.some(classe => classe.nome.toLocaleLowerCase() === nome.toLocaleLowerCase())) {
-      setClasseError('Esta classe já existe.')
-      return
-    }
-    setIsSavingClasse(true)
-    setClasseError('')
-    try {
-      const saved = await db.insertClasseCliente(nome)
-      setClassesClientes(prev => [...prev, saved].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')))
-      setFormData(prev => ({ ...prev, classeCliente: saved.nome }))
-      setNovaClasse('')
-    } catch {
-      setClasseError('Não foi possível adicionar a classe.')
-    } finally {
-      setIsSavingClasse(false)
-    }
-  }
 
   // Busca todos os cards do mesmo cliente (mesmo CNPJ ou mesma razão social)
   const negocios = React.useMemo(() => {
@@ -301,28 +270,6 @@ export default function ClienteFormModal({
                         <p className="text-xs text-gray-400 mt-1">Informe o CNPJ de outro cadastro para indicar que são a mesma empresa.</p>
                       </div>
                     )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Classe do cliente</label>
-                    <div className="flex gap-2">
-                      <select name="classeCliente" value={formData.classeCliente} onChange={handleInputChange}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white">
-                        <option value="">Selecione uma classe</option>
-                        {classesClientes.map(classe => <option key={classe.id} value={classe.nome}>{classe.nome}</option>)}
-                      </select>
-                    </div>
-                    {isGerente && (
-                      <div className="mt-2 flex gap-2">
-                        <input type="text" value={novaClasse} onChange={e => { setNovaClasse(e.target.value); setClasseError('') }}
-                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarClasse() } }}
-                          placeholder="Nova classe" className="flex-1 px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm" />
-                        <button type="button" onClick={adicionarClasse} disabled={isSavingClasse || !novaClasse.trim()}
-                          className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-xs font-medium disabled:opacity-50 whitespace-nowrap">
-                          {isSavingClasse ? 'Salvando...' : '+ Adicionar'}
-                        </button>
-                      </div>
-                    )}
-                    {classeError && <p className="text-xs text-red-500 mt-1">{classeError}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social</label>
