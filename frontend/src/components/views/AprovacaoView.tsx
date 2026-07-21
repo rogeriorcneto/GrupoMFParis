@@ -214,7 +214,7 @@ export default function AprovacaoView({
                 )}
                 {!showActions && (
                   <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${pedido.status === 'confirmado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
-                    {pedido.status === 'confirmado' ? '✅ Aprovado' : '❌ Cancelado'}
+                    {pedido.status === 'confirmado' ? '✅ Aprovado' : '❌ Não Aprovado'}
                   </span>
                 )}
               </div>
@@ -235,15 +235,28 @@ export default function AprovacaoView({
             </div>
           </div>
 
-          {/* Itens resumo */}
-          <div className="border-t border-gray-100 pt-3 space-y-1">
+          {/* Itens */}
+          <div className="border-t border-gray-100 pt-3 space-y-2">
+            <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              <div className="col-span-1">Qtd</div>
+              <div className="col-span-6">Descrição</div>
+              <div className="col-span-2 text-right">Unit.</div>
+              <div className="col-span-3 text-right">Total</div>
+            </div>
             {(isExpanded ? pedido.itens : pedido.itens.slice(0, 3)).map((item, idx) => (
-              <div key={idx} className="flex items-center justify-between text-sm">
-                <span className="text-gray-700 truncate mr-2">
-                  <span className="font-semibold">{item.quantidade}×</span> {item.nomeProduto}
+              <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-1 sm:gap-2 text-sm py-1 border-b border-gray-50 last:border-0">
+                <div className="sm:col-span-1 font-semibold text-gray-900">{item.quantidade}</div>
+                <div className="sm:col-span-6 text-gray-700 truncate">
+                  {item.nomeProduto}
                   {item.sku && <span className="text-gray-400 text-xs ml-1">({item.sku})</span>}
-                </span>
-                <span className="text-gray-900 font-medium flex-shrink-0">R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="sm:col-span-2 text-left sm:text-right text-gray-600 text-sm">
+                  R$ {item.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  <span className="text-xs text-gray-400">/{item.unidade}</span>
+                </div>
+                <div className="sm:col-span-3 text-left sm:text-right font-medium text-gray-900">
+                  R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </div>
               </div>
             ))}
             {!isExpanded && pedido.itens.length > 3 && (
@@ -257,8 +270,8 @@ export default function AprovacaoView({
               </button>
             )}
             {pedido.observacoes && (
-              <p className="text-xs text-gray-500 italic mt-1 pt-1 border-t border-gray-100">
-                📝 {pedido.observacoes}
+              <p className="text-xs text-gray-600 mt-1 pt-2 border-t border-gray-100">
+                <span className="font-semibold">Observação:</span> {pedido.observacoes}
               </p>
             )}
             {pedido.motivoRecusa && (
@@ -325,12 +338,30 @@ export default function AprovacaoView({
             )}
           </div>
 
-          {/* Info do cliente */}
-          {showActions && cliente && (
-            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-3 text-xs text-gray-500">
-              {cliente.contatoTelefone && <span>📞 {cliente.contatoTelefone}</span>}
-              {cliente.contatoEmail && <span>📧 {cliente.contatoEmail}</span>}
-              <span className="capitalize">📍 Etapa: {cliente.etapa}</span>
+          {/* Frete, pagamento e endereço */}
+          {showActions && (
+            <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
+              <div>
+                <span className="font-semibold text-gray-700">Frete:</span> {pedido.tipoFrete || '—'}
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Pagamento:</span> {pedido.formaPagamento || '—'}
+              </div>
+              <div>
+                <span className="font-semibold text-gray-700">Endereço:</span>{' '}
+                {(() => {
+                  const cidade = pedido.enderecoEntregaCidade || cliente?.enderecoCidade
+                  const estado = pedido.enderecoEntregaEstado || cliente?.enderecoEstado
+                  const rua = pedido.enderecoEntregaRua || cliente?.enderecoRua
+                  const numero = pedido.enderecoEntregaNumero || cliente?.enderecoNumero
+                  const bairro = pedido.enderecoEntregaBairro || cliente?.enderecoBairro
+                  const cep = pedido.enderecoEntregaCep || cliente?.enderecoCep
+                  const linha = [rua, numero, bairro].filter(Boolean).join(', ')
+                  const cidadeEstado = [cidade, estado].filter(Boolean).join(' - ')
+                  const partes = [linha, cidadeEstado, cep].filter(Boolean)
+                  return partes.length ? partes.join(' · ') : '—'
+                })()}
+              </div>
             </div>
           )}
 

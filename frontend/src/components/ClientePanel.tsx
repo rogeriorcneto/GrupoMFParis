@@ -14,6 +14,38 @@ import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentT
 import { supabase } from '../lib/supabase'
 import { transcribeCallRecording } from '../lib/botApi'
 
+function normalizarEmpresa(s: string) {
+  return s.toLowerCase().trim()
+    .replace(/\b(ltda|me|epp|eireli|s\.?a\.?|s\/a|cia|comercio|comércio|industria|indústria|distribui(dora|cao|ção)?|com\.?|ind\.?|imp\.?|exp\.?)\b/gi, '')
+    .replace(/[.\-/\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function extrairEmpresaImportada(tarefa: Tarefa) {
+  const texto = `${tarefa.titulo || ''}\n${tarefa.descricao || ''}`
+  const match = texto.match(/\[Empresa:\s*([^\]]+)\]/i)
+  if (!match) return { nome: '', codigo: '' }
+  const raw = match[1].trim()
+  const idxPipe = raw.indexOf('| Código:')
+  const nome = (idxPipe >= 0 ? raw.slice(0, idxPipe) : raw).trim()
+  const codigoMatch = raw.match(/\| Código:\s*([^\]]+)/)
+  const codigo = codigoMatch ? codigoMatch[1].trim() : ''
+  return { nome, codigo }
+}
+
+function tarefaPertenceCliente(tarefa: Tarefa, cliente: Cliente) {
+  if (tarefa.clienteId === cliente.id) return true
+  if (tarefa.clienteId) return false
+  const { nome, codigo } = extrairEmpresaImportada(tarefa)
+  if (codigo && (cliente.agendorCodigo || '').trim() === codigo) return true
+  if (!nome) return false
+  const nomeNorm = normalizarEmpresa(nome)
+  const razaoNorm = normalizarEmpresa(cliente.razaoSocial)
+  const fantasiaNorm = cliente.nomeFantasia ? normalizarEmpresa(cliente.nomeFantasia) : ''
+  return razaoNorm === nomeNorm || fantasiaNorm === nomeNorm ||
+    (nomeNorm.length >= 4 && razaoNorm.length >= 4 && (razaoNorm.includes(nomeNorm) || nomeNorm.includes(razaoNorm))) ||
+    (nomeNorm.length >= 4 && fantasiaNorm.length >= 4 && (fantasiaNorm.includes(nomeNorm) || nomeNorm.includes(fantasiaNorm)))
+}
+
 interface ClientePanelProps {
   cliente: Cliente
   interacoes: Interacao[]
@@ -210,6 +242,7 @@ export default function ClientePanel({
   const [cancelPedidoId, setCancelPedidoId] = useState<number | null>(null)
   const [cancelMotivo, setCancelMotivo] = useState('')
   const [cancelSaving, setCancelSaving] = useState(false)
+  const [ganhouLoading, setGanhouLoading] = useState(false)
 
   // Modal aprovação por item de amostra
   const [showAvaliarAmostra, setShowAvaliarAmostra] = useState(false)
@@ -282,7 +315,7 @@ export default function ClientePanel({
   const vendedor = vendedores.find(v => v.id === c.vendedorId)
   const diasNaEtapa = c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0
   const clienteInteracoesBase = interacoes.filter(i => i.clienteId === c.id)
-  const clienteTarefasBase = tarefas.filter(t => t.clienteId === c.id)
+  const clienteTarefasBase = tarefas.filter(t => tarefaPertenceCliente(t, c))
 
   const tarefasVinculadasIds = new Set<number>()
   for (const inter of clienteInteracoesBase) {
@@ -919,15 +952,12 @@ export default function ClientePanel({
               {c.etapa === 'negociacao' && (
                 <>
                   <button
+                    disabled={ganhouLoading}
                     onClick={async () => {
-                      alert('DEBUG: Botão Ganhou clicado!')
-                      console.log('[DEBUG Ganhou] Clicked!')
+                      if (ganhouLoading) return
+                      setGanhouLoading(true)
                       const hoje = new Date().toISOString().split('T')[0]
-                      console.log('[DEBUG Ganhou] onAddPedido:', onAddPedido)
-                      console.log('[DEBUG Ganhou] ultimaProposta:', ultimaProposta)
-                      console.log('[DEBUG Ganhou] ultimaProposta?.itens:', ultimaProposta?.itens)
                       if (onAddPedido && ultimaProposta && ultimaProposta.itens.length > 0) {
-                        console.log('[DEBUG Ganhou] Criando pedido...')
                         try {
                           const numero = `PED-${Date.now().toString().slice(-6)}`
                           await onAddPedido({
@@ -950,17 +980,18 @@ export default function ClientePanel({
                           addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
                         }
                       } else {
-                        console.log('[DEBUG Ganhou] Sem proposta ou itens, mostrando notificacao')
                         addNotificacao('info', 'Sem proposta', 'Crie uma proposta com itens antes de marcar como Ganhou', c.id)
                       }
-                      console.log('[DEBUG Ganhou] Movendo cliente...')
                       onMoverCliente(c.id, 'negociacao', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
-                      console.log('[DEBUG Ganhou] Fechando panel...')
                       onClose()
                     }}
-                    className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
+                    className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-colors ${
+                      ganhouLoading
+                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                        : 'bg-green-600 text-white hover:bg-green-700'
+                    }`}
                   >
-                    🎉 Ganhou
+                    {ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
                   </button>
                   <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>

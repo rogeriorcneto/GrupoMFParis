@@ -500,6 +500,7 @@ export default function AppRouter({
       )
     case 'tarefas':
       return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast} onVerNoFunil={onVerNoFunil}
+        onOpenClientePanel={setSelectedClientePanel}
         onDeleteTarefa={async (t) => {
           try {
             await db.deleteTarefa(t.id)

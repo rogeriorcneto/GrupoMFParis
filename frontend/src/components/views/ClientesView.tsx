@@ -39,11 +39,13 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   const [filterEtapa, setFilterEtapa] = React.useState('')
   const [filterVendedor, setFilterVendedor] = React.useState('')
   const [filterStatus, setFilterStatus] = React.useState('')
+  const [filterEstado, setFilterEstado] = React.useState('')
   const [filterScoreMin, setFilterScoreMin] = React.useState('')
   const [filterValorMin, setFilterValorMin] = React.useState('')
   const [draftEtapa, setDraftEtapa] = React.useState('')
   const [draftVendedor, setDraftVendedor] = React.useState('')
   const [draftStatus, setDraftStatus] = React.useState('')
+  const [draftEstado, setDraftEstado] = React.useState('')
   const [draftScoreMin, setDraftScoreMin] = React.useState('')
   const [draftValorMin, setDraftValorMin] = React.useState('')
   // Ordenação
@@ -94,13 +96,14 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   const PAGE_SIZE = 50
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE)
 
-  React.useEffect(() => { setVisibleCount(PAGE_SIZE) }, [debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterScoreMin, filterValorMin, sortKey, sortDir])
+  React.useEffect(() => { setVisibleCount(PAGE_SIZE) }, [debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterEstado, filterScoreMin, filterValorMin, sortKey, sortDir])
 
   // Quando abre painel de filtros, copia valores aplicados para o rascunho
   const openFiltersPanel = () => {
     setDraftEtapa(filterEtapa)
     setDraftVendedor(filterVendedor)
     setDraftStatus(filterStatus)
+    setDraftEstado(filterEstado)
     setDraftScoreMin(filterScoreMin)
     setDraftValorMin(filterValorMin)
     setShowFilters(true)
@@ -110,13 +113,14 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
     setFilterEtapa(draftEtapa)
     setFilterVendedor(draftVendedor)
     setFilterStatus(draftStatus)
+    setFilterEstado(draftEstado)
     setFilterScoreMin(draftScoreMin)
     setFilterValorMin(draftValorMin)
     setShowFilters(false)
   }
   const limparFiltros = () => {
-    setDraftEtapa(''); setDraftVendedor(''); setDraftStatus(''); setDraftScoreMin(''); setDraftValorMin('')
-    setFilterEtapa(''); setFilterVendedor(''); setFilterStatus(''); setFilterScoreMin(''); setFilterValorMin('')
+    setDraftEtapa(''); setDraftVendedor(''); setDraftStatus(''); setDraftEstado(''); setDraftScoreMin(''); setDraftValorMin('')
+    setFilterEtapa(''); setFilterVendedor(''); setFilterStatus(''); setFilterEstado(''); setFilterScoreMin(''); setFilterValorMin('')
   }
 
   const filteredClientes = React.useMemo(() => {
@@ -139,9 +143,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       const matchEtapa = !filterEtapa || cliente.etapa === filterEtapa
       const matchVendedor = !filterVendedor || String(cliente.vendedorId) === filterVendedor
       const matchStatus = !filterStatus || cliente.statusCliente === filterStatus
+      const matchEstado = !filterEstado || (cliente.enderecoEstado || '').toLowerCase() === filterEstado.toLowerCase()
       const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
       const matchValor = !filterValorMin || (cliente.valorEstimado || 0) >= Number(filterValorMin)
-      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchScore && matchValor
+      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchEstado && matchScore && matchValor
     })
     // Sort
     const dir = sortDir === 'asc' ? 1 : -1
@@ -160,7 +165,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       if (va > vb) return 1 * dir
       return 0
     })
-  }, [scopedClientes, debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterScoreMin, filterValorMin, sortKey, sortDir])
+  }, [scopedClientes, debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterEstado, filterScoreMin, filterValorMin, sortKey, sortDir])
 
   const etapaConfig: Record<string, { label: string; badge: string; dot: string }> = {
     'prospecção': { label: 'Prospecção', badge: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
@@ -831,7 +836,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
     URL.revokeObjectURL(url)
   }
 
-  const filtersActive = !!(filterEtapa || filterVendedor || filterStatus || filterScoreMin || filterValorMin)
+  const filtersActive = !!(filterEtapa || filterVendedor || filterStatus || filterEstado || filterScoreMin || filterValorMin)
   const sortLabel = ({ nome: 'Nome (A-Z)', dataCadastro: 'Data de Cadastro', ultimaCompra: 'Última Compra', valor: 'Valor', score: 'Score' } as Record<SortKey, string>)[sortKey]
   const totalValor = filteredClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
   const visibleClientes = filteredClientes.slice(0, visibleCount)
@@ -878,7 +883,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         >
           <FunnelIcon className="h-4 w-4" />
           <span>Filtros</span>
-          {filtersActive && <span className="bg-primary-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{[filterEtapa,filterVendedor,filterStatus,filterScoreMin,filterValorMin].filter(Boolean).length}</span>}
+          {filtersActive && <span className="bg-primary-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{[filterEtapa,filterVendedor,filterStatus,filterEstado,filterScoreMin,filterValorMin].filter(Boolean).length}</span>}
         </button>
 
         {/* Botão Ordenar (com texto) */}
@@ -966,6 +971,15 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                 <option value="prospecto">Prospecto</option>
                 <option value="descartado">Descartado</option>
                 <option value="bloqueado">Bloqueado</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Estado</label>
+              <select value={draftEstado} onChange={(e) => setDraftEstado(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Todos</option>
+                {Array.from(new Set(scopedClientes.map(c => c.enderecoEstado).filter(Boolean))).sort().map(uf => (
+                  <option key={uf} value={uf}>{String(uf).toUpperCase()}</option>
+                ))}
               </select>
             </div>
             <div>

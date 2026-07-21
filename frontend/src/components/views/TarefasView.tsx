@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react'
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import WhatsAppIcon from '../icons/WhatsAppIcon'
 import {
   XMarkIcon, PlusIcon, SparklesIcon, PhoneIcon, EnvelopeIcon,
@@ -50,6 +50,7 @@ interface TarefaCardProps {
   isOverdue: boolean
   isToday: boolean
   onVerNoFunil?: (cliente: Cliente) => void
+  onOpenClientePanel?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
   onVerRegraAutomacao?: (regraId: number) => void
 }
@@ -57,7 +58,7 @@ interface TarefaCardProps {
 const TarefaCard: React.FC<TarefaCardProps> = ({
   tarefa, cliente, vendedor, isGerente,
   onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
-  isOverdue, isToday, onVerNoFunil, onDeleteTarefa, onVerRegraAutomacao
+  isOverdue, isToday, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, onVerRegraAutomacao
 }) => {
   const [expanded, setExpanded] = useState(false)
   const [completing, setCompleting] = useState(false)
@@ -146,10 +147,22 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </span>
             )}
             {cliente && (
-              <span className="flex items-center gap-1 truncate max-w-[200px]">
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenClientePanel?.(cliente) }}
+                className="flex items-center gap-1 truncate max-w-[200px] text-primary-700 hover:text-primary-800 hover:underline"
+                title={tarefa.clienteId ? 'Abrir card do cliente' : 'Cliente identificado pelo texto (não vinculado ao card)'}
+              >
                 <BuildingOfficeIcon className="h-3.5 w-3.5 flex-shrink-0" />
                 {cliente.razaoSocial}
-              </span>
+                {tarefa.clienteId ? (
+                  <span className="text-green-600" title="Tarefa vinculada ao card">🔗</span>
+                ) : (
+                  <span className="text-amber-500" title="Tarefa não vinculada ao card">⚠️</span>
+                )}
+              </button>
+            )}
+            {!cliente && tarefa.clienteId && (
+              <span className="text-xs text-red-500">Cliente não encontrado</span>
             )}
           </div>
           {/* Data + badge à direita */}
@@ -202,7 +215,11 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div
+                  className="flex items-center gap-2 flex-wrap cursor-pointer hover:bg-primary-50 rounded px-1 -ml-1 transition-colors"
+                  onClick={() => cliente && onOpenClientePanel?.(cliente)}
+                  title={cliente ? 'Abrir card do cliente' : ''}
+                >
                   <span className="text-base">{cfg.icon}</span>
                   <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'text-gray-500' : ''}`}>
                     {(() => {
@@ -216,7 +233,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                   </h4>
                   {tarefa.origemAutomacaoId && onVerRegraAutomacao && (
                     <button
-                      onClick={() => onVerRegraAutomacao(tarefa.origemAutomacaoId!)}
+                      onClick={(e) => { e.stopPropagation(); onVerRegraAutomacao(tarefa.origemAutomacaoId!) }}
                       className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200 hover:bg-purple-200 transition-colors"
                       title="Ver regra de automação"
                     >
@@ -707,8 +724,9 @@ const TarefasView: React.FC<{
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => Promise<Tarefa[]>
   showToast?: (tipo: 'success' | 'error', texto: string) => void
   onVerNoFunil?: (cliente: Cliente) => void
+  onOpenClientePanel?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onDeleteTarefa }) => {
+}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onOpenClientePanel, onDeleteTarefa }) => {
   const [showModal, setShowModal] = useState(false)
   const [commCliente, setCommCliente] = useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
@@ -716,9 +734,12 @@ const TarefasView: React.FC<{
   const [dateFilter, setDateFilter] = useState<'todas' | 'semana' | 'hoje' | 'definir'>('hoje')
   const [statusFilter, setStatusFilter] = useState<'pendentes' | 'finalizadas' | 'todos'>('pendentes')
   const [viewMode, setViewMode] = useState<'listagem' | 'calendario'>('listagem')
+  const [activeTab, setActiveTab] = useState<'tarefas' | 'historico'>('tarefas')
   // Estado para pesquisa
   const [searchTerm, setSearchTerm] = useState('')
   const [searchTermHistorico, setSearchTermHistorico] = useState('')
+  const [historyLimit, setHistoryLimit] = useState(20)
+  useEffect(() => { setHistoryLimit(20) }, [searchTermHistorico, activeTab])
   const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -726,11 +747,10 @@ const TarefasView: React.FC<{
   const [waCliente, setWaCliente] = useState<Cliente | null>(null)
   const [showWorkspace, setShowWorkspace] = useState(false)
   const [wsCliente, setWsCliente] = useState<Cliente | null>(null)
-  const [activeTab, setActiveTab] = useState<'tarefas' | 'historico'>('tarefas')
 
   const normalizarEmpresa = (s: string) => s.toLowerCase().trim()
     .replace(/\b(ltda|me|epp|eireli|s\.?a\.?|s\/a|cia|comercio|comércio|industria|indústria|distribui(dora|cao|ção)?|com\.?|ind\.?|imp\.?|exp\.?)\b/gi, '')
-    .replace(/[.\-\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/[.\-/\/,()]/g, ' ').replace(/\s+/g, ' ').trim()
 
   const extrairEmpresaImportada = (tarefa: Tarefa) => {
     const texto = `${tarefa.titulo || ''}\n${tarefa.descricao || ''}`
@@ -742,23 +762,45 @@ const TarefasView: React.FC<{
     return { nome, codigo }
   }
 
+  const clienteIndex = useMemo(() => {
+    const porId = new Map<number, Cliente>()
+    const porCodigo = new Map<string, Cliente>()
+    const porRazao = new Map<string, Cliente>()
+    const porFantasia = new Map<string, Cliente>()
+    const todos: { cliente: Cliente; razaoNorm: string; fantasiaNorm: string }[] = []
+    for (const c of clientes) {
+      porId.set(c.id, c)
+      const codigo = (c.agendorCodigo || '').trim()
+      if (codigo) porCodigo.set(codigo, c)
+      const razaoNorm = normalizarEmpresa(c.razaoSocial || '')
+      const fantasiaNorm = c.nomeFantasia ? normalizarEmpresa(c.nomeFantasia) : ''
+      if (razaoNorm) porRazao.set(razaoNorm, c)
+      if (fantasiaNorm) porFantasia.set(fantasiaNorm, c)
+      todos.push({ cliente: c, razaoNorm, fantasiaNorm })
+    }
+    return { porId, porCodigo, porRazao, porFantasia, todos }
+  }, [clientes])
+
   const getClienteDaTarefa = (tarefa: Tarefa) => {
-    const porId = clientes.find(c => c.id === tarefa.clienteId)
-    if (porId) return porId
+    if (tarefa.clienteId) {
+      const porId = clienteIndex.porId.get(tarefa.clienteId)
+      if (porId) return porId
+    }
     const { nome, codigo } = extrairEmpresaImportada(tarefa)
     if (codigo) {
-      const porCodigo = clientes.find(c => (c.agendorCodigo || '').trim() === codigo)
+      const porCodigo = clienteIndex.porCodigo.get(codigo)
       if (porCodigo) return porCodigo
     }
     if (nome) {
       const nomeNorm = normalizarEmpresa(nome)
-      return clientes.find(c => {
-        const razaoNorm = normalizarEmpresa(c.razaoSocial)
-        const fantasiaNorm = c.nomeFantasia ? normalizarEmpresa(c.nomeFantasia) : ''
-        return razaoNorm === nomeNorm || fantasiaNorm === nomeNorm ||
-          (nomeNorm.length >= 4 && razaoNorm.length >= 4 && (razaoNorm.includes(nomeNorm) || nomeNorm.includes(razaoNorm))) ||
-          (nomeNorm.length >= 4 && fantasiaNorm.length >= 4 && (fantasiaNorm.includes(nomeNorm) || nomeNorm.includes(fantasiaNorm)))
-      })
+      const porRazao = clienteIndex.porRazao.get(nomeNorm)
+      if (porRazao) return porRazao
+      const porFantasia = clienteIndex.porFantasia.get(nomeNorm)
+      if (porFantasia) return porFantasia
+      for (const { cliente, razaoNorm, fantasiaNorm } of clienteIndex.todos) {
+        if (nomeNorm.length >= 4 && razaoNorm.length >= 4 && (razaoNorm.includes(nomeNorm) || nomeNorm.includes(razaoNorm))) return cliente
+        if (nomeNorm.length >= 4 && fantasiaNorm.length >= 4 && (fantasiaNorm.includes(nomeNorm) || nomeNorm.includes(fantasiaNorm))) return cliente
+      }
     }
     return undefined
   }
@@ -1270,6 +1312,7 @@ const TarefasView: React.FC<{
           }
           onVerNoFunil(c)
         } : undefined}
+        onOpenClientePanel={onOpenClientePanel}
         onDeleteTarefa={isGerente ? onDeleteTarefa : undefined}
       />
     )
@@ -1392,7 +1435,7 @@ const TarefasView: React.FC<{
             })
           }
           todas = todas.sort((a, b) => (b.concluidaEm || b.data).localeCompare(a.concluidaEm || a.data))
-          
+          const todasExibidas = todas.slice(0, historyLimit)
           const comReagendamento = minhasTarefas.filter(t => t.reagendamentos && t.reagendamentos.length > 0)
           return (
             <>
@@ -1449,20 +1492,34 @@ const TarefasView: React.FC<{
               ) : (
                 <div className="space-y-3">
                   {/* Concluídas */}
-                  {todas.map(t => {
+                  {todasExibidas.map(t => {
                     const cliente = getClienteDaTarefa(t)
                     const cfg = TIPO_CONFIG[t.tipo] || TIPO_CONFIG.outro
                     return (
                       <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div
+                            className="flex items-center gap-2 cursor-pointer hover:bg-primary-50 rounded px-1 -ml-1 transition-colors"
+                            onClick={() => cliente && onOpenClientePanel?.(cliente)}
+                            title={cliente ? 'Abrir card do cliente' : ''}
+                          >
                             <span className="text-base">{cfg.icon}</span>
                             <span className="font-semibold text-gray-700 text-sm">{(() => { const idx = t.titulo.lastIndexOf(' - '); return cliente && idx > 0 ? t.titulo.slice(0, idx) : t.titulo })()}</span>
                           </div>
                           <span className="flex-shrink-0 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200">✓ Concluída</span>
                         </div>
                         <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
-                          {cliente && <span>🏢 {cliente.razaoSocial}</span>}
+                          {cliente && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onOpenClientePanel?.(cliente) }}
+                              className="text-primary-700 hover:text-primary-800 hover:underline flex items-center gap-1"
+                              title={t.clienteId ? 'Vinculada ao card' : 'Cliente identificado pelo texto (não vinculado ao card)'}
+                            >
+                              🏢 {cliente.razaoSocial}
+                              {t.clienteId ? <span className="text-green-600" title="Tarefa vinculada ao card">🔗</span> : <span className="text-amber-500" title="Tarefa não vinculada ao card">⚠️</span>}
+                            </button>
+                          )}
+                          {!cliente && t.clienteId && <span className="text-red-500">Cliente não encontrado</span>}
                           <span>🗓️ Prazo: {new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
                           {t.concluidaEm && (
                             <span>✅ Executada em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')} às {new Date(t.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1495,6 +1552,14 @@ const TarefasView: React.FC<{
                       </div>
                     )
                   })}
+                  {todas.length > historyLimit && (
+                    <button
+                      onClick={() => setHistoryLimit(prev => prev + 20)}
+                      className="w-full py-2 text-sm text-primary-700 font-medium bg-white border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors"
+                    >
+                      Mostrar mais 20
+                    </button>
+                  )}
                 </div>
               )}
             </>

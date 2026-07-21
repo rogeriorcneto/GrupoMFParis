@@ -93,9 +93,6 @@ export async function gerarPropostaPDF(
   const now = new Date()
   const validade = new Date(now)
   validade.setDate(validade.getDate() + 15)
-  const dataLancamento = options.dataLancamento ? new Date(options.dataLancamento) : now
-  const prazoEntrega = new Date(Number.isNaN(dataLancamento.getTime()) ? now : dataLancamento)
-  prazoEntrega.setDate(prazoEntrega.getDate() + 7)
   let y = 16
 
   const logoDataUrl = await loadLogoDataUrl()
@@ -227,7 +224,7 @@ export async function gerarPropostaPDF(
   for (const item of itens) {
     const itemTotal = Number(item.preco || 0) * Number(item.quantidade || 0)
     subtotal += itemTotal
-    const itemLines = doc.splitTextToSize(safePdfText(`${item.sku || item.produtoId} - ${item.nomeProduto}`), itemWidth)
+    const itemLines = doc.splitTextToSize(safePdfText(`${item.sku || item.produtoId}\n${item.nomeProduto}`), itemWidth)
     const rowHeight = Math.max(7, itemLines.length * 4.2 + 2)
 
     if (y + rowHeight > 255) {
@@ -277,8 +274,6 @@ export async function gerarPropostaPDF(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.2)
   doc.setTextColor(75, 85, 99)
-  doc.text(`Prazo de entrega: até ${formatDate(prazoEntrega)} (7 dias após o lançamento)`, margin, y)
-  y += 4.8
   doc.text(`Condição de entrega: ${options.tipoFrete || 'A combinar'}`, margin, y)
   y += 4.8
   doc.text(`Forma de pagamento: ${options.formaPagamento || 'A combinar'}`, margin, y)

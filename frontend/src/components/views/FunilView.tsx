@@ -859,21 +859,21 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           if (!historico || historico.length === 0) return null
                           const ultima = historico[0]
                           return (
-                            <div className="mt-2 p-2 bg-purple-50/60 rounded-md border border-purple-100">
+                            <div className="mt-2 p-2 bg-purple-50/60 dark:bg-purple-900/20 rounded-md border border-purple-100 dark:border-purple-800/40">
                               <div className="flex items-center gap-1 mb-1">
-                                <span className="text-[10px] font-semibold text-purple-800">💰 Propostas ({historico.length})</span>
+                                <span className="text-[10px] font-semibold text-purple-800 dark:text-purple-200">💰 Propostas ({historico.length})</span>
                               </div>
                               <div className="space-y-1">
                                 {historico.slice(0, 2).map((p, i) => (
                                   <div key={p.id || i} className="flex items-center justify-between text-[9px]">
-                                    <span className="text-gray-600 truncate max-w-[70px]">{p.numero}</span>
-                                    <span className="font-medium text-purple-700">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
-                                    <span className="text-gray-400">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                    <span className="text-gray-600 dark:text-gray-300 truncate max-w-[70px]">{p.numero}</span>
+                                    <span className="font-medium text-purple-700 dark:text-purple-300">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
+                                    <span className="text-gray-400 dark:text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
                                   </div>
                                 ))}
-                                {historico.length > 2 && <p className="text-[9px] text-purple-600 text-center">+{historico.length - 2} mais</p>}
+                                {historico.length > 2 && <p className="text-[9px] text-purple-600 dark:text-purple-300 text-center">+{historico.length - 2} mais</p>}
                               </div>
-                              {ultima.frete && <p className="text-[9px] text-gray-500 mt-1">🚚 {ultima.frete}</p>}
+                              {ultima.frete && <p className="text-[9px] text-gray-500 dark:text-gray-400 mt-1">🚚 {ultima.frete}</p>}
                             </div>
                           )
                         })()}
@@ -885,44 +885,44 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           const info = getClientePedidoInfo(cliente)
                           if (!info) return null
                           const p = info.latest
-                          const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando Aprov. Gerência', confirmado: 'Confirmado', cancelado: 'Cancelado' }
+                          const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando Aprov. Gerência', confirmado: 'Confirmado', cancelado: 'Não Aprovado' }
                           return (
-                            <div className="mt-1.5 p-2 bg-gray-50 rounded-md border border-gray-100 space-y-1">
+                            <div className="mt-1.5 p-2 bg-gray-50 dark:bg-gray-700/40 rounded-md border border-gray-100 dark:border-gray-600/40 space-y-1">
                               {/* Tipo + Status */}
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200'}`}>
                                   {p.tipo === 'bonificacao' ? '🧪 Amostra' : '🛒 Venda'}
                                 </span>
-                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 text-green-700' : p.status === 'enviado' ? 'bg-amber-100 text-amber-700' : p.status === 'cancelado' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-200' : p.status === 'enviado' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200' : p.status === 'cancelado' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-200' : 'bg-gray-100 dark:bg-gray-600/40 text-gray-600 dark:text-gray-300'}`}>
                                   {statusLabel[p.status] || p.status}
                                 </span>
-                                {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}
+                                {info.total > 1 && <span className="text-[9px] text-gray-400 dark:text-gray-500">{info.total} pedidos</span>}
                               </div>
                               {/* Número */}
-                              <p className="text-[10px] text-gray-500 font-medium">📋 #{p.omieNumero || p.numero}</p>
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">📋 #{p.omieNumero || p.numero}</p>
                               {/* Itens */}
                               {p.itens && p.itens.length > 0 && (
                                 <div className="space-y-0.5">
                                   {p.itens.map((item, idx) => (
                                     <div key={idx} className="text-[10px]">
                                       <div className="flex items-center justify-between gap-1">
-                                        <span className="text-gray-700 font-medium leading-tight" title={item.nomeProduto}>
+                                        <span className="text-gray-700 dark:text-gray-300 font-medium leading-tight" title={item.nomeProduto}>
                                           • {abreviarProduto(item.nomeProduto)}
                                         </span>
-                                        <span className="font-bold text-gray-900 whitespace-nowrap flex-shrink-0">
+                                        <span className="font-bold text-gray-900 dark:text-gray-100 whitespace-nowrap flex-shrink-0">
                                           {item.quantidade}x
                                         </span>
                                       </div>
-                                      <div className="text-gray-500 pl-2 text-[9px]">
+                                      <div className="text-gray-500 dark:text-gray-400 pl-2 text-[9px]">
                                         {(item.preco * item.quantidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                       </div>
                                     </div>
                                   ))}
-                                  <div className="flex items-center justify-between pt-1 mt-1 border-t border-gray-200">
-                                    <span className="text-[9px] text-gray-500">
+                                  <div className="flex items-center justify-between pt-1 mt-1 border-t border-gray-200 dark:border-gray-600/40">
+                                    <span className="text-[9px] text-gray-500 dark:text-gray-400">
                                       {p.itens.reduce((s, i) => s + i.quantidade, 0)} un
                                     </span>
-                                    <span className="text-[11px] font-bold text-green-700">
+                                    <span className="text-[11px] font-bold text-green-700 dark:text-green-400">
                                       {p.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </span>
                                   </div>
@@ -931,14 +931,20 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                               {/* Frete + Pgto */}
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {p.tipoFrete && (
-                                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 text-blue-700">{p.tipoFrete}</span>
+                                  <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-200">{p.tipoFrete}</span>
                                 )}
                                 {p.formaPagamento && (
-                                  <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-gray-100 text-gray-600 truncate max-w-[110px]">{p.formaPagamento}</span>
+                                  <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-gray-100 dark:bg-gray-600/40 text-gray-600 dark:text-gray-300 truncate max-w-[110px]">{p.formaPagamento}</span>
                                 )}
                               </div>
-                              {p.omieStatus && <p className="text-[9px] text-gray-400">🔄 Omie: {p.omieStatus}</p>}
-                              {p.omieErro && <p className="text-[9px] text-red-500 leading-tight mt-0.5" title={p.omieErro}>⚠️ {p.omieErro.slice(0, 80)}{p.omieErro.length > 80 ? '…' : ''}</p>}
+                              {p.omieStatus && <p className="text-[9px] text-gray-400 dark:text-gray-500">🔄 Omie: {p.omieStatus}</p>}
+                              {p.omieErro && <p className="text-[9px] text-red-500 dark:text-red-400 leading-tight mt-0.5" title={p.omieErro}>⚠️ {p.omieErro.slice(0, 80)}{p.omieErro.length > 80 ? '…' : ''}</p>}
+                              {p.motivoRecusa && (
+                                <div className="mt-1 p-1.5 rounded bg-red-900/20 dark:bg-red-900/20 border border-red-800/30 dark:border-red-800/30">
+                                  <p className="text-[9px] font-semibold text-red-700 dark:text-red-300">Não Aprovado:</p>
+                                  <p className="text-[9px] text-red-600 dark:text-red-300 leading-tight">{p.motivoRecusa}</p>
+                                </div>
+                              )}
                             </div>
                           )
                         })()}
