@@ -207,7 +207,9 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
   const encerrarSessao = async (msgsFinal: MsgChat[]) => {
     setSessaoAtiva(false)
     setLoading(true)
-    const duracao = Math.floor((Date.now() - tempoInicio) / 1000)
+    const duracao = Math.max(0, Math.floor((Date.now() - tempoInicio) / 1000))
+    let notaFinal = 7
+    let feedbackFinal = '{"nota":7,"feedback_geral":"Sessão encerrada."}'
     try {
       const transcript = msgsFinal.map(m => `${m.role === 'user' ? 'VENDEDOR' : 'CLIENTE'}: ${m.content}`).join('\n')
       const resp = await callAI(
@@ -217,18 +219,20 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
       const jsonMatch = resp.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const avaliacao = JSON.parse(jsonMatch[0])
-        setNota(avaliacao.nota || 7)
-        setFeedback(JSON.stringify(avaliacao))
-        const sessao: SessaoTreinamento = {
-          id: Date.now().toString(), modulo: moduloId!, perfilId,
-          msgs: msgsFinal, duracao, nota: avaliacao.nota || 7,
-          feedback: JSON.stringify(avaliacao), createdAt: new Date().toISOString()
-        }
-        const novoHist = [sessao, ...historico]
-        setHistorico(novoHist)
-        localStorage.setItem(`treinamentos_v2_${vendedor.id}`, JSON.stringify(novoHist))
+        notaFinal = avaliacao.nota || 7
+        feedbackFinal = JSON.stringify(avaliacao)
       }
-    } catch { setFeedback('{"nota":7,"feedback_geral":"Sessão encerrada."}') }
+    } catch { /* mantém fallback */ }
+    setNota(notaFinal)
+    setFeedback(feedbackFinal)
+    const sessao: SessaoTreinamento = {
+      id: Date.now().toString(), modulo: moduloId!, perfilId,
+      msgs: msgsFinal, duracao, nota: notaFinal,
+      feedback: feedbackFinal, createdAt: new Date().toISOString()
+    }
+    const novoHist = [sessao, ...historico]
+    setHistorico(novoHist)
+    localStorage.setItem(`treinamentos_v2_${vendedor.id}`, JSON.stringify(novoHist))
     setLoading(false)
   }
 

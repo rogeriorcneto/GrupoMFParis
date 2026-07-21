@@ -1,15 +1,11 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react'
-import type { Cliente, Vendedor, Interacao, Pedido, Tarefa, FunilViewProps, PropostaHistorico } from '../../types'
+import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { fetchPropostasByCliente } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
-
-function normalizarEmpresa(s: string) {
-  return s.toLowerCase().trim().replace(/[.\-/(),]/g, ' ').replace(/\s+/g, ' ')
-}
 
 // Função para abreviar nomes de produtos
 // Resultado: "Comp. Horizonte 200g", "LPI Horizonte 25kg", "Creme Leite 200ml"
@@ -71,7 +67,7 @@ function abreviarProduto(nome: string): string {
   return partes.join(' ')
 }
 
-function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], tarefas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[]; tarefas?: Tarefa[] }) {
+function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
@@ -87,9 +83,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [syncing, setSyncing] = useState(false)
   const [showNovosCiclos, setShowNovosCiclos] = useState(false)
   const [novoCicloEscondidos, setNovoCicloEscondidos] = useState<Set<number>>(new Set())
-  const [taskSearchByCliente, setTaskSearchByCliente] = React.useState<Record<number, string>>({})
-  const [taskLimitByCliente, setTaskLimitByCliente] = React.useState<Record<number, number>>({})
-
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
   const amostraLockedClients = useMemo(() => {
     if (!loggedUser || isGerente) return []
@@ -814,23 +807,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     const urgencia = getCardUrgencia(cliente)
                     const nextAction = getNextAction(cliente)
                     const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
-                    const clienteNomeNorm = normalizarEmpresa(cliente.razaoSocial || '')
-                    const tarefasCliente = tarefas.filter(t => {
-                      if (t.clienteId === cliente.id) return true
-                      if (t.clienteId) return false
-                      const texto = normalizarEmpresa(`${t.titulo || ''} ${t.descricao || ''}`)
-                      return clienteNomeNorm.length >= 4 && texto.includes(clienteNomeNorm)
-                    }).sort((a, b) => {
-                      const dataA = `${a.data}T${a.hora || '00:00'}`
-                      const dataB = `${b.data}T${b.hora || '00:00'}`
-                      return new Date(dataB).getTime() - new Date(dataA).getTime()
-                    })
-                    const taskQuery = (taskSearchByCliente[cliente.id] || '').toLowerCase().trim()
-                    const tarefasFiltradas = taskQuery
-                      ? tarefasCliente.filter(t => `${t.titulo} ${t.descricao || ''}`.toLowerCase().includes(taskQuery))
-                      : tarefasCliente
-                    const taskLimit = taskLimitByCliente[cliente.id] || 5
-                    const tarefasVisiveis = tarefasFiltradas.slice(0, taskLimit)
                     return (
                       <div
                         key={cliente.id}
@@ -902,32 +878,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         })()}
 
                         {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
-                        {tarefasCliente.length > 0 && (
-                          <div className="mt-2 p-2 bg-amber-50/70 dark:bg-amber-900/20 rounded-md border border-amber-100 dark:border-amber-800/40">
-                            <div className="flex items-center justify-between gap-1 mb-1">
-                              <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">📋 Tarefas ({tarefasCliente.length})</span>
-                              {tarefasFiltradas.length > 5 && <span className="text-[9px] text-amber-600 dark:text-amber-300">{tarefasVisiveis.length}/{tarefasFiltradas.length}</span>}
-                            </div>
-                            <input
-                              value={taskSearchByCliente[cliente.id] || ''}
-                              onChange={e => setTaskSearchByCliente(prev => ({ ...prev, [cliente.id]: e.target.value }))}
-                              onClick={e => e.stopPropagation()}
-                              placeholder="Buscar tarefa..."
-                              className="w-full mb-1 px-1.5 py-1 text-[9px] rounded border border-amber-200 dark:border-amber-700/50 bg-white/70 dark:bg-gray-800/50 text-gray-700 dark:text-gray-200 outline-none"
-                            />
-                            <div className="space-y-1">
-                              {tarefasVisiveis.map(t => (
-                                <button key={t.id} onClick={e => { e.stopPropagation(); onClickCliente?.(cliente) }} className="w-full text-left flex items-center justify-between gap-1 text-[9px] hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded px-1 py-0.5">
-                                  <span className={`truncate ${t.status === 'concluida' ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-200'}`}>{t.titulo}</span>
-                                  <span className="shrink-0 text-gray-400">{new Date(`${t.data}T${t.hora || '00:00'}`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
-                                </button>
-                              ))}
-                            </div>
-                            {tarefasFiltradas.length > tarefasVisiveis.length && (
-                              <button onClick={e => { e.stopPropagation(); setTaskLimitByCliente(prev => ({ ...prev, [cliente.id]: taskLimit + 5 })) }} className="w-full mt-1 text-[9px] font-medium text-amber-700 dark:text-amber-300 hover:underline">Mostrar mais 5</button>
-                            )}
-                          </div>
-                        )}
                         {renderCardInfo(cliente)}
                         {/* Logistics mini-info from pedidos */}
                         {(() => {
