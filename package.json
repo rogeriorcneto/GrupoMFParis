@@ -12,7 +12,8 @@
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
-    "@netlify/functions": "^2.0.0"
+    "@netlify/functions": "^2.0.0",
+    "supabase": "^2.109.1"
   },
   "engines": {
     "node": ">=18"

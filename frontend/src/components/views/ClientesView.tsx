@@ -27,8 +27,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   // Clicar no nome abre o perfil (ClientePanel). Edição via menu/ação dedicada.
   const openCliente = (c: Cliente) => onClickCliente ? onClickCliente(c) : onEditCliente(c)
   const isGerente = loggedUser?.cargo === 'gerente'
-  // A tela de Clientes deve exibir a base completa para todos os usuários.
-  const scopedClientes = React.useMemo(() => clientes, [clientes])
+  // Vendedor só vê seus clientes; gerente vê todos.
+  const scopedClientes = React.useMemo(() =>
+    isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
+  , [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
   // Filtros aplicados (efetivos) vs rascunho (no painel)
   const [showFilters, setShowFilters] = React.useState(false)
@@ -502,8 +504,13 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           
           // Parse de vendedor (nome ou ID)
           let vendedorId: number | undefined
-          const vendedorNome = row['vendedor'] || row['vendedor nome'] || row['responsavel'] || ''
-          if (vendedorNome) {
+          const vendedorIdCsv = row['vendedorid'] || row['vendedor_id'] || ''
+          const vendedorIdNumerico = Number(vendedorIdCsv)
+          if (vendedorIdCsv && Number.isFinite(vendedorIdNumerico) && vendedorIdNumerico > 0) {
+            vendedorId = vendedorIdNumerico
+          }
+          const vendedorNome = row['vendedor'] || row['vendedor nome'] || row['vendedornome'] || row['vendedor_nome'] || row['responsavel'] || ''
+          if (!vendedorId && vendedorNome) {
             const vendedorEncontrado = vendedores.find(v => 
               v.nome.toLowerCase().includes(vendedorNome.toLowerCase()) ||
               vendedorNome.toLowerCase().includes(v.nome.toLowerCase())

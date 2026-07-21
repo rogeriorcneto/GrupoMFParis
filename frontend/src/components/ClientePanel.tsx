@@ -207,6 +207,8 @@ export default function ClientePanel({
   const [panelTarefaTipo, setPanelTarefaTipo] = useState<Tarefa['tipo']>('follow-up')
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
   const [panelResponsavelId, setPanelResponsavelId] = useState<number | ''>(c.vendedorId || '')
+  const [taskHistorySearch, setTaskHistorySearch] = useState('')
+  const [taskHistoryLimit, setTaskHistoryLimit] = useState(5)
   const [showCallRecorder, setShowCallRecorder] = useState(false)
   const [showProspeccaoModal, setShowProspeccaoModal] = useState(false)
   const [prospeccaoVendedorId, setProspeccaoVendedorId] = useState<number | ''>('')
@@ -354,6 +356,11 @@ export default function ClientePanel({
     if (aPinned !== bPinned) return aPinned ? -1 : 1
     return new Date(b.data).getTime() - new Date(a.data).getTime()
   })
+  const taskHistoryQuery = taskHistorySearch.toLowerCase().trim()
+  const filteredTaskHistory = taskHistoryQuery
+    ? clienteTarefas.filter(t => `${t.titulo} ${t.descricao || ''}`.toLowerCase().includes(taskHistoryQuery))
+    : clienteTarefas
+  const visibleTaskHistory = filteredTaskHistory.slice(0, taskHistoryLimit)
   const atualizarProdutosInteresse = async (produtosInteresse: string[]) => {
     if (salvandoProdutosInteresse) return
     setSalvandoProdutosInteresse(true)
@@ -1282,8 +1289,15 @@ export default function ClientePanel({
           </div>
 
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">📋 Histórico de tarefas ({clienteTarefas.length})</h3>
-            {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <div className="space-y-2 max-h-72 overflow-y-auto pr-1">{clienteTarefas.map(tarefa => <div key={tarefa.id} className="rounded-apple border border-gray-200 bg-white px-3 py-2"><div className="flex items-start justify-between gap-2"><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">{new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}</p></div>)}</div>}
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">📋 Histórico de tarefas ({clienteTarefas.length})</h3>
+              {filteredTaskHistory.length > visibleTaskHistory.length && <span className="text-[11px] text-gray-500">{visibleTaskHistory.length}/{filteredTaskHistory.length}</span>}
+            </div>
+            {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <>
+              <input value={taskHistorySearch} onChange={e => { setTaskHistorySearch(e.target.value); setTaskHistoryLimit(5) }} placeholder="Buscar tarefa por palavra-chave..." className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-400" />
+              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => <button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors"><div className="flex items-start justify-between gap-2"><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">{new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}</p></button>)}</div>}
+              {filteredTaskHistory.length > visibleTaskHistory.length && <button onClick={() => setTaskHistoryLimit(limit => limit + 5)} className="w-full py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-xl">Mostrar mais 5</button>}
+            </>}
           </div>
 
           {/* === REDES E INFO ADICIONAIS === */}
