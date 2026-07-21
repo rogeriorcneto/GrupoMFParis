@@ -27,10 +27,8 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   // Clicar no nome abre o perfil (ClientePanel). Edição via menu/ação dedicada.
   const openCliente = (c: Cliente) => onClickCliente ? onClickCliente(c) : onEditCliente(c)
   const isGerente = loggedUser?.cargo === 'gerente'
-  // Vendedor só vê seus clientes; gerente vê todos
-  const scopedClientes = React.useMemo(() =>
-    isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
-  , [clientes, isGerente, loggedUser?.id])
+  // A tela de Clientes deve exibir a base completa para todos os usuários.
+  const scopedClientes = React.useMemo(() => clientes, [clientes])
   const [searchTerm, setSearchTerm] = React.useState('')
   // Filtros aplicados (efetivos) vs rascunho (no painel)
   const [showFilters, setShowFilters] = React.useState(false)
