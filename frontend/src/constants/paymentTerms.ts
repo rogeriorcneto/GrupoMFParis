@@ -36,4 +36,8 @@ export const PAYMENT_TERM_GROUPS: PaymentTermGroup[] = [
     label: 'Série começando em 28',
     options: ['28/35', '28/35/42', '28/42/56', '28/35/42/49', '28/35/42/49/56'],
   },
+  {
+    label: 'Série começando em 30',
+    options: ['30/45', '30/45/60'],
+  },
 ]
