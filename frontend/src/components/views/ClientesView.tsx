@@ -149,7 +149,8 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       const matchEstado = !filterEstado || (cliente.enderecoEstado || '').toLowerCase() === filterEstado.toLowerCase()
       const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
       const matchValor = !filterValorMin || (cliente.valorEstimado || 0) >= Number(filterValorMin)
-      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchEstado && matchScore && matchValor
+      const matchNovoCiclo = cliente.novoCiclo !== true
+      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchEstado && matchScore && matchValor && matchNovoCiclo
     })
     // Sort
     const dir = sortDir === 'asc' ? 1 : -1

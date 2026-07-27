@@ -641,12 +641,17 @@ export async function fetchClientes(): Promise<Cliente[]> {
 
 export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Promise<Cliente | null> {
   if (!cnpj || cnpj.trim() === '') return null
+  const digits = cnpj.trim().replace(/\D/g, '')
+  if (digits.length < 11) return null
+  const pattern = '%' + digits.split('').join('%') + '%'
   const { data } = await withAuthRetry(async () => {
-    let q = supabase.from('clientes').select('*').eq('cnpj', cnpj.trim()).limit(1)
+    let q = supabase.from('clientes').select('*').ilike('cnpj', pattern).neq('cnpj', '').limit(20)
     if (excludeId) q = q.neq('id', excludeId)
     return q
   })
-  return data && data.length > 0 ? clienteFromDb(data[0]) : null
+  if (!data || data.length === 0) return null
+  const matches = data.filter(r => (r.cnpj || '').replace(/\D/g, '') === digits)
+  return matches.length > 0 ? clienteFromDb(matches[0]) : null
 }
 
 export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {

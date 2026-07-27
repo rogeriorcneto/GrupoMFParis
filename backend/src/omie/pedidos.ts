@@ -714,7 +714,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   }
 
   // Parcelas baseadas na forma de pagamento
-  const totalPedido = itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
+  const totalPedido = Number(pedido.total_valor) || itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
   
   // Sempre enviar lista_parcelas com datas explícitas para garantir vencimentos corretos no Omie.
   // Exceção: à vista (codigo '000') — o Omie resolve sozinho.
