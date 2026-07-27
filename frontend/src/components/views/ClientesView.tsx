@@ -28,9 +28,11 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   const openCliente = (c: Cliente) => onClickCliente ? onClickCliente(c) : onEditCliente(c)
   const isGerente = loggedUser?.cargo === 'gerente'
   // Vendedor só vê seus clientes; gerente vê todos.
-  const scopedClientes = React.useMemo(() =>
-    isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
-  , [clientes, isGerente, loggedUser?.id])
+  // Cards de novo ciclo (novas oportunidades) ficam no funil, não na lista de cadastros.
+  const scopedClientes = React.useMemo(() => {
+    const base = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
+    return base.filter(c => !c.novoCiclo)
+  }, [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
   // Filtros aplicados (efetivos) vs rascunho (no painel)
   const [showFilters, setShowFilters] = React.useState(false)
@@ -131,6 +133,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       const clienteCnpjSecundario = String(cliente.cnpj2 || '')
       const clienteCpf = String(cliente.cpf || '')
       const matchSearch = cliente.razaoSocial.toLowerCase().includes(searchLower) ||
+        (cliente.nomeFantasia || '').toLowerCase().includes(searchLower) ||
         cliente.contatoNome.toLowerCase().includes(searchLower) ||
         clienteCnpj.toLowerCase().includes(searchLower) ||
         clienteCnpjSecundario.toLowerCase().includes(searchLower) ||

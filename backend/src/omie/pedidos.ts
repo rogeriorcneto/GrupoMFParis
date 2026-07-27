@@ -182,11 +182,18 @@ function toNumberSafe(value: any): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+/**
+ * Extrai o peso unitário (kg) do nome do produto.
+ * Aceita kg e g (ex.: "Leite em Pó 25kg", "ACHOCOLATADO PREMIUM 400G").
+ * Usa a última ocorrência, que na nomenclatura do catálogo é a embalagem.
+ */
 function pesoFromNomeProduto(nome: string): number {
   const normalized = String(nome || '').toLowerCase()
-  const match = normalized.match(/(\d+(?:[\.,]\d+)?)\s*kg\b/)
+  const matches = [...normalized.matchAll(/(\d+(?:[\.,]\d+)?)\s*(kg|g)\b/g)]
+  const match = matches[matches.length - 1]
   if (!match) return 0
-  return toNumberSafe(match[1])
+  const valor = toNumberSafe(match[1])
+  return match[2] === 'g' ? valor / 1000 : valor
 }
 
 function normalizarUf(value: any): string {
@@ -209,13 +216,18 @@ function normalizarUf(value: any): string {
   return uf
 }
 
+/** Arredonda para 3 casas (precisão de peso do Omie) evitando ruído de ponto flutuante. */
+function arredondar3(n: number): number {
+  return Math.round(n * 1000) / 1000
+}
+
 function calcularPesoTotal(quantidade: number, pesoKg: number, unidade: string): number {
   if (quantidade <= 0) throw new Error('Quantidade do item deve ser maior que zero')
   // Se temos peso unitário (do Omie, CRM ou nome do produto), multiplica pela quantidade.
-  if (pesoKg > 0) return quantidade * pesoKg
+  if (pesoKg > 0) return arredondar3(quantidade * pesoKg)
   const unidadeNormalizada = String(unidade || '').trim().toUpperCase()
   // Fallback: quando a unidade é KG e não temos peso unitário, a quantidade é o próprio peso.
-  if (unidadeNormalizada === 'KG' || unidadeNormalizada === 'KGS') return quantidade
+  if (unidadeNormalizada === 'KG' || unidadeNormalizada === 'KGS') return arredondar3(quantidade)
   throw new Error(`Peso unitário não informado para produto vendido em ${unidade || 'unidade'}`)
 }
 
@@ -224,14 +236,14 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
   const pesoNome = pesoFromNomeProduto(produto?.nome || '')
   const pesoOmie = Math.max(toNumberSafe(consultaOmie?.peso_liq), toNumberSafe(consultaOmie?.peso_bruto))
 
-  let pesoFinal = pesoOmie || pesoCrm || pesoNome || 0
-  if (pesoNome > 0 && pesoCrm > 0 && pesoCrm > pesoNome * 1.5 && pesoOmie <= 0) {
-    pesoFinal = pesoNome
-  }
+  // Precedência: cadastro do Omie → cadastro do CRM → nome do produto.
+  // O nome é o último recurso: produtos vendidos em fardo/caixa têm o peso da
+  // embalagem unitária no nome, que não representa o peso da unidade de venda.
+  const pesoFinal = pesoOmie || pesoCrm || pesoNome || 0
 
   return {
     descricao: consultaOmie?.descricao || produto?.nome || '',
-    unidade: consultaOmie?.unidade || produto?.unidade || 'UN',
+    unidade: produto?.unidade || consultaOmie?.unidade || 'UN',
     ncm: consultaOmie?.ncm || produto?.ncm || '21069090',
     marca: consultaOmie?.marca || produto?.marca || '',
     especieVolume: produto?.especie_volume || 'FARDO',
@@ -560,6 +572,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   // 3. Garantir produtos no Omie e montar itens
   const det: any[] = []
   let totalVolumes = 0
+  let pesoTotalPedido = 0
   let especieVolume = 'FARDO'
   let marcaVolumes = ''
 
@@ -576,6 +589,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
       ? (isIntraEstado ? '5910' : '6910')
       : (isIntraEstado ? '5101' : '6101')
     const pesoTotal = calcularPesoTotal(quantidade, prodOmie.pesoKg, prodOmie.unidade)
+    pesoTotalPedido += pesoTotal
 
     const detItem: any = {
       ide: {
@@ -654,6 +668,9 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     quantidade_volumes: totalVolumes,
     especie_volumes: especieVolume,
     marca_volumes: marcaVolumes,
+    // Aba "Frete e Outras Despesas" do pedido: peso total da carga.
+    peso_bruto: arredondar3(pesoTotalPedido),
+    peso_liquido: arredondar3(pesoTotalPedido),
   }
 
   // 7. Departamentos: COMERCIAL (Omie WSDL: cCodDepto, nPerc, nValor, nValorFixo)

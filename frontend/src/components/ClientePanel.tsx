@@ -620,7 +620,7 @@ export default function ClientePanel({
 
   React.useEffect(() => {
     if (pedidoTipo === 'bonificacao') {
-      setPedidoItens(prev => prev.map(i => ({ ...i, preco: 0 })))
+      setPedidoItens(prev => prev.map(i => ({ ...i, preco: 1 })))
     }
   }, [pedidoTipo])
 
@@ -1420,9 +1420,10 @@ export default function ClientePanel({
 
           {/* ===== ABA NEGÓCIOS ===== */}
           {activeTab === 'negocios' && (() => {
+            const dataMaisRecente = (p: Pedido) => p.dataAprovacao || p.dataEnvio || p.dataCriacao || ''
             const pedidosCli = (todosPedidos || [])
               .filter(p => p.clienteId === c.id)
-              .sort((a, b) => (b.dataCriacao || '').localeCompare(a.dataCriacao || ''))
+              .sort((a, b) => dataMaisRecente(b).localeCompare(dataMaisRecente(a)))
             const total = pedidosCli.filter(p => p.status !== 'cancelado' && p.tipo !== 'bonificacao').reduce((s, p) => s + (p.totalValor || 0), 0)
             const statusBadge: Record<string, string> = {
               rascunho: 'bg-gray-100 text-gray-700',
@@ -2355,9 +2356,9 @@ export default function ClientePanel({
                         <div className="flex flex-col items-center gap-0.5">
                           <label className="text-[9px] text-gray-400">Qtd</label>
                           <input
-                            type="number" min={0}
+                            type="number" min={0.01} step={0.01}
                             value={item.quantidade}
-                            onChange={e => setEditPropostaItens(prev => prev.map((it, i) => i === idx ? { ...it, quantidade: Math.max(0, parseInt(e.target.value) || 0) } : it))}
+                            onChange={e => setEditPropostaItens(prev => prev.map((it, i) => i === idx ? { ...it, quantidade: Math.max(0.01, parseFloat(e.target.value) || 0.01) } : it))}
                             className="w-16 px-2 py-1 border border-gray-300 rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-400"
                           />
                         </div>

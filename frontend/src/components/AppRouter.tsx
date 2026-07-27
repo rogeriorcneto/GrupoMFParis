@@ -190,7 +190,7 @@ export default function AppRouter({
             // Se for pedido de bonificação (amostra), mover cliente para amostra_perdida
             if (pedido.tipo === 'bonificacao') {
               const cli = clientes.find(c => c.id === pedido.clienteId)
-              if (cli && cli.etapa === 'amostra') {
+              if (cli && cli.etapa !== 'amostra_perdida' && cli.etapa !== 'perdido') {
                 try {
                   moverCliente(pedido.clienteId, 'amostra_perdida', {
                     resultadoAmostra: 'reprovada',
@@ -221,48 +221,60 @@ export default function AppRouter({
             await db.confirmarCancelamentoPedido(pedido.id)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado' } : p))
             addNotificacao('info', 'Pedido cancelado', `Pedido ${pedido.numero} cancelado pelo gerente.`, pedido.clienteId)
-            // Mover cliente para perdido + criar novo card em Proposta (direto via db, sem lock)
             const cli = clientes.find(c => c.id === pedido.clienteId)
             if (cli) {
               try {
                 const now = new Date().toISOString()
                 const today = now.split('T')[0]
-                // 1) Mover para perdido diretamente no banco
-                if (cli.etapa !== 'perdido') {
-                  await db.moverClienteAtomico(
-                    pedido.clienteId, 'perdido', cli.etapa, now,
-                    { motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
-                  )
-                  setClientes(prev => prev.map(c => c.id === pedido.clienteId
-                    ? { ...c, etapa: 'perdido', etapaAnterior: c.etapa, motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
-                    : c
-                  ))
+                if (pedido.tipo === 'bonificacao') {
+                  // Amostra não aprovada → amostra_perdida (permitir 2ª tentativa)
+                  if (cli.etapa !== 'amostra_perdida') {
+                    await db.moverClienteAtomico(
+                      pedido.clienteId, 'amostra_perdida', cli.etapa, now,
+                      { resultadoAmostra: 'reprovada', dataResultadoAmostra: today, motivoReprovacao: `Pedido ${pedido.numero} cancelado` }
+                    )
+                    setClientes(prev => prev.map(c => c.id === pedido.clienteId
+                      ? { ...c, etapa: 'amostra_perdida', etapaAnterior: c.etapa, resultadoAmostra: 'reprovada', dataResultadoAmostra: today, motivoReprovacao: `Pedido ${pedido.numero} cancelado` }
+                      : c
+                    ))
+                  }
+                } else {
+                  // Venda cancelada → perdido + novo ciclo em Proposta
+                  if (cli.etapa !== 'perdido') {
+                    await db.moverClienteAtomico(
+                      pedido.clienteId, 'perdido', cli.etapa, now,
+                      { motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
+                    )
+                    setClientes(prev => prev.map(c => c.id === pedido.clienteId
+                      ? { ...c, etapa: 'perdido', etapaAnterior: c.etapa, motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
+                      : c
+                    ))
+                  }
+                  const novoCard: Omit<Cliente, 'id'> = {
+                    ...cli,
+                    cnpj: undefined,
+                    etapa: 'proposta',
+                    etapaAnterior: 'perdido',
+                    novoCiclo: true,
+                    cicloNumero: (cli.cicloNumero || 1) + 1,
+                    statusFollowUp: undefined,
+                    statusAmostra: undefined,
+                    statusEntrega: undefined,
+                    statusFaturamento: undefined,
+                    motivoPerda: undefined,
+                    categoriaPerda: undefined,
+                    dataPerda: undefined,
+                    valorEstimado: undefined,
+                    valorProposta: undefined,
+                    dataProposta: undefined,
+                    dataEntradaEtapa: now,
+                    historicoEtapas: [],
+                    vendedorId: cli.vendedorId,
+                  }
+                  const cardCriado = await db.insertCliente(novoCard)
+                  setClientes(prev => [...prev, cardCriado])
+                  addNotificacao('info', '🔄 Novo ciclo criado', `Pedido cancelado — card de ${cli.razaoSocial} criado em Proposta para novo ciclo.`, cardCriado.id)
                 }
-                // 2) Criar novo card em Proposta
-                const novoCard: Omit<Cliente, 'id'> = {
-                  ...cli,
-                  cnpj: undefined,
-                  etapa: 'proposta',
-                  etapaAnterior: 'perdido',
-                  novoCiclo: true,
-                  cicloNumero: (cli.cicloNumero || 1) + 1,
-                  statusFollowUp: undefined,
-                  statusAmostra: undefined,
-                  statusEntrega: undefined,
-                  statusFaturamento: undefined,
-                  motivoPerda: undefined,
-                  categoriaPerda: undefined,
-                  dataPerda: undefined,
-                  valorEstimado: undefined,
-                  valorProposta: undefined,
-                  dataProposta: undefined,
-                  dataEntradaEtapa: now,
-                  historicoEtapas: [],
-                  vendedorId: cli.vendedorId,
-                }
-                const cardCriado = await db.insertCliente(novoCard)
-                setClientes(prev => [...prev, cardCriado])
-                addNotificacao('info', '🔄 Novo ciclo criado', `Pedido cancelado — card de ${cli.razaoSocial} criado em Proposta para novo ciclo.`, cardCriado.id)
               } catch (moveErr) {
                 logger.error('Erro ao processar cancelamento no funil:', moveErr)
               }
@@ -527,7 +539,8 @@ export default function AppRouter({
                     t,
                     cliente.etapa,
                     cliente.razaoSocial || 'Cliente',
-                    t.vendedorId || cliente.vendedorId || loggedUser?.id || 0
+                    t.vendedorId || cliente.vendedorId || loggedUser?.id || 0,
+                    tarefas
                   )
                   if (novasTarefas.length > 0) {
                     setTarefas(prev => [...novasTarefas, ...prev])
@@ -669,8 +682,11 @@ export default function AppRouter({
                       const novoCard: Omit<Cliente, 'id'> = { ...cli, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
-                    } else if (cli.etapa !== 'negociacao') {
-                      moverCliente(p.clienteId, 'negociacao')
+                    } else {
+                      const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
+                      if (cli.etapa !== targetStage) {
+                        moverCliente(p.clienteId, targetStage)
+                      }
                     }
                   } catch { /* non-critical */ }
                 }
@@ -690,8 +706,11 @@ export default function AppRouter({
                       const novoCard: Omit<Cliente, 'id'> = { ...cli2, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
-                    } else if (cli2.etapa !== 'negociacao') {
-                      moverCliente(p.clienteId, 'negociacao')
+                    } else {
+                      const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
+                      if (cli2.etapa !== targetStage) {
+                        moverCliente(p.clienteId, targetStage)
+                      }
                     }
                   } catch { /* non-critical */ }
                 }
@@ -699,10 +718,18 @@ export default function AppRouter({
               }
             } else {
               setPedidos(prev => [...prev, saved])
-              // Move client to negociacao when pedido is sent for approval
+              // Move client to the correct stage based on order type
               const cliSent = clientes.find(c => c.id === p.clienteId)
-              if (cliSent && cliSent.etapa !== 'negociacao' && cliSent.etapa !== 'perdido') {
-                try { moverCliente(p.clienteId, 'negociacao') } catch { /* non-critical */ }
+              if (cliSent && cliSent.etapa !== 'perdido') {
+                try {
+                  if (p.tipo === 'bonificacao') {
+                    if (cliSent.etapa !== 'amostra') {
+                      moverCliente(p.clienteId, 'amostra', { statusAmostra: 'solicitada' })
+                    }
+                  } else if (cliSent.etapa !== 'negociacao') {
+                    moverCliente(p.clienteId, 'negociacao')
+                  }
+                } catch { /* non-critical */ }
               }
               showToast('success', `Pedido ${p.numero} enviado para aprovação!`)
             }
@@ -723,8 +750,11 @@ export default function AppRouter({
                       const novoCard: Omit<Cliente, 'id'> = { ...cliApproved, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
-                    } else if (cliApproved.etapa !== 'negociacao') {
-                      moverCliente(p.clienteId, 'negociacao')
+                    } else {
+                      const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
+                      if (cliApproved.etapa !== targetStage) {
+                        moverCliente(p.clienteId, targetStage)
+                      }
                     }
                   } catch { /* non-critical */ }
                 }
@@ -744,8 +774,11 @@ export default function AppRouter({
                       const novoCard: Omit<Cliente, 'id'> = { ...cliApproved2, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
-                    } else if (cliApproved2.etapa !== 'negociacao') {
-                      moverCliente(p.clienteId, 'negociacao')
+                    } else {
+                      const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
+                      if (cliApproved2.etapa !== targetStage) {
+                        moverCliente(p.clienteId, targetStage)
+                      }
                     }
                   } catch { /* non-critical */ }
                 }

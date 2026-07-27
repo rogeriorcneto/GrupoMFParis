@@ -56,6 +56,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
       const q = filtroBusca.toLowerCase().trim()
       list = list.filter(c =>
         c.razaoSocial.toLowerCase().includes(q) ||
+        (c.nomeFantasia || '').toLowerCase().includes(q) ||
         (c.contatoNome || '').toLowerCase().includes(q) ||
         (c.contatoEmail || '').toLowerCase().includes(q) ||
         (c.contatoTelefone || '').toLowerCase().includes(q)
@@ -168,7 +169,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
   // Individual clients
   const indClientes = React.useMemo(() => {
     const q = indSearch.toLowerCase().trim()
-    const list = q ? clientes.filter(c => c.razaoSocial.toLowerCase().includes(q) || (c.contatoNome || '').toLowerCase().includes(q)) : clientes
+    const list = q ? clientes.filter(c => c.razaoSocial.toLowerCase().includes(q) || (c.nomeFantasia || '').toLowerCase().includes(q) || (c.contatoNome || '').toLowerCase().includes(q)) : clientes
     return list.slice(0, 50)
   }, [clientes, indSearch])
   const indCliente = clientes.find(c => c.id === indSelectedId) ?? null

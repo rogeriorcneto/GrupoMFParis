@@ -1628,12 +1628,29 @@ export async function deleteMensagemAutomacao(id: number): Promise<void> {
 // FUNÇÃO PARA PROCESSAR REGRAS E CRIAR TAREFAS
 // ============================================
 
+function tarefaPendenteEquivalenteExiste(
+  tarefas: Tarefa[],
+  clienteId: number,
+  titulo: string,
+  data: string,
+  tipo: string
+): boolean {
+  return tarefas.some(t =>
+    t.status === 'pendente' &&
+    t.clienteId === clienteId &&
+    t.titulo === titulo &&
+    t.data === data &&
+    t.tipo === tipo
+  )
+}
+
 export async function processarRegrasAutomacao(
   clienteId: number,
   toStage: string,
   fromStage: string,
   vendedorId: number,
-  nomeCliente: string
+  nomeCliente: string,
+  tarefasExistentes?: Tarefa[]
 ): Promise<Tarefa[]> {
   const tarefasCriadas: Tarefa[] = []
   
@@ -1663,19 +1680,29 @@ export async function processarRegrasAutomacao(
       const titulo = (regra.acao?.titulo || '').replace(/\{cliente\}/g, nomeCliente)
       const descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
       
+      const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
+      const tipoTarefa = regra.acao?.tipo || 'outro'
+
+      // Evitar duplicatas: mesma tarefa pendente já existe?
+      if (tarefasExistentes?.length &&
+          tarefaPendenteEquivalenteExiste(tarefasExistentes, clienteId, titulo, dataTarefa, tipoTarefa)) {
+        console.log(`[Automação] Pulando tarefa duplicada: "${titulo}" para cliente ${clienteId}`)
+        continue
+      }
+
       // Criar a tarefa
       const novaTarefa = await insertTarefa({
         titulo,
         descricao,
-        data: dataDaqui(regra.acao?.diasPrazo || 7),
+        data: dataTarefa,
         hora: regra.acao?.horaPadrao || '10:00',
-        tipo: regra.acao?.tipo || 'outro',
+        tipo: tipoTarefa,
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
         clienteId,
         vendedorId
       })
-      
+
       tarefasCriadas.push(novaTarefa)
     }
   } catch (err) {
@@ -1692,7 +1719,8 @@ export async function processarRegrasTarefaConcluida(
   tarefaConcluida: Tarefa,
   etapaCliente: string,
   nomeCliente: string,
-  vendedorId: number
+  vendedorId: number,
+  tarefasExistentes?: Tarefa[]
 ): Promise<Tarefa[]> {
   const tarefasCriadas: Tarefa[] = []
 
@@ -1746,13 +1774,21 @@ export async function processarRegrasTarefaConcluida(
 
       const titulo = (regra.acao?.titulo || '').replace(/\{cliente\}/g, nomeCliente)
       const descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
+      const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
+      const tipoTarefa = regra.acao?.tipo || 'outro'
+
+      if (tarefasExistentes?.length &&
+          tarefaPendenteEquivalenteExiste(tarefasExistentes, tarefaConcluida.clienteId, titulo, dataTarefa, tipoTarefa)) {
+        console.log(`[Automação] Pulando tarefa duplicada: "${titulo}" para cliente ${tarefaConcluida.clienteId}`)
+        continue
+      }
 
       const novaTarefa = await insertTarefa({
         titulo,
         descricao,
-        data: dataDaqui(regra.acao?.diasPrazo || 7),
+        data: dataTarefa,
         hora: regra.acao?.horaPadrao || undefined,
-        tipo: regra.acao?.tipo || 'outro',
+        tipo: tipoTarefa,
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
         clienteId: tarefaConcluida.clienteId,

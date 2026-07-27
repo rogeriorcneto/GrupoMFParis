@@ -53,7 +53,7 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) 
   const [searchCliente, setSearchCliente] = React.useState('')
   const clientesFiltrados = React.useMemo(() => {
     const q = searchCliente.toLowerCase().trim()
-    const list = q ? clientes.filter(c => c.razaoSocial.toLowerCase().includes(q) || (c.enderecoCidade || '').toLowerCase().includes(q)) : clientes
+    const list = q ? clientes.filter(c => c.razaoSocial.toLowerCase().includes(q) || (c.nomeFantasia || '').toLowerCase().includes(q) || (c.enderecoCidade || '').toLowerCase().includes(q)) : clientes
     return list.slice(0, 50)
   }, [clientes, searchCliente])
 

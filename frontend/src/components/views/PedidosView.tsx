@@ -90,7 +90,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 
   React.useEffect(() => {
     if (tipoPedido === 'bonificacao') {
-      setItensPedido(prev => prev.map(i => ({ ...i, preco: 0 })))
+      setItensPedido(prev => prev.map(i => ({ ...i, preco: 1 })))
     }
   }, [tipoPedido])
 
@@ -104,8 +104,8 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     const numeroProposta = `PROP-${Date.now().toString().slice(-6)}`
     try {
       await gerarPropostaPDF(clienteAlvo, itensPedido, observacoes, loggedUser.nome, numeroProposta, { formaPagamento, tipoFrete })
-      if (onMoverCliente && clienteAlvo.etapa !== 'proposta') {
-        onMoverCliente(clienteAlvo.id, 'proposta', { valorProposta: totalPedido, dataProposta: new Date().toISOString().split('T')[0] })
+      if (onMoverCliente) {
+        onMoverCliente(clienteAlvo.id, 'negociacao', { valorProposta: totalPedido, dataProposta: new Date().toISOString().split('T')[0] })
       }
       showToast?.('success', `Proposta ${numeroProposta} gerada com sucesso!`)
     } catch {
@@ -426,7 +426,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     <p className="text-xs font-medium text-gray-400 flex-shrink-0 w-20 text-right">/kg</p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 w-28 justify-end">
                       {noCarrinho ? (
-                        <input type="number" min={1} value={qtd} onChange={e => setItemQtd(produto, Math.max(1, parseInt(e.target.value) || 1))} onFocus={e => e.target.select()}
+                        <input type="number" min={0.01} step={0.01} value={qtd} onChange={e => setItemQtd(produto, parseFloat(e.target.value) || 0)} onFocus={e => e.target.select()}
                           className="w-16 text-center font-bold text-xs text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 py-1" />
                       ) : (
                         <button onClick={() => setItemQtd(produto, 1)} className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold rounded-lg transition-colors">+ Adicionar</button>
@@ -471,7 +471,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                         </div>
                       </div>
                       <div className="flex items-center flex-shrink-0">
-                        <input type="number" min={1} value={item.quantidade} onChange={e => setItemQtd(produtos.find(p => p.id === item.produtoId)!, Math.max(1, parseInt(e.target.value) || 1))} onFocus={e => e.target.select()}
+                        <input type="number" min={0.01} step={0.01} value={item.quantidade} onChange={e => setItemQtd(produtos.find(p => p.id === item.produtoId)!, parseFloat(e.target.value) || 0)} onFocus={e => e.target.select()}
                           className="w-16 text-center text-sm font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400 py-1" />
                       </div>
                       <div className="text-right flex-shrink-0 w-16">

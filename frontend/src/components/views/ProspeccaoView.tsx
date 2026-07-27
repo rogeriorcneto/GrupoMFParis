@@ -250,7 +250,7 @@ const ProspeccaoView: React.FC<{
   const filteredLeads = clientes.filter((c) => {
     const q = query.trim().toLowerCase()
     if (!q) return true
-    return c.razaoSocial.toLowerCase().includes(q) || c.contatoNome.toLowerCase().includes(q) || c.cnpj.includes(q)
+    return c.razaoSocial.toLowerCase().includes(q) || (c.nomeFantasia || '').toLowerCase().includes(q) || c.contatoNome.toLowerCase().includes(q) || c.cnpj.includes(q)
   })
 
   const leadInteracoes = selectedLead ? interacoes.filter((i) => i.clienteId === selectedLead.id) : []

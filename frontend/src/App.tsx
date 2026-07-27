@@ -16,7 +16,7 @@ import { useDarkMode } from './hooks/useDarkMode'
 import { useClienteForm } from './hooks/useClienteForm'
 import { useFunilActions } from './hooks/useFunilActions'
 import { logger } from './utils/logger'
-import { disconnectUserWhatsApp } from './lib/botApi'
+import { disconnectUserWhatsApp, sendTempoTelaBeat } from './lib/botApi'
 import LoginScreen from './components/LoginScreen'
 import Sidebar, { viewsPermitidas } from './components/Sidebar'
 import TopBar from './components/TopBar'
@@ -52,6 +52,29 @@ function _startSegment(id: number) {
   localStorage.setItem(`crm_segment_start_${id}`, new Date().toISOString())
 }
 
+async function _syncToBackend(id: number) {
+  const segKey = `crm_segment_start_${id}`
+  const secsKey = `crm_active_secs_${id}`
+  const segStart = localStorage.getItem(segKey)
+  const segDur = segStart
+    ? Math.max(0, Math.floor((Date.now() - new Date(segStart).getTime()) / 1000))
+    : 0
+  const prevSecs = parseInt(localStorage.getItem(secsKey) || '0', 10)
+  const duracaoSegundos = prevSecs + segDur
+  if (duracaoSegundos <= 0) return
+  const fim = new Date().toISOString()
+  const inicio = new Date(Date.now() - duracaoSegundos * 1000).toISOString()
+  localStorage.removeItem(segKey)
+  localStorage.removeItem(secsKey)
+  try {
+    await sendTempoTelaBeat(id, inicio, fim, duracaoSegundos)
+    _startSegment(id)
+  } catch {
+    // se falhar, reacumula para tentar no próximo batimento
+    localStorage.setItem(secsKey, String(duracaoSegundos))
+  }
+}
+
 function startActiveTimer(vendedorId: number) {
   if (_activeTimerId !== null) stopActiveTimer()
   _activeVendedorId = vendedorId
@@ -70,18 +93,17 @@ function startActiveTimer(vendedorId: number) {
 
   const onVisibility = () => {
     if (!_activeVendedorId) return
-    if (document.hidden) _flushSegment(_activeVendedorId)
+    if (document.hidden) _syncToBackend(_activeVendedorId)
     else _startSegment(_activeVendedorId)
   }
   document.addEventListener('visibilitychange', onVisibility)
 
-  // Flush every 10s as a safety net (e.g. before browser kills the page)
+  // Send heartbeat every 1 minute while the CRM is visible
   _activeTimerId = window.setInterval(() => {
     if (_activeVendedorId && !document.hidden) {
-      _flushSegment(_activeVendedorId)
-      _startSegment(_activeVendedorId)
+      _syncToBackend(_activeVendedorId)
     }
-  }, 10_000)
+  }, 60_000)
 
   // Store cleanup so stopActiveTimer can remove the listener
   ;(startActiveTimer as any)._cleanup = () => {
@@ -90,7 +112,7 @@ function startActiveTimer(vendedorId: number) {
 }
 
 function stopActiveTimer() {
-  if (_activeVendedorId) _flushSegment(_activeVendedorId)
+  if (_activeVendedorId) _syncToBackend(_activeVendedorId)
   if (_activeTimerId !== null) { clearInterval(_activeTimerId); _activeTimerId = null }
   if (typeof (startActiveTimer as any)._cleanup === 'function') {
     ;(startActiveTimer as any)._cleanup()

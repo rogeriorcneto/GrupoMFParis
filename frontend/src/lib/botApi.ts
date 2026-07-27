@@ -554,3 +554,102 @@ export async function fetchCnpjViaBackend(cnpj: string): Promise<any | null> {
     return null
   }
 }
+
+/** Envia um batimento de tempo de tela (1 minuto ativo) */
+export async function sendTempoTelaBeat(
+  vendedorId: number,
+  inicio: string,
+  fim: string,
+  duracaoSegundos: number
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/tempo-tela/beat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendedorId, inicio, fim, duracaoSegundos }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao enviar batimento' }
+  }
+}
+
+export interface TempoTelaRelatorioItem {
+  vendedorId: number
+  nome: string
+  totalSegundos: number
+}
+
+export interface TempoTelaRelatorioResponse {
+  periodo: { dataInicio: string; dataFim: string }
+  relatorio: TempoTelaRelatorioItem[]
+}
+
+/** Busca relatório de tempo de tela (gerente) */
+export async function fetchTempoTelaRelatorio(
+  dataInicio: string,
+  dataFim: string
+): Promise<TempoTelaRelatorioResponse & { error?: string }> {
+  try {
+    const res = await authFetch(
+      `${BOT_URL}/api/tempo-tela/relatorio?dataInicio=${encodeURIComponent(dataInicio)}&dataFim=${encodeURIComponent(dataFim)}`
+    )
+    return await res.json()
+  } catch (err: any) {
+    return { periodo: { dataInicio, dataFim }, relatorio: [], error: err?.message || 'Erro ao buscar relatório' }
+  }
+}
+
+export interface RoleplayMsg { role: 'user' | 'assistant'; content: string; ts: number }
+export interface RoleplaySession {
+  id: string
+  modulo: string
+  perfilId: string
+  msgs: RoleplayMsg[]
+  duracao: number
+  nota: number | null
+  feedback: string
+  createdAt: string
+}
+
+/** Salva uma sessão de roleplay no backend */
+export async function saveRoleplaySession(
+  vendedorId: number,
+  sessao: RoleplaySession,
+  perfilNome?: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const feedbackParsed = (() => {
+      try { return JSON.parse(sessao.feedback) } catch { return sessao.feedback }
+    })()
+    const res = await authFetch(`${BOT_URL}/api/roleplay/sessao`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vendedorId,
+        modulo: sessao.modulo,
+        perfilId: sessao.perfilId,
+        perfilNome: perfilNome || sessao.perfilId,
+        mensagens: sessao.msgs,
+        duracaoSegundos: sessao.duracao,
+        nota: sessao.nota ?? 0,
+        feedback: feedbackParsed,
+      }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao salvar sessão' }
+  }
+}
+
+/** Busca histórico de roleplay do vendedor */
+export async function fetchRoleplayHistory(
+  vendedorId: number
+): Promise<{ sessoes: any[]; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/roleplay/historico?vendedorId=${encodeURIComponent(vendedorId)}`)
+    return await res.json()
+  } catch (err: any) {
+    return { sessoes: [], error: err?.message || 'Erro ao buscar histórico' }
+  }
+}

@@ -406,7 +406,7 @@ describe('database.ts — mappers (tested via exported functions)', () => {
   // ─── fetchWhatsAppMessages ───
 
   describe('fetchWhatsAppMessages', () => {
-    it('cleans numero and fetches', async () => {
+    it('cleans numero and fetches by variations', async () => {
       const chain = resetChain()
       chain.limit = vi.fn().mockResolvedValue({
         data: [{
@@ -420,9 +420,10 @@ describe('database.ts — mappers (tested via exported functions)', () => {
       expect(result[0].numero).toBe('5531999990000')
       expect(result[0].clienteId).toBe(10)
       expect(result[0].direcao).toBe('enviada')
-      expect(chain.eq).toHaveBeenCalled()
-      const eqArgs = chain.eq.mock.calls[0]
-      expect(eqArgs[1]).toBe('31999990000')
+      expect(chain.in).toHaveBeenCalled()
+      const inArgs = chain.in.mock.calls[0]
+      expect(inArgs[0]).toBe('numero')
+      expect(inArgs[1]).toEqual(['5531999990000', '553199990000'])
     })
   })
 

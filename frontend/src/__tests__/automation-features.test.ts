@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock do Supabase
-const mockSupabase = {
+const mockSupabase = vi.hoisted(() => ({
   from: vi.fn(() => ({
     select: vi.fn(() => ({
       eq: vi.fn(() => ({
@@ -32,7 +32,7 @@ const mockSupabase = {
     update: vi.fn(() => Promise.resolve({ error: null })),
     delete: vi.fn(() => Promise.resolve({ error: null }))
   }))
-}
+}))
 
 vi.mock('../lib/supabase', () => ({
   supabase: mockSupabase
@@ -85,16 +85,25 @@ describe('Automação de Tarefas - Database Functions', () => {
         }
       }
 
+      mockSupabase.from.mockReturnValue({
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(() => Promise.resolve({ data: { id: 99, ...novaRegra }, error: null }))
+          }))
+        }))
+      })
+
       const resultado = await db.insertRegraAutomacao(novaRegra)
       expect(resultado).toBeDefined()
       expect(resultado.id).toBeDefined()
     })
 
     it('deve atualizar status ativa/inativa', async () => {
-      const updateSpy = vi.fn(() => Promise.resolve({ error: null }))
-      mockSupabase.from.mockReturnValue({
-        update: updateSpy,
+      const updateSpy = vi.fn(() => ({
         eq: vi.fn(() => Promise.resolve({ error: null }))
+      }))
+      mockSupabase.from.mockReturnValue({
+        update: updateSpy
       })
 
       await db.updateRegraAutomacao(1, { ativa: false })
@@ -102,10 +111,11 @@ describe('Automação de Tarefas - Database Functions', () => {
     })
 
     it('deve excluir regra', async () => {
-      const deleteSpy = vi.fn(() => Promise.resolve({ error: null }))
-      mockSupabase.from.mockReturnValue({
-        delete: deleteSpy,
+      const deleteSpy = vi.fn(() => ({
         eq: vi.fn(() => Promise.resolve({ error: null }))
+      }))
+      mockSupabase.from.mockReturnValue({
+        delete: deleteSpy
       })
 
       await db.deleteRegraAutomacao(1)
@@ -150,6 +160,14 @@ describe('Automação de Tarefas - Database Functions', () => {
         }
       }
 
+      mockSupabase.from.mockReturnValue({
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(() => Promise.resolve({ data: { id: 99, ...novaMensagem }, error: null }))
+          }))
+        }))
+      })
+
       const resultado = await db.insertMensagemAutomacao(novaMensagem)
       expect(resultado).toBeDefined()
     })
@@ -182,6 +200,11 @@ describe('Automação de Tarefas - Database Functions', () => {
               or: vi.fn(() => Promise.resolve({ data: mockRegras, error: null }))
             }))
           }))
+        })),
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(() => Promise.resolve({ data: { id: 99, titulo: 'Tarefa teste', descricao: '', data: '2025-01-01', hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', cliente_id: 1, vendedor_id: 1 }, error: null }))
+          }))
         }))
       })
 
@@ -203,6 +226,11 @@ describe('Automação de Tarefas - Database Functions', () => {
             eq: vi.fn(() => ({
               or: vi.fn(() => Promise.resolve({ data: [mockRegras[0]], error: null }))
             }))
+          }))
+        })),
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({
+            single: vi.fn(() => Promise.resolve({ data: { id: 99, titulo: 'Tarefa teste', descricao: '', data: '2025-01-01', hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'media', cliente_id: 1, vendedor_id: 1 }, error: null }))
           }))
         }))
       })

@@ -22,6 +22,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { callAI } from '../../lib/gemini'
 import type { AIMessage } from '../../lib/gemini'
+import { saveRoleplaySession, fetchRoleplayHistory } from '../../lib/botApi'
 import type { Vendedor, Produto } from '../../types'
 
 interface MsgChat {
@@ -109,8 +110,19 @@ export default function TreinamentoView({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    const saved = localStorage.getItem(`treinamentos_v2_${vendedor.id}`)
-    if (saved) setHistorico(JSON.parse(saved))
+    fetchRoleplayHistory(vendedor.id).then(r => {
+      if (!r.sessoes) return
+      setHistorico(r.sessoes.map((s: any) => ({
+        id: String(s.id),
+        modulo: s.modulo || '',
+        perfilId: s.perfil_id || '',
+        msgs: Array.isArray(s.mensagens) ? s.mensagens : [],
+        duracao: s.duracao_segundos || 0,
+        nota: s.nota ?? null,
+        feedback: typeof s.feedback === 'string' ? s.feedback : JSON.stringify(s.feedback || {}),
+        createdAt: s.created_at,
+      })))
+    })
   }, [vendedor.id])
 
   useEffect(() => {
@@ -232,7 +244,8 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
     }
     const novoHist = [sessao, ...historico]
     setHistorico(novoHist)
-    localStorage.setItem(`treinamentos_v2_${vendedor.id}`, JSON.stringify(novoHist))
+    const perfil = PERFIS.find(p => p.id === perfilId)
+    try { await saveRoleplaySession(vendedor.id, sessao, perfil?.nome) } catch { /* mantém localmente */ }
     setLoading(false)
   }
 

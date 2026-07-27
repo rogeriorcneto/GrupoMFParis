@@ -221,7 +221,8 @@ export function useFunilActions({
         toStage,
         fromStage,
         cliente?.vendedorId || loggedUser?.id || 0,
-        nome
+        nome,
+        tarefas
       )
       
       if (tarefasCriadas.length > 0) {

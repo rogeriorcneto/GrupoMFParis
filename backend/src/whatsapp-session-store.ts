@@ -14,6 +14,8 @@ export async function useSupabaseAuthState(prefix = 'bot', options?: { fresh?: b
   state: AuthenticationState
   saveCreds: () => Promise<void>
   clearSession: () => Promise<void>
+  saveLidMap: (map: Map<string, string>) => Promise<void>
+  loadLidMap: () => Promise<Map<string, string>>
 }> {
   // Prefix all keys so each session (bot, user_1, user_2, ...) is isolated
   const pfx = (key: string) => `${prefix}:${key}`
@@ -95,9 +97,28 @@ export async function useSupabaseAuthState(prefix = 'bot', options?: { fresh?: b
     else log.info(`🗑️ Sessão WhatsApp (${prefix}) removida do Supabase`)
   }
 
+  // ── LID map persistence (survives reconnects) ─────────────────────────────
+
+  const LID_MAP_KEY = 'lid_map'
+
+  const saveLidMap = async (map: Map<string, string>) => {
+    const obj = Object.fromEntries(map.entries())
+    await writeData(LID_MAP_KEY, obj)
+  }
+
+  const loadLidMap = async (): Promise<Map<string, string>> => {
+    const data = await readData(LID_MAP_KEY)
+    if (data && typeof data === 'object') {
+      return new Map(Object.entries(data))
+    }
+    return new Map()
+  }
+
   return {
     state: { creds, keys },
     saveCreds,
     clearSession,
+    saveLidMap,
+    loadLidMap,
   }
 }

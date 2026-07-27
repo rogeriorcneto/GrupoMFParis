@@ -681,10 +681,11 @@ export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'c
 
 export async function fetchWhatsAppMessages(numero: string, limit = 100): Promise<WhatsAppMessage[]> {
   const cleanNum = formatBrazilianPhone(numero.replace(/\D/g, ''))
+  const variations = generateBrazilianPhoneVariations(cleanNum)
   const { data, error } = await supabase
     .from('whatsapp_messages')
     .select('*')
-    .eq('numero', cleanNum)
+    .in('numero', variations)
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error) throw error
@@ -806,4 +807,127 @@ export async function updateJobStatus(id: number, status: string, erro?: string)
   if (erro) updates.erro = erro
   const { error } = await supabase.from('jobs_automacao').update(updates).eq('id', id)
   if (error) log.error({ error }, 'Erro updateJobStatus')
+}
+
+// ============================================
+// TEMPO DE TELA
+// ============================================
+
+export interface TempoTelaRow {
+  id: number
+  vendedor_id: number
+  inicio: string
+  fim: string
+  duracao_segundos: number
+  data: string
+  created_at: string
+}
+
+export async function insertTempoTelaBeat(
+  vendedorId: number,
+  inicio: string,
+  fim: string,
+  duracaoSegundos: number
+): Promise<TempoTelaRow | null> {
+  if (!vendedorId || duracaoSegundos <= 0) return null
+  const data = inicio.slice(0, 10)
+  const { data: row, error } = await supabase
+    .from('tempo_tela')
+    .insert({
+      vendedor_id: vendedorId,
+      inicio,
+      fim,
+      duracao_segundos: duracaoSegundos,
+      data,
+    })
+    .select()
+    .single()
+  if (error) {
+    log.error({ error }, 'Erro insertTempoTelaBeat')
+    throw error
+  }
+  return row || null
+}
+
+export async function fetchTempoTelaPorPeriodo(
+  dataInicio: string,
+  dataFim: string
+): Promise<TempoTelaRow[]> {
+  const { data, error } = await supabase
+    .from('tempo_tela')
+    .select('*')
+    .gte('data', dataInicio)
+    .lte('data', dataFim)
+    .order('data', { ascending: true })
+  if (error) throw error
+  return data || []
+}
+
+// ============================================
+// ROLEPLAY
+// ============================================
+
+export interface RoleplaySessionRow {
+  id: number
+  vendedor_id: number
+  modulo: string | null
+  perfil_id: string | null
+  perfil_nome: string | null
+  mensagens: any
+  duracao_segundos: number
+  nota: number | null
+  feedback: any
+  data: string
+  created_at: string
+  updated_at: string
+}
+
+export async function insertRoleplaySession(
+  vendedorId: number,
+  sessao: {
+    modulo?: string
+    perfilId?: string
+    perfilNome?: string
+    mensagens: any[]
+    duracaoSegundos: number
+    nota: number
+    feedback: any
+  }
+): Promise<RoleplaySessionRow | null> {
+  if (!vendedorId) return null
+  const { data: row, error } = await supabase
+    .from('roleplay_sessions')
+    .insert({
+      vendedor_id: vendedorId,
+      modulo: sessao.modulo || null,
+      perfil_id: sessao.perfilId || null,
+      perfil_nome: sessao.perfilNome || null,
+      mensagens: sessao.mensagens || [],
+      duracao_segundos: sessao.duracaoSegundos,
+      nota: sessao.nota,
+      feedback: sessao.feedback,
+      data: new Date().toISOString().slice(0, 10),
+    })
+    .select()
+    .single()
+  if (error) {
+    log.error({ error }, 'Erro insertRoleplaySession')
+    throw error
+  }
+  return row || null
+}
+
+export async function fetchRoleplaySessionsByVendedor(
+  vendedorId: number,
+  limit = 200
+): Promise<RoleplaySessionRow[]> {
+  if (!vendedorId) return []
+  const { data, error } = await supabase
+    .from('roleplay_sessions')
+    .select('*')
+    .eq('vendedor_id', vendedorId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
 }

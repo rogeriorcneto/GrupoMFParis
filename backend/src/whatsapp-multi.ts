@@ -694,11 +694,51 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
   log.info(`📱 Iniciando conexão WhatsApp para vendedor ${vendedorId}...`)
 
+  let saveLidMap: ((map: Map<string, string>) => Promise<void>) | undefined
+
   try {
     // Tentar restaurar sessão existente; se não houver, gerar creds frescas (QR novo)
-    const { state, saveCreds, clearSession } = await useSupabaseAuthState(`user_${vendedorId}`)
+    const { state, saveCreds, clearSession, saveLidMap: persistLidMap, loadLidMap } = await useSupabaseAuthState(`user_${vendedorId}`)
     const hasSavedCreds = !!state.creds.registered
     log.info(`🔑 Vendedor ${vendedorId}: sessão salva=${hasSavedCreds}`)
+
+    // Restaurar mapeamento LID→JID persistido para resolver mensagens logo após reconexão
+    try {
+      session.lidMap = await loadLidMap()
+      log.info(`🔑 Vendedor ${vendedorId}: lidMap restaurado=${session.lidMap.size} entradas`)
+    } catch (lidErr) {
+      log.warn({ err: lidErr }, `Falha ao carregar lidMap para vendedor ${vendedorId}`)
+      session.lidMap = new Map()
+    }
+    saveLidMap = async (map) => {
+      try {
+        await persistLidMap(map)
+      } catch (err) {
+        log.warn({ err }, `Falha ao salvar lidMap do vendedor ${vendedorId}`)
+      }
+    }
+
+    const setLidMap = (lid: string, phoneJid: string) => {
+      session.lidMap.set(lid, phoneJid)
+      saveLidMap?.(session.lidMap).catch(() => {})
+
+      // Migrate messages that arrived before the LID could be resolved
+      const lidMsgs = session.messageStore.get(lid)
+      if (lidMsgs && lidMsgs.length > 0) {
+        let phoneMsgs = session.messageStore.get(phoneJid)
+        if (!phoneMsgs) {
+          phoneMsgs = []
+          session.messageStore.set(phoneJid, phoneMsgs)
+        }
+        for (const m of lidMsgs) {
+          if (!phoneMsgs.find(x => x.id === m.id)) {
+            phoneMsgs.push(m)
+          }
+        }
+        session.messageStore.delete(lid)
+        log.info(`📦 Migradas ${lidMsgs.length} mensagens de ${lid} para ${phoneJid}`)
+      }
+    }
 
     const { version } = await fetchVersionSafe()
     log.info({ version }, `📡 Versão Baileys para vendedor ${vendedorId}`)
@@ -811,6 +851,14 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
         }
 
+        // Persist credentials as soon as the connection opens to ensure the
+        // session survives container restarts / reconnects.
+        try {
+          await saveCreds()
+        } catch (credsErr) {
+          log.warn({ err: credsErr }, `Falha ao salvar credenciais em abertura para vendedor ${vendedorId}`)
+        }
+
         log.info(`📊 [reconnect-check] vendedor=${vendedorId} messageStore=${session.messageStore.size} lidMap=${session.lidMap.size} contacts=${session.contacts.length} chats=${session.chats.length}`)
 
         // Pré-popular cache do DB para sobreviver a reconexões
@@ -820,6 +868,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             const dbMsgs = await fetchRecentWhatsAppMessagesByVendedor(vendedorId, 50, 50)
             if (dbMsgs.length > 0) {
               for (const m of dbMsgs) {
+                // Skip rows saved with unresolved LIDs or other invalid numero values
+                if (!m.numero || !/^\d{10,14}$/.test(m.numero)) continue
                 const jid = `${m.numero}@s.whatsapp.net`
                 const cached: CachedMessage = {
                   id: `db-${m.id}`,
@@ -850,9 +900,13 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     })
 
     // Save credentials on update
-    sock.ev.on('creds.update', () => {
+    sock.ev.on('creds.update', async () => {
       if (sessions.get(vendedorId) === session && session.sock === sock) {
-        return saveCreds()
+        try {
+          await saveCreds()
+        } catch (err) {
+          log.warn({ err }, `Falha ao salvar credenciais do vendedor ${vendedorId}`)
+        }
       }
     })
 
@@ -1012,7 +1066,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
         if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
           const normalizedPn = senderPn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-          session.lidMap.set(raw, normalizedPn)
+          setLidMap(raw, normalizedPn)
           log.info(`🔗 LID mapped via senderPn: ${raw} → ${normalizedPn}`)
           return normalizedPn
         }
@@ -1020,7 +1074,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         const participant = msg.key?.participant || (msg as any).participant
         if (participant && participant.endsWith('@s.whatsapp.net')) {
           const normalizedPn = participant.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-          session.lidMap.set(raw, normalizedPn)
+          setLidMap(raw, normalizedPn)
           log.info(`🔗 LID mapped: ${raw} → ${normalizedPn}`)
           return normalizedPn
         }
@@ -1028,7 +1082,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         for (const c of session.contacts) {
           if ((c as any).lid === raw) {
             const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
-            session.lidMap.set(raw, phoneJid)
+            setLidMap(raw, phoneJid)
             log.info(`🔗 LID mapped via contacts: ${raw} → ${phoneJid}`)
             return phoneJid
           }
@@ -1040,7 +1094,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             const pn = await lidMapping.getPNForLID(raw)
             if (pn && pn.endsWith('@s.whatsapp.net')) {
               const normalizedPn = pn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-              session.lidMap.set(raw, normalizedPn)
+              setLidMap(raw, normalizedPn)
               log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalizedPn}`)
               return normalizedPn
             }
@@ -1102,6 +1156,14 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         // Cache in memory for chat display — under resolved JID only
         cacheMessage(session, jid, msg)
         log.info(`📩 [msg] CACHED in session for jid=${jid}, store size=${session.messageStore.get(jid)?.length || 0}`)
+
+        // Skip DB persistence for unresolved LID messages — they would be saved with a
+        // non-phone "numero" that the CRM cannot search by. They remain cached in-memory
+        // and will be persisted once the LID is mapped to a phone JID.
+        if (jid.endsWith('@lid')) {
+          log.warn(`📩 [msg] SKIPPED DB save — unresolved LID: ${jid}`)
+          continue
+        }
 
         // Save incoming messages to DB
         const messageId = msg.key?.id

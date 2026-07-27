@@ -465,7 +465,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       ps = allPs.filter(p => p.tipo === 'venda' || !p.tipo)
     }
     if (ps.length === 0) return null
-    const sorted = [...ps].sort((a, b) => new Date(b.dataCriacao).getTime() - new Date(a.dataCriacao).getTime())
+    const dataMaisRecente = (p: Pedido) => p.dataAprovacao || p.dataEnvio || p.dataCriacao || ''
+    const sorted = [...ps].sort((a, b) => new Date(dataMaisRecente(b)).getTime() - new Date(dataMaisRecente(a)).getTime())
     const latest = sorted[0]
     const amostras = ps.filter(p => p.tipo === 'bonificacao')
     const vendas = ps.filter(p => p.tipo === 'venda' || !p.tipo)

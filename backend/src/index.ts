@@ -922,6 +922,92 @@ app.get('/api/vendedores/historico', requireAuth, requireGerente, async (req, re
   }
 })
 
+// ─── Tempo de Tela ───
+
+app.post('/api/tempo-tela/beat', requireAuth, rateLimit(120, 60_000), async (req, res) => {
+  try {
+    const userId = (req as any).userId
+    const { vendedorId, inicio, fim, duracaoSegundos } = req.body || {}
+    if (!vendedorId || !inicio || !fim || !Number.isFinite(duracaoSegundos) || duracaoSegundos <= 0) {
+      res.status(400).json({ error: 'Dados de batimento inválidos' })
+      return
+    }
+    const { insertTempoTelaBeat } = await import('./database.js')
+    const row = await insertTempoTelaBeat(Number(vendedorId), String(inicio), String(fim), Number(duracaoSegundos))
+    res.json({ success: true, data: row })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao salvar batimento de tempo de tela')
+    res.status(500).json({ error: err?.message || 'Erro ao salvar batimento' })
+  }
+})
+
+app.get('/api/tempo-tela/relatorio', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const { fetchTempoTelaPorPeriodo, fetchVendedores } = await import('./database.js')
+    const hoje = new Date().toISOString().slice(0, 10)
+    const dataInicio = String(req.query.dataInicio || hoje)
+    const dataFim = String(req.query.dataFim || hoje)
+    const [vendedores, batidas] = await Promise.all([
+      fetchVendedores(),
+      fetchTempoTelaPorPeriodo(dataInicio, dataFim),
+    ])
+    const map = new Map<number, number>()
+    for (const b of batidas) {
+      const total = map.get(b.vendedor_id) || 0
+      map.set(b.vendedor_id, total + b.duracao_segundos)
+    }
+    const relatorio = vendedores.map(v => ({
+      vendedorId: v.id,
+      nome: v.nome,
+      totalSegundos: map.get(v.id) || 0,
+    })).sort((a, b) => b.totalSegundos - a.totalSegundos)
+    res.json({ periodo: { dataInicio, dataFim }, relatorio })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar relatório de tempo de tela')
+    res.status(500).json({ error: err?.message || 'Erro ao buscar relatório' })
+  }
+})
+
+// ─── Roleplay ───
+
+app.post('/api/roleplay/sessao', requireAuth, async (req, res) => {
+  try {
+    const userId = (req as any).userId
+    const { vendedorId, modulo, perfilId, perfilNome, mensagens, duracaoSegundos, nota, feedback } = req.body || {}
+    if (!vendedorId || !mensagens) {
+      res.status(400).json({ error: 'Dados da sessão inválidos' })
+      return
+    }
+    const { insertRoleplaySession } = await import('./database.js')
+    const row = await insertRoleplaySession(Number(vendedorId), {
+      modulo: String(modulo || ''),
+      perfilId: String(perfilId || ''),
+      perfilNome: String(perfilNome || ''),
+      mensagens: Array.isArray(mensagens) ? mensagens : [],
+      duracaoSegundos: Number(duracaoSegundos || 0),
+      nota: Number(nota || 0),
+      feedback,
+    })
+    res.json({ success: true, data: row })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao salvar sessão de roleplay')
+    res.status(500).json({ error: err?.message || 'Erro ao salvar sessão' })
+  }
+})
+
+app.get('/api/roleplay/historico', requireAuth, async (req, res) => {
+  try {
+    const vendedorId = parseInt(req.query.vendedorId as string, 10)
+    if (isNaN(vendedorId)) { res.status(400).json({ error: 'ID inválido' }); return }
+    const { fetchRoleplaySessionsByVendedor } = await import('./database.js')
+    const sessoes = await fetchRoleplaySessionsByVendedor(vendedorId)
+    res.json({ sessoes })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar histórico de roleplay')
+    res.status(500).json({ error: err?.message || 'Erro ao buscar histórico' })
+  }
+})
+
 // ─── Config Routes (somente gerente) ───
 
 app.get('/api/config', requireAuth, requireGerente, async (req, res) => {

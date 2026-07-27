@@ -2,6 +2,7 @@ import React from 'react'
 import { SparklesIcon } from '@heroicons/react/24/outline'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade } from '../../types'
+import { fetchTempoTelaRelatorio, type TempoTelaRelatorioItem } from '../../lib/botApi'
 import { stageLabels } from '../../utils/constants'
 import { calcularDuracoesEtapas, diasEtapaAtual, EtapaDuracao } from '../../utils/etapas'
 
@@ -10,6 +11,20 @@ const periodoLabels: Record<Periodo, string> = { '7d': '7 dias', '30d': '30 dias
 
 const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], interacoes: Interacao[], produtos?: Produto[], pedidos?: Pedido[], tarefas?: Tarefa[], atividades?: Atividade[] }> = ({ clientes, vendedores, interacoes, produtos = [], pedidos = [], tarefas = [], atividades = [] }) => {
   const [periodo, setPeriodo] = React.useState<Periodo>('total')
+
+  const hoje = new Date().toISOString().slice(0, 10)
+  const [ttDataInicio, setTtDataInicio] = React.useState(hoje)
+  const [ttDataFim, setTtDataFim] = React.useState(hoje)
+  const [ttRelatorio, setTtRelatorio] = React.useState<TempoTelaRelatorioItem[]>([])
+  const [ttLoading, setTtLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    setTtLoading(true)
+    fetchTempoTelaRelatorio(ttDataInicio, ttDataFim)
+      .then(r => setTtRelatorio(r.relatorio))
+      .catch(() => setTtRelatorio([]))
+      .finally(() => setTtLoading(false))
+  }, [ttDataInicio, ttDataFim])
 
   const threshold = React.useMemo(() => {
     if (periodo === 'total') return null
@@ -621,6 +636,62 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
                 <div className="overflow-x-auto"><table className="min-w-full"><thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Cliente</th><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Motivo</th><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Etapa Anterior</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Valor</th><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Data</th><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Vendedor</th></tr></thead><tbody>{perdidos.map(c => { const vend = vendedores.find(v => v.id === c.vendedorId); return (<tr key={c.id} className="border-b border-gray-100"><td className="py-2 px-3 text-sm font-medium text-gray-900">{c.razaoSocial}</td><td className="py-2 px-3"><span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">{catLabels[c.categoriaPerda || 'outro']}</span>{c.motivoPerda && <p className="text-xs text-gray-500 mt-0.5">{c.motivoPerda}</p>}</td><td className="py-2 px-3 text-sm text-gray-700">{stageLabels[c.etapaAnterior || ''] || '—'}</td><td className="py-2 px-3 text-sm text-right font-medium text-red-600">R$ {(c.valorEstimado || 0).toLocaleString('pt-BR')}</td><td className="py-2 px-3 text-sm text-gray-700">{c.dataPerda ? new Date(c.dataPerda).toLocaleDateString('pt-BR') : '—'}</td><td className="py-2 px-3 text-sm text-gray-700">{vend?.nome || '—'}</td></tr>) })}</tbody></table></div>
               </div>
             )}
+          </div>
+        )
+      })()}
+
+      {/* Tempo de Tela */}
+      {(() => {
+        const formatar = (seg: number) => {
+          const h = Math.floor(seg / 3600)
+          const m = Math.floor((seg % 3600) / 60)
+          const s = seg % 60
+          return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
+        }
+        const chartData = ttRelatorio.map(r => ({ name: r.nome.split(' ')[0], horas: Math.round((r.totalSegundos / 3600) * 100) / 100 }))
+        return (
+          <div className="space-y-6 mt-8">
+            <h2 className="text-xl font-bold text-gray-900">⏱️ Tempo de Tela</h2>
+            <div className="flex flex-wrap gap-4 items-end">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Data início</label>
+                <input type="date" value={ttDataInicio} onChange={e => setTtDataInicio(e.target.value)} className="border border-gray-300 rounded-apple px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Data fim</label>
+                <input type="date" value={ttDataFim} onChange={e => setTtDataFim(e.target.value)} className="border border-gray-300 rounded-apple px-3 py-2 text-sm" />
+              </div>
+              {ttLoading && <span className="text-sm text-gray-500">Carregando...</span>}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">⏳ Horas por Vendedor</h3>
+                {chartData.length > 0 ? (<ResponsiveContainer width="100%" height={250}><BarChart data={chartData}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(v: any) => [`${v} h`, 'Horas']} /><Bar dataKey="horas" fill="#3B82F6" name="Horas" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>) : <p className="text-sm text-gray-400 text-center py-12">{ttLoading ? 'Carregando...' : 'Nenhum dado no período'}</p>}
+              </div>
+              <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Detalhamento</h3>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Vendedor</th>
+                        <th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Tempo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ttRelatorio.length > 0 ? ttRelatorio.map((r, i) => (
+                        <tr key={i} className="border-b border-gray-100">
+                          <td className="py-2 px-3 text-sm font-medium text-gray-900">{r.nome}</td>
+                          <td className="py-2 px-3 text-sm text-right text-blue-600 font-bold">{formatar(r.totalSegundos)}</td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={2} className="py-4 text-sm text-gray-400 text-center">{ttLoading ? 'Carregando...' : 'Nenhum dado no período'}</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         )
       })()}

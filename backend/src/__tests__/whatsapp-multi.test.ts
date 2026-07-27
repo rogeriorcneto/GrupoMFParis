@@ -15,6 +15,8 @@ vi.mock('../whatsapp-session-store.js', () => ({
     state: { creds: {}, keys: {} },
     saveCreds: vi.fn(),
     clearSession: vi.fn(),
+    saveLidMap: vi.fn(),
+    loadLidMap: vi.fn().mockResolvedValue(new Map()),
   }),
 }))
 vi.mock('../database.js', () => ({

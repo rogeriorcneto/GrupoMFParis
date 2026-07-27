@@ -3,19 +3,37 @@ import { renderHook, act } from '@testing-library/react'
 import { sampleVendedor, sampleCliente, sampleTarefa } from './mocks/supabase-mock'
 
 // Mock database module
-vi.mock('../lib/database', () => ({
-  updateCliente: vi.fn().mockResolvedValue(undefined),
-  insertCliente: vi.fn().mockImplementation((c: any) => Promise.resolve({ ...c, id: 99 })),
-  insertInteracao: vi.fn().mockImplementation((i: any) => Promise.resolve({ ...i, id: 100 })),
-  insertHistoricoEtapa: vi.fn().mockResolvedValue(undefined),
-  insertAtividade: vi.fn().mockImplementation((a: any) => Promise.resolve({ ...a, id: 200 })),
-  insertTarefa: vi.fn().mockImplementation((t: any) => Promise.resolve({ ...t, id: 300 })),
-  insertJob: vi.fn().mockImplementation((j: any) => Promise.resolve({ ...j, id: 400, status: 'pendente' })),
-  insertJobsBatch: vi.fn().mockImplementation((jobs: any[]) => Promise.resolve(jobs.map((j: any, i: number) => ({ ...j, id: 400 + i })))),
-  updateJobStatus: vi.fn().mockResolvedValue(undefined),
-  updateCampanhaStatus: vi.fn().mockResolvedValue(undefined),
-  moverClienteAtomico: vi.fn().mockResolvedValue(undefined),
-}))
+vi.mock('../lib/database', () => {
+  const insertTarefa = vi.fn().mockImplementation((t: any) => Promise.resolve({ ...t, id: 300 }))
+  return {
+    updateCliente: vi.fn().mockResolvedValue(undefined),
+    insertCliente: vi.fn().mockImplementation((c: any) => Promise.resolve({ ...c, id: 99 })),
+    insertInteracao: vi.fn().mockImplementation((i: any) => Promise.resolve({ ...i, id: 100 })),
+    insertHistoricoEtapa: vi.fn().mockResolvedValue(undefined),
+    insertAtividade: vi.fn().mockImplementation((a: any) => Promise.resolve({ ...a, id: 200 })),
+    insertTarefa,
+    insertJob: vi.fn().mockImplementation((j: any) => Promise.resolve({ ...j, id: 400, status: 'pendente' })),
+    insertJobsBatch: vi.fn().mockImplementation((jobs: any[]) => Promise.resolve(jobs.map((j: any, i: number) => ({ ...j, id: 400 + i })))),
+    updateJobStatus: vi.fn().mockResolvedValue(undefined),
+    updateCampanhaStatus: vi.fn().mockResolvedValue(undefined),
+    moverClienteAtomico: vi.fn().mockResolvedValue(undefined),
+    processarRegrasAutomacao: vi.fn().mockImplementation(async (_clienteId: number, toStage: string) => {
+      const qtd =
+        toStage === 'amostra' ? 2 :
+        toStage === 'proposta' ? 2 :
+        toStage === 'negociacao' ? 1 :
+        toStage === 'follow_up' ? 3 :
+        0
+      const criadas = []
+      for (let i = 0; i < qtd; i++) {
+        const t = await insertTarefa({ titulo: `Tarefa ${i}`, data: '2025-01-01', tipo: 'ligacao', status: 'pendente', clienteId: 1, vendedorId: 1 })
+        criadas.push(t)
+      }
+      return criadas
+    }),
+    processarRegrasTarefaConcluida: vi.fn().mockResolvedValue([]),
+  }
+})
 
 vi.mock('../utils/logger', () => ({
   logger: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
