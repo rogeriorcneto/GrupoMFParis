@@ -713,7 +713,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${notaColor(s.nota || 7)}`}>{s.nota || '?'}</div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{m?.emoji} {m?.titulo}</p>
-                          <p className="text-xs text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · {new Date(s.createdAt).toLocaleDateString('pt-BR')}</p>
+                          <p className="text-xs text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · {new Date(s.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       </div>
                       <ChevronRightIcon className="h-4 w-4 text-gray-300 group-hover:text-primary-500 transition-colors" />
@@ -745,7 +745,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                     <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold ${notaColor(sessaoHistoricoVer.nota || 7)}`}>{sessaoHistoricoVer.nota || '?'}</div>
                     <div>
                       <p className="font-bold text-gray-900 dark:text-gray-100">{m?.emoji} {m?.titulo}</p>
-                      <p className="text-sm text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(sessaoHistoricoVer.duracao / 60)}min · {new Date(sessaoHistoricoVer.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+                      <p className="text-sm text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(sessaoHistoricoVer.duracao / 60)}min · {new Date(sessaoHistoricoVer.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                   </div>
                   {fb?.feedback_geral && (
