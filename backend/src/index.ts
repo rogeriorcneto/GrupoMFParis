@@ -24,6 +24,8 @@ import { placesRouter } from './routes/places.js'
 import { traficoRouter } from './routes/trafico.js'
 import { leadsRfRouter } from './routes/leads-rf.js'
 import { vendedoresRouter } from './routes/vendedores.js'
+import { missoesRouter } from './routes/missoes.js'
+import { mapsRouter } from './routes/maps.js'
 import twilioRouter from './routes/twilio.js'
 import twilioVoiceAiRouter from './routes/twilio-voice-ai.js'
 import ttsRouter from './routes/tts.js'
@@ -1227,6 +1229,8 @@ app.use('/api/places', requireAuth, placesRouter)
 app.use('/api/trafico', requireAuth, requireGerente, traficoRouter)
 app.use('/api/leads-rf', requireAuth, leadsRfRouter)
 app.use('/api/vendedores', requireAuth, requireGerente, vendedoresRouter)
+app.use('/api/missoes', missoesRouter)
+app.use('/api/maps', requireAuth, mapsRouter)
 
 // ─── Pedido → Omie (automático ao aprovar) ───
 

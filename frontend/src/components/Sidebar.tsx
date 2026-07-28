@@ -6,6 +6,7 @@ import {
   ChartBarIcon,
   PaperAirplaneIcon,
   MapIcon,
+  FlagIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
   SparklesIcon,
@@ -35,13 +36,13 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens'],
-  vendedor: ['ia', 'funil', 'clientes', 'tarefas', 'templates', 'treinamento'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens'],
+  vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento'],
   sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
-  { id: 'dashboard', icon: HomeIcon, label: 'Visão Geral' },
+  { id: 'dashboard', icon: HomeIcon, label: 'Dashboard' },
   { id: 'ia', icon: SparklesIcon, label: '🤖 Assistente IA' },
   { id: 'ia-contexto', icon: DocumentTextIcon, label: '📚 Contexto IA' },
   { id: 'criar-automacao', icon: CogIcon, label: '⚙️ Criar Automação' },
@@ -50,6 +51,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'clientes', icon: UserGroupIcon, label: 'Clientes' },
   { id: 'pedidos', icon: ShoppingCartIcon, label: 'Pedidos' },
   { id: 'tarefas', icon: ChartBarIcon, label: 'Tarefas' },
+  { id: 'missao', icon: FlagIcon, label: 'Missões' },
   { id: 'mapa', icon: MapIcon, label: 'Mapa' },
   { id: 'configuracao-tarefas', icon: Cog6ToothIcon, label: '⚙️ Automação Tarefas' },
   { id: 'configuracao-mensagens', icon: ChatBubbleLeftIcon, label: '💬 Mensagens Auto' },

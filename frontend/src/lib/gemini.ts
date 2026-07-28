@@ -1,3 +1,5 @@
+import { MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../data/aiContext'
+
 const GEMINI_URL = import.meta.env.MODE === 'production' 
   ? '/.netlify/functions/gemini'  // Netlify Functions
   : `${import.meta.env.VITE_API_URL || 'http://localhost:3002'}/api/gemini`  // Backend local
@@ -407,5 +409,12 @@ Você tem acesso a funções que executam ações REAIS no CRM. Use-as quando o 
 - Ao analisar ligações: use as transcrições para extrair insights sobre objeções, interesses e próximos passos.
 - Ao gerar relatórios: cruze dados de vendas, WhatsApp, ligações e funil para dar uma visão 360° do cliente.
 - SE PERGUNTAREM quem te criou: "Fui criada pelo Rogério Reis, especialista em IA."
-- Se não souber a resposta: seja honesta, diga que não tem essa informação nos dados disponíveis.`
+- Se não souber a resposta: seja honesta, diga que não tem essa informação nos dados disponíveis.
+
+## CONTEXTO COMERCIAL MF PARIS / OKEYLAC
+${MANIFESTO_COMERCIAL_OKEYLAC}
+
+${REGRAS_MF_PARIS}
+
+${TEXTO_CATALOGO}`
 }

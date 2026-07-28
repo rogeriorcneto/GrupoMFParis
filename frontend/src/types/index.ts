@@ -1,4 +1,4 @@
-export type ViewType = 'dashboard' | 'funil' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia' | 'ia-contexto' | 'criar-automacao' | 'omie' | 'trafico' | 'baseleads' | 'licitacoes' | 'treinamento' | 'configuracao-tarefas' | 'configuracao-mensagens'
+export type ViewType = 'dashboard' | 'funil' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia' | 'ia-contexto' | 'criar-automacao' | 'omie' | 'trafico' | 'baseleads' | 'licitacoes' | 'treinamento' | 'configuracao-tarefas' | 'configuracao-mensagens' | 'missao'
 
 export interface HistoricoEtapa {
   etapa: string
@@ -247,6 +247,34 @@ export interface Produto {
   ncm?: string
 }
 
+export interface ModuloTreinamento {
+  id: number
+  ordem: number
+  ativo: boolean
+  titulo: string
+  descricao: string
+  objetivo: string
+  emoji: string
+  dificuldade: 'Iniciante' | 'Médio' | 'Avançado'
+  promptInstrucoes: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PerfilTreinamento {
+  id: number
+  ordem: number
+  ativo: boolean
+  nome: string
+  negocio: string
+  emoji: string
+  dor: string
+  estilo: string
+  promptInstrucoes: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface DashboardMetrics {
   totalLeads: number
   leadsAtivos: number
@@ -319,7 +347,7 @@ export interface Tarefa {
   descricao?: string
   data: string
   hora?: string
-  tipo: 'ligacao' | 'reuniao' | 'email' | 'whatsapp' | 'follow-up' | 'outro'
+  tipo: 'ligacao' | 'reuniao' | 'email' | 'whatsapp' | 'follow-up' | 'outro' | 'visita'
   status: 'pendente' | 'concluida'
   prioridade: 'alta' | 'media' | 'baixa'
   clienteId?: number
@@ -329,6 +357,19 @@ export interface Tarefa {
   reagendamentos?: TarefaReagendamento[]
   origemAutomacaoId?: number // ID da regra de automação que criou esta tarefa
   conclusao?: string
+  // Missão Comercial
+  missaoId?: number
+  diaMissao?: number
+  ordem?: number
+  chegadaEm?: string
+  saidaEm?: string
+  localizacaoChegada?: { lat: number; lon: number }
+  localizacaoSaida?: { lat: number; lon: number }
+  resultado?: string
+  interesse?: 'muito_interessado' | 'interessado' | 'pouco' | 'nao'
+  produtosApresentados?: string[]
+  proximosPassos?: string
+  amostrasEntregues?: number
 }
 
 export interface Vendedor {
@@ -437,4 +478,39 @@ export interface ChatMensagem {
   content: string
   readAt: string | null
   createdAt: string
+}
+
+export interface Missao {
+  id: number
+  nome: string
+  objetivo?: string
+  vendedorId?: number
+  estado?: string
+  cidades?: string[]
+  dataSaida: string
+  dataRetorno: string
+  veiculo?: string
+  hotel?: string
+  status: 'planejada' | 'em_andamento' | 'concluida' | 'cancelada'
+  metas?: {
+    visitas?: number
+    amostras?: number
+    novosClientes?: number
+    volume?: number
+  }
+  custoEstimado?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface MissaoDespesa {
+  id: number
+  missaoId: number
+  vendedorId?: number
+  tipo: 'combustivel' | 'pedagio' | 'hotel' | 'alimentacao' | 'estacionamento' | 'outro'
+  valor: number
+  data: string
+  comprovanteUrl?: string
+  observacao?: string
+  createdAt?: string
 }

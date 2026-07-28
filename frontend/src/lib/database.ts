@@ -3,7 +3,8 @@ import type {
   Cliente, Interacao, Tarefa, Produto, Pedido, Vendedor,
   Template, TemplateMsg, Cadencia, CadenciaStep, Campanha,
   JobAutomacao, Atividade, Notificacao, HistoricoEtapa, ItemPedido,
-  PropostaHistorico, ChatMensagem
+  PropostaHistorico, ChatMensagem,
+  ModuloTreinamento, PerfilTreinamento
 } from '../types'
 
 // ============================================
@@ -1018,6 +1019,118 @@ export async function updateProduto(id: number, p: Partial<Produto>): Promise<Pr
 
 export async function deleteProduto(id: number): Promise<void> {
   const { error } = await withAuthRetry(async () => { const r = await supabase.from('produtos').delete().eq('id', id); return r })
+  if (error) throw error
+}
+
+// ============================================
+// MÓDULOS E PERFIS DE TREINAMENTO
+// ============================================
+
+function moduloTreinamentoFromDb(row: any): ModuloTreinamento {
+  return {
+    id: row.id,
+    ordem: row.ordem ?? 0,
+    ativo: row.ativo ?? true,
+    titulo: row.titulo ?? '',
+    descricao: row.descricao ?? '',
+    objetivo: row.objetivo ?? '',
+    emoji: row.emoji ?? '',
+    dificuldade: row.dificuldade ?? 'Médio',
+    promptInstrucoes: row.prompt_instrucoes ?? '',
+    createdAt: row.created_at ?? '',
+    updatedAt: row.updated_at ?? '',
+  }
+}
+
+function perfilTreinamentoFromDb(row: any): PerfilTreinamento {
+  return {
+    id: row.id,
+    ordem: row.ordem ?? 0,
+    ativo: row.ativo ?? true,
+    nome: row.nome ?? '',
+    negocio: row.negocio ?? '',
+    emoji: row.emoji ?? '',
+    dor: row.dor ?? '',
+    estilo: row.estilo ?? '',
+    promptInstrucoes: row.prompt_instrucoes ?? '',
+    createdAt: row.created_at ?? '',
+    updatedAt: row.updated_at ?? '',
+  }
+}
+
+export async function fetchModulosTreinamento(): Promise<ModuloTreinamento[]> {
+  const { data, error } = await supabase.from('modulos_treinamento').select('*').order('ordem')
+  if (error) throw error
+  return (data || []).map(moduloTreinamentoFromDb)
+}
+
+export async function fetchPerfisTreinamento(): Promise<PerfilTreinamento[]> {
+  const { data, error } = await supabase.from('perfis_treinamento').select('*').order('ordem')
+  if (error) throw error
+  return (data || []).map(perfilTreinamentoFromDb)
+}
+
+export async function insertModuloTreinamento(p: Omit<ModuloTreinamento, 'id' | 'createdAt' | 'updatedAt'>): Promise<ModuloTreinamento> {
+  const { data, error } = await supabase.from('modulos_treinamento').insert({
+    ordem: p.ordem, ativo: p.ativo, titulo: p.titulo, descricao: p.descricao,
+    objetivo: p.objetivo, emoji: p.emoji, dificuldade: p.dificuldade,
+    prompt_instrucoes: p.promptInstrucoes,
+  }).select().single()
+  if (error) throw error
+  return moduloTreinamentoFromDb(data)
+}
+
+export async function insertPerfilTreinamento(p: Omit<PerfilTreinamento, 'id' | 'createdAt' | 'updatedAt'>): Promise<PerfilTreinamento> {
+  const { data, error } = await supabase.from('perfis_treinamento').insert({
+    ordem: p.ordem, ativo: p.ativo, nome: p.nome, negocio: p.negocio,
+    emoji: p.emoji, dor: p.dor, estilo: p.estilo,
+    prompt_instrucoes: p.promptInstrucoes,
+  }).select().single()
+  if (error) throw error
+  return perfilTreinamentoFromDb(data)
+}
+
+export async function updateModuloTreinamento(id: number, p: Partial<Omit<ModuloTreinamento, 'id' | 'createdAt' | 'updatedAt'>>): Promise<ModuloTreinamento | undefined> {
+  const row: any = {}
+  if (p.ordem !== undefined) row.ordem = p.ordem
+  if (p.ativo !== undefined) row.ativo = p.ativo
+  if (p.titulo !== undefined) row.titulo = p.titulo
+  if (p.descricao !== undefined) row.descricao = p.descricao
+  if (p.objetivo !== undefined) row.objetivo = p.objetivo
+  if (p.emoji !== undefined) row.emoji = p.emoji
+  if (p.dificuldade !== undefined) row.dificuldade = p.dificuldade
+  if (p.promptInstrucoes !== undefined) row.prompt_instrucoes = p.promptInstrucoes
+  const { error } = await supabase.from('modulos_treinamento').update(row).eq('id', id)
+  if (error) throw error
+  const { data, error: fetchErr } = await supabase.from('modulos_treinamento').select('*').eq('id', id).single()
+  if (fetchErr || !data) return undefined
+  return moduloTreinamentoFromDb(data)
+}
+
+export async function updatePerfilTreinamento(id: number, p: Partial<Omit<PerfilTreinamento, 'id' | 'createdAt' | 'updatedAt'>>): Promise<PerfilTreinamento | undefined> {
+  const row: any = {}
+  if (p.ordem !== undefined) row.ordem = p.ordem
+  if (p.ativo !== undefined) row.ativo = p.ativo
+  if (p.nome !== undefined) row.nome = p.nome
+  if (p.negocio !== undefined) row.negocio = p.negocio
+  if (p.emoji !== undefined) row.emoji = p.emoji
+  if (p.dor !== undefined) row.dor = p.dor
+  if (p.estilo !== undefined) row.estilo = p.estilo
+  if (p.promptInstrucoes !== undefined) row.prompt_instrucoes = p.promptInstrucoes
+  const { error } = await supabase.from('perfis_treinamento').update(row).eq('id', id)
+  if (error) throw error
+  const { data, error: fetchErr } = await supabase.from('perfis_treinamento').select('*').eq('id', id).single()
+  if (fetchErr || !data) return undefined
+  return perfilTreinamentoFromDb(data)
+}
+
+export async function deleteModuloTreinamento(id: number): Promise<void> {
+  const { error } = await supabase.from('modulos_treinamento').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function deletePerfilTreinamento(id: number): Promise<void> {
+  const { error } = await supabase.from('perfis_treinamento').delete().eq('id', id)
   if (error) throw error
 }
 

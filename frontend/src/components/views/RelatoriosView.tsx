@@ -1,8 +1,8 @@
 import React from 'react'
-import { SparklesIcon } from '@heroicons/react/24/outline'
+import { SparklesIcon, FlagIcon } from '@heroicons/react/24/outline'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade } from '../../types'
-import { fetchTempoTelaRelatorio, type TempoTelaRelatorioItem } from '../../lib/botApi'
+import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade, Missao } from '../../types'
+import { fetchTempoTelaRelatorio, type TempoTelaRelatorioItem, authFetch, BOT_URL } from '../../lib/botApi'
 import { stageLabels } from '../../utils/constants'
 import { calcularDuracoesEtapas, diasEtapaAtual, EtapaDuracao } from '../../utils/etapas'
 
@@ -25,6 +25,15 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
       .catch(() => setTtRelatorio([]))
       .finally(() => setTtLoading(false))
   }, [ttDataInicio, ttDataFim])
+
+  const [missoes, setMissoes] = React.useState<Missao[]>([])
+
+  React.useEffect(() => {
+    authFetch(`${BOT_URL}/api/missoes?status=em_andamento`)
+      .then(r => r.json())
+      .then(r => setMissoes(r.data || []))
+      .catch(() => {})
+  }, [])
 
   const threshold = React.useMemo(() => {
     if (periodo === 'total') return null
@@ -195,6 +204,23 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
           <button onClick={gerarRelatorioPDF} className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-apple hover:from-blue-700 hover:to-indigo-700 shadow-apple-sm flex items-center gap-2 font-medium text-sm transition-all">
             <SparklesIcon className="h-4 w-4" /> Relatório IA
           </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4 flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-orange-100 text-orange-600"><FlagIcon className="h-5 w-5" /></div>
+          <div>
+            <p className="text-xs text-gray-500 uppercase">Missões em andamento</p>
+            <p className="text-xl font-bold text-gray-900">{missoes.length}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4 flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600"><FlagIcon className="h-5 w-5" /></div>
+          <div>
+            <p className="text-xs text-gray-500 uppercase">Custo estimado</p>
+            <p className="text-xl font-bold text-gray-900">R$ {missoes.reduce((s, m) => s + (m.custoEstimado || 0), 0).toLocaleString('pt-BR')}</p>
+          </div>
         </div>
       </div>
 

@@ -12,6 +12,7 @@ const viewTitles: Record<ViewType, string> = {
   mapa: 'Mapa de Leads',
   prospeccao: 'Prospecção',
   tarefas: 'Tarefas e Agenda',
+  missao: 'Missões Comerciais',
   social: 'Busca por Redes Sociais',
   integracoes: 'Integrações',
   equipe: 'Equipe de Vendas',

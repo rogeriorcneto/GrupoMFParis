@@ -1,15 +1,19 @@
 import React from 'react'
-import type { Cliente, Vendedor } from '../../types'
-import { buscarEmpresasGoogleMaps, importarLugarComoLead, GooglePlace } from '../../lib/botApi'
+import type { Cliente, Vendedor, Tarefa, Pedido } from '../../types'
+import { buscarEmpresasGoogleMaps, importarLugarComoLead, GooglePlace, authFetch, BOT_URL } from '../../lib/botApi'
 import { MapPinIcon, BuildingStorefrontIcon, StarIcon, PhoneIcon, GlobeAltIcon, PlusIcon, MagnifyingGlassIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
+import MapaComercial from '../MapaComercial'
 
 interface MapaViewProps {
   clientes: Cliente[]
+  vendedores: Vendedor[]
+  tarefas: Tarefa[]
+  pedidos: Pedido[]
   loggedUser: Vendedor | null
   showToast?: (type: 'success' | 'error' | 'info', message: string) => void
 }
 
-type TabType = 'leads' | 'prospeccao'
+type TabType = 'leads' | 'prospeccao' | 'comercial'
 
 const TIPOS_NEGOCIO = [
   { value: '', label: 'Qualquer tipo' },
@@ -26,16 +30,28 @@ const TIPOS_NEGOCIO = [
   { value: 'shopping_mall', label: 'Shopping Center' },
 ]
 
+const GOOGLE_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY
+
 async function geocodeAddress(address: string): Promise<{ lat: number; lon: number } | null> {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`
-  const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
-  const data: Array<{ lat: string; lon: string }> = await res.json()
-  if (!data || data.length === 0) return null
-  return { lat: Number(data[0].lat), lon: Number(data[0].lon) }
+  try {
+    const res = await authFetch(`${BOT_URL}/api/maps/geocode?address=${encodeURIComponent(address)}`)
+    const data = await res.json() as { results?: { location: { lat: number; lng: number } }[] }
+    const loc = data.results?.[0]?.location
+    if (!loc) return null
+    return { lat: loc.lat, lon: loc.lng }
+  } catch {
+    return null
+  }
 }
 
-const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) => {
-  const [activeTab, setActiveTab] = React.useState<TabType>('leads')
+const MapaView: React.FC<MapaViewProps> = ({ clientes, vendedores, tarefas, pedidos, loggedUser, showToast }) => {
+  const [activeTab, setActiveTab] = React.useState<TabType>(loggedUser?.cargo === 'vendedor' ? 'comercial' : 'leads')
+
+  React.useEffect(() => {
+    if (loggedUser?.cargo === 'vendedor' && activeTab !== 'comercial') {
+      setActiveTab('comercial')
+    }
+  }, [loggedUser])
 
   // ─── Índice rápido para detectar "já no CRM" ───
   const crmIndex = React.useMemo(() => {
@@ -133,8 +149,8 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) 
     }
   }
 
-  const iframeSrc = coords
-    ? `https://www.openstreetmap.org/export/embed.html?layer=mapnik&marker=${coords.lat}%2C${coords.lon}&zoom=15`
+  const iframeSrc = coords && GOOGLE_KEY
+    ? `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_KEY}&q=${coords.lat}%2C${coords.lon}`
     : null
 
   // ─── Tab Prospecção (Google Maps) ───
@@ -153,17 +169,17 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) 
 
   // Mapa de pins: usa o centróide dos resultados (média das coords)
   const prospMapSrc = React.useMemo(() => {
+    if (!GOOGLE_KEY) return null
     const comCoords = prospResultados.filter(p => p.geometry?.location?.lat && p.geometry?.location?.lng)
     if (comCoords.length === 0) return null
     const lat = comCoords.reduce((s, p) => s + p.geometry.location.lat, 0) / comCoords.length
-    const lon = comCoords.reduce((s, p) => s + p.geometry.location.lng, 0) / comCoords.length
+    const lng = comCoords.reduce((s, p) => s + p.geometry.location.lng, 0) / comCoords.length
     // Usa o primeiro resultado como marcador central se só tiver 1
     if (comCoords.length === 1) {
-      return `https://www.openstreetmap.org/export/embed.html?layer=mapnik&marker=${lat}%2C${lon}&zoom=14`
+      return `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_KEY}&q=${lat}%2C${lng}`
     }
     // Centróide sem marcador — mostra a região geral
-    return `https://www.openstreetmap.org/export/embed.html?layer=mapnik&bbox=${
-      (lon - 0.05).toFixed(5)}%2C${(lat - 0.05).toFixed(5)}%2C${(lon + 0.05).toFixed(5)}%2C${(lat + 0.05).toFixed(5)}`
+    return `https://www.google.com/maps/embed/v1/view?key=${GOOGLE_KEY}&center=${lat}%2C${lng}&zoom=14`
   }, [prospResultados])
 
   const buscarEmpresas = async (pageToken?: string) => {
@@ -248,21 +264,33 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) 
           <p className="mt-1 text-sm text-gray-600">Visualize leads e prospecte novos negócios.</p>
         </div>
         <div className="flex bg-gray-100 rounded-lg p-1">
+          {loggedUser?.cargo !== 'vendedor' && (
+            <>
+              <button
+                onClick={() => setActiveTab('leads')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'leads' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Meus Leads
+              </button>
+              <button
+                onClick={() => setActiveTab('prospeccao')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === 'prospeccao' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Prospecção
+              </button>
+            </>
+          )}
           <button
-            onClick={() => setActiveTab('leads')}
+            onClick={() => setActiveTab('comercial')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'leads' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              activeTab === 'comercial' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            Meus Leads
-          </button>
-          <button
-            onClick={() => setActiveTab('prospeccao')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'prospeccao' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Prospecção
+            Mapa Comercial
           </button>
         </div>
       </div>
@@ -328,11 +356,11 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) 
                   {coords && (
                     <a
                       className="text-xs text-primary-700 hover:text-primary-900 underline inline-block"
-                      href={`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lon}#map=16/${coords.lat}/${coords.lon}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lon}`}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Abrir no OpenStreetMap ↗
+                      Abrir no Google Maps ↗
                     </a>
                   )}
                 </div>
@@ -592,6 +620,15 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, loggedUser, showToast }) 
             </div>
           )}
         </div>
+      )}
+      {activeTab === 'comercial' && (
+        <MapaComercial
+          clientes={clientes}
+          vendedores={vendedores}
+          tarefas={tarefas}
+          pedidos={pedidos}
+          loggedUser={loggedUser}
+        />
       )}
     </div>
   )

@@ -28,4 +28,5 @@ export const CONFIG = {
     return !!(this.email.host && this.email.user && this.email.pass)
   },
   googlePlacesKey: envOptional('GOOGLE_PLACES_API_KEY') || '',
+  googleMapsApiKey: envOptional('GOOGLE_MAPS_API_KEY') || '',
 }

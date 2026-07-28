@@ -5,11 +5,12 @@ import type {
   TemplateMsg, Cadencia, Campanha, JobAutomacao, Pedido
 } from '../types'
 import {
-  DashboardView, AprovacaoView, FunilView, ClientesView, TarefasView,
+  DashboardView, DashboardVendedorView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView,
   ProdutosView, PedidosView, AssistenteIAView, IAContextoView, CriarAutomacaoView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
-  ConfiguracaoTarefasView, ConfiguracaoMensagensView
+  ConfiguracaoTarefasView, ConfiguracaoMensagensView,
+  MissaoView
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
@@ -94,7 +95,7 @@ export default function AppRouter({
 
   switch (activeView) {
     case 'dashboard':
-      return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
+      return <DashboardVendedorView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
     case 'aprovacao':
       return <AprovacaoView
         pedidos={pedidos}
@@ -483,7 +484,7 @@ export default function AppRouter({
     case 'automacoes':
       return <AutomacoesView clientes={clientes} vendedores={vendedores} templates={templatesMsgs} loggedUser={loggedUser} showToast={showToast} onAction={handleQuickAction} />
     case 'mapa':
-      return <MapaView clientes={clientes} loggedUser={loggedUser} showToast={showToast} />
+      return <MapaView clientes={clientes} vendedores={vendedores} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} showToast={showToast} />
     case 'prospeccao':
       return (
         <ProspeccaoView
@@ -827,6 +828,8 @@ export default function AppRouter({
       return <IAContextoView loggedUser={loggedUser} />
     case 'criar-automacao':
       return <CriarAutomacaoView loggedUser={loggedUser} />
+    case 'missao':
+      return <MissaoView clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} showToast={showToast} />
     default:
       return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
   }

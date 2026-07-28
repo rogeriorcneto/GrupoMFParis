@@ -75,6 +75,23 @@ export interface Tarefa {
   prioridade: 'alta' | 'media' | 'baixa'
   clienteId?: number
   vendedorId?: number
+  concluidaEm?: string
+  criadoEm?: string
+  reagendamentos?: any[]
+  origemAutomacaoId?: number
+  conclusao?: string
+  missaoId?: number
+  diaMissao?: number
+  ordem?: number
+  chegadaEm?: string
+  saidaEm?: string
+  localizacaoChegada?: { lat: number; lon: number }
+  localizacaoSaida?: { lat: number; lon: number }
+  resultado?: string
+  interesse?: string
+  produtosApresentados?: string[]
+  proximosPassos?: string
+  amostrasEntregues?: number
 }
 
 export interface Produto {
@@ -241,6 +258,23 @@ function tarefaFromDb(row: any): Tarefa {
     prioridade: row.prioridade,
     clienteId: row.cliente_id,
     vendedorId: row.vendedor_id,
+    concluidaEm: row.concluida_em,
+    criadoEm: row.created_at,
+    reagendamentos: row.reagendamentos || [],
+    origemAutomacaoId: row.origem_automacao_id,
+    conclusao: row.conclusao,
+    missaoId: row.missao_id,
+    diaMissao: row.dia_missao,
+    ordem: row.ordem,
+    chegadaEm: row.chegada_em,
+    saidaEm: row.saida_em,
+    localizacaoChegada: row.localizacao_chegada,
+    localizacaoSaida: row.localizacao_saida,
+    resultado: row.resultado,
+    interesse: row.interesse,
+    produtosApresentados: row.produtos_apresentados || [],
+    proximosPassos: row.proximos_passos,
+    amostrasEntregues: row.amostras_entregues,
   }
 }
 
@@ -504,6 +538,14 @@ export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
     titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora,
     tipo: t.tipo, status: t.status, prioridade: t.prioridade,
     cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
+    missao_id: t.missaoId || null, dia_missao: t.diaMissao || null, ordem: t.ordem || null,
+    chegada_em: t.chegadaEm || null, saida_em: t.saidaEm || null,
+    localizacao_chegada: t.localizacaoChegada || null,
+    localizacao_saida: t.localizacaoSaida || null,
+    resultado: t.resultado || null, interesse: t.interesse || null,
+    produtos_apresentados: t.produtosApresentados || [],
+    proximos_passos: t.proximosPassos || null,
+    amostras_entregues: t.amostrasEntregues || 0,
   }).select().single()
   if (error) throw error
   return tarefaFromDb(data)

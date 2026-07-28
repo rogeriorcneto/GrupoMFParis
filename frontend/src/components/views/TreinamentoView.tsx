@@ -19,11 +19,15 @@ import {
   FireIcon,
   ArrowLeftIcon,
   PaperAirplaneIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline'
 import { callAI } from '../../lib/gemini'
 import type { AIMessage } from '../../lib/gemini'
 import { saveRoleplaySession, fetchRoleplayHistory } from '../../lib/botApi'
-import type { Vendedor, Produto } from '../../types'
+import { fetchModulosTreinamento, fetchPerfisTreinamento } from '../../lib/database'
+import { CATALOGO_PRODUTOS, MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../../data/aiContext'
+import type { Vendedor, Produto, ModuloTreinamento, PerfilTreinamento } from '../../types'
+import ConfiguracaoAcademiaView from './ConfiguracaoAcademiaView'
 
 interface MsgChat {
   role: 'user' | 'assistant'
@@ -42,40 +46,37 @@ interface SessaoTreinamento {
   createdAt: string
 }
 
-type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico'
-type ModuloId = 'abertura' | 'qualificacao' | 'objecao_preco' | 'objecao_prazo' | 'amostra' | 'fechamento' | 'pos_venda' | 'livre'
+type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'config'
 
-const MODULOS: { id: ModuloId; titulo: string; desc: string; dif: 'Iniciante' | 'Médio' | 'Avançado'; emoji: string; objetivo: string }[] = [
-  { id: 'abertura', titulo: 'Abertura & Conexão', desc: 'Captar atenção nos primeiros 30s e criar rapport', dif: 'Iniciante', emoji: '📞', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.' },
-  { id: 'qualificacao', titulo: 'Qualificação BANT', desc: 'Descobrir orçamento, autoridade, necessidade e timing', dif: 'Médio', emoji: '🔍', objetivo: 'Objetivo: entender o perfil completo antes de propor.' },
-  { id: 'objecao_preco', titulo: 'Objeção: Preço', desc: 'Lidar com "está caro" e "o concorrente é mais barato"', dif: 'Médio', emoji: '💸', objetivo: 'Objetivo: reverter objeção de preço e avançar.' },
-  { id: 'objecao_prazo', titulo: 'Objeção: Prazo & Frete', desc: 'Negociar prazos de pagamento e condições CIF/FOB', dif: 'Avançado', emoji: '🚚', objetivo: 'Objetivo: fechar condições logísticas favoráveis.' },
-  { id: 'amostra', titulo: 'Solicitação de Amostra', desc: 'Converter interesse em amostra física com data de retorno', dif: 'Médio', emoji: '🧪', objetivo: 'Objetivo: cliente aceita receber amostra com prazo de feedback.' },
-  { id: 'fechamento', titulo: 'Fechamento & Próximo Passo', desc: 'Propor ação concreta sem ser agressivo', dif: 'Avançado', emoji: '🤝', objetivo: 'Objetivo: cliente confirma pedido ou agenda próxima etapa.' },
-  { id: 'pos_venda', titulo: 'Pós-Venda & Fidelização', desc: 'Garantir satisfação e abrir oportunidade de recompra', dif: 'Médio', emoji: '🌟', objetivo: 'Objetivo: cliente satisfeito e nova compra agendada.' },
-  { id: 'livre', titulo: 'Roleplay Livre', desc: 'Simule uma call completa do zero ao fechamento', dif: 'Avançado', emoji: '🎯', objetivo: 'Objetivo: conduzir toda a jornada comercial.' },
+const DEFAULT_MODULES: ModuloTreinamento[] = [
+  { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '📞', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 2, ordem: 1, ativo: true, titulo: 'Qualificação BANT', descricao: 'Descobrir orçamento, autoridade, necessidade e timing', objetivo: 'Objetivo: entender o perfil completo antes de propor.', emoji: '🔍', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 3, ordem: 2, ativo: true, titulo: 'Objeção: Preço', descricao: 'Lidar com "está caro" e "o concorrente é mais barato"', objetivo: 'Objetivo: reverter objeção de preço e avançar.', emoji: '💸', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 4, ordem: 3, ativo: true, titulo: 'Objeção: Prazo & Frete', descricao: 'Negociar prazos de pagamento e condições CIF/FOB', objetivo: 'Objetivo: fechar condições logísticas favoráveis.', emoji: '🚚', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 5, ordem: 4, ativo: true, titulo: 'Solicitação de Amostra', descricao: 'Converter interesse em amostra física com data de retorno', objetivo: 'Objetivo: cliente aceita receber amostra com prazo de feedback.', emoji: '🧪', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 6, ordem: 5, ativo: true, titulo: 'Fechamento & Próximo Passo', descricao: 'Propor ação concreta sem ser agressivo', objetivo: 'Objetivo: cliente confirma pedido ou agenda próxima etapa.', emoji: '🤝', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 7, ordem: 6, ativo: true, titulo: 'Pós-Venda & Fidelização', descricao: 'Garantir satisfação e abrir oportunidade de recompra', objetivo: 'Objetivo: cliente satisfeito e nova compra agendada.', emoji: '🌟', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 8, ordem: 7, ativo: true, titulo: 'Roleplay Livre', descricao: 'Simule uma call completa do zero ao fechamento', objetivo: 'Objetivo: conduzir toda a jornada comercial.', emoji: '🎯', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
 ]
 
-const PERFIS = [
-  { id: 'panificador', nome: 'João da Silva', negocio: 'Panificadora Estrela', emoji: '🥖', dor: 'custo de insumos alto e falta de tempo', estilo: 'direto, impaciente, foco total em preço e prazo de entrega' },
-  { id: 'sorveteiro', nome: 'Carlos Mendes', negocio: 'Sorveteria Gelada', emoji: '🍦', dor: 'qualidade inconsistente dos fornecedores atuais', estilo: 'técnico, detalhista, compara ingredientes e laudos' },
-  { id: 'industrial', nome: 'Márcio Ferreira', negocio: 'Indústria FrioPar', emoji: '🏭', dor: 'processo de compra burocrático e múltiplos aprovadores', estilo: 'corporativo, frio, pede cotação formal e prazo de entrega garantido' },
-  { id: 'confeiteiro', nome: 'Ana Lima', negocio: 'Confeitaria Premium Belle', emoji: '🧁', dor: 'clientes exigentes que pedem produtos especiais', estilo: 'sofisticada, exige excelência, pergunta sobre origem e diferenciais' },
-  { id: 'restaurante', nome: 'Roberto Costa', negocio: 'Restaurante Sabor Mineiro', emoji: '🍽️', dor: 'volume alto mas margem apertada', estilo: 'negociador nato, sempre pede desconto e prazo maior' },
+const DEFAULT_PROFILES: PerfilTreinamento[] = [
+  { id: 1, ordem: 0, ativo: true, nome: 'João da Silva', negocio: 'Panificadora Estrela', emoji: '🥖', dor: 'custo de insumos alto e falta de tempo', estilo: 'direto, impaciente, foco total em preço e prazo de entrega', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 2, ordem: 1, ativo: true, nome: 'Carlos Mendes', negocio: 'Sorveteria Gelada', emoji: '🍦', dor: 'qualidade inconsistente dos fornecedores atuais', estilo: 'técnico, detalhista, compara ingredientes e laudos', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 3, ordem: 2, ativo: true, nome: 'Márcio Ferreira', negocio: 'Indústria FrioPar', emoji: '🏭', dor: 'processo de compra burocrático e múltiplos aprovadores', estilo: 'corporativo, frio, pede cotação formal e prazo de entrega garantido', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 4, ordem: 3, ativo: true, nome: 'Ana Lima', negocio: 'Confeitaria Premium Belle', emoji: '🧁', dor: 'clientes exigentes que pedem produtos especiais', estilo: 'sofisticada, exige excelência, pergunta sobre origem e diferenciais', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 5, ordem: 4, ativo: true, nome: 'Roberto Costa', negocio: 'Restaurante Sabor Mineiro', emoji: '🍽️', dor: 'volume alto mas margem apertada', estilo: 'negociador nato, sempre pede desconto e prazo maior', promptInstrucoes: '', createdAt: '', updatedAt: '' },
 ]
 
-const PRODUTOS_MF_PARIS = [
-  { nome: 'Composto Lácteo Horizonte 400g', categoria: 'Lácteos', destaque: 'Alto rendimento, cremosidade superior', preco: 'R$ 8,90/un', aplicacao: 'Sorvetes, vitaminas, bebidas lácteas', dif: 'Sem gordura trans, enriquecido com vitaminas A e D' },
-  { nome: 'Leite em Pó Integral 200g', categoria: 'Lácteos', destaque: 'Dissolução rápida, sabor suave', preco: 'R$ 12,50/un', aplicacao: 'Panificação, confeitaria, bebidas', dif: 'Origem rastreada, sem conservantes' },
-  { nome: 'Creme de Leite UHT 200ml', categoria: 'Lácteos', destaque: 'Textura firme, não talha no cozimento', preco: 'R$ 5,20/un', aplicacao: 'Molhos, sobremesas, recheios', dif: 'Processado UHT — maior validade e estabilidade' },
-  { nome: 'Açaí Congelado 1kg', categoria: 'Açaí & Frutas', destaque: 'Polpa 100% pura, sem adição de açúcar', preco: 'R$ 22,00/kg', aplicacao: 'Sorveterias, açaí bowls, blends', dif: 'Colheita sazonal controlada, alto teor de antocianinas' },
-  { nome: 'Base Sorvete de Baunilha 1kg', categoria: 'Sorvetes', destaque: 'Rendimento até 3L de sorvete por kg', preco: 'R$ 28,00/kg', aplicacao: 'Sorveterias artesanais e industriais', dif: 'Fácil preparo a frio, sem necessidade de cozimento' },
-  { nome: 'Chocolate em Pó 50% Cacau 200g', categoria: 'Chocolates', destaque: 'Cor intensa, sabor amargo equilibrado', preco: 'R$ 9,80/un', aplicacao: 'Confeitaria, bolos, mousses', dif: 'Processamento alcalino — dissolve sem grumos' },
-  { nome: 'Cobertura de Chocolate ao Leite 1kg', categoria: 'Chocolates', destaque: 'Brilho intenso, snap perfeito', preco: 'R$ 35,00/kg', aplicacao: 'Trufas, picolés, coberturas', dif: 'Temperagem fácil, ponto ideal em 35°C' },
-  { nome: 'Leite Condensado 395g', categoria: 'Lácteos', destaque: 'Cremosidade ideal para doces finos', preco: 'R$ 7,50/un', aplicacao: 'Brigadeiros, quindins, sorvetes', dif: 'Sem gordura vegetal parcialmente hidrogenada' },
-  { nome: 'Mucilon Milho 400g', categoria: 'Cereais', destaque: 'Enriquecido com 11 vitaminas e minerais', preco: 'R$ 10,90/un', aplicacao: 'Papas, vitaminas, produtos infantis', dif: 'Marca reconhecida, alta rotatividade no varejo' },
-  { nome: 'Farinha de Trigo Premium 1kg', categoria: 'Panificação', destaque: 'Alta absorção de água, glúten forte', preco: 'R$ 6,40/kg', aplicacao: 'Pães, massas, pizzas', dif: 'Maturação controlada — produto consistente lote a lote' },
-]
+const PRODUTOS_MF_PARIS = CATALOGO_PRODUTOS.map(p => ({
+  nome: p.nome,
+  categoria: `${p.linha} — ${p.categoria}`,
+  destaque: `Desempenho superior em ${p.aplicacoes.toLowerCase()}`,
+  preco: 'Sob consulta',
+  aplicacao: p.aplicacoes,
+  dif: p.proteina && p.gordura
+    ? `proteína ${p.proteina} e gordura ${p.gordura}`
+    : `formulação ${p.categoria.toLowerCase()} indicada para ${p.aplicacoes.toLowerCase()}`,
+}))
 
 export default function TreinamentoView({
   vendedor,
@@ -87,8 +88,10 @@ export default function TreinamentoView({
   produtos?: Produto[]
 }) {
   const [aba, setAba] = useState<Aba>('home')
-  const [moduloId, setModuloId] = useState<ModuloId | null>(null)
-  const [perfilId, setPerfilId] = useState<string>('panificador')
+  const [modulos, setModulos] = useState<ModuloTreinamento[]>(DEFAULT_MODULES)
+  const [perfis, setPerfis] = useState<PerfilTreinamento[]>(DEFAULT_PROFILES)
+  const [moduloId, setModuloId] = useState<number | null>(DEFAULT_MODULES[0]?.id ?? null)
+  const [perfilId, setPerfilId] = useState<number | null>(DEFAULT_PROFILES[0]?.id ?? null)
   const [msgs, setMsgs] = useState<MsgChat[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -114,8 +117,8 @@ export default function TreinamentoView({
       if (!r.sessoes) return
       setHistorico(r.sessoes.map((s: any) => ({
         id: String(s.id),
-        modulo: s.modulo || '',
-        perfilId: s.perfil_id || '',
+        modulo: s.modulo != null ? String(s.modulo) : '',
+        perfilId: s.perfil_id != null ? String(s.perfil_id) : '',
         msgs: Array.isArray(s.mensagens) ? s.mensagens : [],
         duracao: s.duracao_segundos || 0,
         nota: s.nota ?? null,
@@ -124,6 +127,20 @@ export default function TreinamentoView({
       })))
     })
   }, [vendedor.id])
+
+  useEffect(() => {
+    Promise.all([
+      fetchModulosTreinamento().catch(() => DEFAULT_MODULES),
+      fetchPerfisTreinamento().catch(() => DEFAULT_PROFILES),
+    ]).then(([m, p]) => {
+      const ativosM = m.filter(x => x.ativo).sort((a, b) => a.ordem - b.ordem)
+      const ativosP = p.filter(x => x.ativo).sort((a, b) => a.ordem - b.ordem)
+      setModulos(ativosM)
+      setPerfis(ativosP)
+      setModuloId(prev => (prev && ativosM.find(x => x.id === prev)) ? prev : (ativosM[0]?.id ?? null))
+      setPerfilId(prev => (prev && ativosP.find(x => x.id === prev)) ? prev : (ativosP[0]?.id ?? null))
+    })
+  }, [])
 
   useEffect(() => {
     if (sessaoAtiva) {
@@ -141,10 +158,15 @@ export default function TreinamentoView({
   const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
 
   const sistemaTreinamento = useCallback(() => {
-    const modulo = MODULOS.find(m => m.id === moduloId)
-    const perfil = PERFIS.find(p => p.id === perfilId)
-    const produtosCatalogo = PRODUTOS_MF_PARIS.map(p => `• ${p.nome} — ${p.dif}`).join('\n')
-    return `Você é um CLIENTE em um roleplay de treinamento de vendas para vendedores da MF Paris, distribuidora de alimentos premium.
+    const modulo = modulos.find(m => m.id === moduloId)
+    const perfil = perfis.find(p => p.id === perfilId)
+    const contextoComercial = `${MANIFESTO_COMERCIAL_OKEYLAC}\n\n${REGRAS_MF_PARIS}`
+    const produtosCrmTexto = produtos
+      .map(p => `- ${p.nome} (${p.categoria}) | ${p.descricao || ''} | ${p.preco > 0 ? `R$ ${p.preco.toFixed(2)}/${p.unidade}` : 'preço sob consulta'} | SKU: ${p.sku || '-'} | peso: ${p.pesoKg ?? '-'}kg | ${p.ativo ? 'ativo' : 'inativo'}`)
+      .join('\n')
+    const instrucoesModulo = modulo?.promptInstrucoes ? `INSTRUÇÕES ESPECÍFICAS DESTE MÓDULO:\n${modulo.promptInstrucoes}\n` : ''
+    const instrucoesPerfil = perfil?.promptInstrucoes ? `INSTRUÇÕES ESPECÍFICAS DESTE PERFIL:\n${perfil.promptInstrucoes}\n` : ''
+    return `Você é um CLIENTE em um roleplay de treinamento de vendas para vendedores da MF Paris / Okeylac, distribuidora de alimentos premium.
 
 PERSONAGEM: ${perfil?.nome} (${perfil?.negocio})
 PERFIL: ${perfil?.estilo}
@@ -153,8 +175,11 @@ DOR PRINCIPAL: ${perfil?.dor}
 MÓDULO DO TREINO: "${modulo?.titulo}"
 ${modulo?.objetivo}
 
-CATÁLOGO DE PRODUTOS MF PARIS (você pode mencionar interesse em alguns):
-${produtosCatalogo}
+CATÁLOGO DE PRODUTOS MF PARIS / OKEYLAC (você pode mencionar interesse em alguns):
+${TEXTO_CATALOGO}
+
+PRODUTOS CADASTRADOS NO CRM (referência real de todos os produtos):
+${produtosCrmTexto}
 
 REGRAS DO ROLEPLAY:
 1. Fique SEMPRE no personagem. Não quebre o personagem.
@@ -162,11 +187,16 @@ REGRAS DO ROLEPLAY:
 3. Se o vendedor fizer perguntas inteligentes de qualificação, responda com detalhes do seu negócio.
 4. Se ele apresentar argumentos fracos, mostre resistência.
 5. Se ele apresentar argumentos fortes e benefícios reais, demonstre interesse gradual.
-6. Quando o vendedor digitar "ENCERRAR TREINO", saia do personagem e dê um FEEDBACK DETALHADO em JSON com este formato:
+6. Você conhece os concorrentes do seu segmento e pode comparar preços, mas valoriza resultado, segurança e suporte.
+7. Quando o vendedor digitar "ENCERRAR TREINO", saia do personagem e dê um FEEDBACK DETALHADO em JSON com este formato:
 {"nota": 8, "abertura": 7, "qualificacao": 9, "apresentacao": 8, "objecoes": 7, "fechamento": 8, "pontos_fortes": ["..."], "pontos_melhora": ["..."], "feedback_geral": "..."}
 
-Comece a cena: você acabou de atender o telefone em um momento movimentado do seu dia.`
-  }, [moduloId, perfilId])
+CONTEXTO COMERCIAL E REGRAS QUE OS VENDEDORES SEGUEM (você reage a eles):
+${contextoComercial}
+
+${instrucoesModulo}${instrucoesPerfil}
+Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor da MF Paris / Okeylac. Responda como se estivesse digitando no celular, de forma natural, objetiva e no ritmo de uma conversa por mensagem.`
+  }, [moduloId, perfilId, modulos, perfis, produtos])
 
   const iniciarSessao = async () => {
     if (!moduloId) return
@@ -186,7 +216,7 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
       )
       setMsgs([{ role: 'assistant', content: resp, ts: Date.now() }])
     } catch {
-      setMsgs([{ role: 'assistant', content: '📞 *toca o telefone* Alô?', ts: Date.now() }])
+      setMsgs([{ role: 'assistant', content: '� *nova mensagem* Olá, quem é?', ts: Date.now() }])
     }
     setLoading(false)
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -238,13 +268,13 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
     setNota(notaFinal)
     setFeedback(feedbackFinal)
     const sessao: SessaoTreinamento = {
-      id: Date.now().toString(), modulo: moduloId!, perfilId,
+      id: Date.now().toString(), modulo: String(moduloId), perfilId: String(perfilId),
       msgs: msgsFinal, duracao, nota: notaFinal,
       feedback: feedbackFinal, createdAt: new Date().toISOString()
     }
     const novoHist = [sessao, ...historico]
     setHistorico(novoHist)
-    const perfil = PERFIS.find(p => p.id === perfilId)
+    const perfil = perfis.find(p => p.id === perfilId)
     try { await saveRoleplaySession(vendedor.id, sessao, perfil?.nome) } catch { /* mantém localmente */ }
     setLoading(false)
   }
@@ -313,12 +343,13 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {(['home', 'produtos', 'quiz', 'historico'] as Aba[]).map(a => {
+            {(['home', 'produtos', 'quiz', 'historico', ...(isGerente ? ['config'] : [])] as Aba[]).map(a => {
               const labels: Record<string, { icon: React.ReactNode; label: string }> = {
                 home: { icon: <PlayIcon className="h-4 w-4" />, label: 'Treinar' },
                 produtos: { icon: <BookOpenIcon className="h-4 w-4" />, label: 'Produtos' },
                 quiz: { icon: <SparklesIcon className="h-4 w-4" />, label: 'Quiz IA' },
                 historico: { icon: <ClockIcon className="h-4 w-4" />, label: 'Histórico' },
+                config: { icon: <Cog6ToothIcon className="h-4 w-4" />, label: 'Config' },
               }
               const l = labels[a]
               return (
@@ -355,18 +386,18 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
             <div className="lg:col-span-2 space-y-4">
               <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Módulos de Roleplay</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {MODULOS.map(m => (
+                {modulos.map(m => (
                   <button key={m.id} onClick={() => setModuloId(m.id)}
                     className={`text-left p-4 rounded-xl border-2 transition-all ${moduloId === m.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30 shadow-md' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm'}`}>
                     <div className="flex items-start justify-between mb-2">
                       <span className="text-2xl">{m.emoji}</span>
                       <div className="flex items-center gap-1">
                         {moduloId === m.id && <CheckCircleIcon className="h-4 w-4 text-primary-600" />}
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${difColor(m.dif)}`}>{m.dif}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${difColor(m.dificuldade)}`}>{m.dificuldade}</span>
                       </div>
                     </div>
                     <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm mb-1">{m.titulo}</h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{m.desc}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{m.descricao}</p>
                     <p className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">{m.objetivo}</p>
                   </button>
                 ))}
@@ -380,7 +411,7 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
                   <UserGroupIcon className="h-4 w-4 text-primary-500" />Perfil do Cliente
                 </h3>
                 <div className="space-y-2">
-                  {PERFIS.map(p => (
+                  {perfis.map(p => (
                     <button key={p.id} onClick={() => setPerfilId(p.id)}
                       className={`w-full text-left p-3 rounded-lg border transition-all ${perfilId === p.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                       <div className="flex items-center gap-2">
@@ -419,10 +450,10 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
           {/* Info bar */}
           <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl px-4 py-2.5 border border-gray-200 dark:border-gray-700 shadow-sm flex-shrink-0">
             <div className="flex items-center gap-3">
-              <span className="text-2xl">{PERFIS.find(p => p.id === perfilId)?.emoji}</span>
+              <span className="text-2xl">{perfis.find(p => p.id === perfilId)?.emoji}</span>
               <div>
-                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{PERFIS.find(p => p.id === perfilId)?.nome}</p>
-                <p className="text-xs text-gray-400">{MODULOS.find(m => m.id === moduloId)?.titulo}</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{perfis.find(p => p.id === perfilId)?.nome}</p>
+                <p className="text-xs text-gray-400">{modulos.find(m => m.id === moduloId)?.titulo}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -441,7 +472,7 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
             {msgs.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {m.role === 'assistant' && (
-                  <span className="text-xl mr-2 flex-shrink-0 mt-1">{PERFIS.find(p => p.id === perfilId)?.emoji}</span>
+                  <span className="text-xl mr-2 flex-shrink-0 mt-1">{perfis.find(p => p.id === perfilId)?.emoji}</span>
                 )}
                 <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 shadow-sm rounded-bl-sm'}`}>
                   {m.content}
@@ -453,7 +484,7 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
             ))}
             {loading && (
               <div className="flex justify-start">
-                <span className="text-xl mr-2 flex-shrink-0">{PERFIS.find(p => p.id === perfilId)?.emoji}</span>
+                <span className="text-xl mr-2 flex-shrink-0">{perfis.find(p => p.id === perfilId)?.emoji}</span>
                 <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3 flex items-center gap-1.5">
                   {[0,1,2].map(i => <span key={i} className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
                 </div>
@@ -589,7 +620,7 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
                 <p className="text-sm text-blue-800 dark:text-blue-200">"Nosso {produtoVer.nome.split(' ').slice(0,3).join(' ')} tem {produtoVer.dif.toLowerCase()}, o que garante {produtoVer.destaque.toLowerCase()} para o seu negócio."</p>
               </div>
               <button
-                onClick={() => { setModuloId('livre'); setAba('home') }}
+                onClick={() => { const livre = modulos.find(m => m.titulo.toLowerCase().includes('livre')) || modulos[modulos.length - 1]; setModuloId(livre?.id || null); setAba('home') }}
                 className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
                 <ChatBubbleLeftRightIcon className="h-4 w-4" />Praticar com este produto no Roleplay
               </button>
@@ -670,8 +701,8 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
           ) : (
             <div className="space-y-3">
               {historico.map(s => {
-                const m = MODULOS.find(x => x.id === s.modulo)
-                const p = PERFIS.find(x => x.id === s.perfilId)
+                const m = modulos.find(x => String(x.id) === s.modulo)
+                const p = perfis.find(x => String(x.id) === s.perfilId)
                 let fb: any = null
                 try { fb = JSON.parse(s.feedback) } catch { fb = null }
                 return (
@@ -704,8 +735,8 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
           </button>
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg p-6 space-y-4">
             {(() => {
-              const m = MODULOS.find(x => x.id === sessaoHistoricoVer.modulo)
-              const p = PERFIS.find(x => x.id === sessaoHistoricoVer.perfilId)
+              const m = modulos.find(x => String(x.id) === sessaoHistoricoVer.modulo)
+              const p = perfis.find(x => String(x.id) === sessaoHistoricoVer.perfilId)
               let fb: any = null
               try { fb = JSON.parse(sessaoHistoricoVer.feedback) } catch { fb = null }
               return (
@@ -738,6 +769,15 @@ Comece a cena: você acabou de atender o telefone em um momento movimentado do s
             })()}
           </div>
         </div>
+      )}
+      {aba === 'config' && (
+        <ConfiguracaoAcademiaView
+          isGerente={isGerente}
+          modulos={modulos}
+          perfis={perfis}
+          setModulos={setModulos}
+          setPerfis={setPerfis}
+        />
       )}
     </div>
   )
