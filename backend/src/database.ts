@@ -932,7 +932,7 @@ export async function insertRoleplaySession(
     perfilNome?: string
     mensagens: any[]
     duracaoSegundos: number
-    nota: number
+    nota: number | null
     feedback: any
   }
 ): Promise<RoleplaySessionRow | null> {
@@ -968,6 +968,16 @@ export async function fetchRoleplaySessionsByVendedor(
     .from('roleplay_sessions')
     .select('*')
     .eq('vendedor_id', vendedorId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+export async function fetchAllRoleplaySessions(limit = 1000): Promise<RoleplaySessionRow[]> {
+  const { data, error } = await supabase
+    .from('roleplay_sessions')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw error

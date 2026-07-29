@@ -52,7 +52,7 @@ export interface Cliente {
   notas?: string
   origemLead?: string
   dataEnvioAmostra?: string
-  statusAmostra?: 'solicitada' | 'aguardando_gerente' | 'liberada' | 'coletada' | 'entregue' | 'em_teste' | 'aprovada' | 'reprovada'
+  statusAmostra?: 'solicitada' | 'aguardando_gerente' | 'liberada' | 'coletada' | 'entregue' | 'em_teste' | 'aprovada' | 'reprovada' | 'cancelamento_pendente'
   dataHomologacao?: string
   proximoPedidoPrevisto?: string
   dataProposta?: string

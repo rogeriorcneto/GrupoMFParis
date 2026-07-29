@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon, ArrowPathIcon, CloudArrowUpIcon } from '@heroicons/react/24/outline'
+import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon, ArrowPathIcon, CloudArrowUpIcon, DocumentArrowDownIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
+import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 import type { Pedido, Cliente, Vendedor } from '../../types'
 
 export interface ParametrosAprovacao {
@@ -47,6 +48,9 @@ interface AprovacaoViewProps {
   onConfirmarCancelamento?: (pedido: Pedido) => Promise<void>
   onRejeitarCancelamento?: (pedido: Pedido) => Promise<void>
   onReenviarOmie?: (pedido: Pedido) => Promise<void>
+  onAprovarCancelamentoAmostra?: (cliente: Cliente) => Promise<void>
+  onClickCliente?: (cliente: Cliente) => void
+  onVerNoFunil?: (cliente: Cliente) => void
   showToast: (tipo: 'success' | 'error', texto: string) => void
 }
 
@@ -60,7 +64,8 @@ const catLabel: Record<string, string> = {
 
 export default function AprovacaoView({
   pedidos, clientes, vendedores, loggedUser, onAprovar, onRecusar,
-  onConfirmarCancelamento, onRejeitarCancelamento, onReenviarOmie, showToast,
+  onConfirmarCancelamento, onRejeitarCancelamento, onReenviarOmie,
+  onAprovarCancelamentoAmostra, onClickCliente, onVerNoFunil, showToast,
 }: AprovacaoViewProps) {
   const [loadingId, setLoadingId] = useState<number | null>(null)
   const [recusandoId, setRecusandoId] = useState<number | null>(null)
@@ -68,8 +73,9 @@ export default function AprovacaoView({
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [reenviandoId, setReenviandoId] = useState<number | null>(null)
   const [filtroVendedor, setFiltroVendedor] = useState<number | ''>('')
-  const [activeTab, setActiveTab] = useState<'pendentes' | 'cancelamentos' | 'historico' | 'parametros'>('pendentes')
+  const [activeTab, setActiveTab] = useState<'pendentes' | 'cancelamentos' | 'amostras' | 'historico' | 'parametros'>('pendentes')
   const [loadingCancelId, setLoadingCancelId] = useState<number | null>(null)
+  const [pdfLoadingId, setPdfLoadingId] = useState<number | null>(null)
 
   // Parâmetros de auto-aprovação
   const [params, setParams] = useState<ParametrosAprovacao>(() => getParametrosAprovacao())
@@ -123,6 +129,15 @@ export default function AprovacaoView({
       )
       .sort((a, b) => new Date(a.dataCriacao).getTime() - new Date(b.dataCriacao).getTime())
   , [pedidos, filtroVendedor])
+
+  const amostrasCancelamentoPendentes = useMemo(() =>
+    clientes
+      .filter(c =>
+        c.statusAmostra === 'cancelamento_pendente' &&
+        (filtroVendedor === '' || c.vendedorId === filtroVendedor)
+      )
+      .sort((a, b) => new Date(a.dataEntradaEtapa || a.dataEnvioAmostra || '').getTime() - new Date(b.dataEntradaEtapa || b.dataEnvioAmostra || '').getTime())
+  , [clientes, filtroVendedor])
 
   const historicoList = useMemo(() =>
     pedidos
@@ -191,6 +206,25 @@ export default function AprovacaoView({
     }
   }
 
+  const handleBaixarPDF = async (pedido: Pedido, cliente: Cliente | undefined, vendedor: Vendedor | undefined) => {
+    if (!cliente) return
+    setPdfLoadingId(pedido.id)
+    try {
+      await gerarPropostaPDF(
+        cliente,
+        pedido.itens,
+        pedido.observacoes,
+        vendedor?.nome || loggedUser.nome,
+        pedido.numero,
+        { tipoFrete: pedido.tipoFrete, formaPagamento: pedido.formaPagamento }
+      )
+    } catch {
+      showToast('error', 'Erro ao gerar PDF da proposta.')
+    } finally {
+      setPdfLoadingId(null)
+    }
+  }
+
   const renderPedidoCard = (pedido: Pedido, showActions: boolean) => {
     const cliente = clienteMap.get(pedido.clienteId)
     const vendedor = vendedorMap.get(pedido.vendedorId)
@@ -219,13 +253,51 @@ export default function AprovacaoView({
                 )}
               </div>
               <div className="mt-1 space-y-0.5">
-                <p className="text-sm font-medium text-gray-800">{cliente?.razaoSocial || '—'}</p>
+                {onClickCliente && cliente ? (
+                  <button
+                    onClick={() => onClickCliente(cliente)}
+                    className="text-sm font-medium text-left text-primary-700 hover:underline"
+                    title="Ver card do cliente"
+                  >
+                    {cliente.razaoSocial}
+                  </button>
+                ) : (
+                  <p className="text-sm font-medium text-gray-800">{cliente?.razaoSocial || '—'}</p>
+                )}
                 <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
                   {vendedor && <span>👤 {vendedor.nome}</span>}
                   <span>·</span>
                   <span>📅 {new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')}</span>
                   {pedido.dataEnvio && <><span>·</span><span>📤 Enviado: {new Date(pedido.dataEnvio).toLocaleDateString('pt-BR')}</span></>}
                   {pedido.dataAprovacao && <><span>·</span><span>{pedido.status === 'confirmado' ? '✅' : '❌'} {new Date(pedido.dataAprovacao).toLocaleDateString('pt-BR')}</span></>}
+                  {cliente && onVerNoFunil && (
+                    <>
+                      <span>·</span>
+                      <button
+                        onClick={() => onVerNoFunil(cliente)}
+                        className="text-primary-600 hover:text-primary-700 hover:underline flex items-center gap-0.5"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-3 w-3" /> Ir para o funil
+                      </button>
+                    </>
+                  )}
+                  {cliente && (
+                    <>
+                      <span>·</span>
+                      <button
+                        onClick={() => handleBaixarPDF(pedido, cliente, vendedor)}
+                        disabled={pdfLoadingId === pedido.id}
+                        className="text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-0.5 disabled:opacity-50"
+                      >
+                        {pdfLoadingId === pedido.id ? (
+                          <ArrowPathIcon className="h-5 w-5 text-red-600 animate-spin" />
+                        ) : (
+                          <DocumentArrowDownIcon className="h-5 w-5 text-red-600" />
+                        )}
+                        PDF
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -477,6 +549,12 @@ export default function AprovacaoView({
             🚫 Cancelamentos {cancelamentosPendentes.length > 0 && <span className="ml-1.5 bg-white text-red-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{cancelamentosPendentes.length}</span>}
           </button>
           <button
+            onClick={() => setActiveTab('amostras')}
+            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'amostras' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+          >
+            🧪 Amostras {amostrasCancelamentoPendentes.length > 0 && <span className="ml-1.5 bg-white text-amber-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{amostrasCancelamentoPendentes.length}</span>}
+          </button>
+          <button
             onClick={() => setActiveTab('historico')}
             className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'historico' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
@@ -713,6 +791,64 @@ export default function AprovacaoView({
                         className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:opacity-60 text-gray-700 border border-gray-300 text-sm font-semibold rounded-apple transition-colors"
                       >
                         ↩ Rejeitar (Manter Pedido)
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Tab: Amostras Cancelamento */}
+      {activeTab === 'amostras' && (
+        <>
+          {amostrasCancelamentoPendentes.length === 0 ? (
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-16 text-center">
+              <CheckCircleIcon className="h-16 w-16 text-amber-300 mx-auto mb-4" />
+              <p className="text-lg font-semibold text-gray-700">Nenhum cancelamento de amostra pendente</p>
+              <p className="text-sm text-gray-400 mt-1">Quando um vendedor solicitar cancelamento de amostra, aparecerá aqui.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-500">{amostrasCancelamentoPendentes.length} cancelamento(s) de amostra aguardando aprovação</p>
+              {amostrasCancelamentoPendentes.map(cliente => {
+                const vendedor = vendedorMap.get(cliente.vendedorId || 0)
+                const isLoading = loadingId === cliente.id
+                return (
+                  <div key={cliente.id} className="bg-white rounded-apple shadow-apple-sm border-2 border-amber-300 p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-base font-bold text-gray-900">{cliente.razaoSocial}</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">🚫 Cancelamento Solicitado</span>
+                        </div>
+                        <div className="mt-1 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                            {vendedor && <span>👤 {vendedor.nome}</span>}
+                            <span>·</span>
+                            {cliente.dataEnvioAmostra && <span>📤 Envio da amostra: {new Date(cliente.dataEnvioAmostra).toLocaleDateString('pt-BR')}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={async () => {
+                          if (!onAprovarCancelamentoAmostra) return
+                          setLoadingId(cliente.id)
+                          try {
+                            await onAprovarCancelamentoAmostra(cliente)
+                            showToast('success', `Cancelamento da amostra de ${cliente.razaoSocial} aprovado. Cliente voltou para Prospecção.`)
+                          } catch {
+                            showToast('error', 'Erro ao aprovar cancelamento da amostra.')
+                          } finally { setLoadingId(null) }
+                        }}
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
+                      >
+                        {isLoading ? '⏳ Processando...' : '✅ Aprovar Cancelamento'}
                       </button>
                     </div>
                   </div>

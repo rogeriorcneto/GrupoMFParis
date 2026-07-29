@@ -173,7 +173,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
 
     const enderecoCompleto = buildEnderecoCompleto(formData)
 
-    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, produtosQuantidadesMensais: _pqm, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, classeCliente: _cc, ...restForm } = formData
+    const { vendedorId: vIdStr, produtosInteresse: _pi, produtosQuantidades: _pq, produtosQuantidadesMensais: _pqm, valorEstimado: _ve, statusCliente: _sc, grupoEconomicoId: _gei, classeCliente: _cc, descricao, ...restForm } = formData
 
     const vendedorResponsavelId = loggedUser?.cargo === 'gerente'
       ? (vIdStr ? Number(vIdStr) : undefined)
@@ -207,6 +207,17 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         } catch (err) {
           logger.error('Cliente atualizado, mas não foi possível registrar a interação:', err)
         }
+        if (descricao?.trim()) {
+          try {
+            const savedNota = await db.insertInteracao({
+              clienteId: editingCliente.id, tipo: 'nota', data: new Date().toISOString(),
+              assunto: 'Dados da empresa', descricao: descricao.trim(), automatico: true
+            })
+            setInteracoes(prev => [savedNota, ...prev])
+          } catch (err) {
+            logger.error('Não foi possível registrar nota com dados da empresa:', err)
+          }
+        }
         setEditingCliente(null)
         showToast('success', `Cliente "${formData.razaoSocial}" atualizado com sucesso!`)
       } else {
@@ -228,10 +239,18 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         } catch (err) {
           logger.error('Cliente cadastrado, mas não foi possível registrar a interação:', err)
         }
-        showToast('success', `Cliente "${formData.razaoSocial}" cadastrado com sucesso!`)
+        if (descricao?.trim()) {
+          try {
+            const savedNota = await db.insertInteracao({
+              clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),
+              assunto: 'Dados da empresa', descricao: descricao.trim(), automatico: true
+            })
+            setInteracoes(prev => [savedNota, ...prev])
+          } catch (err) {
+            logger.error('Não foi possível registrar nota com dados da empresa:', err)
+          }
+        }
       }
-      setFormData({ ...emptyForm })
-      setShowModal(false)
     } catch (err: any) {
       logger.error('Erro ao salvar cliente:', err)
       const detalhe = err?.message ? `: ${err.message}` : ''

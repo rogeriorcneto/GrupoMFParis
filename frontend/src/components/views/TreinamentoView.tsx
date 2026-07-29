@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   PlayIcon,
   StopIcon,
@@ -23,8 +23,8 @@ import {
 } from '@heroicons/react/24/outline'
 import { callAI } from '../../lib/gemini'
 import type { AIMessage } from '../../lib/gemini'
-import { saveRoleplaySession, fetchRoleplayHistory } from '../../lib/botApi'
-import { fetchModulosTreinamento, fetchPerfisTreinamento } from '../../lib/database'
+import { saveRoleplaySession, fetchRoleplayHistory, fetchRoleplayHistoryGerente } from '../../lib/botApi'
+import { fetchModulosTreinamento, fetchPerfisTreinamento, fetchVendedores } from '../../lib/database'
 import { CATALOGO_PRODUTOS, MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../../data/aiContext'
 import type { Vendedor, Produto, ModuloTreinamento, PerfilTreinamento } from '../../types'
 import ConfiguracaoAcademiaView from './ConfiguracaoAcademiaView'
@@ -46,7 +46,7 @@ interface SessaoTreinamento {
   createdAt: string
 }
 
-type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'config'
+type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config'
 
 const DEFAULT_MODULES: ModuloTreinamento[] = [
   { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '📞', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
@@ -108,6 +108,14 @@ export default function TreinamentoView({
   const [quizFeedback, setQuizFeedback] = useState<string | null>(null)
   const [quizLoading, setQuizLoading] = useState(false)
   const [sessaoHistoricoVer, setSessaoHistoricoVer] = useState<SessaoTreinamento | null>(null)
+  const [gerenteSessoes, setGerenteSessoes] = useState<any[]>([])
+  const [gerenteVendedores, setGerenteVendedores] = useState<Vendedor[]>([])
+  const [filtroDataInicio, setFiltroDataInicio] = useState('')
+  const [filtroDataFim, setFiltroDataFim] = useState('')
+  const [filtroVendedorId, setFiltroVendedorId] = useState('')
+  const [filtroNotaMin, setFiltroNotaMin] = useState('')
+  const [filtroNotaMax, setFiltroNotaMax] = useState('')
+  const [filtroModuloId, setFiltroModuloId] = useState('')
   const chatRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -127,6 +135,14 @@ export default function TreinamentoView({
       })))
     })
   }, [vendedor.id])
+
+  useEffect(() => {
+    if (aba !== 'gerente' || !isGerente) return
+    Promise.all([fetchRoleplayHistoryGerente(), fetchVendedores().catch(() => [])]).then(([r, v]) => {
+      setGerenteSessoes(r.sessoes || [])
+      setGerenteVendedores(v || [])
+    })
+  }, [aba, isGerente])
 
   useEffect(() => {
     Promise.all([
@@ -188,8 +204,22 @@ REGRAS DO ROLEPLAY:
 4. Se ele apresentar argumentos fracos, mostre resistência.
 5. Se ele apresentar argumentos fortes e benefícios reais, demonstre interesse gradual.
 6. Você conhece os concorrentes do seu segmento e pode comparar preços, mas valoriza resultado, segurança e suporte.
-7. Quando o vendedor digitar "ENCERRAR TREINO", saia do personagem e dê um FEEDBACK DETALHADO em JSON com este formato:
-{"nota": 8, "abertura": 7, "qualificacao": 9, "apresentacao": 8, "objecoes": 7, "fechamento": 8, "pontos_fortes": ["..."], "pontos_melhora": ["..."], "feedback_geral": "..."}
+7. Quando o vendedor digitar "ENCERRAR TREINO", saia do personagem e dê um FEEDBACK DETALHADO em JSON com este formato EXATO:
+{"nota": 6, "abertura": 5, "qualificacao": 6, "apresentacao": 7, "objecoes": 5, "fechamento": 6, "pontos_fortes": ["..."], "pontos_melhora": ["..."], "feedback_geral": "..."}
+
+RUBRICA DE NOTA — seja RIGOROSO e use TODA a escala de 0 a 10. NOTAS GENÉRICAS (7/8/9 automáticas) SÃO PROIBIDAS:
+- 10: execução exemplar, objetivo totalmente atingido, argumentos afiados, conexão genuína e próximo passo claro. Só dê 10 se for praticamente perfeito.
+- 8-9: muito bom, com pouquíssimas falhas e objetivo bem atingido.
+- 5-7: mediano, atingiu parcialmente o objetivo, erros de técnicas, argumentos rasos ou falta de qualificação.
+- 3-4: ruim, muitos erros, despreparo, não conectou ou não avançou no objetivo.
+- 0-2: péssimo, sem conexão, sem argumento, sem técnicas ou abordagem inadequada.
+
+REGRAS PARA A NOTA FINAL:
+- Se o vendedor não atingir o objetivo do módulo, a nota final NÃO pode ser maior que 6.
+- Cada erro de qualificação, argumento fraco, resposta genérica ou falta de conteúdo do catálogo desconta 1-2 pontos.
+- Respostas muito curtas ("ok", "tudo bem?", "qual seu preço?") sem contexto: descontar.
+- A nota final é uma média PONDERADA dos critérios, com ênfase no que o módulo exige.
+- Você DEVE justificar a nota no "feedback_geral", citando exemplos reais do transcript.
 
 CONTEXTO COMERCIAL E REGRAS QUE OS VENDEDORES SEGUEM (você reage a eles):
 ${contextoComercial}
@@ -250,8 +280,8 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     setSessaoAtiva(false)
     setLoading(true)
     const duracao = Math.max(0, Math.floor((Date.now() - tempoInicio) / 1000))
-    let notaFinal = 7
-    let feedbackFinal = '{"nota":7,"feedback_geral":"Sessão encerrada."}'
+    let notaFinal: number | null = null
+    let feedbackFinal = JSON.stringify({ nota: null, feedback_geral: 'Não foi possível avaliar a sessão. Tente novamente.' })
     try {
       const transcript = msgsFinal.map(m => `${m.role === 'user' ? 'VENDEDOR' : 'CLIENTE'}: ${m.content}`).join('\n')
       const resp = await callAI(
@@ -261,7 +291,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
       const jsonMatch = resp.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const avaliacao = JSON.parse(jsonMatch[0])
-        notaFinal = avaliacao.nota || 7
+        notaFinal = typeof avaliacao.nota === 'number' ? avaliacao.nota : null
         feedbackFinal = JSON.stringify(avaliacao)
       }
     } catch { /* mantém fallback */ }
@@ -310,13 +340,28 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     setQuizLoading(false)
   }
 
-  const notaColor = (n: number) => n >= 9 ? 'text-green-600 bg-green-100' : n >= 7 ? 'text-yellow-600 bg-yellow-100' : 'text-red-600 bg-red-100'
+  const notaColor = (n: number | null) => {
+    const v = n ?? 0
+    return v >= 9 ? 'text-green-600 bg-green-100' : v >= 7 ? 'text-yellow-600 bg-yellow-100' : 'text-red-600 bg-red-100'
+  }
   const difColor = (d: string) => d === 'Iniciante' ? 'bg-green-100 text-green-700' : d === 'Médio' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
 
   const totalTreinos = historico.length
   const notaMedia = historico.length > 0 ? (historico.reduce((a, b) => a + (b.nota || 0), 0) / historico.length).toFixed(1) : '—'
   const minutosTotais = Math.floor(historico.reduce((a, b) => a + b.duracao, 0) / 60)
   const streak = historico.filter(h => new Date(h.createdAt).toDateString() === new Date().toDateString()).length
+
+  const gerenteFiltrado = useMemo(() => {
+    return gerenteSessoes.filter((s: any) => {
+      if (filtroVendedorId && String(s.vendedor_id) !== filtroVendedorId) return false
+      if (filtroModuloId && String(s.modulo) !== filtroModuloId) return false
+      if (filtroNotaMin !== '' && (s.nota == null || Number(s.nota) < Number(filtroNotaMin))) return false
+      if (filtroNotaMax !== '' && (s.nota == null || Number(s.nota) > Number(filtroNotaMax))) return false
+      if (filtroDataInicio && s.data && s.data < filtroDataInicio) return false
+      if (filtroDataFim && s.data && s.data > filtroDataFim) return false
+      return true
+    })
+  }, [gerenteSessoes, filtroVendedorId, filtroModuloId, filtroNotaMin, filtroNotaMax, filtroDataInicio, filtroDataFim])
 
   // FEEDBACK PARSED
   let feedbackObj: any = null
@@ -343,12 +388,13 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {(['home', 'produtos', 'quiz', 'historico', ...(isGerente ? ['config'] : [])] as Aba[]).map(a => {
+            {(['home', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'config'] : [])] as Aba[]).map(a => {
               const labels: Record<string, { icon: React.ReactNode; label: string }> = {
                 home: { icon: <PlayIcon className="h-4 w-4" />, label: 'Treinar' },
                 produtos: { icon: <BookOpenIcon className="h-4 w-4" />, label: 'Produtos' },
                 quiz: { icon: <SparklesIcon className="h-4 w-4" />, label: 'Quiz IA' },
                 historico: { icon: <ClockIcon className="h-4 w-4" />, label: 'Histórico' },
+                gerente: { icon: <ChartBarIcon className="h-4 w-4" />, label: 'Gerente' },
                 config: { icon: <Cog6ToothIcon className="h-4 w-4" />, label: 'Config' },
               }
               const l = labels[a]
@@ -519,8 +565,8 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             <div className="p-6 space-y-6">
               {/* Nota */}
               <div className="text-center">
-                <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full text-3xl font-bold mb-2 ${notaColor(feedbackObj.nota || 7)}`}>
-                  {feedbackObj.nota || 7}
+                <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full text-3xl font-bold mb-2 ${notaColor(feedbackObj.nota)}`}>
+                  {feedbackObj.nota ?? '?'}
                 </div>
                 <p className="text-sm text-gray-500">Nota Final / 10</p>
               </div>
@@ -529,7 +575,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                 <div className="grid grid-cols-5 gap-2">
                   {['abertura', 'qualificacao', 'apresentacao', 'objecoes', 'fechamento'].map(k => (
                     <div key={k} className="text-center p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                      <p className={`text-lg font-bold ${notaColor(feedbackObj[k] || 7).split(' ')[0]}`}>{feedbackObj[k] || '—'}</p>
+                      <p className={`text-lg font-bold ${notaColor(feedbackObj[k] ?? 0).split(' ')[0]}`}>{feedbackObj[k] != null ? feedbackObj[k] : '—'}</p>
                       <p className="text-[10px] text-gray-400 capitalize">{k}</p>
                     </div>
                   ))}
@@ -710,10 +756,10 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                     className="w-full text-left bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all group">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${notaColor(s.nota || 7)}`}>{s.nota || '?'}</div>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${notaColor(s.nota)}`}>{s.nota ?? '?'}</div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{m?.emoji} {m?.titulo}</p>
-                          <p className="text-xs text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · {new Date(s.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · Início {new Date(new Date(s.createdAt).getTime() - s.duracao * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       </div>
                       <ChevronRightIcon className="h-4 w-4 text-gray-300 group-hover:text-primary-500 transition-colors" />
@@ -742,10 +788,10 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
               return (
                 <>
                   <div className="flex items-center gap-3">
-                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold ${notaColor(sessaoHistoricoVer.nota || 7)}`}>{sessaoHistoricoVer.nota || '?'}</div>
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold ${notaColor(sessaoHistoricoVer.nota)}`}>{sessaoHistoricoVer.nota ?? '?'}</div>
                     <div>
                       <p className="font-bold text-gray-900 dark:text-gray-100">{m?.emoji} {m?.titulo}</p>
-                      <p className="text-sm text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(sessaoHistoricoVer.duracao / 60)}min · {new Date(sessaoHistoricoVer.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      <p className="text-sm text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(sessaoHistoricoVer.duracao / 60)}min · Início {new Date(new Date(sessaoHistoricoVer.createdAt).getTime() - sessaoHistoricoVer.duracao * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} · Fim {new Date(sessaoHistoricoVer.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
                   </div>
                   {fb?.feedback_geral && (
@@ -770,6 +816,81 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
           </div>
         </div>
       )}
+      {aba === 'gerente' && (
+        <div className="flex-1 max-w-6xl mx-auto w-full px-4 py-6 space-y-4">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Histórico de Treinamentos — Visão Gerente</h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Data início</label>
+                <input type="date" value={filtroDataInicio} onChange={e => setFiltroDataInicio(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Data fim</label>
+                <input type="date" value={filtroDataFim} onChange={e => setFiltroDataFim(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Vendedor</label>
+                <select value={filtroVendedorId} onChange={e => setFiltroVendedorId(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
+                  <option value="">Todos</option>
+                  {gerenteVendedores.map(v => <option key={v.id} value={String(v.id)}>{v.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nota mín</label>
+                <input type="number" min={0} max={10} value={filtroNotaMin} onChange={e => setFiltroNotaMin(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nota máx</label>
+                <input type="number" min={0} max={10} value={filtroNotaMax} onChange={e => setFiltroNotaMax(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Módulo</label>
+                <select value={filtroModuloId} onChange={e => setFiltroModuloId(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
+                  <option value="">Todos</option>
+                  {modulos.map(m => <option key={m.id} value={String(m.id)}>{m.titulo}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 dark:bg-gray-700 text-xs uppercase text-gray-500 dark:text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3">Vendedor</th>
+                    <th className="px-4 py-3">Módulo</th>
+                    <th className="px-4 py-3">Perfil</th>
+                    <th className="px-4 py-3">Nota</th>
+                    <th className="px-4 py-3">Duração</th>
+                    <th className="px-4 py-3">Início</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {gerenteFiltrado.map((s: any) => {
+                    const m = modulos.find(x => String(x.id) === String(s.modulo))
+                    const v = gerenteVendedores.find(v => v.id === Number(s.vendedor_id))
+                    return (
+                      <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-4 py-3 whitespace-nowrap">{s.data ? new Date(s.data).toLocaleDateString('pt-BR') : '—'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{v?.nome || s.vendedor_nome || `ID ${s.vendedor_id}`}</td>
+                        <td className="px-4 py-3">{m?.emoji} {m?.titulo || s.modulo}</td>
+                        <td className="px-4 py-3">{s.perfil_nome || '—'}</td>
+                        <td className="px-4 py-3"><span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-xs ${notaColor(s.nota)}`}>{s.nota ?? '?'}</span></td>
+                        <td className="px-4 py-3 whitespace-nowrap">{Math.floor((s.duracao_segundos || 0) / 60)}min</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{new Date(new Date(s.created_at).getTime() - (s.duracao_segundos || 0) * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {gerenteFiltrado.length === 0 && <p className="text-center py-8 text-gray-400 text-sm">Nenhum treinamento encontrado</p>}
+          </div>
+        </div>
+      )}
+
       {aba === 'config' && (
         <ConfiguracaoAcademiaView
           isGerente={isGerente}

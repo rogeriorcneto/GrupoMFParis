@@ -3,6 +3,7 @@ import type { Cliente, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico 
 import { PAYMENT_TERM_GROUPS, DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 import { gerarPropostaPDF } from '../utils/pdfGenerator'
 import { savePropostaHistorico, fetchPropostasByCliente } from '../lib/database'
+import SimuladorPrecoPanel from './SimuladorPrecoPanel'
 
 interface DragItem {
   cliente: Cliente
@@ -85,7 +86,7 @@ export default function FunilModals({
   const [propostaObs, setPropostaObs] = React.useState('')
   const [propostaSearch, setPropostaSearch] = React.useState('')
   const [propostaSaving, setPropostaSaving] = React.useState(false)
-  const [propostaTab, setPropostaTab] = React.useState<'itens' | 'historico'>('itens')
+  const [propostaTab, setPropostaTab] = React.useState<'itens' | 'historico' | 'simulador'>('itens')
   const [propostaHistorico, setPropostaHistorico] = React.useState<PropostaHistorico[]>([])
   const [propostaHistoricoLoading, setPropostaHistoricoLoading] = React.useState(false)
 
@@ -241,13 +242,9 @@ export default function FunilModals({
     }
     setPedidoItens(prev => {
       const exists = prev.find(i => i.produtoId === produto.id)
-      if (exists) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd } : i)
-      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: produto.preco, unidade: produto.unidade, quantidade: qtd }]
+      if (exists) return prev.map(i => i.produtoId === produto.id ? { ...i, quantidade: qtd, preco: 0.1 } : i)
+      return [...prev, { produtoId: produto.id, nomeProduto: produto.nome, sku: produto.omieCodigo || produto.sku || '', preco: 0.1, unidade: produto.unidade, quantidade: qtd }]
     })
-  }
-
-  const setPedidoItemPreco = (produtoId: number, preco: number) => {
-    setPedidoItens(prev => prev.map(i => i.produtoId === produtoId ? { ...i, preco: Math.max(0, preco) } : i))
   }
 
   const setPropostaItemPreco = (produtoId: number, preco: number) => {
@@ -365,7 +362,7 @@ export default function FunilModals({
                           <p className="text-xs font-semibold text-gray-900 truncate">{p.nome}</p>
                           <p className="text-[10px] text-gray-500">R$ {p.preco.toFixed(2).replace('.', ',')} / KG</p>
                         </div>
-                        <input type="number" min={0} value={qtd || ''} onChange={e => setPedidoItemQtd(p, Math.max(0, parseInt(e.target.value || '0', 10) || 0))} placeholder="Qtd" className="w-16 px-2 py-1 border border-gray-300 rounded-apple text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                        <input type="number" min={0} step="0.01" inputMode="decimal" value={qtd || ''} onChange={e => setPedidoItemQtd(p, Math.max(0, parseFloat(e.target.value || '0') || 0))} placeholder="Qtd" className="w-16 px-2 py-1 border border-gray-300 rounded-apple text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary-500" />
                       </div>
                     )
                   })}
@@ -386,18 +383,7 @@ export default function FunilModals({
                       <p className="text-xs font-semibold text-gray-800 leading-tight">{item.nomeProduto}</p>
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className="text-[10px] text-gray-500 flex-shrink-0">{item.quantidade}x</span>
-                        <div className="flex items-center gap-1 flex-1">
-                          <span className="text-[10px] text-gray-400">R$</span>
-                          <input
-                            type="number" min={0} step="0.01"
-                            value={item.preco || ''}
-                            onChange={e => setPedidoItemPreco(item.produtoId, parseFloat(e.target.value) || 0)}
-                            onFocus={e => e.target.select()}
-                            placeholder="0,00"
-                            className="flex-1 px-1.5 py-1 border border-gray-300 rounded text-xs text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
-                          />
-                          <span className="text-[10px] text-gray-400 flex-shrink-0">/KG</span>
-                        </div>
+                        <span className="text-[10px] text-gray-500">R$ 0,10 /KG</span>
                       </div>
                       {item.preco > 0 && (
                         <p className="text-[10px] font-bold text-primary-700 mt-1">= R$ {(item.quantidade * item.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
@@ -506,6 +492,12 @@ export default function FunilModals({
                       <span className="ml-1 bg-purple-100 text-purple-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full">{propostaHistorico.length}</span>
                     )}
                   </button>
+                  <button
+                    onClick={() => setPropostaTab('simulador')}
+                    className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${propostaTab === 'simulador' ? 'text-purple-700 border-b-2 border-purple-600 bg-white' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    🧮 Simulador
+                  </button>
                 </div>
 
                 {propostaTab === 'itens' ? (
@@ -546,7 +538,7 @@ export default function FunilModals({
                       </div>
                     </div>
                   </>
-                ) : (
+                ) : propostaTab === 'historico' ? (
                   <div className="flex-1 overflow-y-auto p-3 space-y-2">
                     {propostaHistoricoLoading && (
                       <p className="text-xs text-gray-400 text-center py-8">Carregando histórico...</p>
@@ -593,6 +585,11 @@ export default function FunilModals({
                         </div>
                       </div>
                     ))}
+                  </div>
+                ) : (
+                  <div className="p-3 overflow-y-auto">
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">Simulador de preço</p>
+                    <SimuladorPrecoPanel produtoNome={propostaItens[0]?.nomeProduto} />
                   </div>
                 )}
               </div>

@@ -5,6 +5,7 @@ import { enviarPedidoOmie } from '../../lib/botApi'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 import { savePropostaHistorico } from '../../lib/database'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../../constants/paymentTerms'
+import SimuladorPrecoPanel from '../SimuladorPrecoPanel'
 
 function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, onMoverCliente, showToast }: {
   pedidos: Pedido[]
@@ -135,6 +136,9 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     }
     if (tipoPedido === 'venda' && totalPedido <= 0) { showToast?.('error', 'Valor total deve ser > zero para venda.'); return }
     if (!tipoFrete) { showToast?.('error', 'Selecione o frete (CIF ou FOB).'); return }
+    if (!formaPagamento.trim()) { showToast?.('error', 'Selecione a forma de pagamento.'); return }
+    if (!observacoes.trim()) { showToast?.('error', 'Informe as observações do pedido.'); return }
+    if (itensPedido.some(i => !i.sku?.trim())) { showToast?.('error', 'Todos os produtos devem ter SKU preenchido.'); return }
     setIsSaving(true)
     const numero = `PED-${Date.now().toString().slice(-6)}`
     const novoPedido: Omit<Pedido, 'id'> = {
@@ -357,6 +361,12 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                 )}
               </div>
 
+              {/* Simulador de preco */}
+              <div className="bg-white rounded-xl border border-gray-200 p-3">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Simulador de preco</p>
+                <SimuladorPrecoPanel />
+              </div>
+
               {/* Observacoes */}
               <div className="bg-white rounded-xl border border-gray-200 p-3">
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Observacoes</p>
@@ -463,6 +473,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                     <div key={item.produtoId} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-semibold text-gray-900 truncate">{item.nomeProduto}</p>
+                        <p className="text-[10px] text-gray-400">{item.sku ? `SKU: ${item.sku}` : 'Sem SKU'}</p>
                         <div className="flex items-center gap-1 mt-0.5">
                           <span className="text-[10px] text-gray-400">R$</span>
                           <input type="number" min={0} step="0.01" value={item.preco} onChange={e => setItemPreco(item.produtoId, parseFloat(e.target.value))} onFocus={e => e.target.select()} disabled={tipoPedido !== 'venda'}
@@ -552,7 +563,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-gray-500 border-t border-gray-50 pt-2">
                     {pedido.itens.map((item, idx) => (
-                      <span key={idx}><span className="font-medium text-gray-700">{item.quantidade}x</span> {item.nomeProduto}</span>
+                      <span key={idx}><span className="font-medium text-gray-700">{item.quantidade}x</span> {item.nomeProduto}{item.sku ? ` (${item.sku})` : ''}</span>
                     ))}
                   </div>
                   {pedido.observacoes && <p className="text-[10px] text-gray-400 mt-1 italic">Obs: {pedido.observacoes}</p>}

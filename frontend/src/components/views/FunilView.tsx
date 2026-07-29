@@ -319,7 +319,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Leads', key: 'lead', badge: 'bg-emerald-100 text-emerald-800', icon: '🌐', prob: 0.05, gerenteOnly: true },
     { title: 'Prospecção', key: 'prospecção', badge: 'bg-sky-100 text-sky-800', icon: '🔎', prob: 0.10, gerenteOnly: false },
     { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25, gerenteOnly: false },
-    { title: 'Amostra Perdida', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🚫', prob: 0.05, gerenteOnly: false },
+    { title: 'Amostra Finalizada', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🚫', prob: 0.05, gerenteOnly: false },
     { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10, gerenteOnly: false },
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: 0.60, gerenteOnly: false },

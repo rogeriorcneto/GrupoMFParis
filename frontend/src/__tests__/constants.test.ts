@@ -15,7 +15,7 @@ describe('stageLabels', () => {
     expect(stageLabels['follow_up']).toBe('Follow-up')
     expect(stageLabels['inativo']).toBe('Clientes Inativos')
     expect(stageLabels['lead']).toBe('Leads')
-    expect(stageLabels['amostra_perdida']).toBe('Amostra Perdida')
+    expect(stageLabels['amostra_perdida']).toBe('Amostra Finalizada')
   })
 })
 

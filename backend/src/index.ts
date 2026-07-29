@@ -987,7 +987,7 @@ app.post('/api/roleplay/sessao', requireAuth, async (req, res) => {
       perfilNome: String(perfilNome || ''),
       mensagens: Array.isArray(mensagens) ? mensagens : [],
       duracaoSegundos: Number(duracaoSegundos || 0),
-      nota: Number(nota || 0),
+      nota: nota == null ? null : Number(nota),
       feedback,
     })
     res.json({ success: true, data: row })
@@ -1006,6 +1006,23 @@ app.get('/api/roleplay/historico', requireAuth, async (req, res) => {
     res.json({ sessoes })
   } catch (err: any) {
     log.error({ err }, 'Erro ao buscar histórico de roleplay')
+    res.status(500).json({ error: err?.message || 'Erro ao buscar histórico' })
+  }
+})
+
+app.get('/api/roleplay/historico/gerente', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const { fetchAllRoleplaySessions, fetchVendedores } = await import('./database.js')
+    const [sessoes, vendedores] = await Promise.all([fetchAllRoleplaySessions(), fetchVendedores()])
+    const vMap = new Map(vendedores.map(v => [v.id, v]))
+    const enriched = sessoes.map(s => ({
+      ...s,
+      vendedor_nome: vMap.get(s.vendedor_id)?.nome || '',
+      vendedor_email: vMap.get(s.vendedor_id)?.email || '',
+    }))
+    res.json({ sessoes: enriched })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar histórico de roleplay do gerente')
     res.status(500).json({ error: err?.message || 'Erro ao buscar histórico' })
   }
 })

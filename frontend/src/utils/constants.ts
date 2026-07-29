@@ -2,7 +2,7 @@ export const stageLabels: Record<string, string> = {
   'lead': 'Leads',
   'prospecção': 'Prospecção',
   'amostra': 'Amostra',
-  'amostra_perdida': 'Amostra Perdida',
+  'amostra_perdida': 'Amostra Finalizada',
   'proposta': 'Proposta',
   'negociacao': 'Negociação',
   'follow_up': 'Follow-up',
@@ -23,7 +23,7 @@ export const transicoesPermitidas: Record<string, string[]> = {
 }
 
 export const subStatusAmostra = [
-  'solicitada', 'aguardando_gerente', 'liberada', 'coletada', 'entregue', 'em_teste', 'aprovada', 'reprovada'
+  'solicitada', 'aguardando_gerente', 'liberada', 'coletada', 'entregue', 'em_teste', 'aprovada', 'reprovada', 'cancelamento_pendente'
 ] as const
 
 export const subStatusFollowUp = [
@@ -39,6 +39,7 @@ export const subStatusAmostraLabels: Record<string, string> = {
   'em_teste': 'Em Teste',
   'aprovada': 'Aprovada',
   'reprovada': 'Reprovada',
+  'cancelamento_pendente': 'Cancelamento Pendente',
 }
 
 export const subStatusFollowUpLabels: Record<string, string> = {

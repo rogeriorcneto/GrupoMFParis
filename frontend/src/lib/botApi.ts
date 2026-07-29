@@ -632,7 +632,7 @@ export async function saveRoleplaySession(
         perfilNome: perfilNome || sessao.perfilId,
         mensagens: sessao.msgs,
         duracaoSegundos: sessao.duracao,
-        nota: sessao.nota ?? 0,
+        nota: sessao.nota,
         feedback: feedbackParsed,
       }),
     })
@@ -648,6 +648,16 @@ export async function fetchRoleplayHistory(
 ): Promise<{ sessoes: any[]; error?: string }> {
   try {
     const res = await authFetch(`${BOT_URL}/api/roleplay/historico?vendedorId=${encodeURIComponent(vendedorId)}`)
+    return await res.json()
+  } catch (err: any) {
+    return { sessoes: [], error: err?.message || 'Erro ao buscar histórico' }
+  }
+}
+
+/** Busca histórico de roleplay de todos os vendedores (gerente) */
+export async function fetchRoleplayHistoryGerente(): Promise<{ sessoes: any[]; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/roleplay/historico/gerente`)
     return await res.json()
   } catch (err: any) {
     return { sessoes: [], error: err?.message || 'Erro ao buscar histórico' }

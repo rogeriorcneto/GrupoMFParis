@@ -103,6 +103,8 @@ export default function AppRouter({
         vendedores={vendedores}
         loggedUser={loggedUser || { id: 0, nome: 'Sistema', email: '', cargo: 'gerente', ativo: true, metaVendas: 0, metaLeads: 0, metaConversao: 0 } as Vendedor}
         showToast={showToast}
+        onClickCliente={(c) => setSelectedClientePanel(c)}
+        onVerNoFunil={onVerNoFunil}
         onAprovar={async (pedido) => {
           try {
             const result = await aprovarPedidoComOmie(pedido.id)
@@ -306,6 +308,9 @@ export default function AppRouter({
             ))
             throw new Error(result.error || 'Omie rejeitou o pedido')
           }
+        }}
+        onAprovarCancelamentoAmostra={async (cliente) => {
+          await moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined })
         }}
       />
     case 'trafico':
@@ -662,6 +667,10 @@ export default function AppRouter({
         onMoverCliente={moverCliente}
         onAddPedido={async (p) => {
           try {
+            if (!p.tipoFrete) throw new Error('Selecione o frete (CIF ou FOB).')
+            if (!p.formaPagamento?.trim()) throw new Error('Selecione a forma de pagamento.')
+            if (!p.observacoes?.trim()) throw new Error('Informe as observações do pedido.')
+            if (p.itens.length === 0 || p.itens.some(i => !i.sku?.trim())) throw new Error('Todos os produtos devem ter SKU preenchido.')
             const saved = await db.insertPedido(p)
             // Atualizar ultimaInteracao do cliente (evita auto-inativo)
             const now = new Date().toISOString()

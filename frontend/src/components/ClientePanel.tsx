@@ -407,7 +407,8 @@ export default function ClientePanel({
 
   const handleRegistrarAtividade = async () => {
     if (!panelAtividadeDesc.trim()) return
-    const isNota = panelAtividadeTipo === 'nota'
+    const isDescricaoEmpresa = /(cnpj|data de abertura|situação cadastral|situacao cadastral|quadro de sócios|quadro de socios|porte da empresa|atividade econômica|cnae|capital social|faturamento presumido|inscrição estadual|inscricao estadual)/i.test(panelAtividadeDesc.trim())
+    const isNota = panelAtividadeTipo === 'nota' || isDescricaoEmpresa
     const semTipo = !panelAtividadeTipo
     // proposta/visita/atividades com tipo precisam de prazo; semTipo usa padrão
     const precisaPrazo = !isNota && !semTipo
@@ -423,8 +424,10 @@ export default function ClientePanel({
       // tipos que não existem em Interacao['tipo'] — salvar como 'nota'
       const tiposExtraComoNota = ['proposta', 'visita']
       const isExtra = tiposExtraComoNota.includes(panelAtividadeTipo as string)
-      const tipoInteracao = (isExtra || semTipo ? 'nota' : panelAtividadeTipo) as Interacao['tipo']
-      const labelAtividade = semTipo ? 'Tarefa Genérica' : (labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade')
+      const tipoInteracao = (isDescricaoEmpresa || isExtra || semTipo ? 'nota' : panelAtividadeTipo) as Interacao['tipo']
+      const labelAtividade = isDescricaoEmpresa
+        ? 'Nota'
+        : (semTipo ? 'Tarefa Genérica' : (labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade'))
 
       // Upload de anexo se houver
       let anexoUrl: string | null = null
@@ -580,7 +583,12 @@ export default function ClientePanel({
   }
 
   const handleEnviarPedido = async () => {
-    if (!onAddPedido || pedidoItens.length === 0 || !pedidoFrete) return
+    if (!onAddPedido) return
+    if (pedidoItens.length === 0) { addNotificacao('warning', 'Sem itens', 'Adicione pelo menos um produto.', c.id); return }
+    if (!pedidoFrete) { addNotificacao('warning', 'Frete obrigatório', 'Selecione o frete (CIF ou FOB).', c.id); return }
+    if (!pedidoFormaPagamento.trim()) { addNotificacao('warning', 'Pagamento obrigatório', 'Selecione a forma de pagamento.', c.id); return }
+    if (!pedidoObs.trim()) { addNotificacao('warning', 'Observações obrigatórias', 'Informe as observações do pedido.', c.id); return }
+    if (pedidoItens.some(i => !i.sku?.trim())) { addNotificacao('warning', 'SKU obrigatório', 'Todos os produtos devem ter SKU preenchido.', c.id); return }
     if (pedidoTipo === 'venda' && pedidoItens.some(i => i.preco <= 0)) {
       addNotificacao('warning', 'Preço obrigatório', 'Defina o preço unitário de todos os itens para venda.', c.id)
       return
@@ -886,6 +894,15 @@ export default function ClientePanel({
               >
                 📝 Editar Proposta
               </button>
+              {ultimaProposta && isGerente && (
+                <button
+                  onClick={() => gerarPropostaPDF(c, ultimaProposta.itens, ultimaProposta.observacoes, ultimaProposta.vendedorNome, ultimaProposta.numero, { tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: ultimaProposta.pagamento, dataLancamento: ultimaProposta.criadoEm })}
+                  className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white border border-indigo-200 rounded-apple hover:bg-indigo-700"
+                  title={`Baixar PDF da ${ultimaProposta.numero}`}
+                >
+                  📄 Baixar PDF
+                </button>
+              )}
               {todasPropostas.length > 1 && (
                 <div className="relative">
                   <button
@@ -942,13 +959,33 @@ export default function ClientePanel({
                       >🧪 Resultado da Amostra</button>
                     </>
                   )}
-                  {!['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(c.statusAmostra || '') && (
-                    <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
+                  {c.statusAmostra === 'cancelamento_pendente' && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-apple p-2.5 space-y-2">
+                      <p className="text-xs text-amber-800 font-medium">⏳ Cancelamento aguardando aprovação do gerente.</p>
+                      {isGerente && (
+                        <button onClick={async () => { if (confirm(`Aprovar cancelamento da amostra de ${c.razaoSocial}?`)) { await onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="w-full px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">✅ Aprovar Cancelamento</button>
+                      )}
+                    </div>
+                  )}
+                  {c.statusAmostra !== 'cancelamento_pendente' && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(c.statusAmostra || '') && (
+                    <button onClick={async () => { if (confirm(`Solicitar cancelamento do envio de amostra para ${c.razaoSocial}?`)) { try { await db.updateCliente(c.id, { statusAmostra: 'cancelamento_pendente' }); setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusAmostra: 'cancelamento_pendente' } : cl)); addNotificacao('warning', 'Cancelamento solicitado', `${c.razaoSocial}: aguardando aprovação do gerente`, c.id); onClose() } catch { addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento', c.id) } } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
                   )}
                 </>
               )}
               {c.etapa === 'amostra_perdida' && (
-                <button onClick={() => { if (confirm(`Cancelar envio de amostra para ${c.razaoSocial}?`)) { onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
+                <>
+                  {c.statusAmostra === 'cancelamento_pendente' && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-apple p-2.5 space-y-2">
+                      <p className="text-xs text-amber-800 font-medium">⏳ Cancelamento aguardando aprovação do gerente.</p>
+                      {isGerente && (
+                        <button onClick={async () => { if (confirm(`Aprovar cancelamento da amostra de ${c.razaoSocial}?`)) { await onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="w-full px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">✅ Aprovar Cancelamento</button>
+                      )}
+                    </div>
+                  )}
+                  {c.statusAmostra !== 'cancelamento_pendente' && (
+                    <button onClick={async () => { if (confirm(`Solicitar cancelamento do envio de amostra para ${c.razaoSocial}?`)) { try { await db.updateCliente(c.id, { statusAmostra: 'cancelamento_pendente' }); setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusAmostra: 'cancelamento_pendente' } : cl)); addNotificacao('warning', 'Cancelamento solicitado', `${c.razaoSocial}: aguardando aprovação do gerente`, c.id); onClose() } catch { addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento', c.id) } } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
+                  )}
+                </>
               )}
               {c.etapa === 'proposta' && (
                 <>
@@ -959,12 +996,32 @@ export default function ClientePanel({
               {c.etapa === 'negociacao' && (
                 <>
                   <button
-                    disabled={ganhouLoading}
+                    disabled={ganhouLoading || c.statusFollowUp === 'aguardando_aprovacao_gerente'}
                     onClick={async () => {
-                      if (ganhouLoading) return
+                      if (ganhouLoading || c.statusFollowUp === 'aguardando_aprovacao_gerente') return
                       setGanhouLoading(true)
                       const hoje = new Date().toISOString().split('T')[0]
                       if (onAddPedido && ultimaProposta && ultimaProposta.itens.length > 0) {
+                        if (!ultimaProposta.frete) {
+                          addNotificacao('warning', 'Frete obrigatório', 'A última proposta não tem frete preenchido.', c.id)
+                          setGanhouLoading(false)
+                          return
+                        }
+                        if (!ultimaProposta.pagamento?.trim()) {
+                          addNotificacao('warning', 'Pagamento obrigatório', 'A última proposta não tem forma de pagamento preenchida.', c.id)
+                          setGanhouLoading(false)
+                          return
+                        }
+                        if (!ultimaProposta.observacoes?.trim()) {
+                          addNotificacao('warning', 'Observações obrigatórias', 'A última proposta não tem observações preenchidas.', c.id)
+                          setGanhouLoading(false)
+                          return
+                        }
+                        if (ultimaProposta.itens.some(i => !i.sku?.trim())) {
+                          addNotificacao('warning', 'SKU obrigatório', 'Todos os produtos da proposta devem ter SKU preenchido.', c.id)
+                          setGanhouLoading(false)
+                          return
+                        }
                         try {
                           const numero = `PED-${Date.now().toString().slice(-6)}`
                           await onAddPedido({
@@ -985,20 +1042,24 @@ export default function ClientePanel({
                         } catch (err) {
                           console.error('[DEBUG Ganhou] Erro ao criar pedido:', err)
                           addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
+                          setGanhouLoading(false)
+                          return
                         }
                       } else {
                         addNotificacao('info', 'Sem proposta', 'Crie uma proposta com itens antes de marcar como Ganhou', c.id)
+                        setGanhouLoading(false)
+                        return
                       }
                       onMoverCliente(c.id, 'negociacao', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
                       onClose()
                     }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-colors ${
-                      ganhouLoading
+                      ganhouLoading || c.statusFollowUp === 'aguardando_aprovacao_gerente'
                         ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
+                    {c.statusFollowUp === 'aguardando_aprovacao_gerente' ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
                   </button>
                   <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>
@@ -1223,11 +1284,11 @@ export default function ClientePanel({
             const statusAprovados = new Set(['confirmado', 'faturado', 'expedido', 'entregue'])
             const nomesHomologados = new Set<string>()
             for (const p of pedidosCliente) {
-              const isAmostraAprovada = p.tipo === 'bonificacao' && c.resultadoAmostra === 'aprovada'
+              const isAmostraAvaliada = p.tipo === 'bonificacao' && !!c.resultadoAmostra
               const isVendaConfirmada = p.tipo !== 'bonificacao' && statusAprovados.has(p.status)
-              if (isAmostraAprovada || isVendaConfirmada) {
+              if (isAmostraAvaliada || isVendaConfirmada) {
                 for (const item of (p.itens || [])) {
-                  if (item.nomeProduto) nomesHomologados.add(item.nomeProduto)
+                  if (item.nomeProduto && !c.produtosDenegados?.includes(item.nomeProduto)) nomesHomologados.add(item.nomeProduto)
                 }
               }
             }
@@ -1248,20 +1309,31 @@ export default function ClientePanel({
             )
           })()}
 
-          {/* === PRODUTOS DENEGADOS === */}
+          {/* === PRODUTOS REPROVADOS === */}
           {(() => {
             const lista = c.produtosDenegados || []
+            const motivoMap: Record<string, string> = {}
+            if (c.motivoReprovacao) {
+              c.motivoReprovacao.split(';').forEach(part => {
+                const [nome, ...rest] = part.split(':')
+                const key = nome.trim()
+                if (key) motivoMap[key] = rest.join(':').trim()
+              })
+            }
             return (
               <div className="bg-red-50 rounded-apple border border-red-200 p-4 space-y-2">
-                <h3 className="text-sm font-semibold text-red-900">🚫 Produtos Denegados</h3>
+                <h3 className="text-sm font-semibold text-red-900">🚫 Produtos Reprovados</h3>
                 {lista.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-2">
                     {lista.map(nome => (
-                      <span key={nome} className="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded-full border border-red-300 font-medium">{nome}</span>
+                      <div key={nome} className="inline-flex flex-col px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded border border-red-300">
+                        <span className="font-medium">{nome}</span>
+                        {motivoMap[nome] && <span className="text-[10px] text-red-600 font-normal">Motivo: {motivoMap[nome]}</span>}
+                      </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-red-700 opacity-70">Nenhum produto denegado registrado.</p>
+                  <p className="text-xs text-red-700 opacity-70">Nenhum produto reprovado registrado.</p>
                 )}
               </div>
             )
@@ -2472,6 +2544,7 @@ export default function ClientePanel({
                       totalValor: total, criadoEm: new Date().toISOString(),
                     })
                     setUltimaProposta(saved)
+                    setTodasPropostas(prev => [saved, ...prev])
                     setShowEditProposta(false)
                     setEditPropostaProdSearch('')
                   } catch {
@@ -2576,32 +2649,35 @@ export default function ClientePanel({
 
         const handleConfirmar = async () => {
           const hoje = new Date().toISOString().split('T')[0]
-          // Calcular homologados e denegados desta avaliação
-          const nomesHomologados = itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === true).map(i => i.nomeProduto)
-          const nomesDenegados = itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === false).map(i => i.nomeProduto)
-          // Atualizar listas acumuladas no cliente
-          const homologadosAtuais = c.produtosDenegados ? [...c.produtosDenegados] : []
+          const nomesReprovados = itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === false).map(i => i.nomeProduto)
           const denegadosAtuais = c.produtosDenegados ? [...c.produtosDenegados] : []
-          const novosDenegados = Array.from(new Set([...denegadosAtuais, ...nomesDenegados]))
-          const motivosReprovados = itens
+          const novosDenegados = Array.from(new Set([...denegadosAtuais, ...nomesReprovados]))
+          const novosMotivos = itens
             .map((item, idx) => avaliacaoItens[idx]?.aprovado === false
               ? `${item.nomeProduto}: ${avaliacaoItens[idx]?.motivo || ''}`
               : null
             )
-            .filter(Boolean)
-            .join('; ')
-          if (todosAprovados) {
-            onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje })
-            await criarNovoCicloEmProposta()
-          } else {
-            onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: hoje, motivoReprovacao: motivosReprovados, produtosDenegados: novosDenegados })
+            .filter((m): m is string => m !== null)
+          const motivoReprovacaoAnterior = c.motivoReprovacao || ''
+          const motivosReprovados = motivoReprovacaoAnterior
+            ? [motivoReprovacaoAnterior, ...novosMotivos].filter(Boolean).join('; ')
+            : novosMotivos.join('; ')
+          const extras: Partial<Cliente> = { resultadoAmostra: todosAprovados ? 'aprovada' : 'reprovada', dataResultadoAmostra: hoje }
+          if (!todosAprovados) {
+            extras.motivoReprovacao = motivosReprovados
+            extras.produtosDenegados = novosDenegados
           }
-          // Se algum foi homologado (aprovação parcial ou total), persistir no cliente original também
-          if (nomesHomologados.length > 0 && !todosAprovados) {
-            try {
-              await db.updateCliente(c.id, { produtosDenegados: novosDenegados })
-              setClientes(prev => prev.map(cli => cli.id === c.id ? { ...cli, produtosDenegados: novosDenegados } : cli))
-            } catch (err) { logger.error('Erro ao salvar denegados:', err) }
+          try {
+            if (todosAprovados) {
+              await onMoverCliente(c.id, 'proposta', extras)
+              await criarNovoCicloEmProposta()
+            } else {
+              await onMoverCliente(c.id, 'amostra_perdida', extras)
+            }
+            await db.updateCliente(c.id, extras)
+            setClientes(prev => prev.map(cli => cli.id === c.id ? { ...cli, ...extras } : cli))
+          } catch (err) {
+            logger.error('Erro ao salvar avaliação da amostra:', err)
           }
           setShowAvaliarAmostra(false)
           onClose()
@@ -2612,7 +2688,7 @@ export default function ClientePanel({
             <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">🧪 Resultado da Amostra por Item</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{c.razaoSocial} — Classifique cada produto como Homologado ou Denegado</p>
+                <p className="text-sm text-gray-500 mt-0.5">{c.razaoSocial} — Classifique cada produto como Aprovado ou Reprovado</p>
               </div>
 
               {itens.length === 0 ? (
@@ -2620,8 +2696,8 @@ export default function ClientePanel({
                   <p>Nenhum item encontrado no pedido de amostra.</p>
                   <p className="text-xs mt-1">Use os botões gerais de Homologado / Denegado.</p>
                   <div className="flex gap-3 justify-center mt-4">
-                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); await criarNovoCicloEmProposta(); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Homologado</button>
-                    <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">🚫 Denegado</button>
+                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); await criarNovoCicloEmProposta(); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Aprovado</button>
+                    <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">🚫 Reprovado</button>
                   </div>
                 </div>
               ) : (
@@ -2639,11 +2715,11 @@ export default function ClientePanel({
                             <button
                               onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { aprovado: true, motivo: '' } }))}
                               className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === true ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'}`}
-                            >✅ Homologado</button>
+                            >✅ Aprovado</button>
                             <button
                               onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], aprovado: false, motivo: prev[idx]?.motivo || '' } }))}
                               className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === false ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-700 border-red-300 hover:bg-red-50'}`}
-                            >🚫 Denegado</button>
+                            >🚫 Reprovado</button>
                           </div>
                         </div>
                         {av.aprovado === false && (
@@ -2651,7 +2727,7 @@ export default function ClientePanel({
                             type="text"
                             value={av.motivo}
                             onChange={e => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], motivo: e.target.value } }))}
-                            placeholder="Motivo da denegação (obrigatório)..."
+                            placeholder="Motivo da reprovação (obrigatório)..."
                             className="w-full px-2 py-1.5 border border-red-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-red-400"
                             autoFocus
                           />

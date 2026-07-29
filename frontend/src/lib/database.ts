@@ -1100,10 +1100,9 @@ export async function updateModuloTreinamento(id: number, p: Partial<Omit<Modulo
   if (p.emoji !== undefined) row.emoji = p.emoji
   if (p.dificuldade !== undefined) row.dificuldade = p.dificuldade
   if (p.promptInstrucoes !== undefined) row.prompt_instrucoes = p.promptInstrucoes
-  const { error } = await supabase.from('modulos_treinamento').update(row).eq('id', id)
+  const { data, error } = await supabase.from('modulos_treinamento').update(row).eq('id', id).select().single()
   if (error) throw error
-  const { data, error: fetchErr } = await supabase.from('modulos_treinamento').select('*').eq('id', id).single()
-  if (fetchErr || !data) return undefined
+  if (!data) return undefined
   return moduloTreinamentoFromDb(data)
 }
 
@@ -1117,10 +1116,9 @@ export async function updatePerfilTreinamento(id: number, p: Partial<Omit<Perfil
   if (p.dor !== undefined) row.dor = p.dor
   if (p.estilo !== undefined) row.estilo = p.estilo
   if (p.promptInstrucoes !== undefined) row.prompt_instrucoes = p.promptInstrucoes
-  const { error } = await supabase.from('perfis_treinamento').update(row).eq('id', id)
+  const { data, error } = await supabase.from('perfis_treinamento').update(row).eq('id', id).select().single()
   if (error) throw error
-  const { data, error: fetchErr } = await supabase.from('perfis_treinamento').select('*').eq('id', id).single()
-  if (fetchErr || !data) return undefined
+  if (!data) return undefined
   return perfilTreinamentoFromDb(data)
 }
 
