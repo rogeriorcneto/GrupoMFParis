@@ -170,7 +170,9 @@ interface ProdutoOmieResult {
   especieVolume: string
   cfopInterno: string
   cfopExterno: string
-  pesoKg: number
+  pesoKg: number          // mantido para compatibilidade (alias do pesoBruto)
+  pesoBruto: number
+  pesoLiquido: number
   valorUnitario: number
 }
 
@@ -234,12 +236,17 @@ function calcularPesoTotal(quantidade: number, pesoKg: number, unidade: string):
 function buildMetaProduto(produto: any, consultaOmie?: any) {
   const pesoCrm = toNumberSafe(produto?.peso_kg)
   const pesoNome = pesoFromNomeProduto(produto?.nome || '')
-  const pesoOmie = Math.max(toNumberSafe(consultaOmie?.peso_liq), toNumberSafe(consultaOmie?.peso_bruto))
+  const pesoOmieBruto = toNumberSafe(consultaOmie?.peso_bruto)
+  const pesoOmieLiq = toNumberSafe(consultaOmie?.peso_liq)
 
-  // Precedência: cadastro do Omie → cadastro do CRM → nome do produto.
+  // Bruto: cadastro do Omie → nome (embalagem) → CRM.
   // O nome é o último recurso: produtos vendidos em fardo/caixa têm o peso da
-  // embalagem unitária no nome, que não representa o peso da unidade de venda.
-  const pesoFinal = pesoOmie || pesoCrm || pesoNome || 0
+  // embalagem unitária no nome, que não representa o peso da unidade líquida.
+  const pesoBruto = pesoOmieBruto || pesoNome || pesoCrm || 0
+
+  // Líquido: cadastro do Omie (peso_liq) → CRM (sincronizado como peso_liq).
+  // Se não houver, aproximamos pelo bruto para evitar erro de cadastro.
+  const pesoLiquido = pesoOmieLiq || pesoCrm || pesoBruto
 
   return {
     descricao: consultaOmie?.descricao || produto?.nome || '',
@@ -249,7 +256,9 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
     especieVolume: produto?.especie_volume || 'FARDO',
     cfopInterno: produto?.cfop_interno || '5101',
     cfopExterno: produto?.cfop_externo || '6101',
-    pesoKg: pesoFinal,
+    pesoBruto,
+    pesoLiquido,
+    pesoKg: pesoBruto,
     valorUnitario: toNumberSafe(consultaOmie?.valor_unitario) || toNumberSafe(produto?.preco) || 0,
   }
 }
@@ -572,7 +581,8 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   // 3. Garantir produtos no Omie e montar itens
   const det: any[] = []
   let totalVolumes = 0
-  let pesoTotalPedido = 0
+  let pesoTotalBruto = 0
+  let pesoTotalLiquido = 0
   let especieVolume = 'FARDO'
   let marcaVolumes = ''
 
@@ -588,8 +598,10 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     const cfop = tipoPedido === 'bonificacao'
       ? (isIntraEstado ? '5910' : '6910')
       : (isIntraEstado ? '5101' : '6101')
-    const pesoTotal = calcularPesoTotal(quantidade, prodOmie.pesoKg, prodOmie.unidade)
-    pesoTotalPedido += pesoTotal
+    const pesoBrutoItem = calcularPesoTotal(quantidade, prodOmie.pesoBruto, prodOmie.unidade)
+    const pesoLiquidoItem = calcularPesoTotal(quantidade, prodOmie.pesoLiquido, prodOmie.unidade)
+    pesoTotalBruto += pesoBrutoItem
+    pesoTotalLiquido += pesoLiquidoItem
 
     const detItem: any = {
       ide: {
@@ -613,8 +625,8 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
         valor_desconto: 0,
       },
       inf_adic: {
-        peso_bruto: pesoTotal,
-        peso_liquido: pesoTotal,
+        peso_bruto: pesoBrutoItem,
+        peso_liquido: pesoLiquidoItem,
       },
     }
 
@@ -669,8 +681,8 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     especie_volumes: especieVolume,
     marca_volumes: marcaVolumes,
     // Aba "Frete e Outras Despesas" do pedido: peso total da carga.
-    peso_bruto: arredondar3(pesoTotalPedido),
-    peso_liquido: arredondar3(pesoTotalPedido),
+    peso_bruto: arredondar3(pesoTotalBruto),
+    peso_liquido: arredondar3(pesoTotalLiquido),
   }
 
   // 7. Departamentos: COMERCIAL (Omie WSDL: cCodDepto, nPerc, nValor, nValorFixo)
