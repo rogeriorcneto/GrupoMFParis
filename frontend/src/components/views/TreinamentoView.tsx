@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useConversation, ConversationProvider } from '@elevenlabs/react'
 import {
   PlayIcon,
   StopIcon,
@@ -46,7 +47,7 @@ interface SessaoTreinamento {
   createdAt: string
 }
 
-type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config'
+type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config' | 'ligar'
 
 const DEFAULT_MODULES: ModuloTreinamento[] = [
   { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '📞', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
@@ -397,9 +398,10 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {(['home', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'config'] : [])] as Aba[]).map(a => {
+            {(['home', 'ligar', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'config'] : [])] as Aba[]).map(a => {
               const labels: Record<string, { icon: React.ReactNode; label: string }> = {
                 home: { icon: <PlayIcon className="h-4 w-4" />, label: 'Treinar' },
+                ligar: { icon: <PhoneIcon className="h-4 w-4" />, label: 'Ligar' },
                 produtos: { icon: <BookOpenIcon className="h-4 w-4" />, label: 'Produtos' },
                 quiz: { icon: <SparklesIcon className="h-4 w-4" />, label: 'Quiz IA' },
                 historico: { icon: <ClockIcon className="h-4 w-4" />, label: 'Histórico' },
@@ -908,6 +910,337 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
           setModulos={setModulos}
           setPerfis={setPerfis}
         />
+      )}
+
+      {/* ─── ABA LIGAR — SIMULAÇÃO DE LIGAÇÃO POR VOZ ──────── */}
+      {aba === 'ligar' && (
+        <ConversationProvider>
+          <LigarView
+            modulos={modulos}
+            perfis={perfis}
+            moduloId={moduloId}
+            perfilId={perfilId}
+            setModuloId={setModuloId}
+            setPerfilId={setPerfilId}
+          />
+        </ConversationProvider>
+      )}
+    </div>
+  )
+}
+
+// ─── COMPONENTE LIGAR (usa useConversation do ElevenLabs) ───────────
+const ELEVENLABS_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || ''
+const VOZ_MASCULINA = 'aU2vcrnwi348Gnc2Y1si'
+const VOZ_FEMININA = 'RGymW84CSmfVugnA5tvA'
+
+function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId }: {
+  modulos: ModuloTreinamento[]
+  perfis: PerfilTreinamento[]
+  moduloId: number | null
+  perfilId: number | null
+  setModuloId: (id: number | null) => void
+  setPerfilId: (id: number | null) => void
+}) {
+  const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'connected' | 'ended'>('idle')
+  const [duracao, setDuracao] = useState(0)
+  const [tempoInicio, setTempoInicio] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([])
+  const transcriptRef = useRef<HTMLDivElement>(null)
+
+  const perfilAtual = perfis.find(p => p.id === perfilId)
+  const moduloAtual = modulos.find(m => m.id === moduloId)
+  const isFeminino = perfilAtual?.nome?.toLowerCase().includes('ana')
+
+  const conversation = useConversation({
+    onConnect: () => {
+      setCallStatus('connected')
+      const t = Date.now()
+      setTempoInicio(t)
+      setDuracao(0)
+      timerRef.current = setInterval(() => setDuracao(Math.floor((Date.now() - t) / 1000)), 1000)
+    },
+    onDisconnect: () => {
+      setCallStatus('ended')
+      if (timerRef.current) clearInterval(timerRef.current)
+    },
+    onMessage: (message: any) => {
+      if (message.source === 'ai' && message.message) {
+        setTranscript(prev => [...prev, { role: 'agent', text: message.message }])
+      } else if (message.source === 'user' && message.message) {
+        setTranscript(prev => [...prev, { role: 'user', text: message.message }])
+      }
+    },
+    onError: (error: any) => {
+      console.error('ElevenLabs error:', error)
+      setCallStatus('idle')
+      if (timerRef.current) clearInterval(timerRef.current)
+    },
+  })
+
+  useEffect(() => {
+    if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight
+  }, [transcript])
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [])
+
+  const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
+
+  const iniciarLigacao = async () => {
+    if (!ELEVENLABS_AGENT_ID) {
+      setPermissionError('Agent ID não configurado. Defina VITE_ELEVENLABS_AGENT_ID no .env')
+      return
+    }
+    setPermissionError(null)
+    setTranscript([])
+    setCallStatus('connecting')
+
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setPermissionError('Permissão de microfone necessária para a ligação')
+      setCallStatus('idle')
+      return
+    }
+
+    const contextoPerfil = perfilAtual
+      ? `Você é ${perfilAtual.nome} da ${perfilAtual.negocio}. Dor: ${perfilAtual.dor}. Estilo: ${perfilAtual.estilo}.`
+      : 'Você é um cliente genérico de indústria alimentícia.'
+    const contextoModulo = moduloAtual
+      ? `Módulo: ${moduloAtual.titulo} — ${moduloAtual.objetivo}`
+      : ''
+
+    try {
+      await conversation.startSession({
+        agentId: ELEVENLABS_AGENT_ID,
+        overrides: {
+          agent: {
+            prompt: {
+              prompt: `SESSÃO ATUAL:\nPERFIL: ${contextoPerfil}\n${contextoModulo}\n\nCOMECE: Atenda o telefone de forma natural como ${perfilAtual?.nome || 'o cliente'} faria.`
+            },
+            firstMessage: perfilAtual?.nome?.includes('João') ? 'Alô? Quem fala?'
+              : perfilAtual?.nome?.includes('Carlos') ? 'Alô, pois não?'
+              : perfilAtual?.nome?.includes('Márcio') ? 'Sim?'
+              : perfilAtual?.nome?.includes('Ana') ? 'Alô?'
+              : perfilAtual?.nome?.includes('Roberto') ? 'Oi, fala!'
+              : 'Alô?',
+          },
+          tts: {
+            voiceId: isFeminino ? VOZ_FEMININA : VOZ_MASCULINA,
+          },
+        },
+      })
+    } catch (err: any) {
+      console.error('Erro ao iniciar ligação:', err)
+      setPermissionError(err?.message || 'Erro ao conectar com o agente de voz')
+      setCallStatus('idle')
+    }
+  }
+
+  const encerrarLigacao = async () => {
+    await conversation.endSession()
+    setCallStatus('ended')
+    if (timerRef.current) clearInterval(timerRef.current)
+  }
+
+  return (
+    <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 space-y-6">
+      {/* Seleção de módulo e perfil — só quando idle */}
+      {callStatus === 'idle' && (
+        <>
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-3">
+              <PhoneIcon className="h-8 w-8 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Simulação de Ligação</h2>
+            <p className="text-sm text-gray-500 mt-1">Pratique uma ligação real por voz com um cliente simulado por IA</p>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Módulo</label>
+              <div className="grid grid-cols-2 gap-2">
+                {modulos.filter(m => m.ativo).map(m => (
+                  <button key={m.id} onClick={() => setModuloId(m.id)}
+                    className={`p-3 rounded-lg border text-left transition-all ${moduloId === m.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                    <span className="text-lg">{m.emoji}</span>
+                    <p className="text-xs font-medium text-gray-800 dark:text-gray-200 mt-1">{m.titulo}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{m.dificuldade}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">Cliente</label>
+              <div className="space-y-2">
+                {perfis.filter(p => p.ativo).map(p => (
+                  <button key={p.id} onClick={() => setPerfilId(p.id)}
+                    className={`w-full p-3 rounded-lg border text-left transition-all flex items-center gap-3 ${perfilId === p.id ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                    <span className="text-2xl">{p.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.nome}</p>
+                        {p.nome?.toLowerCase().includes('ana') ? (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded-full">♀ voz feminina</span>
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">♂ voz masculina</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{p.negocio} · {p.dor}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {permissionError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+              <p className="text-sm text-red-700 dark:text-red-300">{permissionError}</p>
+            </div>
+          )}
+
+          <button onClick={iniciarLigacao} disabled={!moduloId || !perfilId}
+            className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-bold text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg shadow-green-500/20">
+            <PhoneIcon className="h-6 w-6" />
+            Iniciar Ligação
+          </button>
+        </>
+      )}
+
+      {/* Conectando */}
+      {callStatus === 'connecting' && (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <PhoneIcon className="h-10 w-10 text-green-600 animate-pulse" />
+            </div>
+            <div className="absolute inset-0 w-24 h-24 rounded-full border-4 border-green-400 animate-ping opacity-20" />
+          </div>
+          <p className="text-sm text-gray-500 animate-pulse">Conectando com {perfilAtual?.nome || 'cliente'}...</p>
+          <p className="text-xs text-gray-400">Aguarde, o telefone está tocando...</p>
+        </div>
+      )}
+
+      {/* Em ligação */}
+      {callStatus === 'connected' && (
+        <div className="flex flex-col h-[calc(100vh-200px)] gap-4">
+          {/* Header da ligação */}
+          <div className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl p-6 text-white text-center shadow-lg relative overflow-hidden">
+            <div className="absolute inset-0 opacity-10">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="absolute inset-0 rounded-full border border-white animate-ping" style={{ animationDelay: `${i * 0.5}s`, animationDuration: '2s' }} />
+              ))}
+            </div>
+            <div className="relative">
+              <span className="text-4xl mb-2 block">{perfilAtual?.emoji}</span>
+              <h3 className="text-lg font-bold">{perfilAtual?.nome}</h3>
+              <p className="text-green-200 text-xs">{perfilAtual?.negocio}</p>
+              <div className="flex items-center justify-center gap-2 mt-3">
+                <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
+                <span className="text-xl font-mono font-bold">{fmt(duracao)}</span>
+              </div>
+              <p className="text-green-200 text-xs mt-1">
+                {conversation.isSpeaking ? '🗣️ Cliente falando...' : '🎙️ Ouvindo você...'}
+              </p>
+            </div>
+          </div>
+
+          {/* Waveform visual */}
+          <div className="flex items-center justify-center gap-1 h-8">
+            {[...Array(20)].map((_, i) => (
+              <div key={i}
+                className={`w-1 rounded-full transition-all duration-150 ${conversation.isSpeaking ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                style={{
+                  height: conversation.isSpeaking ? `${8 + Math.random() * 24}px` : '4px',
+                  animationDelay: `${i * 50}ms`,
+                  transition: 'height 0.15s ease',
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Transcript em tempo real */}
+          <div ref={transcriptRef} className="flex-1 overflow-y-auto bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+            {transcript.length === 0 && (
+              <p className="text-center text-gray-400 text-sm py-8">A transcrição aparecerá aqui em tempo real...</p>
+            )}
+            {transcript.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${msg.role === 'user'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}>
+                  <p className="text-[10px] font-medium opacity-70 mb-0.5">{msg.role === 'user' ? '🎙️ Você' : `${perfilAtual?.emoji} ${perfilAtual?.nome}`}</p>
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Botão desligar */}
+          <button onClick={encerrarLigacao}
+            className="w-full py-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-xl font-bold text-base transition-all flex items-center justify-center gap-3 shadow-lg shadow-red-500/20">
+            <PhoneIcon className="h-6 w-6 rotate-[135deg]" />
+            Desligar
+          </button>
+        </div>
+      )}
+
+      {/* Pós-ligação */}
+      {callStatus === 'ended' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
+            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 text-center">
+              <PhoneIcon className="h-10 w-10 mx-auto mb-2" />
+              <h2 className="text-xl font-bold">Ligação Encerrada</h2>
+              <p className="text-green-100 text-sm">{fmt(duracao)} com {perfilAtual?.nome}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="text-lg font-bold text-gray-800 dark:text-gray-200">{fmt(duracao)}</p>
+                  <p className="text-[10px] text-gray-400">Duração</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="text-lg font-bold text-gray-800 dark:text-gray-200">{transcript.filter(t => t.role === 'user').length}</p>
+                  <p className="text-[10px] text-gray-400">Suas falas</p>
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                  <p className="text-lg font-bold text-gray-800 dark:text-gray-200">{transcript.filter(t => t.role === 'agent').length}</p>
+                  <p className="text-[10px] text-gray-400">Falas do cliente</p>
+                </div>
+              </div>
+
+              {transcript.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Transcrição da Ligação</h4>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 max-h-64 overflow-y-auto space-y-2">
+                    {transcript.map((msg, i) => (
+                      <div key={i} className="text-sm">
+                        <span className={`font-medium ${msg.role === 'user' ? 'text-primary-600' : 'text-gray-600 dark:text-gray-400'}`}>
+                          {msg.role === 'user' ? '🎙️ Você: ' : `${perfilAtual?.emoji} ${perfilAtual?.nome}: `}
+                        </span>
+                        <span className="text-gray-700 dark:text-gray-300">{msg.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={() => { setCallStatus('idle'); setTranscript([]); setDuracao(0) }}
+              className="flex-1 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+              <ArrowPathIcon className="h-4 w-4" />Nova Ligação
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

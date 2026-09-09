@@ -388,10 +388,20 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   // Clientes em proposta que são novos ciclos (duplicados de perdidos)
   const clientesNovoCicloProposta = useMemo(() => {
-    return clientesFiltradosVendedor.filter(c => 
+    let base = clientesFiltradosVendedor.filter(c => 
       c.etapa === 'proposta' && c.novoCiclo === true
     )
-  }, [clientesFiltradosVendedor])
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      base = base.filter(c =>
+        c.razaoSocial.toLowerCase().includes(q) ||
+        (c.nomeFantasia || '').toLowerCase().includes(q) ||
+        (c.contatoNome || '').toLowerCase().includes(q) ||
+        (c.cnpj || '').includes(q)
+      )
+    }
+    return base
+  }, [clientesFiltradosVendedor, search])
 
   // Clientes em follow_up OU perdidos vindo de negociação que podem iniciar novo ciclo
   const clientesNovoCiclo = useMemo(() => {
@@ -988,10 +998,10 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                       </div>
                     )
                   })}
-                  {stageClientes.length === 0 && !showNovosCiclos && <div className="p-6 text-center text-gray-400 dark:text-gray-600 text-xs">Arraste clientes aqui</div>}
+                  {stageClientes.length === 0 && !showNovosCiclos && !search.trim() && <div className="p-6 text-center text-gray-400 dark:text-gray-600 text-xs">Arraste clientes aqui</div>}
 
-                  {/* Novos ciclos: todos juntos, ocultos por padrão, botão 🔄 no header para mostrar */}
-                  {isProposta && showNovosCiclos && (() => {
+                  {/* Novos ciclos: todos juntos, ocultos por padrão, botão 🔄 no header para mostrar — auto-mostrar quando pesquisa encontra */}
+                  {isProposta && (showNovosCiclos || search.trim()) && (() => {
                     const todos = [
                       ...clientesNovoCicloProposta,
                       ...clientesNovoCiclo.filter(c => !clientesNovoCicloProposta.some(p => p.id === c.id)),
@@ -1048,7 +1058,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     )
                   })()}
 
-                  {isProposta && showNovosCiclos && novoCicloCount === 0 && stageClientes.length === 0 && (
+                  {isProposta && (showNovosCiclos || search.trim()) && novoCicloCount === 0 && stageClientes.length === 0 && (
                     <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>
                   )}
                 </div>

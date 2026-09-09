@@ -641,8 +641,8 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     det.push(detItem)
   }
 
-  // 4. Data de previsão: 7 dias úteis
-  const dataPrevisao = calcularDataPrevisao(7)
+  // 4. Data de previsão: 6 dias úteis
+  const dataPrevisao = calcularDataPrevisao(6)
 
   // 5. Forma de pagamento → parcelas Omie
   // Bonificação é grátis (valor 0): força "À vista" pois Omie rejeita parcela com valor 0.

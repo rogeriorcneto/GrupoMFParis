@@ -14,6 +14,7 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@elevenlabs/react": "^1.15.2",
     "@heroicons/react": "^2.0.16",
     "@supabase/supabase-js": "^2.97.0",
     "@twilio/voice-sdk": "^2.18.1",
