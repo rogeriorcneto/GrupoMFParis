@@ -922,6 +922,10 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             perfilId={perfilId}
             setModuloId={setModuloId}
             setPerfilId={setPerfilId}
+            vendedor={vendedor}
+            historico={historico}
+            setHistorico={setHistorico}
+            produtos={produtos}
           />
         </ConversationProvider>
       )}
@@ -934,21 +938,26 @@ const ELEVENLABS_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || ''
 const VOZ_MASCULINA = 'aU2vcrnwi348Gnc2Y1si'
 const VOZ_FEMININA = 'RGymW84CSmfVugnA5tvA'
 
-function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId }: {
+function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId, vendedor, historico, setHistorico, produtos }: {
   modulos: ModuloTreinamento[]
   perfis: PerfilTreinamento[]
   moduloId: number | null
   perfilId: number | null
   setModuloId: (id: number | null) => void
   setPerfilId: (id: number | null) => void
+  vendedor: Vendedor
+  historico: SessaoTreinamento[]
+  setHistorico: (h: SessaoTreinamento[]) => void
+  produtos: Produto[]
 }) {
-  const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'connected' | 'ended'>('idle')
+  const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'connected' | 'ended' | 'evaluating'>('idle')
   const [duracao, setDuracao] = useState(0)
   const [tempoInicio, setTempoInicio] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [transcript, setTranscript] = useState<Array<{ role: 'user' | 'agent'; text: string }>>([])
   const transcriptRef = useRef<HTMLDivElement>(null)
+  const [feedbackObj, setFeedbackObj] = useState<any>(null)
 
   const perfilAtual = perfis.find(p => p.id === perfilId)
   const moduloAtual = modulos.find(m => m.id === moduloId)
@@ -1041,10 +1050,85 @@ function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfil
     }
   }
 
-  const encerrarLigacao = async () => {
-    await conversation.endSession()
+  const notaColor = (n: number | null) => {
+    const v = n ?? 0
+    return v >= 9 ? 'text-green-600 bg-green-100' : v >= 7 ? 'text-yellow-600 bg-yellow-100' : 'text-red-600 bg-red-100'
+  }
+
+  const avaliarLigacao = async (transcriptFinal: Array<{ role: 'user' | 'agent'; text: string }>) => {
+    setCallStatus('evaluating')
+    const transcriptTexto = transcriptFinal.map(m => `${m.role === 'user' ? 'VENDEDOR' : 'CLIENTE'}: ${m.text}`).join('\n')
+    const duracaoFinal = Math.max(0, Math.floor((Date.now() - tempoInicio) / 1000))
+
+    const contextoComercial = `${MANIFESTO_COMERCIAL_OKEYLAC}\n\n${REGRAS_MF_PARIS}`
+    const produtosCrmTexto = produtos
+      .map(p => `- ${p.nome} (${p.categoria}) | ${p.descricao || ''} | ${p.preco > 0 ? `R$ ${p.preco.toFixed(2)}/${p.unidade}` : 'preço sob consulta'}`)
+      .join('\n')
+
+    const sistemaAvaliacao = `Você é um coach de vendas RIGOROSO da MF Paris / Okeylac. Você vai avaliar a performance de um vendedor em uma LIGAÇÃO TELEFÔNICA simulada.
+
+PERFIL DO CLIENTE: ${perfilAtual?.nome} (${perfilAtual?.negocio}) — Dor: ${perfilAtual?.dor}. Estilo: ${perfilAtual?.estilo}.
+MÓDULO: ${moduloAtual?.titulo} — ${moduloAtual?.objetivo}
+
+CATÁLOGO DE PRODUTOS:
+${TEXTO_CATALOGO}
+
+PRODUTOS CRM:
+${produtosCrmTexto}
+
+CONTEXTO COMERCIAL:
+${contextoComercial}
+
+AVALIE e dê um FEEDBACK DETALHADO em JSON com este formato EXATO:
+{"nota": 6, "abertura": 5, "qualificacao": 6, "apresentacao": 7, "objecoes": 5, "fechamento": 6, "pontos_fortes": ["..."], "pontos_melhora": ["..."], "feedback_geral": "..."}
+
+RUBRICA DE NOTA — seja RIGOROSO e use TODA a escala de 0 a 10. NOTAS GENÉRICAS (7/8/9 automáticas) SÃO PROIBIDAS:
+- 10: execução exemplar, objetivo totalmente atingido, argumentos afiados, conexão genuína e próximo passo claro.
+- 8-9: muito bom, com pouquíssimas falhas e objetivo bem atingido.
+- 5-7: mediano, atingiu parcialmente o objetivo, erros de técnicas, argumentos rasos ou falta de qualificação.
+- 3-4: ruim, muitos erros, despreparo, não conectou ou não avançou no objetivo.
+- 0-2: péssimo, sem conexão, sem argumento, sem técnicas ou abordagem inadequada.
+
+REGRAS PARA A NOTA FINAL:
+- Se o vendedor não atingir o objetivo do módulo, a nota final NÃO pode ser maior que 6.
+- Cada erro de qualificação, argumento fraco, resposta genérica ou falta de conteúdo do catálogo desconta 1-2 pontos.
+- A nota final é uma média PONDERADA dos critérios, com ênfase no que o módulo exige.
+- CONSIDERE que foi uma LIGAÇÃO POR VOZ — avalie fluência, naturalidade, uso de pausas e escuta ativa.
+- Você DEVE justificar a nota no "feedback_geral", citando exemplos reais do transcript.`
+
+    try {
+      const resp = await callAI(
+        [{ role: 'user', content: `TRANSCRIPT DA LIGAÇÃO:\n${transcriptTexto}\n\nDuração: ${Math.floor(duracaoFinal / 60)}min ${duracaoFinal % 60}s\n\nAGORA DÊ O FEEDBACK DETALHADO EM JSON conforme instrução.` }],
+        sistemaAvaliacao
+      )
+      const jsonMatch = resp.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const avaliacao = JSON.parse(jsonMatch[0])
+        setFeedbackObj(avaliacao)
+        const notaFinal = typeof avaliacao.nota === 'number' ? avaliacao.nota : null
+        const sessao: SessaoTreinamento = {
+          id: Date.now().toString(), modulo: String(moduloId), perfilId: String(perfilId),
+          msgs: transcriptFinal.map(t => ({ role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.text, ts: Date.now() })),
+          duracao: duracaoFinal, nota: notaFinal,
+          feedback: JSON.stringify(avaliacao), createdAt: new Date().toISOString()
+        }
+        const novoHist = [sessao, ...historico]
+        setHistorico(novoHist)
+        try { await saveRoleplaySession(vendedor.id, sessao, perfilAtual?.nome) } catch { /* salvo localmente */ }
+      } else {
+        setFeedbackObj({ nota: null, feedback_geral: 'Não foi possível avaliar a ligação. Tente novamente.' })
+      }
+    } catch {
+      setFeedbackObj({ nota: null, feedback_geral: 'Erro ao avaliar a ligação. Verifique a conexão.' })
+    }
     setCallStatus('ended')
+  }
+
+  const encerrarLigacao = async () => {
+    const transcriptFinal = [...transcript]
+    await conversation.endSession()
     if (timerRef.current) clearInterval(timerRef.current)
+    await avaliarLigacao(transcriptFinal)
   }
 
   return (
@@ -1191,16 +1275,77 @@ function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfil
         </div>
       )}
 
-      {/* Pós-ligação */}
+      {/* Avaliando */}
+      {callStatus === 'evaluating' && (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+            <SparklesIcon className="h-10 w-10 text-primary-600 animate-pulse" />
+          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Analisando sua performance...</p>
+          <p className="text-xs text-gray-400">O coach IA está avaliando a ligação</p>
+          <div className="flex gap-1.5 mt-2">
+            {[0,1,2].map(i => <span key={i} className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Pós-ligação com feedback */}
       {callStatus === 'ended' && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
             <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 text-center">
-              <PhoneIcon className="h-10 w-10 mx-auto mb-2" />
-              <h2 className="text-xl font-bold">Ligação Encerrada</h2>
-              <p className="text-green-100 text-sm">{fmt(duracao)} com {perfilAtual?.nome}</p>
+              <TrophyIcon className="h-12 w-12 mx-auto mb-2" />
+              <h2 className="text-2xl font-bold">Ligação Concluída!</h2>
+              <p className="text-green-100 text-sm">Análise de Performance · {fmt(duracao)} com {perfilAtual?.nome}</p>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-6">
+              {/* Nota principal */}
+              {feedbackObj && (
+                <>
+                  <div className="text-center">
+                    <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full text-3xl font-bold mb-2 ${notaColor(feedbackObj.nota)}`}>
+                      {feedbackObj.nota ?? '?'}
+                    </div>
+                    <p className="text-sm text-gray-500">Nota Final / 10</p>
+                  </div>
+
+                  {/* Breakdown */}
+                  {feedbackObj.abertura != null && (
+                    <div className="grid grid-cols-5 gap-2">
+                      {['abertura', 'qualificacao', 'apresentacao', 'objecoes', 'fechamento'].map(k => (
+                        <div key={k} className="text-center p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <p className={`text-lg font-bold ${notaColor(feedbackObj[k] ?? 0).split(' ')[0]}`}>{feedbackObj[k] != null ? feedbackObj[k] : '—'}</p>
+                          <p className="text-[10px] text-gray-400 capitalize">{k}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Pontos fortes */}
+                  {feedbackObj.pontos_fortes?.length > 0 && (
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                      <h4 className="text-sm font-bold text-green-800 dark:text-green-300 mb-2 flex items-center gap-1"><CheckCircleIcon className="h-4 w-4" />Pontos Fortes</h4>
+                      <ul className="space-y-1">{feedbackObj.pontos_fortes.map((p: string, i: number) => <li key={i} className="text-sm text-green-700 dark:text-green-300">• {p}</li>)}</ul>
+                    </div>
+                  )}
+
+                  {/* Pontos de melhora */}
+                  {feedbackObj.pontos_melhora?.length > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+                      <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-2 flex items-center gap-1"><LightBulbIcon className="h-4 w-4" />Pontos de Melhora</h4>
+                      <ul className="space-y-1">{feedbackObj.pontos_melhora.map((p: string, i: number) => <li key={i} className="text-sm text-amber-700 dark:text-amber-300">• {p}</li>)}</ul>
+                    </div>
+                  )}
+
+                  {/* Feedback geral */}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-1"><SparklesIcon className="h-4 w-4 text-primary-500" />Análise do Coach IA</h4>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{feedbackObj.feedback_geral}</p>
+                  </div>
+                </>
+              )}
+
+              {/* Stats da ligação */}
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                   <p className="text-lg font-bold text-gray-800 dark:text-gray-200">{fmt(duracao)}</p>
@@ -1216,10 +1361,14 @@ function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfil
                 </div>
               </div>
 
+              {/* Transcrição colapsável */}
               {transcript.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Transcrição da Ligação</h4>
-                  <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 max-h-64 overflow-y-auto space-y-2">
+                <details className="group">
+                  <summary className="text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-700 flex items-center gap-1">
+                    <ChevronRightIcon className="h-3 w-3 group-open:rotate-90 transition-transform" />
+                    Ver Transcrição da Ligação
+                  </summary>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 max-h-64 overflow-y-auto space-y-2 mt-2">
                     {transcript.map((msg, i) => (
                       <div key={i} className="text-sm">
                         <span className={`font-medium ${msg.role === 'user' ? 'text-primary-600' : 'text-gray-600 dark:text-gray-400'}`}>
@@ -1229,13 +1378,13 @@ function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfil
                       </div>
                     ))}
                   </div>
-                </div>
+                </details>
               )}
             </div>
           </div>
 
           <div className="flex gap-3">
-            <button onClick={() => { setCallStatus('idle'); setTranscript([]); setDuracao(0) }}
+            <button onClick={() => { setCallStatus('idle'); setTranscript([]); setDuracao(0); setFeedbackObj(null) }}
               className="flex-1 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
               <ArrowPathIcon className="h-4 w-4" />Nova Ligação
             </button>

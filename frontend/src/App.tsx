@@ -27,6 +27,7 @@ import FunilModals from './components/FunilModals'
 import AppRouter, { PersistentViews } from './components/AppRouter'
 import GlobalSearch from './components/GlobalSearch'
 import ChatInterno from './components/ChatInterno'
+import FloatingAIAssistant from './components/FloatingAIAssistant'
 
 // ── Active-time tracker ─────────────────────────────────────────────────────
 // Stores accumulated active seconds in localStorage.
@@ -790,6 +791,9 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
             onUnreadChange={setChatUnreadTotal}
           />
         )}
+
+        {/* Assistente IA Flutuante */}
+        {loggedUser && <FloatingAIAssistant vendedor={loggedUser} produtos={produtos} />}
 
         {/* Chat Interno — Botão flutuante */}
         {loggedUser && (
