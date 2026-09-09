@@ -60,6 +60,7 @@ interface AppRouterProps {
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
   onNovoCiclo?: (cliente: Cliente) => void
   onVerNoFunil?: (cliente: Cliente) => void
+  highlightTarefaId?: number
 }
 
 export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
@@ -79,7 +80,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, handleQuickAction,
-  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil
+  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -150,6 +151,8 @@ export default function AppRouter({
                   const clienteOriginal = clientes.find(c => c.id === pedido.clienteId) || cliAprov
                   const novoCliente: Omit<Cliente, 'id'> = {
                     ...clienteOriginal,
+                    cnpj: undefined,
+                    googlePlaceId: undefined,
                     etapa: 'negociacao',
                     etapaAnterior: 'follow_up',
                     novoCiclo: true,
@@ -255,7 +258,7 @@ export default function AppRouter({
                   }
                   const novoCard: Omit<Cliente, 'id'> = {
                     ...cli,
-                    cnpj: undefined,
+                    cnpj: undefined, googlePlaceId: undefined,
                     etapa: 'proposta',
                     etapaAnterior: 'perdido',
                     novoCiclo: true,
@@ -519,6 +522,7 @@ export default function AppRouter({
     case 'tarefas':
       return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast} onVerNoFunil={onVerNoFunil}
         onOpenClientePanel={setSelectedClientePanel}
+        highlightTarefaId={highlightTarefaId}
         onDeleteTarefa={async (t) => {
           try {
             await db.deleteTarefa(t.id)
@@ -689,7 +693,7 @@ export default function AppRouter({
                 if (cli) {
                   try {
                     if (cli.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cli, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cli, cnpj: undefined, googlePlaceId: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else {
@@ -713,7 +717,7 @@ export default function AppRouter({
                 if (cli2) {
                   try {
                     if (cli2.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cli2, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cli2, cnpj: undefined, googlePlaceId: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cli2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else {
@@ -757,7 +761,7 @@ export default function AppRouter({
                 if (cliApproved) {
                   try {
                     if (cliApproved.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved, cnpj: undefined, googlePlaceId: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else {
@@ -781,7 +785,7 @@ export default function AppRouter({
                 if (cliApproved2) {
                   try {
                     if (cliApproved2.etapa === 'perdido') {
-                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved2, cnpj: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
+                      const novoCard: Omit<Cliente, 'id'> = { ...cliApproved2, cnpj: undefined, googlePlaceId: undefined, etapa: 'proposta', etapaAnterior: 'perdido', novoCiclo: true, cicloNumero: (cliApproved2.cicloNumero || 1) + 1, statusFollowUp: undefined, motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined, valorEstimado: undefined, valorProposta: undefined, dataProposta: undefined, dataEntradaEtapa: new Date().toISOString(), historicoEtapas: [] }
                       const cardCriado = await db.insertCliente(novoCard)
                       setClientes(prev => [...prev, cardCriado])
                     } else {

@@ -147,6 +147,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showGlobalSearch, setShowGlobalSearch] = useState(false)
+  const [highlightTarefaId, setHighlightTarefaId] = useState<number | undefined>(undefined)
   const [showChat, setShowChat] = useState(false)
   const [chatUnreadTotal, setChatUnreadTotal] = useState(0)
   const [dbNotificacoes, setDbNotificacoes] = useState<Notificacao[]>([])
@@ -550,12 +551,18 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           notificacoes={notificacoes} showNotifications={showNotifications}
           setShowNotifications={setShowNotifications} markAllRead={markAllRead} markRead={markRead}
           onClickNotificacao={(n) => {
-            if (n.acao === 'abrir_tarefa') {
+            if (n.acao === 'abrir_tarefa' && n.tarefaId) {
+              setHighlightTarefaId(n.tarefaId)
+              setActiveView('tarefas')
+            } else if (n.acao === 'abrir_tarefa') {
+              setHighlightTarefaId(undefined)
               setActiveView('tarefas')
             } else if (n.clienteId) {
+              setHighlightTarefaId(undefined)
               const cli = clientes.find(c => c.id === n.clienteId)
               if (cli) setSelectedClientePanel(cli)
             } else if (n.acao === 'abrir_funil') {
+              setHighlightTarefaId(undefined)
               setActiveView('funil')
             }
           }}
@@ -601,6 +608,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
                 onNovoCiclo={handleNovoCiclo}
                 onVerNoFunil={(c) => { setActiveView('funil'); setSelectedClientePanel(c) }}
+                highlightTarefaId={highlightTarefaId}
               />
               <PersistentViews
                 activeView={activeView}

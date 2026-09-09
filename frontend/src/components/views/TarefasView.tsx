@@ -53,14 +53,24 @@ interface TarefaCardProps {
   onOpenClientePanel?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
   onVerRegraAutomacao?: (regraId: number) => void
+  highlightTarefaId?: number
 }
 
 const TarefaCard: React.FC<TarefaCardProps> = ({
   tarefa, cliente, vendedor, isGerente,
   onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
-  isOverdue, isToday, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, onVerRegraAutomacao
+  isOverdue, isToday, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, onVerRegraAutomacao, highlightTarefaId
 }) => {
-  const [expanded, setExpanded] = useState(false)
+  const isHighlighted = highlightTarefaId === tarefa.id
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [expanded, setExpanded] = useState(isHighlighted)
+
+  useEffect(() => {
+    if (isHighlighted && cardRef.current) {
+      setExpanded(true)
+      setTimeout(() => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
+    }
+  }, [isHighlighted])
   const [completing, setCompleting] = useState(false)
   const [nota, setNota] = useState(tarefa.descricao || '')
   const [notaSaved, setNotaSaved] = useState(false)
@@ -112,6 +122,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
 
   return (
     <div
+      ref={cardRef}
       className={`
         group relative rounded-2xl border transition-all duration-300 overflow-hidden
         ${done
@@ -121,6 +132,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
             : cfg.color + ' shadow-sm hover:shadow-md'
         }
         ${completing ? 'scale-95 opacity-50' : 'scale-100 opacity-100'}
+        ${isHighlighted ? 'ring-2 ring-primary-500 ring-offset-2' : ''}
       `}
     >
       {/* Barra lateral de prioridade */}
@@ -726,7 +738,8 @@ const TarefasView: React.FC<{
   onVerNoFunil?: (cliente: Cliente) => void
   onOpenClientePanel?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
-}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onOpenClientePanel, onDeleteTarefa }) => {
+  highlightTarefaId?: number
+}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, highlightTarefaId }) => {
   const [showModal, setShowModal] = useState(false)
   const [commCliente, setCommCliente] = useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
@@ -743,6 +756,15 @@ const TarefasView: React.FC<{
   const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
+
+  // Quando uma tarefa é destacada via notificação, mostrar todas as datas para garantir visibilidade
+  useEffect(() => {
+    if (highlightTarefaId) {
+      setDateFilter('todas')
+      setStatusFilter('pendentes')
+      setActiveTab('tarefas')
+    }
+  }, [highlightTarefaId])
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [waCliente, setWaCliente] = useState<Cliente | null>(null)
   const [showWorkspace, setShowWorkspace] = useState(false)
@@ -1314,6 +1336,7 @@ const TarefasView: React.FC<{
         } : undefined}
         onOpenClientePanel={onOpenClientePanel}
         onDeleteTarefa={isGerente ? onDeleteTarefa : undefined}
+        highlightTarefaId={highlightTarefaId}
       />
     )
   }
