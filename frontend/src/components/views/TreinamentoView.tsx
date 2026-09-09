@@ -121,20 +121,29 @@ export default function TreinamentoView({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetchRoleplayHistory(vendedor.id).then(r => {
-      if (!r.sessoes) return
-      setHistorico(r.sessoes.map((s: any) => ({
-        id: String(s.id),
-        modulo: s.modulo != null ? String(s.modulo) : '',
-        perfilId: s.perfil_id != null ? String(s.perfil_id) : '',
-        msgs: Array.isArray(s.mensagens) ? s.mensagens : [],
-        duracao: s.duracao_segundos || 0,
-        nota: s.nota ?? null,
-        feedback: typeof s.feedback === 'string' ? s.feedback : JSON.stringify(s.feedback || {}),
-        createdAt: s.created_at,
-      })))
+    const mapSessao = (s: any): SessaoTreinamento & { vendedorNome?: string } => ({
+      id: String(s.id),
+      modulo: s.modulo != null ? String(s.modulo) : '',
+      perfilId: s.perfil_id != null ? String(s.perfil_id) : '',
+      msgs: Array.isArray(s.mensagens) ? s.mensagens : [],
+      duracao: s.duracao_segundos || 0,
+      nota: s.nota ?? null,
+      feedback: typeof s.feedback === 'string' ? s.feedback : JSON.stringify(s.feedback || {}),
+      createdAt: s.created_at,
+      vendedorNome: s.vendedor_nome || undefined,
     })
-  }, [vendedor.id])
+    if (isGerente) {
+      fetchRoleplayHistoryGerente().then((r: any) => {
+        if (!r.sessoes) return
+        setHistorico(r.sessoes.map(mapSessao))
+      })
+    } else {
+      fetchRoleplayHistory(vendedor.id).then(r => {
+        if (!r.sessoes) return
+        setHistorico(r.sessoes.map(mapSessao))
+      })
+    }
+  }, [vendedor.id, isGerente])
 
   useEffect(() => {
     if (aba !== 'gerente' || !isGerente) return
@@ -759,7 +768,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${notaColor(s.nota)}`}>{s.nota ?? '?'}</div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{m?.emoji} {m?.titulo}</p>
-                          <p className="text-xs text-gray-400">{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · Início {new Date(new Date(s.createdAt).getTime() - s.duracao * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs text-gray-400">{isGerente && (s as any).vendedorNome ? `👤 ${(s as any).vendedorNome} · ` : ''}{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · Início {new Date(new Date(s.createdAt).getTime() - s.duracao * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       </div>
                       <ChevronRightIcon className="h-4 w-4 text-gray-300 group-hover:text-primary-500 transition-colors" />

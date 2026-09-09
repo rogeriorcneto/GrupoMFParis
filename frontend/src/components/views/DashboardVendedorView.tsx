@@ -9,6 +9,7 @@ import {
   EnvelopeIcon,
   ChatBubbleLeftRightIcon,
   CalendarIcon,
+  CalendarDaysIcon,
   ClockIcon,
   ArrowTrendingUpIcon,
   CheckCircleIcon,
@@ -17,9 +18,11 @@ import {
   MegaphoneIcon,
   TrophyIcon,
   FlagIcon,
+  AcademicCapIcon,
+  ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
 import { stageLabels } from '../../utils/constants'
-import { authFetch, BOT_URL } from '../../lib/botApi'
+import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao } from '../../types'
 
 interface Props {
@@ -148,6 +151,64 @@ export default function DashboardVendedorView({
 }: Props) {
   const userId = loggedUser?.id
   const isGerente = loggedUser?.cargo === 'gerente'
+
+  // ─── Filtro de período ────────────────────────────────────────────────────────
+  const hoje = new Date()
+  const primeiroDiaMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`
+  const hojeISO = hoje.toISOString().slice(0, 10)
+
+  type PeriodoPreset = 'mes' | 'semana' | 'hoje' | 'custom'
+  const [periodoPreset, setPeriodoPreset] = useState<PeriodoPreset>('mes')
+  const [periodoInicio, setPeriodoInicio] = useState(primeiroDiaMes)
+  const [periodoFim, setPeriodoFim] = useState(hojeISO)
+
+  const handlePreset = (p: PeriodoPreset) => {
+    setPeriodoPreset(p)
+    if (p === 'mes') { setPeriodoInicio(primeiroDiaMes); setPeriodoFim(hojeISO) }
+    if (p === 'semana') {
+      const d = new Date(); d.setDate(d.getDate() - d.getDay())
+      setPeriodoInicio(d.toISOString().slice(0, 10)); setPeriodoFim(hojeISO)
+    }
+    if (p === 'hoje') { setPeriodoInicio(hojeISO); setPeriodoFim(hojeISO) }
+  }
+
+  const inRange = (d?: string | null) => {
+    if (!d) return false
+    const ds = d.slice(0, 10)
+    return ds >= periodoInicio && ds <= periodoFim
+  }
+
+  // ─── Tempo de tela + academia (gerente) ───────────────────────────────────────
+  const [tempoTelaData, setTempoTelaData] = useState<{ nome: string; totalSegundos: number }[]>([])
+  const [academiaData, setAcademiaData] = useState<{ nome: string; treinos: number; minutos: number; notaMedia: number }[]>([])
+
+  useEffect(() => {
+    if (!isGerente) return
+    fetchTempoTelaRelatorio(periodoInicio, periodoFim).then(r => {
+      setTempoTelaData((r.relatorio || []).map(x => ({ nome: x.nome, totalSegundos: x.totalSegundos })))
+    }).catch(() => {})
+    fetchRoleplayHistoryGerente().then((r: any) => {
+      const sessoes: any[] = r.sessoes || []
+      const vendedoresAtivosIds = vendedores.filter(v => v.ativo && v.cargo !== 'gerente')
+      const map = new Map<number, { treinos: number; segs: number; somaNotas: number; countNotas: number }>()
+      sessoes.forEach((s: any) => {
+        const dt = (s.created_at || s.data || '').slice(0, 10)
+        if (dt < periodoInicio || dt > periodoFim) return
+        const vid = Number(s.vendedor_id)
+        const cur = map.get(vid) || { treinos: 0, segs: 0, somaNotas: 0, countNotas: 0 }
+        cur.treinos++
+        cur.segs += (s.duracao_segundos || 0)
+        if (s.nota != null) { cur.somaNotas += s.nota; cur.countNotas++ }
+        map.set(vid, cur)
+      })
+      setAcademiaData(vendedoresAtivosIds.map(v => {
+        const d = map.get(v.id) || { treinos: 0, segs: 0, somaNotas: 0, countNotas: 0 }
+        return { nome: v.nome, treinos: d.treinos, minutos: Math.floor(d.segs / 60), notaMedia: d.countNotas > 0 ? d.somaNotas / d.countNotas : 0 }
+      }))
+    }).catch(() => {})
+  }, [isGerente, periodoInicio, periodoFim, vendedores])
+
+  // ─── Data derivada ────────────────────────────────────────────────────────────
   const meusClientes = useMemo(() => isGerente ? clientes : clientes.filter(c => c.vendedorId === userId), [clientes, userId, isGerente])
   const meusPedidos = useMemo(() => isGerente ? pedidos : pedidos.filter(p => p.vendedorId === userId), [pedidos, userId, isGerente])
 
@@ -160,14 +221,14 @@ export default function DashboardVendedorView({
   const metaConversao = loggedUser?.metaConversao || 35
 
   const fatMes = useMemo(
-    () => meusPedidos.filter(p => p.status === 'confirmado' && isMes(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0),
-    [meusPedidos]
+    () => meusPedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0),
+    [meusPedidos, periodoInicio, periodoFim]
   )
-  const novosClientesMes = useMemo(() => meusClientes.filter(c => isMes(c.dataEntradaEtapa)).length, [meusClientes])
+  const novosClientesMes = useMemo(() => meusClientes.filter(c => inRange(c.dataEntradaEtapa)).length, [meusClientes, periodoInicio, periodoFim])
   const propostasMes = useMemo(
-    () => meusClientes.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && isMes(c.dataEntradaEtapa)).length
-      + meusPedidos.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && isMes(p.dataCriacao)).length,
-    [meusClientes, meusPedidos]
+    () => meusClientes.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && inRange(c.dataEntradaEtapa)).length
+      + meusPedidos.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && inRange(p.dataCriacao)).length,
+    [meusClientes, meusPedidos, periodoInicio, periodoFim]
   )
 
   const minhasTarefas = useMemo(
@@ -179,8 +240,8 @@ export default function DashboardVendedorView({
     [interacoes, meusClientes, isGerente]
   )
   const visitasMes = useMemo(
-    () => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && isMes(t.concluidaEm || t.data)).length,
-    [minhasTarefas]
+    () => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && inRange(t.concluidaEm || t.data)).length,
+    [minhasTarefas, periodoInicio, periodoFim]
   )
   const visitasHoje = useMemo(() => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'pendente' && isHoje(t.data)),
     [minhasTarefas])
@@ -221,7 +282,7 @@ export default function DashboardVendedorView({
   const ranking = useMemo(() => {
     const map = new Map<number, number>()
     vendedores.forEach(v => map.set(v.id, 0))
-    pedidos.filter(p => p.status === 'confirmado' && isMes(p.dataCriacao)).forEach(p => {
+    pedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).forEach(p => {
       map.set(p.vendedorId, (map.get(p.vendedorId) || 0) + p.totalValor)
     })
     return vendedores
@@ -229,14 +290,14 @@ export default function DashboardVendedorView({
       .filter(v => v.valor > 0)
       .sort((a, b) => b.valor - a.valor)
       .slice(0, 3)
-  }, [vendedores, pedidos])
+  }, [vendedores, pedidos, periodoInicio, periodoFim])
 
   const oportunidades = useMemo(() => {
     return meusClientes
-      .filter(c => (c.valorEstimado || 0) > 0 && ['proposta', 'negociacao', 'follow_up'].includes(c.etapa) && isSemana(c.ultimaInteracao || c.dataEntradaEtapa))
+      .filter(c => (c.valorEstimado || 0) > 0 && ['proposta', 'negociacao', 'follow_up'].includes(c.etapa) && inRange(c.ultimaInteracao || c.dataEntradaEtapa))
       .sort((a, b) => (b.valorEstimado || 0) - (a.valorEstimado || 0))
       .slice(0, 5)
-  }, [meusClientes])
+  }, [meusClientes, periodoInicio, periodoFim])
 
   const atualizacoes = useMemo(
     () => (isGerente ? atividades : atividades.filter(a => loggedUser?.nome && a.vendedorNome === loggedUser.nome))
@@ -293,24 +354,24 @@ export default function DashboardVendedorView({
       let label = ''
       switch (detailOpen) {
         case 'faturamento':
-          valor = vp.filter(p => p.status === 'confirmado' && isMes(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0)
+          valor = vp.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0)
           label = fmtBRL(valor)
           break
         case 'comissao':
-          valor = vp.filter(p => p.status === 'confirmado' && isMes(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0) * 0.01
+          valor = vp.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0) * 0.01
           label = fmtBRL(valor)
           break
         case 'visitas':
-          valor = vt.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && isMes(t.concluidaEm || t.data)).length
+          valor = vt.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && inRange(t.concluidaEm || t.data)).length
           label = String(valor)
           break
         case 'propostas':
-          valor = vc.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && isMes(c.dataEntradaEtapa)).length
-            + vp.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && isMes(p.dataCriacao)).length
+          valor = vc.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && inRange(c.dataEntradaEtapa)).length
+            + vp.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && inRange(p.dataCriacao)).length
           label = String(valor)
           break
         case 'novos':
-          valor = vc.filter(c => isMes(c.dataEntradaEtapa)).length
+          valor = vc.filter(c => inRange(c.dataEntradaEtapa)).length
           label = String(valor)
           break
         case 'conversao': {
@@ -333,7 +394,7 @@ export default function DashboardVendedorView({
       }
       return { nome: v.nome, valor, label }
     }).sort((a, b) => b.valor - a.valor)
-  }, [detailOpen, isGerente, vendedoresAtivos, clientes, pedidos, tarefas, missoesAtivas])
+  }, [detailOpen, isGerente, vendedoresAtivos, clientes, pedidos, tarefas, missoesAtivas, periodoInicio, periodoFim])
 
   const detailTitles: Record<DetailKey, string> = {
     faturamento: 'Faturamento do mês',
@@ -394,8 +455,21 @@ export default function DashboardVendedorView({
             <h1 className="text-2xl font-bold text-gray-900">Bom dia, {loggedUser?.nome?.split(' ')[0] || 'Vendedor'}! 👋</h1>
             <p className="text-sm text-gray-500 mt-0.5">Aqui está o seu resumo de hoje.</p>
           </div>
-          <div className="text-sm text-gray-400 bg-white rounded-apple border border-gray-200 px-4 py-2 shadow-apple-sm">
-            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+          <div className="flex items-center gap-2 flex-wrap">
+            {(['hoje', 'semana', 'mes'] as PeriodoPreset[]).map(p => (
+              <button key={p} onClick={() => handlePreset(p)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${periodoPreset === p ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                {p === 'hoje' ? 'Hoje' : p === 'semana' ? 'Semana' : 'Mês'}
+              </button>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <CalendarDaysIcon className="h-4 w-4 text-gray-400" />
+              <input type="date" value={periodoInicio} onChange={e => { setPeriodoInicio(e.target.value); setPeriodoPreset('custom') }}
+                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:outline-none" />
+              <span className="text-xs text-gray-400">até</span>
+              <input type="date" value={periodoFim} onChange={e => { setPeriodoFim(e.target.value); setPeriodoPreset('custom') }}
+                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:outline-none" />
+            </div>
           </div>
         </div>
 
@@ -482,6 +556,80 @@ export default function DashboardVendedorView({
             onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
           />
         </div>
+
+        {/* Gerente: Tempo de Tela + Academia de Vendas */}
+        {isGerente && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Tempo de Tela */}
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <ComputerDesktopIcon className="h-5 w-5 text-primary-600" />
+                <h2 className="text-lg font-bold text-gray-900">Tempo de tela CRM</h2>
+              </div>
+              {tempoTelaData.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Sem dados de tempo de tela no período.</p>
+              ) : (
+                <div className="space-y-2">
+                  {[...tempoTelaData].sort((a, b) => b.totalSegundos - a.totalSegundos).map((d, i) => {
+                    const horas = Math.floor(d.totalSegundos / 3600)
+                    const mins = Math.floor((d.totalSegundos % 3600) / 60)
+                    const maxSecs = Math.max(...tempoTelaData.map(x => x.totalSegundos), 1)
+                    return (
+                      <div key={i} className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700 w-28 truncate">{d.nome}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+                          <div className="h-5 rounded-full bg-primary-500 flex items-center px-2 transition-all" style={{ width: `${Math.max((d.totalSegundos / maxSecs) * 100, 8)}%` }}>
+                            <span className="text-[10px] font-bold text-white whitespace-nowrap">{horas}h{String(mins).padStart(2, '0')}m</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Academia de Vendas */}
+            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <AcademicCapIcon className="h-5 w-5 text-amber-500" />
+                <h2 className="text-lg font-bold text-gray-900">Academia de Vendas</h2>
+              </div>
+              {academiaData.every(d => d.treinos === 0) ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Nenhum treinamento realizado no período.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead>
+                      <tr className="text-xs text-gray-500 uppercase border-b border-gray-100">
+                        <th className="py-2 pr-3">Vendedor</th>
+                        <th className="py-2 px-2 text-center">Treinos</th>
+                        <th className="py-2 px-2 text-center">Tempo</th>
+                        <th className="py-2 px-2 text-center">Nota média</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {[...academiaData].sort((a, b) => b.treinos - a.treinos).map((d, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="py-2 pr-3 font-medium text-gray-800">{d.nome}</td>
+                          <td className="py-2 px-2 text-center">{d.treinos}</td>
+                          <td className="py-2 px-2 text-center text-gray-600">{d.minutos}min</td>
+                          <td className="py-2 px-2 text-center">
+                            {d.notaMedia > 0 ? (
+                              <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${d.notaMedia >= 8 ? 'bg-green-100 text-green-700' : d.notaMedia >= 5 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                {d.notaMedia.toFixed(1)}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Main content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
