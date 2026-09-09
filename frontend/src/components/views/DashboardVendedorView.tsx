@@ -89,12 +89,13 @@ interface MetricCardProps {
   color: string
   unit?: string
   icon: React.ReactNode
+  onClick?: () => void
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, color, unit, icon }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, color, unit, icon, onClick }) => {
   const pct = meta > 0 ? Math.min(100, Math.round((total / meta) * 100)) : 0
   return (
-    <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4 flex flex-col justify-between h-full">
+    <div className={`bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4 flex flex-col justify-between h-full ${onClick ? 'cursor-pointer hover:shadow-md hover:border-gray-300 transition-all' : ''}`} onClick={onClick}>
       <div className="flex items-start justify-between">
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
         <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${color}20` }}>{icon}</div>
@@ -164,19 +165,25 @@ export default function DashboardVendedorView({
   )
   const novosClientesMes = useMemo(() => meusClientes.filter(c => isMes(c.dataEntradaEtapa)).length, [meusClientes])
   const propostasMes = useMemo(
-    () => meusPedidos.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && isMes(p.dataCriacao)).length,
-    [meusPedidos]
+    () => meusClientes.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && isMes(c.dataEntradaEtapa)).length
+      + meusPedidos.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && isMes(p.dataCriacao)).length,
+    [meusClientes, meusPedidos]
   )
 
+  const minhasTarefas = useMemo(
+    () => isGerente ? tarefas : tarefas.filter(t => t.vendedorId === userId),
+    [tarefas, userId, isGerente]
+  )
   const interacoesUsuario = useMemo(
     () => isGerente ? interacoes : interacoes.filter(i => meusClientes.some(c => c.id === i.clienteId)),
     [interacoes, meusClientes, isGerente]
   )
-  const visitasMes = useMemo(() => interacoesUsuario.filter(i => i.tipo === 'reuniao' && isMes(i.data)).length, [interacoesUsuario])
-  const visitasHoje = useMemo(() => isGerente
-    ? tarefas.filter(t => t.tipo === 'reuniao' && isHoje(t.data))
-    : tarefas.filter(t => t.vendedorId === userId && t.tipo === 'reuniao' && isHoje(t.data)),
-    [tarefas, userId, isGerente])
+  const visitasMes = useMemo(
+    () => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && isMes(t.concluidaEm || t.data)).length,
+    [minhasTarefas]
+  )
+  const visitasHoje = useMemo(() => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'pendente' && isHoje(t.data)),
+    [minhasTarefas])
 
   const ativos = meusClientes.filter(c => c.etapa !== 'perdido')
   const convertidos = ativos.filter(c => c.etapa === 'follow_up').length
@@ -270,8 +277,116 @@ export default function DashboardVendedorView({
     return 'Bom ritmo! Aproveite para qualificar novos leads e enviar propostas personalizadas.'
   }, [meusClientes, amostras])
 
+  // ─── Detalhamento por vendedor (modal) ───────────────────────────────────────
+  type DetailKey = 'faturamento' | 'comissao' | 'visitas' | 'propostas' | 'novos' | 'conversao' | 'visitasHoje' | 'missoes' | 'visitasMissao'
+  const [detailOpen, setDetailOpen] = useState<DetailKey | null>(null)
+
+  const vendedoresAtivos = useMemo(() => vendedores.filter(v => v.ativo && v.cargo !== 'gerente'), [vendedores])
+
+  const detailData = useMemo(() => {
+    if (!detailOpen || !isGerente) return []
+    return vendedoresAtivos.map(v => {
+      const vc = clientes.filter(c => c.vendedorId === v.id)
+      const vp = pedidos.filter(p => p.vendedorId === v.id)
+      const vt = tarefas.filter(t => t.vendedorId === v.id)
+      let valor = 0
+      let label = ''
+      switch (detailOpen) {
+        case 'faturamento':
+          valor = vp.filter(p => p.status === 'confirmado' && isMes(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0)
+          label = fmtBRL(valor)
+          break
+        case 'comissao':
+          valor = vp.filter(p => p.status === 'confirmado' && isMes(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0) * 0.01
+          label = fmtBRL(valor)
+          break
+        case 'visitas':
+          valor = vt.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && isMes(t.concluidaEm || t.data)).length
+          label = String(valor)
+          break
+        case 'propostas':
+          valor = vc.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && isMes(c.dataEntradaEtapa)).length
+            + vp.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && isMes(p.dataCriacao)).length
+          label = String(valor)
+          break
+        case 'novos':
+          valor = vc.filter(c => isMes(c.dataEntradaEtapa)).length
+          label = String(valor)
+          break
+        case 'conversao': {
+          const atv = vc.filter(c => c.etapa !== 'perdido')
+          const conv = atv.filter(c => c.etapa === 'follow_up').length
+          valor = atv.length > 0 ? (conv / atv.length) * 100 : 0
+          label = `${valor.toFixed(0)}%`
+          break
+        }
+        case 'visitasHoje':
+          valor = vt.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'pendente' && isHoje(t.data)).length
+          label = String(valor)
+          break
+        case 'visitasMissao':
+          valor = vt.filter(t => t.missaoId && missoesAtivas.some(m => m.id === t.missaoId)).length
+          label = String(valor)
+          break
+        default:
+          break
+      }
+      return { nome: v.nome, valor, label }
+    }).sort((a, b) => b.valor - a.valor)
+  }, [detailOpen, isGerente, vendedoresAtivos, clientes, pedidos, tarefas, missoesAtivas])
+
+  const detailTitles: Record<DetailKey, string> = {
+    faturamento: 'Faturamento do mês',
+    comissao: 'Comissão estimada',
+    visitas: 'Visitas realizadas',
+    propostas: 'Propostas enviadas',
+    novos: 'Novos clientes',
+    conversao: 'Conversão',
+    visitasHoje: 'Próximas visitas hoje',
+    missoes: 'Missões em andamento',
+    visitasMissao: 'Visitas de missão',
+  }
+
   return (
     <div className="min-h-screen bg-white p-4 md:p-6 space-y-6">
+      {/* ── Modal detalhamento por vendedor ── */}
+      {detailOpen && isGerente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDetailOpen(null)}>
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md mx-4 max-h-[70vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">{detailTitles[detailOpen]}</h3>
+              <button onClick={() => setDetailOpen(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div className="overflow-y-auto max-h-[55vh] divide-y divide-gray-50">
+              {detailData.length === 0 ? (
+                <p className="p-5 text-sm text-gray-400 text-center">Sem dados para exibir.</p>
+              ) : (
+                detailData.map((d, i) => (
+                  <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                      <span className="text-sm font-medium text-gray-800">{d.nome}</span>
+                    </div>
+                    <span className="text-sm font-bold text-gray-900">{d.label}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-500">Total equipe</span>
+              <span className="text-sm font-bold text-gray-900">
+                {detailOpen === 'faturamento' || detailOpen === 'comissao'
+                  ? fmtBRL(detailData.reduce((s, d) => s + d.valor, 0))
+                  : detailOpen === 'conversao'
+                    ? `${detailData.length > 0 ? (detailData.reduce((s, d) => s + d.valor, 0) / detailData.length).toFixed(0) : 0}%`
+                    : detailData.reduce((s, d) => s + d.valor, 0)
+                }
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -293,6 +408,7 @@ export default function DashboardVendedorView({
             total={fatMes}
             color="#22C55E"
             icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#22C55E' }} />}
+            onClick={isGerente ? () => setDetailOpen('faturamento') : undefined}
           />
           <MetricCard
             label="Comissão estimada"
@@ -301,6 +417,7 @@ export default function DashboardVendedorView({
             total={comissao}
             color="#10B981"
             icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#10B981' }} />}
+            onClick={isGerente ? () => setDetailOpen('comissao') : undefined}
           />
           <MetricCard
             label="Visitas realizadas"
@@ -309,6 +426,7 @@ export default function DashboardVendedorView({
             total={visitasMes}
             color="#3B82F6"
             icon={<MapPinIcon className="h-5 w-5" style={{ color: '#3B82F6' }} />}
+            onClick={isGerente ? () => setDetailOpen('visitas') : undefined}
           />
           <MetricCard
             label="Propostas enviadas"
@@ -317,6 +435,7 @@ export default function DashboardVendedorView({
             total={propostasMes}
             color="#A855F7"
             icon={<ClipboardDocumentCheckIcon className="h-5 w-5" style={{ color: '#A855F7' }} />}
+            onClick={isGerente ? () => setDetailOpen('propostas') : undefined}
           />
           <MetricCard
             label="Novos clientes"
@@ -325,6 +444,7 @@ export default function DashboardVendedorView({
             total={novosClientesMes}
             color="#F59E0B"
             icon={<UsersIcon className="h-5 w-5" style={{ color: '#F59E0B' }} />}
+            onClick={isGerente ? () => setDetailOpen('novos') : undefined}
           />
           <MetricCard
             label="Conversão"
@@ -333,6 +453,7 @@ export default function DashboardVendedorView({
             total={taxaConversao}
             color="#EF4444"
             icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#EF4444' }} />}
+            onClick={isGerente ? () => setDetailOpen('conversao') : undefined}
           />
           <MetricCard
             label="Próximas visitas hoje"
@@ -341,6 +462,7 @@ export default function DashboardVendedorView({
             total={visitasHoje.length}
             color="#14B8A6"
             icon={<CalendarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
+            onClick={isGerente ? () => setDetailOpen('visitasHoje') : undefined}
           />
           <MetricCard
             label="Missões em andamento"
@@ -357,6 +479,7 @@ export default function DashboardVendedorView({
             total={visitasMissao}
             color="#8B5CF6"
             icon={<MapPinIcon className="h-5 w-5" style={{ color: '#8B5CF6' }} />}
+            onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
           />
         </div>
 
