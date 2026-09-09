@@ -204,6 +204,9 @@ export interface Notificacao {
   timestamp: string
   lida: boolean
   clienteId?: number
+  vendedorId?: number
+  tarefaId?: number
+  acao?: 'abrir_cliente' | 'abrir_tarefa' | 'abrir_funil' | 'abrir_pedido'
 }
 
 export interface Atividade {

@@ -40,6 +40,7 @@ interface TopBarProps {
   setShowNotifications: (v: boolean) => void
   markAllRead: () => void
   markRead: (id: number) => void
+  onClickNotificacao?: (n: Notificacao) => void
   onOpenSearch?: () => void
   dark?: boolean
   onToggleDark?: () => void
@@ -47,7 +48,7 @@ interface TopBarProps {
 
 export default function TopBar({
   activeView, setSidebarOpen, notificacoes,
-  showNotifications, setShowNotifications, markAllRead, markRead, onOpenSearch,
+  showNotifications, setShowNotifications, markAllRead, markRead, onClickNotificacao, onOpenSearch,
   dark, onToggleDark
 }: TopBarProps) {
   const unreadCount = notificacoes.filter(n => !n.lida).length
@@ -127,12 +128,13 @@ export default function TopBar({
                 <div className="p-6 text-center text-gray-500 text-sm">Nenhuma notificação</div>
               ) : (
                 notificacoes.map(n => (
-                  <div key={n.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!n.lida ? 'bg-blue-50' : ''}`} onClick={() => markRead(n.id)}>
+                  <div key={n.id} className={`p-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!n.lida ? 'bg-blue-50' : ''}`} onClick={() => { markRead(n.id); if (onClickNotificacao) { onClickNotificacao(n); setShowNotifications(false) } }}>
                     <div className="flex items-start gap-2">
                       <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${n.tipo === 'warning' ? 'bg-yellow-500' : n.tipo === 'error' ? 'bg-red-500' : n.tipo === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-900 truncate">{n.titulo}</p>
                         <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{n.mensagem}</p>
+                        {(n.acao || n.clienteId) && <p className="text-[10px] text-primary-500 mt-1 font-medium">Clique para ver →</p>}
                       </div>
                     </div>
                   </div>

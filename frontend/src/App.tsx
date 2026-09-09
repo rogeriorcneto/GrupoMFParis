@@ -188,8 +188,8 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     db.fetchProdutos().then(setProdutos).catch(err => logger.error('produtos:', err))
     db.fetchPedidos().then(setPedidos).catch(err => logger.error('pedidos:', err))
     db.fetchVendedores().then(setVendedores).catch(err => logger.error('vendedores:', err))
-    db.fetchNotificacoes().then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
-  }, [])
+    db.fetchNotificacoes(loggedUser?.cargo === 'gerente' ? undefined : loggedUser?.id).then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
+  }, [loggedUser])
 
   // Lazy load de datasets secundários (carregados quando a view é acessada)
   const secondaryLoaded = useRef<Set<string>>(new Set())
@@ -386,7 +386,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   }, []), isLoggedIn)
 
   // Notification system — hook handles auto-generation + Supabase persistence
-  const { notificacoes, addNotificacao, markAllRead, markRead } = useNotificacoes(clientes, tarefas, vendedores, dbNotificacoes)
+  const { notificacoes, addNotificacao, markAllRead, markRead } = useNotificacoes(clientes, tarefas, vendedores, loggedUser, dbNotificacoes)
 
   useRealtimeSubscription<any>('pedidos', useCallback((payload) => {
     if (payload.eventType === 'INSERT') {
@@ -549,6 +549,16 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           activeView={activeView} setSidebarOpen={setSidebarOpen}
           notificacoes={notificacoes} showNotifications={showNotifications}
           setShowNotifications={setShowNotifications} markAllRead={markAllRead} markRead={markRead}
+          onClickNotificacao={(n) => {
+            if (n.acao === 'abrir_tarefa') {
+              setActiveView('tarefas')
+            } else if (n.clienteId) {
+              const cli = clientes.find(c => c.id === n.clienteId)
+              if (cli) setSelectedClientePanel(cli)
+            } else if (n.acao === 'abrir_funil') {
+              setActiveView('funil')
+            }
+          }}
           onOpenSearch={() => setShowGlobalSearch(true)}
           dark={dark} onToggleDark={toggleDark}
         />

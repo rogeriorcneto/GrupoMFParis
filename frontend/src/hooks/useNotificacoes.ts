@@ -28,11 +28,15 @@ export function useNotificacoes(
   clientes: Cliente[],
   tarefas: Tarefa[],
   vendedores: Vendedor[],
+  loggedUser: Vendedor | null,
   initialNotificacoes?: Notificacao[]
 ) {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>(initialNotificacoes || [])
   const notifGenRef = useRef<string>('')
   const dismissedRef = useRef<Set<string>>(loadDismissed())
+
+  const loggedVendedorId = loggedUser?.id
+  const isGerente = loggedUser?.cargo === 'gerente'
 
   // Sync initial data when it arrives from loadAllData
   const initialLoadedRef = useRef(false)
@@ -49,9 +53,10 @@ export function useNotificacoes(
   }, [initialNotificacoes])
 
   // Generate auto-notifications from data (computed, not persisted)
+  // Only for the logged user's clients (vendedor vê só os seus; gerente vê todos)
   useEffect(() => {
     // Hash numérico O(n) simples — evita alocar string gigante a cada render
-    let hash = tarefas.length * 31 + vendedores.length
+    let hash = tarefas.length * 31 + vendedores.length + (loggedVendedorId || 0)
     for (const c of clientes) {
       hash = (hash * 31 + c.id + c.etapa.length + (c.diasInativo || 0)) | 0
     }
@@ -59,38 +64,56 @@ export function useNotificacoes(
     if (notifGenRef.current === key) return
     notifGenRef.current = key
 
+    // Filtrar apenas clientes do vendedor logado (gerente vê todos)
+    const meusClientes = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedVendedorId)
+    const minhasTarefas = isGerente ? tarefas : tarefas.filter(t => t.vendedorId === loggedVendedorId)
+
     const novas: Notificacao[] = []
     let nId = -1 // Negative IDs for auto-generated (distinguish from DB)
 
-    clientes.forEach(c => {
+    // Tarefas atrasadas
+    const hoje = new Date().toISOString().split('T')[0]
+    minhasTarefas.filter(t => t.status === 'pendente' && t.data < hoje).forEach(t => {
+      novas.push({ id: nId--, tipo: 'error', titulo: '⏰ Tarefa atrasada', mensagem: `"${t.titulo}" era para ${t.data}`, timestamp: new Date().toISOString(), lida: false, clienteId: t.clienteId, tarefaId: t.id, acao: 'abrir_tarefa' })
+    })
+
+    meusClientes.forEach(c => {
       if (c.etapa === 'amostra' && c.dataEntradaEtapa) {
         const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
         if (dias >= 30) {
-          novas.push({ id: nId--, tipo: 'error', titulo: '🔴 Prazo vencido (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+          novas.push({ id: nId--, tipo: 'error', titulo: '🔴 Prazo vencido (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id, acao: 'abrir_cliente' })
         } else if (dias >= 25) {
-          novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+          novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Amostra)', mensagem: `${c.razaoSocial} está há ${dias} dias na Amostra (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id, acao: 'abrir_cliente' })
         }
       }
       if (c.etapa === 'proposta' && c.dataEntradaEtapa) {
         const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000)
         if (dias >= 30) {
-          novas.push({ id: nId--, tipo: 'error', titulo: '🔴 Prazo vencido (Proposta)', mensagem: `${c.razaoSocial} está há ${dias} dias em Proposta (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+          novas.push({ id: nId--, tipo: 'error', titulo: '🔴 Prazo vencido (Proposta)', mensagem: `${c.razaoSocial} está há ${dias} dias em Proposta (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id, acao: 'abrir_cliente' })
         } else if (dias >= 25) {
-          novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Proposta)', mensagem: `${c.razaoSocial} está há ${dias} dias em Proposta (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+          novas.push({ id: nId--, tipo: 'warning', titulo: '⚠️ Prazo vencendo (Proposta)', mensagem: `${c.razaoSocial} está há ${dias} dias em Proposta (prazo: 30d)`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id, acao: 'abrir_cliente' })
         }
       }
     })
 
-    vendedores.forEach(v => {
-      const clientesV = clientes.filter(c => c.vendedorId === v.id)
-      const valorPipeline = clientesV.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-      if (valorPipeline < v.metaVendas * 0.5 && v.ativo) {
-        novas.push({ id: nId--, tipo: 'error', titulo: 'Meta em risco', mensagem: `${v.nome} está abaixo de 50% da meta de vendas`, timestamp: new Date().toISOString(), lida: false })
+    // Meta em risco — gerente vê de todos vendedores; vendedor vê só a sua
+    if (isGerente) {
+      vendedores.forEach(v => {
+        const clientesV = clientes.filter(c => c.vendedorId === v.id)
+        const valorPipeline = clientesV.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+        if (valorPipeline < v.metaVendas * 0.5 && v.ativo) {
+          novas.push({ id: nId--, tipo: 'error', titulo: 'Meta em risco', mensagem: `${v.nome} está abaixo de 50% da meta de vendas`, timestamp: new Date().toISOString(), lida: false })
+        }
+      })
+    } else if (loggedUser) {
+      const meuValor = meusClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+      if (meuValor < loggedUser.metaVendas * 0.5) {
+        novas.push({ id: nId--, tipo: 'error', titulo: 'Meta em risco', mensagem: `Você está abaixo de 50% da sua meta de vendas`, timestamp: new Date().toISOString(), lida: false })
       }
-    })
+    }
 
-    clientes.filter(c => (c.diasInativo || 0) > 10).sort((a, b) => (b.diasInativo || 0) - (a.diasInativo || 0)).slice(0, 10).forEach(c => {
-      novas.push({ id: nId--, tipo: 'warning', titulo: 'Cliente inativo', mensagem: `${c.razaoSocial} está inativo há ${c.diasInativo} dias`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id })
+    meusClientes.filter(c => (c.diasInativo || 0) > 10).sort((a, b) => (b.diasInativo || 0) - (a.diasInativo || 0)).slice(0, 10).forEach(c => {
+      novas.push({ id: nId--, tipo: 'warning', titulo: 'Cliente inativo', mensagem: `${c.razaoSocial} está inativo há ${c.diasInativo} dias`, timestamp: new Date().toISOString(), lida: false, clienteId: c.id, acao: 'abrir_cliente' })
     })
 
     setNotificacoes(prev => {
@@ -110,7 +133,7 @@ export function useNotificacoes(
       }))
       return [...autoWithLida, ...persisted].slice(0, 50)
     })
-  }, [clientes, tarefas, vendedores])
+  }, [clientes, tarefas, vendedores, loggedVendedorId, isGerente])
 
   const addNotificacao = useCallback(async (tipo: Notificacao['tipo'], titulo: string, mensagem: string, clienteId?: number) => {
     // Optimistic local update
@@ -122,13 +145,14 @@ export function useNotificacoes(
       mensagem,
       timestamp: new Date().toISOString(),
       lida: false,
-      clienteId
+      clienteId,
+      vendedorId: loggedVendedorId,
     }
     setNotificacoes(prev => [novaNotificacao, ...prev].slice(0, 50))
 
     // Persist to Supabase (fire-and-forget)
     try {
-      const saved = await db.insertNotificacao({ tipo, titulo, mensagem, clienteId })
+      const saved = await db.insertNotificacao({ tipo, titulo, mensagem, clienteId, vendedorId: loggedVendedorId })
       // Replace temp with real DB record
       setNotificacoes(prev => prev.map(n => n.id === tempId ? saved : n))
     } catch (err) {
@@ -143,12 +167,12 @@ export function useNotificacoes(
           : n
       ))
     }, 5000)
-  }, [])
+  }, [loggedVendedorId])
 
   const markAllRead = useCallback(async () => {
     setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))
-    try { await db.markAllNotificacoesLidas() } catch (err) { logger.error('Erro ao marcar todas lidas:', err) }
-  }, [])
+    try { await db.markAllNotificacoesLidas(loggedVendedorId) } catch (err) { logger.error('Erro ao marcar todas lidas:', err) }
+  }, [loggedVendedorId])
 
   const markRead = useCallback(async (id: number) => {
     setNotificacoes(prev => {

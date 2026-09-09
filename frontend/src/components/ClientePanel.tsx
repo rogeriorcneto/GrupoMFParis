@@ -2624,27 +2624,8 @@ export default function ClientePanel({
         const reprovadoSemMotivo = itens.some((_, idx) => avaliacaoItens[idx]?.aprovado === false && !avaliacaoItens[idx]?.motivo?.trim())
 
         const criarNovoCicloEmProposta = async () => {
-          if (c.etapaAnterior !== 'proposta') return
-          try {
-            const novoCard: Omit<Cliente, 'id'> = {
-              ...c,
-              etapa: 'proposta',
-              etapaAnterior: 'amostra',
-              novoCiclo: true,
-              cicloNumero: (c.cicloNumero || 1) + 1,
-              statusAmostra: undefined,
-              dataEnvioAmostra: undefined,
-              resultadoAmostra: undefined,
-              dataResultadoAmostra: undefined,
-              dataEntradaEtapa: new Date().toISOString(),
-              historicoEtapas: [],
-            }
-            const saved = await db.insertCliente(novoCard)
-            setClientes(prev => [saved, ...prev])
-            addNotificacao('info', 'Novo card criado', `Card de ${c.razaoSocial} criado em Proposta após amostra aprovada.`, saved.id)
-          } catch (err) {
-            logger.error('Erro ao criar card em proposta após amostra:', err)
-          }
+          // Novo ciclo agora é criado automaticamente pelo moverCliente centralizado
+          // quando resultadoAmostra === 'aprovada' e destino é 'proposta'
         }
 
         const handleConfirmar = async () => {

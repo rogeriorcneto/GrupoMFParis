@@ -146,11 +146,16 @@ export default function DashboardVendedorView({
   loggedUser,
 }: Props) {
   const userId = loggedUser?.id
-  const meusClientes = useMemo(() => clientes.filter(c => c.vendedorId === userId), [clientes, userId])
-  const meusPedidos = useMemo(() => pedidos.filter(p => p.vendedorId === userId), [pedidos, userId])
+  const isGerente = loggedUser?.cargo === 'gerente'
+  const meusClientes = useMemo(() => isGerente ? clientes : clientes.filter(c => c.vendedorId === userId), [clientes, userId, isGerente])
+  const meusPedidos = useMemo(() => isGerente ? pedidos : pedidos.filter(p => p.vendedorId === userId), [pedidos, userId, isGerente])
 
-  const metaVendas = loggedUser?.metaVendas || 100000
-  const metaLeads = loggedUser?.metaLeads || 10
+  const metaVendas = isGerente
+    ? vendedores.filter(v => v.ativo && v.cargo !== 'gerente').reduce((s, v) => s + (v.metaVendas || 0), 0) || 500000
+    : (loggedUser?.metaVendas || 100000)
+  const metaLeads = isGerente
+    ? vendedores.filter(v => v.ativo && v.cargo !== 'gerente').reduce((s, v) => s + (v.metaLeads || 0), 0) || 20
+    : (loggedUser?.metaLeads || 10)
   const metaConversao = loggedUser?.metaConversao || 35
 
   const fatMes = useMemo(
@@ -164,11 +169,14 @@ export default function DashboardVendedorView({
   )
 
   const interacoesUsuario = useMemo(
-    () => interacoes.filter(i => meusClientes.some(c => c.id === i.clienteId)),
-    [interacoes, meusClientes]
+    () => isGerente ? interacoes : interacoes.filter(i => meusClientes.some(c => c.id === i.clienteId)),
+    [interacoes, meusClientes, isGerente]
   )
   const visitasMes = useMemo(() => interacoesUsuario.filter(i => i.tipo === 'reuniao' && isMes(i.data)).length, [interacoesUsuario])
-  const visitasHoje = useMemo(() => tarefas.filter(t => t.vendedorId === userId && t.tipo === 'reuniao' && isHoje(t.data)), [tarefas, userId])
+  const visitasHoje = useMemo(() => isGerente
+    ? tarefas.filter(t => t.tipo === 'reuniao' && isHoje(t.data))
+    : tarefas.filter(t => t.vendedorId === userId && t.tipo === 'reuniao' && isHoje(t.data)),
+    [tarefas, userId, isGerente])
 
   const ativos = meusClientes.filter(c => c.etapa !== 'perdido')
   const convertidos = ativos.filter(c => c.etapa === 'follow_up').length
@@ -184,12 +192,18 @@ export default function DashboardVendedorView({
   }, [meusClientes])
 
   const tarefasHoje = useMemo(
-    () => tarefas.filter(t => t.vendedorId === userId && isHoje(t.data)).sort((a, b) => (a.hora || '').localeCompare(b.hora || '')),
-    [tarefas, userId]
+    () => (isGerente
+      ? tarefas.filter(t => isHoje(t.data))
+      : tarefas.filter(t => t.vendedorId === userId && isHoje(t.data))
+    ).sort((a, b) => (a.hora || '').localeCompare(b.hora || '')),
+    [tarefas, userId, isGerente]
   )
   const tarefasPendentes = useMemo(
-    () => tarefas.filter(t => t.vendedorId === userId && t.status !== 'concluida').sort((a, b) => (a.data || '').localeCompare(b.data || '')),
-    [tarefas, userId]
+    () => (isGerente
+      ? tarefas.filter(t => t.status !== 'concluida')
+      : tarefas.filter(t => t.vendedorId === userId && t.status !== 'concluida')
+    ).sort((a, b) => (a.data || '').localeCompare(b.data || '')),
+    [tarefas, userId, isGerente]
   )
 
   const amostras = useMemo(
@@ -218,11 +232,10 @@ export default function DashboardVendedorView({
   }, [meusClientes])
 
   const atualizacoes = useMemo(
-    () => atividades
-      .filter(a => loggedUser?.nome && a.vendedorNome === loggedUser.nome)
+    () => (isGerente ? atividades : atividades.filter(a => loggedUser?.nome && a.vendedorNome === loggedUser.nome))
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 5),
-    [atividades, loggedUser]
+    [atividades, loggedUser, isGerente]
   )
 
   const atividadesHoje = useMemo(() => ({
@@ -234,8 +247,9 @@ export default function DashboardVendedorView({
   }), [interacoesUsuario, meusClientes])
 
   const pctMeta = metaVendas > 0 ? Math.min(100, Math.round((fatMes / metaVendas) * 100)) : 0
-  const comissao = fatMes * 0.01
-  const metaComissao = metaVendas * 0.01
+  const comissaoRate = isGerente ? 0.005 : 0.01
+  const comissao = fatMes * comissaoRate
+  const metaComissao = metaVendas * comissaoRate
 
   const [missoesAtivas, setMissoesAtivas] = useState<Missao[]>([])
 

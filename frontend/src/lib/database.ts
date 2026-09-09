@@ -433,6 +433,7 @@ function notificacaoFromDb(row: any): Notificacao {
     mensagem: row.mensagem,
     lida: row.lida,
     clienteId: row.cliente_id,
+    vendedorId: row.vendedor_id ?? undefined,
     timestamp: row.created_at,
   }
 }
@@ -1395,8 +1396,10 @@ export async function insertAtividade(a: Omit<Atividade, 'id'>): Promise<Ativida
 // NOTIFICAÇÕES
 // ============================================
 
-export async function fetchNotificacoes(): Promise<Notificacao[]> {
-  const { data, error } = await supabase.from('notificacoes').select('*').order('created_at', { ascending: false }).limit(50)
+export async function fetchNotificacoes(vendedorId?: number): Promise<Notificacao[]> {
+  let q = supabase.from('notificacoes').select('*').order('created_at', { ascending: false }).limit(50)
+  if (vendedorId) q = q.eq('vendedor_id', vendedorId)
+  const { data, error } = await q
   if (error) throw error
   return (data || []).map(notificacaoFromDb)
 }
@@ -1405,6 +1408,7 @@ export async function insertNotificacao(n: Omit<Notificacao, 'id' | 'timestamp' 
   const { data, error } = await supabase.from('notificacoes').insert({
     tipo: n.tipo, titulo: n.titulo, mensagem: n.mensagem,
     cliente_id: n.clienteId || null,
+    vendedor_id: n.vendedorId || null,
   }).select().single()
   if (error) throw error
   return notificacaoFromDb(data)
@@ -1415,8 +1419,10 @@ export async function markNotificacaoLida(id: number): Promise<void> {
   if (error) throw error
 }
 
-export async function markAllNotificacoesLidas(): Promise<void> {
-  const { error } = await supabase.from('notificacoes').update({ lida: true }).eq('lida', false)
+export async function markAllNotificacoesLidas(vendedorId?: number): Promise<void> {
+  let q = supabase.from('notificacoes').update({ lida: true }).eq('lida', false)
+  if (vendedorId) q = q.eq('vendedor_id', vendedorId)
+  const { error } = await q
   if (error) throw error
 }
 

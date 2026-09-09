@@ -6,6 +6,33 @@ import { logger } from '../utils/logger'
 
 interface DragItem { cliente: Cliente; fromStage: string }
 
+async function copiarHistoricoETarefas(
+  clienteOriginalId: number,
+  novoClienteId: number,
+  historicoOriginal: HistoricoEtapa[],
+  tarefasAll: Tarefa[],
+  setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>,
+) {
+  // 1. Copiar histórico de etapas
+  for (const h of historicoOriginal) {
+    try { await db.insertHistoricoEtapa(novoClienteId, h) } catch { /* non-critical */ }
+  }
+  // 2. Copiar tarefas pendentes
+  const tarefasPendentes = tarefasAll.filter(t => t.clienteId === clienteOriginalId && t.status === 'pendente')
+  if (tarefasPendentes.length > 0) {
+    const novas: Omit<Tarefa, 'id'>[] = tarefasPendentes.map(t => ({
+      ...t,
+      clienteId: novoClienteId,
+    }))
+    try {
+      const salvas = await db.insertTarefasBatch(novas)
+      setTarefas(prev => [...salvas, ...prev])
+    } catch (e) {
+      logger.error('Erro ao copiar tarefas para novo ciclo:', e)
+    }
+  }
+}
+
 interface UseFunilActionsParams {
   clientes: Cliente[]
   setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
@@ -233,12 +260,47 @@ export function useFunilActions({
       logger.error('Erro ao processar regras de automação:', err)
     }
 
+    // Novo ciclo automático: ao aprovar amostra (mover para proposta com resultado aprovada)
+    if (toStage === 'proposta' && extras.resultadoAmostra === 'aprovada' && fromStage === 'amostra') {
+      const clienteAtualizado = { ...cliente, ...extras, etapa: toStage }
+      const novoCard: Omit<Cliente, 'id'> = {
+        ...clienteAtualizado,
+        cnpj: undefined, googlePlaceId: undefined,
+        etapa: 'proposta',
+        etapaAnterior: 'amostra',
+        novoCiclo: true,
+        cicloNumero: (clienteAtualizado.cicloNumero || 1) + 1,
+        statusAmostra: undefined,
+        dataEnvioAmostra: undefined,
+        resultadoAmostra: undefined,
+        dataResultadoAmostra: undefined,
+        statusFollowUp: undefined,
+        statusEntrega: undefined,
+        statusFaturamento: undefined,
+        statusSatisfacao: undefined,
+        valorEstimado: undefined,
+        valorProposta: undefined,
+        dataProposta: undefined,
+        dataEntradaEtapa: new Date().toISOString(),
+        historicoEtapas: [],
+        vendedorId: loggedUser?.id || clienteAtualizado.vendedorId,
+      }
+      try {
+        const cardCriado = await db.insertCliente(novoCard)
+        setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
+        addNotificacao('info', '🔄 Novo ciclo criado', `Amostra aprovada — card de ${cliente.razaoSocial} criado em Proposta para novo ciclo.`, cardCriado.id)
+        await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
+      } catch (e) {
+        logger.error('Erro ao criar novo ciclo após aprovação de amostra:', e)
+      }
+    }
+
     // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue
     if (extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue') {
       const clienteAtualizado = { ...cliente, ...extras, etapa: toStage }
       const novoCard: Omit<Cliente, 'id'> = {
         ...clienteAtualizado,
-        cnpj: undefined,
+        cnpj: undefined, googlePlaceId: undefined,
         etapa: 'proposta',
         etapaAnterior: 'follow_up',
         novoCiclo: true,
@@ -257,8 +319,9 @@ export function useFunilActions({
       }
       try {
         const cardCriado = await db.insertCliente(novoCard)
-        setClientes(prev => [...prev, cardCriado])
+        setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
         addNotificacao('info', '🔄 Novo ciclo criado', `Card de ${cliente.razaoSocial} criado em Proposta para o próximo ciclo de vendas.`, cardCriado.id)
+        await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
       } catch (e) {
         logger.error('Erro ao criar novo ciclo automático:', e)
       }
@@ -380,7 +443,7 @@ export function useFunilActions({
       if (etapasComNovoCiclo.includes(fromStage)) {
         const novoCliente: Omit<Cliente, 'id'> = {
           ...clienteOriginal,
-          cnpj: undefined,
+          cnpj: undefined, googlePlaceId: undefined,
           etapa: 'proposta',
           etapaAnterior: 'perdido',
           novoCiclo: true,
@@ -398,8 +461,9 @@ export function useFunilActions({
         }
         try {
           const clienteCriado = await db.insertCliente(novoCliente)
-          setClientes(prev => [...prev, clienteCriado])
+          setClientes(prev => [...prev, { ...clienteCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
           addNotificacao('info', '🔄 Novo ciclo criado', `${clienteOriginal.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, clienteCriado.id)
+          await copiarHistoricoETarefas(clienteOriginal.id, clienteCriado.id, clienteOriginal.historicoEtapas || [], tarefas, setTarefas)
         } catch (e) {
           logger.error('Erro ao criar novo ciclo:', e)
         }
@@ -427,7 +491,7 @@ export function useFunilActions({
       if (!isRetry) {
         const novoCard: Omit<Cliente, 'id'> = {
           ...clienteOriginal,
-          cnpj: undefined,
+          cnpj: undefined, googlePlaceId: undefined,
           etapa: 'proposta',
           etapaAnterior: 'amostra',
           novoCiclo: true,
@@ -445,9 +509,10 @@ export function useFunilActions({
           historicoEtapas: [],
           vendedorId: loggedUser?.id || clienteOriginal.vendedorId,
         }
-        db.insertCliente(novoCard).then(cardCriado => {
-          setClientes(prev => [...prev, cardCriado])
+        db.insertCliente(novoCard).then(async cardCriado => {
+          setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
           addNotificacao('info', '🔄 Novo card em Proposta', `${clienteOriginal.razaoSocial}: amostra iniciada em card próprio, novo card criado em Proposta.`, cardCriado.id)
+          await copiarHistoricoETarefas(clienteOriginal.id, cardCriado.id, clienteOriginal.historicoEtapas || [], tarefas, setTarefas)
         }).catch(e => logger.error('Erro ao criar novo card em proposta:', e))
       }
     }
