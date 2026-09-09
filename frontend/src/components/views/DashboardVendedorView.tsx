@@ -23,6 +23,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { stageLabels } from '../../utils/constants'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
+import { callAI } from '../../lib/gemini'
 import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao } from '../../types'
 
 interface Props {
@@ -396,6 +397,66 @@ export default function DashboardVendedorView({
     }).sort((a, b) => b.valor - a.valor)
   }, [detailOpen, isGerente, vendedoresAtivos, clientes, pedidos, tarefas, missoesAtivas, periodoInicio, periodoFim])
 
+  // ─── Relatório IA ──────────────────────────────────────────────────────────
+  const [relatorioIA, setRelatorioIA] = useState<string | null>(null)
+  const [relatorioLoading, setRelatorioLoading] = useState(false)
+  const [relatorioOpen, setRelatorioOpen] = useState(false)
+
+  const gerarRelatorioIA = async () => {
+    setRelatorioLoading(true)
+    setRelatorioOpen(true)
+    setRelatorioIA(null)
+    const periodoLabel = periodoPreset === 'hoje' ? 'diário' : periodoPreset === 'semana' ? 'semanal' : periodoPreset === 'mes' ? 'mensal' : `de ${periodoInicio} a ${periodoFim}`
+    const kpis = [
+      `Período: ${periodoLabel} (${new Date(periodoInicio).toLocaleDateString('pt-BR')} a ${new Date(periodoFim).toLocaleDateString('pt-BR')})`,
+      `Cargo: ${isGerente ? 'Gerente' : 'Vendedor'}`,
+      `Faturamento: ${fmtBRL(fatMes)} (meta ${fmtBRL(metaVendas)}, ${pctMeta}%)`,
+      `Comissão estimada: ${fmtBRL(comissao)}`,
+      `Visitas realizadas: ${visitasMes}`,
+      `Propostas enviadas: ${propostasMes}`,
+      `Novos clientes: ${novosClientesMes} (meta ${metaLeads})`,
+      `Taxa de conversão: ${taxaConversao.toFixed(1)}% (meta ${metaConversao}%)`,
+      `Próximas visitas hoje: ${visitasHoje.length}`,
+      `Tarefas pendentes: ${tarefasPendentes.length}`,
+      `Missões em andamento: ${missoesAtivas.length}`,
+      `Visitas de missão: ${visitasMissao}`,
+    ]
+    if (isGerente && ranking.length > 0) {
+      kpis.push(`Ranking equipe: ${ranking.map((v, i) => `${i + 1}º ${v.nome} ${fmtBRL(v.valor)}`).join(', ')}`)
+    }
+    if (isGerente && tempoTelaData.length > 0) {
+      kpis.push(`Tempo de tela CRM: ${tempoTelaData.map(d => `${d.nome}: ${Math.floor(d.totalSegundos / 3600)}h${String(Math.floor((d.totalSegundos % 3600) / 60)).padStart(2, '0')}m`).join(', ')}`)
+    }
+    if (isGerente && academiaData.some(d => d.treinos > 0)) {
+      kpis.push(`Academia de vendas: ${academiaData.filter(d => d.treinos > 0).map(d => `${d.nome}: ${d.treinos} treinos, ${d.minutos}min, nota ${d.notaMedia.toFixed(1)}`).join(', ')}`)
+    }
+    const funil_str = funil.map(f => `${f.label}: ${f.qtd} clientes (${fmtBRL(f.valor)})`).join(', ')
+    kpis.push(`Funil: ${funil_str}`)
+
+    const systemPrompt = `Você é um consultor comercial sênior especialista em gestão de vendas B2B de alimentos e ingredientes industriais (MF Paris / Grupo Paris).
+Gere um relatório ${periodoLabel} crítico e estratégico baseado nos KPIs fornecidos.
+O relatório deve conter:
+1. **Resumo executivo** (2-3 frases diretas)
+2. **Pontos positivos** — o que está funcionando
+3. **Pontos de atenção** — riscos, gargalos, indicadores abaixo da meta
+4. **Recomendações práticas** — ações concretas para melhorar resultados no próximo período
+5. **Nota geral** — de 0 a 10 com justificativa
+
+Seja direto, use dados concretos, não invente números. Use formatação Markdown.`
+
+    try {
+      const resp = await callAI(
+        [{ role: 'user', content: `Dados do período:\n${kpis.join('\n')}` }],
+        systemPrompt
+      )
+      setRelatorioIA(resp)
+    } catch (err: any) {
+      setRelatorioIA(`❌ Erro ao gerar relatório: ${err?.message || 'Tente novamente.'}`)
+    } finally {
+      setRelatorioLoading(false)
+    }
+  }
+
   const detailTitles: Record<DetailKey, string> = {
     faturamento: 'Faturamento do mês',
     comissao: 'Comissão estimada',
@@ -448,6 +509,66 @@ export default function DashboardVendedorView({
         </div>
       )}
 
+      {/* ── Modal Relatório IA ── */}
+      {relatorioOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRelatorioOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <ArrowTrendingUpIcon className="h-5 w-5 text-violet-600" />
+                <h3 className="font-bold text-gray-900">Relatório IA — {periodoPreset === 'hoje' ? 'Diário' : periodoPreset === 'semana' ? 'Semanal' : periodoPreset === 'mes' ? 'Mensal' : 'Personalizado'}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {relatorioIA && (
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(relatorioIA) }}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                  >
+                    📋 Copiar
+                  </button>
+                )}
+                <button onClick={() => setRelatorioOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {relatorioLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <div className="w-8 h-8 border-3 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+                  <p className="text-sm text-gray-500">Analisando KPIs e gerando relatório...</p>
+                </div>
+              ) : relatorioIA ? (
+                <div className="prose prose-sm max-w-none text-gray-800 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:mt-3 [&_h3]:mb-1 [&_p]:text-sm [&_p]:leading-relaxed [&_li]:text-sm [&_strong]:text-gray-900 [&_ul]:space-y-1 [&_ol]:space-y-1"
+                  dangerouslySetInnerHTML={{ __html: relatorioIA
+                    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+                    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+                    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                    .replace(/^- (.+)$/gm, '<li>$1</li>')
+                    .replace(/^(\d+)\. (.+)$/gm, '<li>$1. $2</li>')
+                    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
+                    .replace(/\n{2,}/g, '</p><p>')
+                    .replace(/\n/g, '<br/>')
+                    .replace(/^/, '<p>')
+                    .replace(/$/, '</p>')
+                  }}
+                />
+              ) : null}
+            </div>
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between flex-shrink-0">
+              <span className="text-[10px] text-gray-400">Relatório gerado por IA com base nos KPIs do período selecionado</span>
+              <button
+                onClick={gerarRelatorioIA}
+                disabled={relatorioLoading}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors disabled:opacity-50"
+              >
+                🔄 Regenerar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -470,6 +591,14 @@ export default function DashboardVendedorView({
               <input type="date" value={periodoFim} onChange={e => { setPeriodoFim(e.target.value); setPeriodoPreset('custom') }}
                 className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:outline-none" />
             </div>
+            <button
+              onClick={gerarRelatorioIA}
+              disabled={relatorioLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-violet-600 to-primary-600 text-white hover:from-violet-700 hover:to-primary-700 transition-all shadow-sm disabled:opacity-60"
+            >
+              <ArrowTrendingUpIcon className="h-4 w-4" />
+              {relatorioLoading ? 'Gerando...' : 'Relatório IA'}
+            </button>
           </div>
         </div>
 
