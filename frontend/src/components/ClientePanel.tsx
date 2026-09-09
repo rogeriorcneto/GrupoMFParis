@@ -122,7 +122,7 @@ function currentTimeHHMM(): string {
 }
 
 function parseNotasEmpresa(notas?: string): { setor: string; info: string } {
-  const raw = (notas || '').trim()
+  const raw = (notas || '').replace(/<br\s*\/?>/gi, '\n').trim()
   if (!raw) return { setor: '', info: '' }
   const setorMatch = raw.match(/^Setor\s*respons[aá]vel:\s*(.+)$/im)
   const setor = setorMatch?.[1]?.trim() || ''
