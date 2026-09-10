@@ -1991,8 +1991,8 @@ export async function createIAContexto(
   tamanhoArquivo?: number
 ): Promise<IAContexto | null> {
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Usuário não autenticado')
+    const vendedor = await getLoggedVendedor()
+    if (!vendedor) throw new Error('Vendedor autenticado não encontrado')
 
     const { data, error } = await supabase
       .from('ia_contexto')
@@ -2003,7 +2003,7 @@ export async function createIAContexto(
         conteudo,
         url_arquivo: urlArquivo,
         tamanho_arquivo: tamanhoArquivo,
-        criado_por: user.id
+        criado_por: vendedor.id
       })
       .select()
       .single()
