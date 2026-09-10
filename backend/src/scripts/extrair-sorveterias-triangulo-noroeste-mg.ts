@@ -105,7 +105,7 @@ async function main() {
   const buf = await fs.readFile(INPUT_FILE)
   const workbook = XLSX.read(buf, { type: 'buffer' })
 
-  const mg = await processState(workbook, 'MG', citiesSet)
+  const mg = await processState(workbook, 'MG')
 
   const wb = XLSX.utils.book_new()
 

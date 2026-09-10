@@ -22,7 +22,8 @@
     "nodemailer": "^6.9.16",
     "pino": "^9.6.0",
     "qrcode": "^1.5.4",
-    "twilio": "^5.13.0"
+    "twilio": "^5.13.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
