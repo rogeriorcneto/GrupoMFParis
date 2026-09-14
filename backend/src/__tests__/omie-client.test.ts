@@ -5,6 +5,7 @@ vi.mock('../config-store.js', () => ({
   loadConfig: vi.fn().mockResolvedValue({
     omieAppKey: 'ENC:fake-app-key',
     omieAppSecret: 'ENC:fake-app-secret',
+    omieEmpresas: [],
   }),
 }))
 

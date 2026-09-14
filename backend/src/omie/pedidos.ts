@@ -238,19 +238,33 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
   const pesoNome = pesoFromNomeProduto(produto?.nome || '')
   const pesoOmieBruto = toNumberSafe(consultaOmie?.peso_bruto)
   const pesoOmieLiq = toNumberSafe(consultaOmie?.peso_liq)
+  const unidade = produto?.unidade || consultaOmie?.unidade || 'UN'
+  const vendidoPorKg = String(unidade).trim().toUpperCase() === 'KG'
 
-  // Bruto: cadastro do Omie → nome (embalagem) → CRM.
-  // O nome é o último recurso: produtos vendidos em fardo/caixa têm o peso da
-  // embalagem unitária no nome, que não representa o peso da unidade líquida.
-  const pesoBruto = pesoOmieBruto || pesoNome || pesoCrm || 0
-
-  // Líquido: cadastro do Omie (peso_liq) → CRM (sincronizado como peso_liq).
-  // Se não houver, aproximamos pelo bruto para evitar erro de cadastro.
-  const pesoLiquido = pesoOmieLiq || pesoCrm || pesoBruto
+  let pesoLiquido: number
+  let pesoBruto: number
+  if (vendidoPorKg) {
+    // Produto vendido por KG: a quantidade do item já é o peso em kg e o
+    // cadastro Omie guarda peso por kg (~1.0 líquido / ~1.003 bruto c/ embalagem).
+    // O peso_kg do CRM e o peso do nome são o tamanho da embalagem (ex.: 25KG) —
+    // nunca podem ser tratados como peso unitário da venda.
+    pesoLiquido = pesoOmieLiq || 1
+    pesoBruto = pesoOmieBruto || pesoLiquido
+  } else {
+    // Vendido por unidade/fardo/caixa: líquido vem do cadastro Omie, do peso
+    // declarado no nome (conteúdo líquido) ou do CRM. O bruto só vem do cadastro
+    // Omie; sem ele, aproximamos pelo líquido (nunca pelo nome, que é líquido).
+    pesoLiquido = pesoOmieLiq || pesoNome || pesoCrm || 0
+    pesoBruto = pesoOmieBruto || pesoLiquido
+  }
+  // Saneamento: bruto nunca pode ser menor que líquido.
+  if (pesoBruto > 0 && pesoLiquido > 0 && pesoBruto < pesoLiquido) {
+    pesoBruto = pesoLiquido
+  }
 
   return {
     descricao: consultaOmie?.descricao || produto?.nome || '',
-    unidade: produto?.unidade || consultaOmie?.unidade || 'UN',
+    unidade,
     ncm: consultaOmie?.ncm || produto?.ncm || '21069090',
     marca: consultaOmie?.marca || produto?.marca || '',
     especieVolume: produto?.especie_volume || 'FARDO',
@@ -400,7 +414,9 @@ async function garantirProdutoOmie(produtoId: number): Promise<ProdutoOmieResult
       const codigoOmie = match.codigo_produto
       await supabase.from('produtos').update({ omie_codigo: String(codigoOmie) }).eq('id', produtoId)
       log.info({ produtoId, codigoOmie, nome: produto.nome }, '🔗 Produto já existia no Omie — vinculado ao CRM')
-      return { codigoOmie, ...meta }
+      // Reconstruir meta com os dados do cadastro Omie (peso_bruto/peso_liq por unidade)
+      const metaOmie = buildMetaProduto(produto, match)
+      return { codigoOmie, ...metaOmie }
     }
   } catch {
     log.info({ produtoId, nome: produto.nome }, '⚠️ Busca prévia de produto no Omie falhou, tentando criar...')
@@ -733,7 +749,11 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   if (codigoParcela === '000') {
     log.info({ pedidoId, formaPagamento, codigoParcela }, '✅ À vista — sem lista_parcelas')
   } else {
-    const parcelas = gerarParcelas(formaPagamento, totalPedido, dataPrevisao)
+    // Prazos do CRM ("7/14", "28 dias"...) contam a partir da data da venda/emissão,
+    // não da previsão de entrega — senão cada vencimento ficaria ~6 dias úteis atrasado.
+    const hoje = new Date()
+    const dataBaseParcelas = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`
+    const parcelas = gerarParcelas(formaPagamento, totalPedido, dataBaseParcelas)
     omiePedido.lista_parcelas = { parcela: parcelas }
     log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas com datas explícitas enviadas para Omie')
   }
