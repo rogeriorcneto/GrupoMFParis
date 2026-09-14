@@ -15,6 +15,7 @@ interface CallRecorderProps {
   callMode?: CallMode
   onClose: () => void
   onSaved?: (gravacao: GravacaoMeta) => void
+  onTranscribed?: (gravacaoId: number, transcricao: string) => void
 }
 
 export interface GravacaoMeta {
@@ -32,7 +33,7 @@ export interface GravacaoMeta {
 
 type RecordingState = 'idle' | 'requesting' | 'recording' | 'stopped' | 'uploading' | 'saved' | 'error'
 
-export default function CallRecorder({ cliente, vendedorId, phoneNumber, contactName, callMode = 'phone', onClose, onSaved }: CallRecorderProps) {
+export default function CallRecorder({ cliente, vendedorId, phoneNumber, contactName, callMode = 'phone', onClose, onSaved, onTranscribed }: CallRecorderProps) {
   const [state, setState] = useState<RecordingState>('idle')
   const [seconds, setSeconds] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -107,7 +108,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
         // WhatsApp voice call — open in new tab so recording continues
         window.open(`https://wa.me/${formattedNum}`, '_blank')
       } else {
-        window.open(`tel:+${formattedNum}`, '_self')
+        window.location.href = `tel:+${formattedNum}`
       }
 
     } catch (err: any) {
@@ -204,6 +205,9 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
         })
       }
 
+      // Transcreve automaticamente — a conversa fica salva no histórico do cliente
+      if (arquivoUrl) runTranscription(data.id)
+
       // Don't auto-close — user may want to transcribe
 
     } catch (err: any) {
@@ -211,6 +215,22 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
       setState('error')
     }
   }, [cliente?.id, vendedorId, phoneNumber, seconds, notas, callMode, onSaved, onClose])
+
+  const runTranscription = useCallback(async (gravacaoId: number) => {
+    setTranscribing(true)
+    try {
+      const result = await transcribeCallRecording(gravacaoId)
+      if (result.success && result.transcription) {
+        setTranscription(result.transcription)
+        onTranscribed?.(gravacaoId, result.transcription)
+      } else {
+        setError(result.error || 'Não foi possível transcrever')
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Erro ao transcrever')
+    }
+    setTranscribing(false)
+  }, [onTranscribed])
 
   const discardRecording = useCallback(() => {
     audioBlobRef.current = null
@@ -375,30 +395,22 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
                 <p className="text-xs text-gray-600 whitespace-pre-wrap">{transcription}</p>
               </div>
             ) : savedId ? (
-              <button
-                onClick={async () => {
-                  setTranscribing(true)
-                  try {
-                    const result = await transcribeCallRecording(savedId)
-                    if (result.success && result.transcription) {
-                      setTranscription(result.transcription)
-                    } else {
-                      setError(result.error || 'Não foi possível transcrever')
-                    }
-                  } catch (err: any) {
-                    setError(err?.message || 'Erro ao transcrever')
-                  }
-                  setTranscribing(false)
-                }}
-                disabled={transcribing}
-                className="mt-3 flex items-center gap-1.5 mx-auto px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:bg-gray-300 transition-colors"
-              >
-                {transcribing ? (
-                  <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Transcrevendo...</>
-                ) : (
-                  <>🤖 Transcrever com IA</>
+              <>
+                <button
+                  onClick={() => runTranscription(savedId)}
+                  disabled={transcribing}
+                  className="mt-3 flex items-center gap-1.5 mx-auto px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:bg-gray-300 transition-colors"
+                >
+                  {transcribing ? (
+                    <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Transcrevendo...</>
+                  ) : (
+                    <>🤖 Transcrever com IA</>
+                  )}
+                </button>
+                {error && !transcribing && (
+                  <p className="mt-2 text-xs text-red-600">{error}</p>
                 )}
-              </button>
+              </>
             ) : null}
 
             <button onClick={onClose} className="mt-3 px-4 py-1.5 text-gray-500 text-xs hover:text-gray-700">Fechar</button>

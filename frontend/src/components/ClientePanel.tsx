@@ -6,7 +6,8 @@ import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
 import { gerarPropostaPDF } from '../utils/pdfGenerator'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { formatCNPJ } from '../utils/validators'
+import { formatCNPJ, formatBrazilianPhone } from '../utils/validators'
+import { isMobileDevice } from '../utils/device'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
@@ -255,7 +256,6 @@ export default function ClientePanel({
 
   // Gravações de ligação
   const [gravacoes, setGravacoes] = useState<any[]>([])
-  const [gravacoesPorData, setGravacoesPorData] = useState<Map<string, any>>(new Map())
   const [transcricoes, setTranscricoes] = useState<Record<number, string>>({})
   const [transcrevendo, setTranscrevendo] = useState<Record<number, boolean>>({})
 
@@ -298,12 +298,11 @@ export default function ClientePanel({
       .then(({ data }) => {
         if (!data) return
         setGravacoes(data)
-        const map = new Map<string, any>()
+        const trMap: Record<number, string> = {}
         for (const g of data) {
-          const dia = (g.created_at || '').split('T')[0]
-          if (!map.has(dia)) map.set(dia, g)
+          if (g.transcricao) trMap[g.id] = g.transcricao
         }
-        setGravacoesPorData(map)
+        setTranscricoes(trMap)
       })
   }, [c.id])
 
@@ -349,6 +348,9 @@ export default function ClientePanel({
     if (t) tarefasVinculadasIds.add(t.id)
   }
 
+  // Gravações sem uma interação 'ligacao' próxima (ex.: salvas pelo funil) entram
+  // como itens sintéticos. IDs abaixo de -10_000_000 as distinguem de tarefas.
+  const GRAVACAO_ID_OFFSET = 10_000_000
   const clienteInteracoes = [
     ...clienteInteracoesBase,
     ...clienteTarefasBase.filter(t => !tarefasVinculadasIds.has(t.id)).map(t => ({
@@ -360,6 +362,19 @@ export default function ClientePanel({
       data: t.criadoEm || `${t.data}T${t.hora || '00:00'}`,
       automatico: false,
     } as Interacao)),
+    ...gravacoes
+      .filter(g => !clienteInteracoesBase.some(i =>
+        i.tipo === 'ligacao' && Math.abs(new Date(i.data).getTime() - new Date(g.created_at).getTime()) < 24 * 3600 * 1000
+      ))
+      .map(g => ({
+        id: -(g.id + GRAVACAO_ID_OFFSET),
+        clienteId: c.id,
+        tipo: 'ligacao' as Interacao['tipo'],
+        assunto: `Ligação - ${c.razaoSocial}`,
+        descricao: `Ligação gravada para ${g.numero_telefone || '—'}${g.notas ? ` — ${g.notas}` : ''}`,
+        data: g.created_at,
+        automatico: true,
+      } as Interacao)),
   ].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
   const clienteInteracoesOrdenadas = [...clienteInteracoes].sort((a, b) => {
     const aPinned = pinnedInteracoes.includes(a.id)
@@ -677,14 +692,26 @@ export default function ClientePanel({
                       </button>
                     )}
                     {fone && (
-                      <button type="button" onClick={() => setShowWhatsApp(true)}
+                      <button type="button" onClick={() => {
+                        if (isMobileDevice()) {
+                          window.location.href = `https://wa.me/${formatBrazilianPhone(fone)}`
+                        } else {
+                          setShowWhatsApp(true)
+                        }
+                      }}
                         className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
                         title="WhatsApp">
                         <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {c.contatoEmail && (
-                      <button type="button" onClick={() => { setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100) }}
+                      <button type="button" onClick={() => {
+                        if (isMobileDevice()) {
+                          window.location.href = `mailto:${c.contatoEmail}`
+                        } else {
+                          setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
+                        }
+                      }}
                         className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
                         title="E-mail">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -1957,7 +1984,7 @@ export default function ClientePanel({
                       return itens.map(inter => {
                       const tipo = inter.tipo || 'nota'
                       const isPinned = pinnedInteracoes.includes(inter.id)
-                      const isTaskItem = inter.id < 0
+                      const isTaskItem = inter.id < 0 && inter.id > -10_000_000
                       const tarefaVinculada = isTaskItem ? clienteTarefas.find(t => t.id === Math.abs(inter.id)) : interacaoTarefaMap.get(inter.id)
                       const cor = isTaskItem ? { bg: 'bg-orange-50', border: 'border-orange-200', dot: 'bg-orange-500' } : (tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' })
                       const criador = inter.automatico ? 'Automação' : (vendedor?.nome?.split(' ')[0] || '—')
@@ -2055,9 +2082,11 @@ export default function ClientePanel({
 
                           {/* Gravação de ligação */}
                           {inter.tipo === 'ligacao' && (() => {
-                            const diaDaInteracao = (inter.data || '').split('T')[0]
-                            const gravacao = gravacoesPorData.get(diaDaInteracao)
-                              || gravacoes.find(g => Math.abs(new Date(g.created_at).getTime() - new Date(inter.data).getTime()) < 24 * 3600 * 1000)
+                            const tInter = new Date(inter.data).getTime()
+                            const gravacao = gravacoes.reduce((best, g) => {
+                              const diff = Math.abs(new Date(g.created_at).getTime() - tInter)
+                              return diff < 24 * 3600 * 1000 && (!best || diff < best.diff) ? { g, diff } : best
+                            }, null as { g: any, diff: number } | null)?.g
                             if (!gravacao) return null
                             const tid = transcricoes[gravacao.id]
                             const carregando = transcrevendo[gravacao.id]
@@ -2385,6 +2414,40 @@ export default function ClientePanel({
           vendedorId={loggedUser?.id}
           phoneNumber={(c.contatoCelular || c.contatoTelefone || '').replace(/\D/g, '')}
           onClose={() => setShowCallRecorder(false)}
+          onSaved={async (g) => {
+            const gravRow = {
+              id: g.id,
+              cliente_id: c.id,
+              numero_telefone: g.numeroTelefone,
+              duracao_segundos: g.duracaoSegundos,
+              arquivo_url: g.arquivoUrl,
+              arquivo_path: g.arquivoPath,
+              tamanho_bytes: g.tamanhoBytes,
+              notas: g.notas,
+              created_at: g.createdAt,
+            }
+            setGravacoes(prev => [gravRow, ...prev])
+            try {
+              const dur = `${Math.floor(g.duracaoSegundos / 60)}:${String(g.duracaoSegundos % 60).padStart(2, '0')}`
+              const savedI = await db.insertInteracao({
+                clienteId: c.id,
+                tipo: 'ligacao',
+                data: g.createdAt || new Date().toISOString(),
+                assunto: `Ligação - ${c.razaoSocial}`,
+                descricao: `Ligação gravada para ${g.numeroTelefone} (duração ${dur} min)${g.notas ? ` — ${g.notas}` : ''}`,
+                automatico: false,
+              })
+              setInteracoes(prev => [savedI, ...prev])
+              const hoje = new Date().toISOString().split('T')[0]
+              await db.updateCliente(c.id, { ultimaInteracao: hoje })
+              setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, ultimaInteracao: hoje } : cl))
+            } catch (err) {
+              logger.error('Erro ao registrar ligação no histórico:', err)
+            }
+          }}
+          onTranscribed={(gravacaoId, texto) =>
+            setTranscricoes(prev => ({ ...prev, [gravacaoId]: texto }))
+          }
         />
       )}
 
