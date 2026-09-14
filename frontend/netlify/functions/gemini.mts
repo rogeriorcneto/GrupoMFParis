@@ -69,7 +69,8 @@ export default async (req: Request, _context: Context) => {
       contents,
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
+        thinkingConfig: { thinkingBudget: 1024 },
       },
     }
 
