@@ -281,7 +281,7 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white shadow-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 group"
+        className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-50 w-12 h-12 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white shadow-xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 group"
         title="Assistente IA"
       >
         <SparklesIcon className="h-6 w-6" />
@@ -291,7 +291,7 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
   }
 
   return (
-    <div className="fixed bottom-24 right-6 z-50 w-[380px] max-h-[70vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
+    <div className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-50 w-[calc(100vw-2rem)] max-w-[380px] max-h-[70vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-violet-600 to-purple-700 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">

@@ -149,7 +149,7 @@ export default function ClienteFormModal({
         />
 
         {/* Modal — ampliado para ~70% da largura da tela (mínimo de 5xl em telas pequenas) */}
-        <div className="relative w-full sm:w-[70vw] max-w-[1400px] bg-white rounded-apple shadow-apple border border-gray-200 max-h-[90vh] overflow-y-auto">
+        <div className="relative w-full sm:w-[70vw] max-w-[1400px] bg-white rounded-none sm:rounded-apple shadow-apple border border-gray-200 h-[100dvh] sm:h-auto sm:max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
             <h2 className="text-lg font-semibold text-gray-900">
@@ -169,7 +169,7 @@ export default function ClienteFormModal({
             <div className="space-y-5">
 
               {/* ── Responsável + Status ── */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Vendedor Responsável</label>
                   {isGerente ? (
@@ -348,7 +348,7 @@ export default function ClienteFormModal({
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                       placeholder="João Silva" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Celular <span className="text-red-500">*</span></label>
                       <input type="tel" name="contatoCelular" value={formData.contatoCelular} onChange={handleTelChange}
@@ -465,7 +465,7 @@ export default function ClienteFormModal({
                         placeholder="Rua das Flores" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Número</label>
                       <input type="text" name="enderecoNumero" value={formData.enderecoNumero} onChange={handleInputChange}
@@ -479,7 +479,7 @@ export default function ClienteFormModal({
                         placeholder="Sala 2, Apto 301..." />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div className="col-span-1">
                       <label className="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
                       <input type="text" name="enderecoBairro" value={formData.enderecoBairro} onChange={handleInputChange}
@@ -533,7 +533,7 @@ export default function ClienteFormModal({
                           placeholder="Rua das Flores" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Número</label>
                         <input type="text" name="enderecoNumero2" value={formData.enderecoNumero2} onChange={handleInputChange}
@@ -547,7 +547,7 @@ export default function ClienteFormModal({
                           placeholder="Sala 2, Apto 301..." />
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <div className="col-span-1">
                         <label className="block text-xs font-medium text-gray-600 mb-1">Bairro</label>
                         <input type="text" name="enderecoBairro2" value={formData.enderecoBairro2} onChange={handleInputChange}

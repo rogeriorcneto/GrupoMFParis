@@ -650,9 +650,9 @@ export default function ClientePanel({
   }, [pedidoTipo])
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-[5vh_5vw]">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-0 sm:p-[5vh_5vw]">
       <div className="absolute inset-0 bg-black bg-opacity-40" onClick={onClose} />
-      <div className="relative w-[90vw] h-[90vh] bg-white shadow-2xl rounded-2xl overflow-hidden">
+      <div className="relative w-full h-[100dvh] sm:w-[90vw] sm:h-[90vh] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden">
         {/* Header — Perfil do Cliente (referência: Agendor) */}
         <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -1168,7 +1168,7 @@ export default function ClientePanel({
           {/* === CONTATO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">🏢 Dados básicos da empresa</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
               <div><p className="text-xs text-gray-500">Razão social</p><p className="font-medium text-gray-900">{c.razaoSocial}</p></div>
               <div><p className="text-xs text-gray-500">CNPJ</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || '-'}</p></div>
               <div><p className="text-xs text-gray-500">Nome fantasia</p><p className="font-medium text-gray-900">{c.nomeFantasia || '-'}</p></div>
@@ -1231,7 +1231,7 @@ export default function ClientePanel({
           {/* === CONTATO E LOCALIZAÇÃO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">📇 Informações para contato</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
               <div><p className="text-xs text-gray-500">Pessoa responsável</p><p className="font-medium text-gray-900">{c.contatoNome || '-'}</p></div>
               <div>
                 <p className="text-xs text-gray-500">Setor</p>
@@ -1524,7 +1524,7 @@ export default function ClientePanel({
             return (
               <div className="space-y-3">
                 {/* KPIs */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div className="bg-white rounded-apple border border-gray-200 p-3">
                     <p className="text-[10px] text-gray-400 uppercase tracking-wider">Pedidos</p>
                     <p className="text-lg font-bold text-gray-900">{pedidosCli.length}</p>
@@ -2390,10 +2390,10 @@ export default function ClientePanel({
 
       {/* Modal Editar Proposta */}
       {showEditProposta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95dvh] sm:max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <div>
                 <h2 className="text-base font-bold text-gray-900">📝 {ultimaProposta ? 'Editar Proposta' : 'Nova Proposta'}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta ? `${ultimaProposta.numero} · ${new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}` : 'Itens, frete e pagamento são exigidos pelo botão "Ganhou"'}</p>
@@ -2402,7 +2402,7 @@ export default function ClientePanel({
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
               {/* Frete */}
               <div>
                 <p className="text-xs font-medium text-gray-700 mb-2">Tipo de Frete</p>
@@ -2429,7 +2429,7 @@ export default function ClientePanel({
                 <p className="text-xs font-medium text-gray-700 mb-2">Itens da Proposta</p>
                 <div className="space-y-2">
                   {editPropostaItens.map((item, idx) => (
-                    <div key={item.produtoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-apple border border-gray-200">
+                    <div key={item.produtoId} className="flex flex-wrap items-center gap-2 sm:gap-3 p-3 bg-gray-50 rounded-apple border border-gray-200">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">{item.nomeProduto}</p>
                         <p className="text-[10px] text-gray-400">KG</p>

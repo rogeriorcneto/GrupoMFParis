@@ -52,6 +52,7 @@ interface AppRouterProps {
   handleDragStart: (e: React.DragEvent, cliente: Cliente, fromStage: string) => void
   handleDragOver: (e: React.DragEvent) => void
   handleDrop: (e: React.DragEvent, toStage: string) => void
+  requestStageMove: (cliente: Cliente, fromStage: string, toStage: string) => void
   handleQuickAction: (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => void
   setSelectedClientePanel: (c: Cliente | null) => void
   moverCliente: (clienteId: number, toStage: string, extras?: Partial<Cliente>) => void
@@ -79,7 +80,7 @@ export default function AppRouter({
   setClientes, setInteracoes, setVendedores, setTarefas, setTemplates,
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
-  handleDragStart, handleDragOver, handleDrop, handleQuickAction,
+  handleDragStart, handleDragOver, handleDrop, requestStageMove, handleQuickAction,
   setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
@@ -357,6 +358,7 @@ export default function AppRouter({
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onMoveCliente={requestStageMove}
         onQuickAction={handleQuickAction}
         onClickCliente={(c) => setSelectedClientePanel(c)}
         isGerente={loggedUser?.cargo === 'gerente'}

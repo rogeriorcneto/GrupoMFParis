@@ -215,3 +215,18 @@ input[type="number"] {
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
 }
+
+/* ─── Mobile ─────────────────────────────────────────────── */
+/* iOS Safari dá zoom automático ao focar inputs com fonte < 16px */
+@media (max-width: 767.98px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
+/* Área segura do iPhone (notch/home indicator) para elementos fixed no rodapé */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

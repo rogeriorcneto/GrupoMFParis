@@ -59,7 +59,7 @@ export function useFunilActions({
   const draggedItemRef = useRef<DragItem | null>(null)
   const [draggedItem, setDraggedItemState] = useState<DragItem | null>(null)
   const setDraggedItem = (v: DragItem | null) => { draggedItemRef.current = v; setDraggedItemState(v) }
-  const [pendingDrop, setPendingDrop] = useState<{ e: React.DragEvent, toStage: string } | null>(null)
+  const [pendingDrop, setPendingDrop] = useState<{ e: React.DragEvent | null, toStage: string } | null>(null)
   const [showMotivoPerda, setShowMotivoPerda] = useState(false)
   const [motivoPerdaTexto, setMotivoPerdaTexto] = useState('')
   const [categoriaPerdaSel, setCategoriaPerdaSel] = useState<Cliente['categoriaPerda']>('outro')
@@ -329,14 +329,17 @@ export function useFunilActions({
     } finally { movingRef.current = false }
   }
 
-  const handleDrop = (e: React.DragEvent, toStage: string) => {
-    e.preventDefault()
-    if (!draggedItem || draggedItem.fromStage === toStage) { setDraggedItem(null); return }
+  // Lógica de transição de etapa — usada tanto pelo drag-and-drop (desktop)
+  // quanto pelo menu "Mover" dos cards (mobile), que não tem DragEvent.
+  const requestStageMove = (cliente: Cliente, fromStage: string, toStage: string) => {
+    if (fromStage === toStage) { setDraggedItem(null); return }
+    // Garante draggedItem para os confirms dos modais (perda, amostra, proposta)
+    setDraggedItem({ cliente, fromStage })
 
     const isGerente = loggedUser?.cargo === 'gerente'
-    const permitidas = transicoesPermitidas[draggedItem.fromStage] || []
+    const permitidas = transicoesPermitidas[fromStage] || []
     if (!isGerente && !permitidas.includes(toStage)) {
-      setTransicaoInvalida(`Não é possível mover de "${stageLabels[draggedItem.fromStage]}" para "${stageLabels[toStage]}". Transições permitidas: ${permitidas.map(s => stageLabels[s]).join(', ')}`)
+      setTransicaoInvalida(`Não é possível mover de "${stageLabels[fromStage]}" para "${stageLabels[toStage]}". Transições permitidas: ${permitidas.map(s => stageLabels[s]).join(', ')}`)
       setTimeout(() => setTransicaoInvalida(''), 4000)
       setDraggedItem(null)
       return
@@ -346,47 +349,47 @@ export function useFunilActions({
     // EXCETO para 'perdido' — sempre abre o modal para registrar motivo e criar novo ciclo
     const isOutOfFlow = !permitidas.includes(toStage)
     if (isGerente && isOutOfFlow && toStage !== 'perdido') {
-      moverCliente(draggedItem.cliente.id, toStage, {})
+      moverCliente(cliente.id, toStage, {})
       setDraggedItem(null)
       return
     }
 
     if (toStage === 'perdido') {
-      if (draggedItem.fromStage === 'amostra') {
-        moverCliente(draggedItem.cliente.id, 'amostra_perdida', {
+      if (fromStage === 'amostra') {
+        moverCliente(cliente.id, 'amostra_perdida', {
           resultadoAmostra: 'reprovada',
           dataResultadoAmostra: new Date().toISOString().split('T')[0],
         })
         setDraggedItem(null)
         return
       }
-      setPendingDrop({ e, toStage })
+      setPendingDrop({ e: null, toStage })
       setShowMotivoPerda(true)
       return
     }
     if (toStage === 'amostra') {
-      setPendingDrop({ e, toStage })
+      setPendingDrop({ e: null, toStage })
       setModalAmostraData(new Date().toISOString().split('T')[0])
       setShowModalAmostra(true)
       return
     }
     if (toStage === 'negociacao') {
-      setPendingDrop({ e, toStage })
-      setModalPropostaValor(draggedItem.cliente.valorEstimado?.toString() || '')
+      setPendingDrop({ e: null, toStage })
+      setModalPropostaValor(cliente.valorEstimado?.toString() || '')
       setShowModalProposta(true)
       return
     }
 
     // 2ª tentativa de amostra: de amostra_perdida → amostra
-    if (toStage === 'amostra' && draggedItem.fromStage === 'amostra_perdida') {
-      const tentativa = draggedItem.cliente.tentativaAmostra || 0
+    if (toStage === 'amostra' && fromStage === 'amostra_perdida') {
+      const tentativa = cliente.tentativaAmostra || 0
       if (tentativa >= 2) {
-        setTransicaoInvalida(`${draggedItem.cliente.razaoSocial} já usou as 2 tentativas de amostra. Mova para Perdido.`)
+        setTransicaoInvalida(`${cliente.razaoSocial} já usou as 2 tentativas de amostra. Mova para Perdido.`)
         setTimeout(() => setTransicaoInvalida(''), 5000)
         setDraggedItem(null)
         return
       }
-      setPendingDrop({ e, toStage })
+      setPendingDrop({ e: null, toStage })
       setModalAmostraData(new Date().toISOString().split('T')[0])
       setShowModalAmostra(true)
       return
@@ -396,9 +399,9 @@ export function useFunilActions({
     if (toStage === 'proposta') { extras.resultadoAmostra = 'aprovada'; extras.dataResultadoAmostra = new Date().toISOString().split('T')[0] }
     if (toStage === 'prospecção') { extras.motivoPerda = undefined; extras.categoriaPerda = undefined; extras.dataPerda = undefined }
     // Lead → Prospecção: notify vendedor
-    if (toStage === 'prospecção' && draggedItem.fromStage === 'lead') {
+    if (toStage === 'prospecção' && fromStage === 'lead') {
       const vendedorNome = loggedUser?.nome || 'Gerente'
-      addNotificacao('info', '🆕 Novo Lead!', `${vendedorNome} enviou um novo lead: ${draggedItem.cliente.razaoSocial}`, draggedItem.cliente.id)
+      addNotificacao('info', '🆕 Novo Lead!', `${vendedorNome} enviou um novo lead: ${cliente.razaoSocial}`, cliente.id)
     }
     // Amostra → Amostra Perdida: set reprovada result
     if (toStage === 'amostra_perdida') {
@@ -406,8 +409,14 @@ export function useFunilActions({
       extras.dataResultadoAmostra = new Date().toISOString().split('T')[0]
     }
 
-    moverCliente(draggedItem.cliente.id, toStage, extras)
+    moverCliente(cliente.id, toStage, extras)
     setDraggedItem(null)
+  }
+
+  const handleDrop = (e: React.DragEvent, toStage: string) => {
+    e.preventDefault()
+    if (!draggedItem) { setDraggedItem(null); return }
+    requestStageMove(draggedItem.cliente, draggedItem.fromStage, toStage)
   }
 
   const confirmPerda = async () => {
@@ -549,6 +558,8 @@ export function useFunilActions({
     // Drag & drop
     draggedItem, setDraggedItem,
     handleDragStart, handleDragOver, handleDrop,
+    // Transição de etapa (drag ou menu mobile)
+    requestStageMove,
     // Mover cliente
     moverCliente,
     // Quick actions & campaigns

@@ -425,7 +425,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   // Funnel actions: drag/drop, mover, modals, quick actions, campaigns
   const {
     draggedItem, setDraggedItem,
-    handleDragStart, handleDragOver, handleDrop,
+    handleDragStart, handleDragOver, handleDrop, requestStageMove,
     moverCliente, handleQuickAction, scheduleJob, runJobNow, startCampanha,
     showMotivoPerda, setShowMotivoPerda, motivoPerdaTexto, setMotivoPerdaTexto,
     categoriaPerdaSel, setCategoriaPerdaSel, confirmPerda,
@@ -604,6 +604,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
                 }}
                 handleEditCliente={handleEditCliente}
                 handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDrop={handleDrop}
+                requestStageMove={requestStageMove}
                 handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
                 moverCliente={moverCliente}
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}

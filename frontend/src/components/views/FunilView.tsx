@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react'
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
@@ -67,7 +67,13 @@ function abreviarProduto(nome: string): string {
   return partes.join(' ')
 }
 
-function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[] }) {
+function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo, onMoveCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[]; onMoveCliente?: (cliente: Cliente, fromStage: string, toStage: string) => void }) {
+  // ─── Mobile kanban: chips de etapa + scroll por coluna ───
+  const kanbanScrollRef = useRef<HTMLDivElement>(null)
+  const colRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const scrollRaf = useRef(0)
+  const [activeStageIdx, setActiveStageIdx] = useState(0)
+  const [moveMenuCliente, setMoveMenuCliente] = useState<number | null>(null)
   const [filterVendedorId, setFilterVendedorId] = React.useState<number | ''>('')
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
@@ -646,6 +652,26 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   const alertCount = useMemo(() => clientesFiltrados.filter(c => getCardUrgencia(c) !== 'normal').length, [clientesFiltrados])
 
+  // Mobile: descobre qual coluna está centralizada no scroll horizontal
+  const handleKanbanScroll = () => {
+    cancelAnimationFrame(scrollRaf.current)
+    scrollRaf.current = requestAnimationFrame(() => {
+      const el = kanbanScrollRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const center = rect.left + el.clientWidth / 2
+      let best = 0, bestDist = Infinity
+      displayedStages.forEach((s, i) => {
+        const col = colRefs.current.get(s.key)
+        if (!col) return
+        const r = col.getBoundingClientRect()
+        const d = Math.abs((r.left + r.right) / 2 - center)
+        if (d < bestDist) { bestDist = d; best = i }
+      })
+      setActiveStageIdx(best)
+    })
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden">
       {/* KPI bar — cards com mais destaque */}
@@ -766,8 +792,22 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         )}
       </div>
 
+      {/* Mobile: chips de etapa para pular entre colunas */}
+      <div className="md:hidden flex gap-1.5 px-2 pb-2 overflow-x-auto flex-shrink-0">
+        {displayedStages.map((s, i) => (
+          <button
+            key={s.key}
+            onClick={() => colRefs.current.get(s.key)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap border transition-colors flex-shrink-0 ${i === activeStageIdx ? 'bg-primary-600 text-white border-primary-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700'}`}
+          >
+            <span>{s.icon}</span><span>{s.title}</span>
+            <span className={`px-1.5 rounded-full text-[9px] font-bold ${i === activeStageIdx ? 'bg-white/20' : 'bg-gray-100 dark:bg-gray-700'}`}>{(stageMap.get(s.key) || []).length}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Kanban columns */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div ref={kanbanScrollRef} onScroll={handleKanbanScroll} className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory md:snap-none">
         <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 300}px` }}>
           {displayedStages.map((stage) => {
             const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
@@ -788,7 +828,13 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
               perdido: 'border-t-2 border-t-red-400',
             }
             return (
-              <div key={stage.key} className={`flex-1 min-w-[270px] max-w-[380px] flex flex-col bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden ${colHeaderColor[stage.key] || ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, stage.key)}>
+              <div
+                key={stage.key}
+                ref={(el) => { if (el) colRefs.current.set(stage.key, el); else colRefs.current.delete(stage.key) }}
+                className={`flex-none w-[86vw] max-w-[86vw] snap-center md:flex-1 md:w-auto md:min-w-[270px] md:max-w-[380px] flex flex-col bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden ${colHeaderColor[stage.key] || ''}`}
+                onDragOver={onDragOver}
+                onDrop={(e) => onDrop(e, stage.key)}
+              >
                 {/* Column header */}
                 <div className="px-3 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                   <div className="flex items-center justify-between gap-1">
@@ -821,22 +867,43 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     return (
                       <div
                         key={cliente.id}
-                        className={`p-3 rounded-xl bg-white dark:bg-gray-800 ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-lg dark:hover:shadow-gray-900/50 transition-all duration-150 group ${
+                        className={`relative p-3 rounded-xl bg-white dark:bg-gray-800 ${isGerente ? 'cursor-move' : 'cursor-pointer'} hover:shadow-lg dark:hover:shadow-gray-900/50 transition-all duration-150 group ${
                           urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-red-100 dark:border-red-900/50' :
                           urgencia === 'atencao' ? 'border-l-[3px] border-l-yellow-400 border border-yellow-100 dark:border-yellow-900/50' :
                           'border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                         }`}
                         draggable={isGerente}
                         onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
-                        onClick={() => onClickCliente?.(cliente)}
+                        onClick={() => { if (moveMenuCliente === cliente.id) { setMoveMenuCliente(null); return } onClickCliente?.(cliente) }}
                       >
                         <div className="flex items-start justify-between gap-1.5">
                           <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
                           <div className="flex items-center gap-1 flex-shrink-0">
+                            {isGerente && onMoveCliente && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setMoveMenuCliente(moveMenuCliente === cliente.id ? null : cliente.id) }}
+                                className="md:hidden px-1.5 py-0.5 text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded"
+                                title="Mover de etapa"
+                              >⇄</button>
+                            )}
                             {urgencia !== 'normal' && <span className="text-xs">{urgencia === 'critico' ? '🔴' : '🟡'}</span>}
                             {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 rounded-full">{cliente.score}</span>}
                           </div>
                         </div>
+                        {moveMenuCliente === cliente.id && isGerente && onMoveCliente && (
+                          <div className="absolute right-2 top-9 z-30 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl py-1 max-h-64 overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Mover para</p>
+                            {displayedStages.filter(s => s.key !== stage.key).map(s => (
+                              <button
+                                key={s.key}
+                                onClick={() => { setMoveMenuCliente(null); onMoveCliente(cliente, stage.key, s.key) }}
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                              >
+                                <span>{s.icon}</span><span>{s.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.contatoNome}</span>
                           {vendedor && <span className="text-[10px] text-primary-500 dark:text-primary-400 font-semibold flex-shrink-0 bg-primary-50 dark:bg-primary-900/30 px-1.5 py-0.5 rounded-full">{vendedor.nome.split(' ')[0]}</span>}
