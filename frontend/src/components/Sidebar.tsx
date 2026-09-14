@@ -80,7 +80,7 @@ export default function Sidebar({
       {/* Logo */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2">
-          <img src="/Logo_MFParis.jpg" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
+          <img src="/Logo_MFParis.png" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
           <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Grupo MF Paris</h1>
         </div>
         <button onClick={() => setSidebarOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-apple" title="Fechar menu">

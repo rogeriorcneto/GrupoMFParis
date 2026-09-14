@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State
         <div className="min-h-screen bg-gradient-to-br from-primary-700 via-primary-800 to-primary-900 flex items-center justify-center p-4">
           <div className="w-full max-w-md text-center">
             <div className="w-20 h-20 bg-white rounded-2xl shadow-lg mx-auto flex items-center justify-center mb-6 p-2">
-              <img src="/Logo_MFParis.jpg" alt="GMF" className="w-full h-full object-contain rounded-xl" />
+              <img src="/Logo_MFParis.png" alt="GMF" className="w-full h-full object-contain rounded-xl" />
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">Algo deu errado</h1>
             <p className="text-primary-200 mb-6">Ocorreu um erro inesperado. Tente recarregar a página.</p>

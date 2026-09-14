@@ -113,7 +113,7 @@ export default function GrupoParisHome({ usuario, onSelectSistema, onSignOut }: 
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white rounded-xl shadow-lg flex items-center justify-center p-1.5">
               <img
-                src="/Logo_MFParis.jpg"
+                src="/Logo_MFParis.png"
                 alt="GMF Paris"
                 className="w-full h-full object-contain rounded-lg"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}

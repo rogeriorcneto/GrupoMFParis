@@ -16,7 +16,7 @@ interface PropostaPdfOptions {
   dataLancamento?: string
 }
 
-const LOGO_PATH = '/Logo_MFParis.jpg'
+const LOGO_PATH = '/Logo_MFParis.png'
 
 const EMISSOR = {
   nome: 'DMS COMERCIO E DISTRIBUICAO DE CAFE LTDA',
