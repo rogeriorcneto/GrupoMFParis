@@ -205,6 +205,17 @@ export default function AppRouter({
                   })
                 } catch { /* non-critical */ }
               }
+            } else {
+              // Pedido de venda recusado: liberar o card em negociação — sem isso o
+              // statusFollowUp ficava 'aguardando_aprovacao_gerente' para sempre e o
+              // botão "Ganhou" do cliente nunca mais respondia.
+              const cliV = clientes.find(c => c.id === pedido.clienteId)
+              if (cliV?.statusFollowUp === 'aguardando_aprovacao_gerente') {
+                try {
+                  await db.updateCliente(pedido.clienteId, { statusFollowUp: null as any })
+                  setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusFollowUp: undefined } : c))
+                } catch { /* non-critical */ }
+              }
             }
           } catch (err) { logger.error('Erro ao recusar pedido:', err); throw err }
         }}

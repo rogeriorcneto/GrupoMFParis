@@ -164,7 +164,12 @@ export default function FunilModals({
         })
         setPropostaHistorico(prev => [saved, ...prev])
       } catch {
-        // histórico falhou silenciosamente, não bloqueia o fluxo
+        // histórico falhou: sem proposta salva, o botão "Ganhou" não funciona depois
+        showToast?.('error', 'A proposta não foi salva no histórico. Gere-a novamente antes de usar "Ganhou".')
+      }
+
+      if (propostaItens.length === 0) {
+        showToast?.('error', 'Atenção: proposta gerada sem itens. O botão "Ganhou" exige itens na proposta.')
       }
 
       if (isNovoCiclo) {

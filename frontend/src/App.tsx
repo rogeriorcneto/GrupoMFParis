@@ -694,6 +694,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
             setClientes={setClientes}
             setTarefas={setTarefas}
             addNotificacao={addNotificacao}
+            showToast={showToast}
             produtos={produtos}
             pedidos={pedidos}
             onAddPedido={async (p) => {

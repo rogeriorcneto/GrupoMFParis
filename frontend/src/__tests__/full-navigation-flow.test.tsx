@@ -98,6 +98,17 @@ vi.mock('../components/views', () => ({
   AssistenteIAView: () => <div data-testid="view-ia">Assistente IA</div>,
   AmostrasView:     () => <div data-testid="view-amostras">Amostras</div>,
   AprovacaoView:    () => <div data-testid="view-aprovacao">Aprovação</div>,
+  DashboardVendedorView: () => <div data-testid="view-dashboard-vendedor">Dashboard Vendedor</div>,
+  IAContextoView: () => <div data-testid="view-ia-contexto">IA Contexto</div>,
+  CriarAutomacaoView: () => <div data-testid="view-criar-automacao">Criar Automação</div>,
+  OmieView: () => <div data-testid="view-omie">Omie</div>,
+  TrafegoPagoView: () => <div data-testid="view-trafego">Tráfego</div>,
+  BaseLeadsView: () => <div data-testid="view-base-leads">Base Leads</div>,
+  LicitacoesView: () => <div data-testid="view-licitacoes">Licitações</div>,
+  TreinamentoView: () => <div data-testid="view-treinamento">Treinamento</div>,
+  ConfiguracaoTarefasView: () => <div data-testid="view-config-tarefas">Config Tarefas</div>,
+  ConfiguracaoMensagensView: () => <div data-testid="view-config-mensagens">Config Mensagens</div>,
+  MissaoView: () => <div data-testid="view-missao">Missão</div>,
 }))
 
 vi.mock('../components/ClientePanel', () => ({

@@ -63,6 +63,8 @@ interface ClientePanelProps {
   setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
   setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
+  /** Toast visível na tela (diferente de addNotificacao, que só vai para o sino). */
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
   produtos?: Produto[]
   pedidos?: Pedido[]
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
@@ -143,7 +145,7 @@ export default function ClientePanel({
   cliente: c, interacoes, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda, onDeleteTarefa,
-  setInteracoes, setClientes, setTarefas, addNotificacao,
+  setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
   produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido,
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
@@ -271,6 +273,21 @@ export default function ClientePanel({
       .then(list => { setUltimaProposta(list[0] || null); setTodasPropostas(list) })
       .catch(() => {})
   }, [c.id])
+
+  // Pedido real aguardando aprovação do gerente. Usa a tabela de pedidos como fonte
+  // de verdade — o campo statusFollowUp pode ficar travado ('aguardando_aprovacao_gerente')
+  // se um pedido foi recusado, o que deixava o botão "Ganhou" desabilitado para sempre.
+  const pedidoAguardandoAprovacao = (todosPedidos || []).some(p => p.clienteId === c.id && p.status === 'enviado')
+
+  const abrirEdicaoProposta = () => {
+    const itens = ultimaProposta && Array.isArray(ultimaProposta.itens) ? ultimaProposta.itens : []
+    setEditPropostaItens(itens.map(i => ({ ...i })))
+    setEditPropostaFrete((ultimaProposta?.frete as 'CIF' | 'FOB' | '') || '')
+    setEditPropostaPagamento(ultimaProposta?.pagamento || DEFAULT_PAYMENT_TERM)
+    setEditPropostaObs(ultimaProposta?.observacoes || '')
+    setEditPropostaProdSearch('')
+    setShowEditProposta(true)
+  }
 
   useEffect(() => {
     supabase
@@ -880,19 +897,11 @@ export default function ClientePanel({
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={() => {
-                  if (!ultimaProposta) return
-                  setEditPropostaItens(ultimaProposta.itens.map(i => ({ ...i })))
-                  setEditPropostaFrete((ultimaProposta.frete as 'CIF' | 'FOB' | '') || '')
-                  setEditPropostaPagamento(ultimaProposta.pagamento || DEFAULT_PAYMENT_TERM)
-                  setEditPropostaObs(ultimaProposta.observacoes || '')
-                  setShowEditProposta(true)
-                }}
-                disabled={!ultimaProposta}
-                className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                title={ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Nenhuma proposta gerada ainda'}
+                onClick={abrirEdicaoProposta}
+                className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100"
+                title={ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Criar proposta para este cliente'}
               >
-                📝 Editar Proposta
+                📝 {ultimaProposta ? 'Editar Proposta' : 'Criar Proposta'}
               </button>
               {ultimaProposta && isGerente && (
                 <button
@@ -996,57 +1005,59 @@ export default function ClientePanel({
               {c.etapa === 'negociacao' && (
                 <>
                   <button
-                    disabled={ganhouLoading || c.statusFollowUp === 'aguardando_aprovacao_gerente'}
+                    disabled={ganhouLoading || pedidoAguardandoAprovacao}
                     onClick={async () => {
-                      if (ganhouLoading || c.statusFollowUp === 'aguardando_aprovacao_gerente') return
+                      if (ganhouLoading || pedidoAguardandoAprovacao) return
                       setGanhouLoading(true)
                       const hoje = new Date().toISOString().split('T')[0]
-                      if (onAddPedido && ultimaProposta && ultimaProposta.itens.length > 0) {
-                        if (!ultimaProposta.frete) {
-                          addNotificacao('warning', 'Frete obrigatório', 'A última proposta não tem frete preenchido.', c.id)
-                          setGanhouLoading(false)
-                          return
-                        }
-                        if (!ultimaProposta.pagamento?.trim()) {
-                          addNotificacao('warning', 'Pagamento obrigatório', 'A última proposta não tem forma de pagamento preenchida.', c.id)
-                          setGanhouLoading(false)
-                          return
-                        }
-                        if (!ultimaProposta.observacoes?.trim()) {
-                          addNotificacao('warning', 'Observações obrigatórias', 'A última proposta não tem observações preenchidas.', c.id)
-                          setGanhouLoading(false)
-                          return
-                        }
-                        if (ultimaProposta.itens.some(i => !i.sku?.trim())) {
-                          addNotificacao('warning', 'SKU obrigatório', 'Todos os produtos da proposta devem ter SKU preenchido.', c.id)
-                          setGanhouLoading(false)
-                          return
-                        }
-                        try {
-                          const numero = `PED-${Date.now().toString().slice(-6)}`
-                          await onAddPedido({
-                            numero,
-                            clienteId: c.id,
-                            vendedorId: loggedUser?.id || 0,
-                            itens: ultimaProposta.itens,
-                            observacoes: ultimaProposta.observacoes || '',
-                            status: 'enviado',
-                            dataCriacao: new Date().toISOString(),
-                            dataEnvio: new Date().toISOString(),
-                            totalValor: ultimaProposta.totalValor,
-                            tipo: 'venda',
-                            formaPagamento: ultimaProposta.pagamento || DEFAULT_PAYMENT_TERM,
-                            tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB') || undefined,
-                          })
-                          addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${ultimaProposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
-                        } catch (err) {
-                          console.error('[DEBUG Ganhou] Erro ao criar pedido:', err)
-                          addNotificacao('error', 'Erro', 'Falha ao criar pedido de aprovação', c.id)
-                          setGanhouLoading(false)
-                          return
-                        }
-                      } else {
-                        addNotificacao('info', 'Sem proposta', 'Crie uma proposta com itens antes de marcar como Ganhou', c.id)
+                      const proposta = ultimaProposta
+                      const propostaItens = proposta && Array.isArray(proposta.itens) ? proposta.itens : []
+                      if (!onAddPedido || !proposta || propostaItens.length === 0) {
+                        const msg = proposta
+                          ? 'A última proposta não tem itens. Complete a proposta para enviar o pedido.'
+                          : 'Nenhuma proposta registrada neste cliente. Crie uma proposta antes de marcar como Ganhou.'
+                        addNotificacao('info', 'Sem proposta válida', msg, c.id)
+                        showToast?.('error', msg)
+                        setGanhouLoading(false)
+                        abrirEdicaoProposta()
+                        return
+                      }
+                      const faltando: string[] = []
+                      if (!proposta.frete) faltando.push('frete')
+                      if (!proposta.pagamento?.trim()) faltando.push('forma de pagamento')
+                      if (!proposta.observacoes?.trim()) faltando.push('observações')
+                      if (propostaItens.some(i => !i.sku?.trim())) faltando.push('SKU dos produtos')
+                      if (faltando.length > 0) {
+                        const msg = `Proposta incompleta — falta: ${faltando.join(', ')}. Complete e tente novamente.`
+                        addNotificacao('warning', 'Proposta incompleta', msg, c.id)
+                        showToast?.('error', msg)
+                        setGanhouLoading(false)
+                        abrirEdicaoProposta()
+                        return
+                      }
+                      try {
+                        const numero = `PED-${Date.now().toString().slice(-6)}`
+                        await onAddPedido({
+                          numero,
+                          clienteId: c.id,
+                          vendedorId: loggedUser?.id || 0,
+                          itens: propostaItens,
+                          observacoes: proposta.observacoes || '',
+                          status: 'enviado',
+                          dataCriacao: new Date().toISOString(),
+                          dataEnvio: new Date().toISOString(),
+                          totalValor: proposta.totalValor,
+                          tipo: 'venda',
+                          formaPagamento: proposta.pagamento || DEFAULT_PAYMENT_TERM,
+                          tipoFrete: (proposta.frete as 'CIF' | 'FOB') || undefined,
+                        })
+                        addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${proposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
+                        showToast?.('success', `Pedido ${numero} enviado para aprovação do gerente!`)
+                      } catch (err: any) {
+                        console.error('[DEBUG Ganhou] Erro ao criar pedido:', err)
+                        const msg = err?.message || 'Falha ao criar pedido de aprovação'
+                        addNotificacao('error', 'Erro', msg, c.id)
+                        showToast?.('error', `Erro ao enviar pedido: ${msg}`)
                         setGanhouLoading(false)
                         return
                       }
@@ -1054,12 +1065,12 @@ export default function ClientePanel({
                       onClose()
                     }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-colors ${
-                      ganhouLoading || c.statusFollowUp === 'aguardando_aprovacao_gerente'
+                      ganhouLoading || pedidoAguardandoAprovacao
                         ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {c.statusFollowUp === 'aguardando_aprovacao_gerente' ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
+                    {pedidoAguardandoAprovacao ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
                   </button>
                   <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>
@@ -2379,14 +2390,14 @@ export default function ClientePanel({
       )}
 
       {/* Modal Editar Proposta */}
-      {showEditProposta && ultimaProposta && (
+      {showEditProposta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <div>
-                <h2 className="text-base font-bold text-gray-900">📝 Editar Proposta</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta.numero} · {new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}</p>
+                <h2 className="text-base font-bold text-gray-900">📝 {ultimaProposta ? 'Editar Proposta' : 'Nova Proposta'}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta ? `${ultimaProposta.numero} · ${new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}` : 'Itens, frete, pagamento e observações são exigidos pelo botão "Ganhou"'}</p>
               </div>
               <button onClick={() => { setShowEditProposta(false); setEditPropostaProdSearch('') }} className="p-1.5 hover:bg-gray-100 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
             </div>
@@ -2425,6 +2436,16 @@ export default function ClientePanel({
                         <p className="text-[10px] text-gray-400">KG</p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <label className={`text-[9px] ${item.sku?.trim() ? 'text-gray-400' : 'text-red-500 font-semibold'}`}>SKU</label>
+                          <input
+                            type="text"
+                            value={item.sku || ''}
+                            onChange={e => setEditPropostaItens(prev => prev.map((it, i) => i === idx ? { ...it, sku: e.target.value } : it))}
+                            placeholder="SKU"
+                            className={`w-20 px-2 py-1 border rounded text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-400 ${item.sku?.trim() ? 'border-gray-300' : 'border-red-300 bg-red-50'}`}
+                          />
+                        </div>
                         <div className="flex flex-col items-center gap-0.5">
                           <label className="text-[9px] text-gray-400">Qtd</label>
                           <input
