@@ -85,13 +85,18 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
 
   // Meeting state
   const [isListening, setIsListening] = useState(false)
+  const isListeningRef = useRef(false)
   const [meetingTranscript, setMeetingTranscript] = useState('')
   const [suggestions, setSuggestions] = useState<MeetingSuggestion[]>([])
   const [meetingDuration, setMeetingDuration] = useState(0)
+  const [analyzing, setAnalyzing] = useState(false)
   const recognitionRef = useRef<any>(null)
   const meetingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const meetingStartRef = useRef(0)
   const transcriptBufferRef = useRef('')
+  const transcriptContextRef = useRef('')
+  const analyzingRef = useRef(false)
+  const lastAnalysisErrorRef = useRef(0)
   const analyzeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -104,6 +109,7 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
 
   useEffect(() => {
     return () => {
+      isListeningRef.current = false
       if (meetingTimerRef.current) clearInterval(meetingTimerRef.current)
       if (analyzeTimerRef.current) clearInterval(analyzeTimerRef.current)
       if (recognitionRef.current) { try { recognitionRef.current.stop() } catch {} }
@@ -136,12 +142,63 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
   }
 
   // Meeting mode — Speech Recognition
+  const stopMeeting = useCallback(() => {
+    isListeningRef.current = false
+    setIsListening(false)
+    setAnalyzing(false)
+    if (recognitionRef.current) { try { recognitionRef.current.stop() } catch {} }
+    if (meetingTimerRef.current) { clearInterval(meetingTimerRef.current); meetingTimerRef.current = null }
+    if (analyzeTimerRef.current) { clearInterval(analyzeTimerRef.current); analyzeTimerRef.current = null }
+    recognitionRef.current = null
+  }, [])
+
+  const analyzeChunk = useCallback(async () => {
+    if (analyzingRef.current || !isListeningRef.current) return
+    const buffer = transcriptBufferRef.current.trim()
+    if (!buffer || buffer.length < 20) return
+    transcriptBufferRef.current = ''
+    analyzingRef.current = true
+    setAnalyzing(true)
+    const contexto = transcriptContextRef.current.slice(-600)
+
+    try {
+      const resp = await callAI(
+        [{ role: 'user', content: `${contexto ? `Contexto anterior da conversa:\n"${contexto}"\n\n` : ''}Trecho da conversa ouvida agora:\n"${buffer}"` }],
+        MEETING_SYSTEM
+      )
+      transcriptContextRef.current = `${contexto} ${buffer}`.slice(-1200)
+      if (resp.trim() && resp.trim() !== '—') {
+        const typeMatch = resp.match(/\[(TIP|OBJEÇÃO|PERGUNTA|FECHAMENTO)\]/i)
+        const rawType = typeMatch ? typeMatch[1].toLowerCase() : ''
+        const text = resp.replace(/\[(TIP|OBJEÇÃO|PERGUNTA|FECHAMENTO)\]/gi, '').trim()
+        const mappedType: MeetingSuggestion['type'] = rawType.includes('obje') ? 'objection' : rawType.includes('pergu') ? 'question' : rawType.includes('fecha') ? 'closing' : 'tip'
+        setSuggestions(prev => [{ text, ts: Date.now(), type: mappedType } as MeetingSuggestion, ...prev].slice(0, 20))
+      }
+    } catch {
+      transcriptBufferRef.current = `${buffer} ${transcriptBufferRef.current}`
+      const now = Date.now()
+      if (now - lastAnalysisErrorRef.current > 60000) {
+        lastAnalysisErrorRef.current = now
+        setSuggestions(prev => [{ text: '⚠️ Falha ao gerar sugestão — verifique a conexão. A escuta continua.', ts: now, type: 'tip' as MeetingSuggestion['type'] }, ...prev].slice(0, 20))
+      }
+    } finally {
+      analyzingRef.current = false
+      setAnalyzing(false)
+    }
+  }, [])
+
   const startMeeting = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
       setSuggestions([{ text: 'Seu navegador não suporta reconhecimento de voz. Use o Chrome.', ts: Date.now(), type: 'tip' }])
       return
     }
+
+    transcriptBufferRef.current = ''
+    transcriptContextRef.current = ''
+    lastAnalysisErrorRef.current = 0
+    setMeetingTranscript('')
+    setSuggestions([])
 
     const recognition = new SpeechRecognition()
     recognition.continuous = true
@@ -163,26 +220,33 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
 
     recognition.onerror = (event: any) => {
       console.error('Speech recognition error:', event.error)
-      if (event.error === 'not-allowed') {
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         setSuggestions([{ text: 'Permissão de microfone negada. Habilite nas configurações do navegador.', ts: Date.now(), type: 'tip' }])
-        setIsListening(false)
+        stopMeeting()
         return
       }
-      // Restart on network errors
-      if (isListening && recognitionRef.current) {
-        try { recognitionRef.current.start() } catch {}
+      if (event.error === 'audio-capture') {
+        setSuggestions(prev => [{ text: 'Nenhum microfone encontrado. Verifique o dispositivo de áudio.', ts: Date.now(), type: 'tip' as MeetingSuggestion['type'] }, ...prev])
+        stopMeeting()
       }
+      // Erros transitórios ('no-speech', 'network', 'aborted') — onend reinicia a escuta
     }
 
     recognition.onend = () => {
-      // Auto-restart if still listening
-      if (isListening && recognitionRef.current) {
+      // Auto-restart while meeting is active
+      if (isListeningRef.current && recognitionRef.current) {
         try { recognitionRef.current.start() } catch {}
       }
     }
 
     recognitionRef.current = recognition
-    recognition.start()
+    isListeningRef.current = true
+    try {
+      recognition.start()
+    } catch {
+      stopMeeting()
+      return
+    }
     setIsListening(true)
     meetingStartRef.current = Date.now()
     setMeetingDuration(0)
@@ -190,35 +254,9 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
       setMeetingDuration(Math.floor((Date.now() - meetingStartRef.current) / 1000))
     }, 1000)
 
-    // Analyze every 15 seconds
-    analyzeTimerRef.current = setInterval(async () => {
-      const buffer = transcriptBufferRef.current.trim()
-      if (!buffer || buffer.length < 20) return
-      transcriptBufferRef.current = '' // reset buffer
-
-      try {
-        const resp = await callAI(
-          [{ role: 'user', content: `Trecho da conversa ouvida agora:\n"${buffer}"` }],
-          MEETING_SYSTEM
-        )
-        if (resp.trim() && resp.trim() !== '—') {
-          const typeMatch = resp.match(/\[(TIP|OBJEÇÃO|PERGUNTA|FECHAMENTO)\]/i)
-          const rawType = typeMatch ? typeMatch[1].toLowerCase() : ''
-          const text = resp.replace(/\[(TIP|OBJEÇÃO|PERGUNTA|FECHAMENTO)\]/gi, '').trim()
-          const mappedType: MeetingSuggestion['type'] = rawType.includes('obje') ? 'objection' : rawType.includes('pergu') ? 'question' : rawType.includes('fecha') ? 'closing' : 'tip'
-          setSuggestions(prev => [{ text, ts: Date.now(), type: mappedType } as MeetingSuggestion, ...prev].slice(0, 20))
-        }
-      } catch { /* ignore analysis errors */ }
-    }, 15000)
-  }, [isListening])
-
-  const stopMeeting = useCallback(() => {
-    setIsListening(false)
-    if (recognitionRef.current) { try { recognitionRef.current.stop() } catch {} }
-    if (meetingTimerRef.current) clearInterval(meetingTimerRef.current)
-    if (analyzeTimerRef.current) clearInterval(analyzeTimerRef.current)
-    recognitionRef.current = null
-  }, [])
+    // Analyze transcript every 12 seconds
+    analyzeTimerRef.current = setInterval(analyzeChunk, 12000)
+  }, [analyzeChunk, stopMeeting])
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
 
@@ -346,6 +384,7 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
             {!isListening ? (
               <>
                 <p className="text-xs text-gray-500">Ative o microfone durante uma reunião ou call. A IA vai ouvir e dar sugestões em tempo real.</p>
+                <p className="text-[10px] text-gray-400">Dica: em ligações, deixe o celular no viva-voz para a IA ouvir o cliente também.</p>
                 <button onClick={startMeeting}
                   className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 mx-auto shadow-lg shadow-green-500/20">
                   <MicrophoneIcon className="h-5 w-5" />Iniciar Escuta
@@ -357,6 +396,7 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
                   <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
                   <span className="text-sm font-mono font-bold text-gray-800 dark:text-gray-200">{fmt(meetingDuration)}</span>
                   <span className="text-xs text-gray-400">Ouvindo...</span>
+                  {analyzing && <span className="text-[10px] text-violet-500 animate-pulse font-medium">analisando…</span>}
                 </div>
                 {/* Mini waveform */}
                 <div className="flex items-center justify-center gap-0.5 h-6">
