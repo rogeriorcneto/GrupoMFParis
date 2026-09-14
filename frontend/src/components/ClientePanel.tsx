@@ -1025,7 +1025,6 @@ export default function ClientePanel({
                       const faltando: string[] = []
                       if (!proposta.frete) faltando.push('frete')
                       if (!proposta.pagamento?.trim()) faltando.push('forma de pagamento')
-                      if (!proposta.observacoes?.trim()) faltando.push('observações')
                       if (propostaItens.some(i => !i.sku?.trim())) faltando.push('SKU dos produtos')
                       if (faltando.length > 0) {
                         const msg = `Proposta incompleta — falta: ${faltando.join(', ')}. Complete e tente novamente.`
@@ -2397,7 +2396,7 @@ export default function ClientePanel({
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <div>
                 <h2 className="text-base font-bold text-gray-900">📝 {ultimaProposta ? 'Editar Proposta' : 'Nova Proposta'}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta ? `${ultimaProposta.numero} · ${new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}` : 'Itens, frete, pagamento e observações são exigidos pelo botão "Ganhou"'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta ? `${ultimaProposta.numero} · ${new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}` : 'Itens, frete e pagamento são exigidos pelo botão "Ganhou"'}</p>
               </div>
               <button onClick={() => { setShowEditProposta(false); setEditPropostaProdSearch('') }} className="p-1.5 hover:bg-gray-100 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
             </div>
