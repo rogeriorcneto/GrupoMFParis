@@ -1144,16 +1144,17 @@ export async function fetchRoleplaySessionsByAcademiaLink(academiaLinkId: number
     .slice(0, limit)
 }
 
-export async function fetchAcademiaSessionCounts(): Promise<Map<number, { total: number; ultima: string | null }>> {
+export async function fetchAcademiaSessionCounts(): Promise<Map<number, { total: number; ultima: string | null; segundos: number }>> {
   const todas = await kvListByPrefix<AcademiaSessaoRow>(ACADEMIA_SESSAO_PREFIX)
-  const map = new Map<number, { total: number; ultima: string | null }>()
+  const map = new Map<number, { total: number; ultima: string | null; segundos: number }>()
   for (const s of todas) {
     const cur = map.get(s.academia_link_id)
     if (cur) {
       cur.total += 1
+      cur.segundos += s.duracao_segundos || 0
       if (!cur.ultima || s.created_at > cur.ultima) cur.ultima = s.created_at
     } else {
-      map.set(s.academia_link_id, { total: 1, ultima: s.created_at })
+      map.set(s.academia_link_id, { total: 1, ultima: s.created_at, segundos: s.duracao_segundos || 0 })
     }
   }
   return map

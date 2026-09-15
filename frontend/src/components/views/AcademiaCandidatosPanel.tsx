@@ -23,6 +23,7 @@ interface LinkCandidato {
   createdAt: string
   sessoes: number
   ultimaAtividade: string | null
+  tempoSegundos: number
 }
 
 interface SessaoCandidato {
@@ -39,6 +40,12 @@ interface SessaoCandidato {
 const fmtData = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const fmtHora = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 const fmtDur = (s: number) => `${Math.floor(s / 60)}min`
+const fmtTempoTotal = (s: number) => {
+  if (!s) return '0min'
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ''}` : `${m}min`
+}
 
 const statusChip = (status: string) => {
   if (status === 'ativo') return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
@@ -205,6 +212,7 @@ export default function AcademiaCandidatosPanel() {
                       </p>
                       <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                         <span><strong className="text-gray-700 dark:text-gray-200">{l.sessoes}</strong> treino(s)</span>
+                        <span><strong className="text-gray-700 dark:text-gray-200">{fmtTempoTotal(l.tempoSegundos)}</strong> treinando</span>
                         {media && <span>Média <strong className="text-gray-700 dark:text-gray-200">{media}</strong></span>}
                       </div>
                     </div>

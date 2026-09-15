@@ -37,7 +37,7 @@ interface MsgChat {
   ts: number
 }
 
-interface SessaoTreinamento {
+export interface SessaoTreinamento {
   id: string
   modulo: string
   perfilId: string
@@ -944,17 +944,18 @@ const ELEVENLABS_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || ''
 const VOZ_MASCULINA = 'aU2vcrnwi348Gnc2Y1si'
 const VOZ_FEMININA = 'RGymW84CSmfVugnA5tvA'
 
-function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId, vendedor, historico, setHistorico, produtos }: {
+export function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId, vendedor, historico, setHistorico, produtos, onSaveSessao }: {
   modulos: ModuloTreinamento[]
   perfis: PerfilTreinamento[]
   moduloId: number | null
   perfilId: number | null
   setModuloId: (id: number | null) => void
   setPerfilId: (id: number | null) => void
-  vendedor: Vendedor
+  vendedor?: Vendedor
   historico: SessaoTreinamento[]
   setHistorico: (h: SessaoTreinamento[]) => void
   produtos: Produto[]
+  onSaveSessao?: (sessao: SessaoTreinamento, perfilNome?: string) => Promise<void>
 }) {
   const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'connected' | 'ended' | 'evaluating'>('idle')
   const [duracao, setDuracao] = useState(0)
@@ -1120,7 +1121,10 @@ REGRAS PARA A NOTA FINAL:
         }
         const novoHist = [sessao, ...historico]
         setHistorico(novoHist)
-        try { await saveRoleplaySession(vendedor.id, sessao, perfilAtual?.nome) } catch { /* salvo localmente */ }
+        try {
+          if (onSaveSessao) await onSaveSessao(sessao, perfilAtual?.nome)
+          else if (vendedor) await saveRoleplaySession(vendedor.id, sessao, perfilAtual?.nome)
+        } catch { /* salvo localmente */ }
       } else {
         setFeedbackObj({ nota: null, feedback_geral: 'Não foi possível avaliar a ligação. Tente novamente.' })
       }

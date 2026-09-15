@@ -28,7 +28,7 @@ async function validateToken(token: string): Promise<{ link: AcademiaLinkRow } |
   return { link }
 }
 
-function publicLink(l: AcademiaLinkRow, counts?: { total: number; ultima: string | null }) {
+function publicLink(l: AcademiaLinkRow, counts?: { total: number; ultima: string | null; segundos: number }) {
   return {
     id: l.id,
     token: l.token,
@@ -40,6 +40,7 @@ function publicLink(l: AcademiaLinkRow, counts?: { total: number; ultima: string
     createdAt: l.created_at,
     sessoes: counts?.total ?? 0,
     ultimaAtividade: counts?.ultima ?? null,
+    tempoSegundos: counts?.segundos ?? 0,
   }
 }
 

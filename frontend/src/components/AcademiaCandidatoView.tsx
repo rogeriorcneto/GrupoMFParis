@@ -1,41 +1,32 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { ConversationProvider } from '@elevenlabs/react'
 import {
   AcademicCapIcon,
+  ArrowLeftIcon,
+  ArrowPathIcon,
+  BookOpenIcon,
   ChatBubbleLeftRightIcon,
   CheckCircleIcon,
   ChevronRightIcon,
   ClockIcon,
+  LightBulbIcon,
   PaperAirplaneIcon,
+  PhoneIcon,
+  PlayIcon,
+  SparklesIcon,
   StopIcon,
   TrophyIcon,
 } from '@heroicons/react/24/outline'
 import { callAI } from '../lib/gemini'
 import type { AIMessage } from '../lib/gemini'
-import { MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../data/aiContext'
+import { CATALOGO_PRODUTOS, MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../data/aiContext'
+import { LigarView } from './views/TreinamentoView'
+import type { SessaoTreinamento } from './views/TreinamentoView'
+import type { ModuloTreinamento, PerfilTreinamento } from '../types'
 
 const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
 
 interface MsgChat { role: 'user' | 'assistant'; content: string; ts: number }
-
-interface ModuloCandidato {
-  id: number
-  titulo: string
-  descricao?: string
-  objetivo?: string
-  emoji?: string
-  dificuldade?: string
-  promptInstrucoes?: string
-}
-
-interface PerfilCandidato {
-  id: number
-  nome: string
-  negocio?: string
-  emoji?: string
-  dor?: string
-  estilo?: string
-  promptInstrucoes?: string
-}
 
 interface SessaoCandidato {
   id: string | number
@@ -47,16 +38,29 @@ interface SessaoCandidato {
 }
 
 type Fase = 'validando' | 'invalido' | 'home' | 'roleplay' | 'avaliando' | 'resultado'
+type Aba = 'home' | 'ligar' | 'produtos' | 'quiz'
+
+const PRODUTOS_MF_PARIS = CATALOGO_PRODUTOS.map(p => ({
+  nome: p.nome,
+  categoria: `${p.linha} — ${p.categoria}`,
+  destaque: `Desempenho superior em ${p.aplicacoes.toLowerCase()}`,
+  preco: 'Sob consulta',
+  aplicacao: p.aplicacoes,
+  dif: p.proteina && p.gordura
+    ? `proteína ${p.proteina} e gordura ${p.gordura}`
+    : `formulação ${p.categoria.toLowerCase()} indicada para ${p.aplicacoes.toLowerCase()}`,
+}))
 
 export default function AcademiaCandidatoView() {
   const [fase, setFase] = useState<Fase>('validando')
+  const [aba, setAba] = useState<Aba>('home')
   const [erroAcesso, setErroAcesso] = useState('')
   const [nomeCandidato, setNomeCandidato] = useState('')
   const [expiraEm, setExpiraEm] = useState('')
   const [token, setToken] = useState('')
 
-  const [modulos, setModulos] = useState<ModuloCandidato[]>([])
-  const [perfis, setPerfis] = useState<PerfilCandidato[]>([])
+  const [modulos, setModulos] = useState<ModuloTreinamento[]>([])
+  const [perfis, setPerfis] = useState<PerfilTreinamento[]>([])
   const [moduloId, setModuloId] = useState<number | null>(null)
   const [perfilId, setPerfilId] = useState<number | null>(null)
 
@@ -68,6 +72,14 @@ export default function AcademiaCandidatoView() {
   const [nota, setNota] = useState<number | null>(null)
   const [feedbackObj, setFeedbackObj] = useState<any>(null)
   const [historico, setHistorico] = useState<SessaoCandidato[]>([])
+
+  // Produtos / Quiz
+  const [produtoVer, setProdutoVer] = useState<typeof PRODUTOS_MF_PARIS[0] | null>(null)
+  const [quizAtivo, setQuizAtivo] = useState(false)
+  const [quizPergunta, setQuizPergunta] = useState('')
+  const [quizResp, setQuizResp] = useState('')
+  const [quizFeedback, setQuizFeedback] = useState<string | null>(null)
+  const [quizLoading, setQuizLoading] = useState(false)
 
   const chatRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -98,13 +110,16 @@ export default function AcademiaCandidatoView() {
           fetch(`${BOT_URL}/api/academia/config?token=${encodeURIComponent(t)}`).then(x => x.json()).catch(() => null),
           fetch(`${BOT_URL}/api/academia/sessoes?token=${encodeURIComponent(t)}`).then(x => x.json()).catch(() => null),
         ])
-        const ms: ModuloCandidato[] = (cfg?.modulos || []).map((m: any) => ({
-          id: m.id, titulo: m.titulo, descricao: m.descricao, objetivo: m.objetivo,
-          emoji: m.emoji, dificuldade: m.dificuldade, promptInstrucoes: m.prompt_instrucoes,
+        const ms: ModuloTreinamento[] = (cfg?.modulos || []).map((m: any) => ({
+          id: m.id, ordem: m.ordem ?? 0, ativo: m.ativo ?? true, titulo: m.titulo,
+          descricao: m.descricao, objetivo: m.objetivo, emoji: m.emoji,
+          dificuldade: m.dificuldade, promptInstrucoes: m.prompt_instrucoes,
+          createdAt: '', updatedAt: '',
         }))
-        const ps: PerfilCandidato[] = (cfg?.perfis || []).map((p: any) => ({
-          id: p.id, nome: p.nome, negocio: p.negocio, emoji: p.emoji,
-          dor: p.dor, estilo: p.estilo, promptInstrucoes: p.prompt_instrucoes,
+        const ps: PerfilTreinamento[] = (cfg?.perfis || []).map((p: any) => ({
+          id: p.id, ordem: p.ordem ?? 0, ativo: p.ativo ?? true, nome: p.nome,
+          negocio: p.negocio, emoji: p.emoji, dor: p.dor, estilo: p.estilo,
+          promptInstrucoes: p.prompt_instrucoes, createdAt: '', updatedAt: '',
         }))
         setModulos(ms)
         setPerfis(ps)
@@ -125,7 +140,7 @@ export default function AcademiaCandidatoView() {
     })()
   }, [])
 
-  // Cronômetro da sessão
+  // Cronômetro da sessão de texto
   useEffect(() => {
     if (fase === 'roleplay') {
       timerRef.current = setInterval(() => setDuracaoAtual(Math.floor((Date.now() - tempoInicio) / 1000)), 1000)
@@ -193,6 +208,63 @@ ${instrucoesModulo}${instrucoesPerfil}
 Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor da MF Paris / Okeylac. Responda como se estivesse digitando no celular, de forma natural, objetiva e no ritmo de uma conversa por mensagem.`
   }, [moduloId, perfilId, modulos, perfis])
 
+  // Salva a sessão no backend (usado pelo roleplay de texto e pela ligação por voz)
+  const salvarSessaoBackend = useCallback(async (dados: {
+    msgsFinal: MsgChat[]; duracao: number; notaFinal: number | null; avaliacao: any
+  }) => {
+    const modulo = modulos.find(m => m.id === moduloId)
+    const perfil = perfis.find(p => p.id === perfilId)
+    const nova: SessaoCandidato = {
+      id: Date.now(), modulo: modulo?.titulo || '', perfilNome: perfil?.nome || '',
+      duracao: dados.duracao, nota: dados.notaFinal, createdAt: new Date().toISOString(),
+    }
+    setHistorico(prev => [nova, ...prev])
+    try {
+      await fetch(`${BOT_URL}/api/academia/sessao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          modulo: modulo?.titulo || '',
+          perfilId: String(perfilId || ''),
+          perfilNome: perfil?.nome || '',
+          mensagens: dados.msgsFinal,
+          duracaoSegundos: dados.duracao,
+          nota: dados.notaFinal,
+          feedback: dados.avaliacao,
+        }),
+      })
+    } catch { /* sessão fica só na tela */ }
+  }, [moduloId, perfilId, modulos, perfis, token])
+
+  // Callback para o LigarView (sessão por voz) — converte SessaoTreinamento → formato do backend
+  const salvarSessaoVoz = useCallback(async (sessao: SessaoTreinamento, perfilNome?: string) => {
+    const modulo = modulos.find(m => String(m.id) === sessao.modulo)
+    let avaliacao: any = null
+    try { avaliacao = JSON.parse(sessao.feedback) } catch { avaliacao = { feedback_geral: sessao.feedback } }
+    const nova: SessaoCandidato = {
+      id: sessao.id, modulo: modulo?.titulo || sessao.modulo, perfilNome: perfilNome || '',
+      duracao: sessao.duracao, nota: sessao.nota, createdAt: sessao.createdAt,
+    }
+    setHistorico(prev => [nova, ...prev])
+    try {
+      await fetch(`${BOT_URL}/api/academia/sessao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          modulo: modulo?.titulo || sessao.modulo,
+          perfilId: sessao.perfilId,
+          perfilNome: perfilNome || '',
+          mensagens: sessao.msgs,
+          duracaoSegundos: sessao.duracao,
+          nota: sessao.nota,
+          feedback: avaliacao,
+        }),
+      })
+    } catch { /* sessão fica só na tela */ }
+  }, [modulos, token])
+
   const iniciarSessao = async () => {
     if (!moduloId) return
     setTempoInicio(Date.now())
@@ -232,30 +304,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     } catch { /* mantém fallback */ }
     setNota(notaFinal)
     setFeedbackObj(avaliacao)
-
-    const modulo = modulos.find(m => m.id === moduloId)
-    const perfil = perfis.find(p => p.id === perfilId)
-    const nova: SessaoCandidato = {
-      id: Date.now(), modulo: modulo?.titulo || '', perfilNome: perfil?.nome || '',
-      duracao, nota: notaFinal, createdAt: new Date().toISOString(),
-    }
-    setHistorico(prev => [nova, ...prev])
-    try {
-      await fetch(`${BOT_URL}/api/academia/sessao`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          modulo: modulo?.titulo || '',
-          perfilId: String(perfilId || ''),
-          perfilNome: perfil?.nome || '',
-          mensagens: msgsFinal,
-          duracaoSegundos: duracao,
-          nota: notaFinal,
-          feedback: avaliacao,
-        }),
-      })
-    } catch { /* sessão fica só na tela */ }
+    await salvarSessaoBackend({ msgsFinal, duracao, notaFinal, avaliacao })
     setLoading(false)
     setFase('resultado')
   }
@@ -281,12 +330,42 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     setLoading(false)
   }
 
+  const gerarQuiz = async () => {
+    setQuizLoading(true)
+    setQuizFeedback(null)
+    setQuizResp('')
+    const produtosTexto = PRODUTOS_MF_PARIS.map(p => `${p.nome}: ${p.dif}. Aplicação: ${p.aplicacao}.`).join('\n')
+    try {
+      const resp = await callAI(
+        [{ role: 'user', content: 'Gere UMA pergunta de quiz sobre os produtos MF Paris. Apenas a pergunta, sem resposta.' }],
+        `Você é um treinador de vendas da MF Paris. Catálogo:\n${produtosTexto}\nCrie perguntas práticas sobre aplicações, diferenciais e argumentos de venda.`
+      )
+      setQuizPergunta(resp)
+    } catch { setQuizPergunta('Qual é o diferencial do Composto Lácteo Horizonte para uma sorveteria?') }
+    setQuizLoading(false)
+  }
+
+  const responderQuiz = async () => {
+    if (!quizResp.trim() || quizLoading) return
+    setQuizLoading(true)
+    const produtosTexto = PRODUTOS_MF_PARIS.map(p => `${p.nome}: ${p.dif}. Aplicação: ${p.aplicacao}.`).join('\n')
+    try {
+      const resp = await callAI(
+        [{ role: 'user', content: `Pergunta: ${quizPergunta}\nResposta do candidato: ${quizResp}\n\nAvalie a resposta e dê feedback construtivo em 2-3 linhas.` }],
+        `Você é um treinador de vendas da MF Paris. Catálogo:\n${produtosTexto}`
+      )
+      setQuizFeedback(resp)
+    } catch { setQuizFeedback('Não foi possível avaliar agora.') }
+    setQuizLoading(false)
+  }
+
   const moduloAtual = modulos.find(m => m.id === moduloId)
   const perfilAtual = perfis.find(p => p.id === perfilId)
   const totalTreinos = historico.length
   const notaMedia = totalTreinos > 0 ? (historico.reduce((a, b) => a + (b.nota || 0), 0) / totalTreinos).toFixed(1) : '—'
+  const minutosTotais = Math.floor(historico.reduce((a, b) => a + b.duracao, 0) / 60)
 
-  // ─── TELAS ───
+  // ─── TELAS DE ACESSO ───
 
   if (fase === 'validando') {
     return (
@@ -313,6 +392,13 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     )
   }
 
+  const abas: { id: Aba; icon: React.ReactNode; label: string }[] = [
+    { id: 'home', icon: <PlayIcon className="h-4 w-4" />, label: 'Treinar' },
+    { id: 'ligar', icon: <PhoneIcon className="h-4 w-4" />, label: 'Ligar' },
+    { id: 'produtos', icon: <BookOpenIcon className="h-4 w-4" />, label: 'Produtos' },
+    { id: 'quiz', icon: <SparklesIcon className="h-4 w-4" />, label: 'Quiz IA' },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
@@ -333,20 +419,32 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             </span>
           )}
         </div>
+        {/* Abas — só na home (roleplay tem tela própria) */}
+        {fase === 'home' && (
+          <div className="max-w-4xl mx-auto px-4 pb-2 flex items-center gap-1 overflow-x-auto">
+            {abas.map(a => (
+              <button key={a.id} onClick={() => { setAba(a.id); setProdutoVer(null) }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${aba === a.id ? 'bg-primary-100 text-primary-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+                {a.icon}{a.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 w-full max-w-4xl mx-auto p-4">
         {/* HOME — escolha de módulo e cliente simulado */}
-        {fase === 'home' && (
+        {fase === 'home' && aba === 'home' && (
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white">
               <h2 className="text-lg font-bold">Olá, {nomeCandidato.split(' ')[0]}! 👋</h2>
               <p className="text-sm text-purple-100 mt-1">
-                Este é seu ambiente de avaliação. Escolha um módulo, converse com o cliente simulado por texto e receba uma nota com feedback no final.
+                Este é seu ambiente de avaliação. Escolha um módulo, converse com o cliente simulado e receba uma nota com feedback no final.
               </p>
-              <div className="flex gap-4 mt-3 text-xs">
+              <div className="flex flex-wrap gap-4 mt-3 text-xs">
                 <span className="flex items-center gap-1"><TrophyIcon className="h-4 w-4" /> {totalTreinos} treino(s)</span>
                 <span className="flex items-center gap-1"><CheckCircleIcon className="h-4 w-4" /> Média {notaMedia}</span>
+                <span className="flex items-center gap-1"><ClockIcon className="h-4 w-4" /> {minutosTotais} min treinados</span>
               </div>
             </div>
 
@@ -379,7 +477,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
 
             <button onClick={iniciarSessao} disabled={!moduloId || !perfilId}
               className="w-full py-3.5 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition-all">
-              <ChatBubbleLeftRightIcon className="h-5 w-5" /> Iniciar treino
+              <ChatBubbleLeftRightIcon className="h-5 w-5" /> Iniciar treino por texto
             </button>
 
             {historico.length > 0 && (
@@ -396,6 +494,141 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* LIGAR — simulação por voz (ElevenLabs), mesmo componente da Academia de Vendas */}
+        {fase === 'home' && aba === 'ligar' && (
+          <ConversationProvider>
+            <LigarView
+              modulos={modulos}
+              perfis={perfis}
+              moduloId={moduloId}
+              perfilId={perfilId}
+              setModuloId={setModuloId}
+              setPerfilId={setPerfilId}
+              historico={[]}
+              setHistorico={() => {}}
+              produtos={[]}
+              onSaveSessao={salvarSessaoVoz}
+            />
+          </ConversationProvider>
+        )}
+
+        {/* PRODUTOS — catálogo */}
+        {fase === 'home' && aba === 'produtos' && !produtoVer && (
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Catálogo de Produtos MF Paris</h2>
+            <p className="text-sm text-gray-500 mb-5">Conheça cada produto e seus argumentos de venda antes de entrar num treino.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {PRODUTOS_MF_PARIS.map((p, i) => (
+                <button key={i} onClick={() => setProdutoVer(p)}
+                  className="text-left bg-white rounded-xl p-4 border border-gray-200 hover:border-primary-400 hover:shadow-md transition-all group">
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-xs px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full font-medium">{p.categoria}</span>
+                    <ChevronRightIcon className="h-4 w-4 text-gray-300 group-hover:text-primary-500 transition-colors" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900 text-sm mb-1">{p.nome}</h3>
+                  <p className="text-xs text-gray-500 mb-2">{p.destaque}</p>
+                  <p className="text-xs font-bold text-green-600">{p.preco}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {fase === 'home' && aba === 'produtos' && produtoVer && (
+          <div className="max-w-2xl mx-auto">
+            <button onClick={() => setProdutoVer(null)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4">
+              <ArrowLeftIcon className="h-4 w-4" /> Voltar ao catálogo
+            </button>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-lg overflow-hidden">
+              <div className="bg-gradient-to-br from-primary-500 to-primary-700 p-6 text-white">
+                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">{produtoVer.categoria}</span>
+                <h2 className="text-xl font-bold mt-2">{produtoVer.nome}</h2>
+                <p className="text-primary-200 text-sm mt-1">{produtoVer.destaque}</p>
+              </div>
+              <div className="p-6 space-y-4">
+                {[
+                  { label: '💰 Preço Referência', value: produtoVer.preco },
+                  { label: '🍳 Aplicações', value: produtoVer.aplicacao },
+                  { label: '⭐ Diferencial de Venda', value: produtoVer.dif },
+                ].map(row => (
+                  <div key={row.label} className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-bold text-gray-500 mb-1">{row.label}</p>
+                    <p className="text-sm text-gray-900">{row.value}</p>
+                  </div>
+                ))}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-blue-700 mb-1">💡 Argumento de Venda Sugerido</p>
+                  <p className="text-sm text-blue-800">"Nosso {produtoVer.nome.split(' ').slice(0, 3).join(' ')} tem {produtoVer.dif.toLowerCase()}, o que garante {produtoVer.destaque.toLowerCase()} para o seu negócio."</p>
+                </div>
+                <button
+                  onClick={() => { const livre = modulos.find(m => m.titulo.toLowerCase().includes('livre')) || modulos[modulos.length - 1]; setModuloId(livre?.id || null); setAba('home') }}
+                  className="w-full py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                  <ChatBubbleLeftRightIcon className="h-4 w-4" />Praticar com este produto no Roleplay
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* QUIZ IA */}
+        {fase === 'home' && aba === 'quiz' && (
+          <div className="max-w-2xl mx-auto space-y-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Quiz de Produtos</h2>
+              <p className="text-sm text-gray-500">Teste seus conhecimentos. A IA avalia e dá feedback personalizado.</p>
+            </div>
+            {!quizAtivo && !quizPergunta && (
+              <button onClick={() => { setQuizAtivo(true); gerarQuiz() }}
+                className="w-full py-4 bg-gradient-to-r from-purple-600 to-primary-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
+                <SparklesIcon className="h-5 w-5" />Gerar Pergunta com IA
+              </button>
+            )}
+            {quizLoading && !quizPergunta && (
+              <div className="text-center py-8"><div className="w-8 h-8 border-3 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-2" /><p className="text-sm text-gray-400">Gerando pergunta...</p></div>
+            )}
+            {quizPergunta && (
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl p-5 border-2 border-primary-200 shadow-sm">
+                  <div className="flex items-start gap-2 mb-3">
+                    <SparklesIcon className="h-5 w-5 text-primary-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm font-semibold text-gray-900 leading-relaxed">{quizPergunta}</p>
+                  </div>
+                  {!quizFeedback && (
+                    <div className="flex gap-2">
+                      <input value={quizResp} onChange={e => setQuizResp(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && responderQuiz()}
+                        placeholder="Sua resposta..."
+                        className="flex-1 px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary-400" />
+                      <button onClick={responderQuiz} disabled={quizLoading || !quizResp.trim()}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-primary-700 transition-colors">
+                        {quizLoading ? '...' : 'Enviar'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {quizFeedback && (
+                  <div className="space-y-3">
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <p className="text-xs font-bold text-green-700 mb-1 flex items-center gap-1"><CheckCircleIcon className="h-4 w-4" />Feedback do Coach IA</p>
+                      <p className="text-sm text-green-800 leading-relaxed">{quizFeedback}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setQuizPergunta(''); setQuizResp(''); setQuizFeedback(null); gerarQuiz() }}
+                        className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-1.5">
+                        <ArrowPathIcon className="h-4 w-4" />Próxima Pergunta
+                      </button>
+                      <button onClick={() => { setQuizPergunta(''); setQuizResp(''); setQuizFeedback(null); setQuizAtivo(false) }}
+                        className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200 transition-colors">
+                        Encerrar Quiz
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
