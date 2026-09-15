@@ -29,6 +29,7 @@ import { fetchModulosTreinamento, fetchPerfisTreinamento, fetchVendedores } from
 import { CATALOGO_PRODUTOS, MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../../data/aiContext'
 import type { Vendedor, Produto, ModuloTreinamento, PerfilTreinamento } from '../../types'
 import ConfiguracaoAcademiaView from './ConfiguracaoAcademiaView'
+import AcademiaCandidatosPanel from './AcademiaCandidatosPanel'
 
 interface MsgChat {
   role: 'user' | 'assistant'
@@ -47,7 +48,7 @@ interface SessaoTreinamento {
   createdAt: string
 }
 
-type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config' | 'ligar'
+type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config' | 'ligar' | 'candidatos'
 
 const DEFAULT_MODULES: ModuloTreinamento[] = [
   { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '📞', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
@@ -398,7 +399,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {(['home', 'ligar', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'config'] : [])] as Aba[]).map(a => {
+            {(['home', 'ligar', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'candidatos', 'config'] : [])] as Aba[]).map(a => {
               const labels: Record<string, { icon: React.ReactNode; label: string }> = {
                 home: { icon: <PlayIcon className="h-4 w-4" />, label: 'Treinar' },
                 ligar: { icon: <PhoneIcon className="h-4 w-4" />, label: 'Ligar' },
@@ -406,6 +407,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                 quiz: { icon: <SparklesIcon className="h-4 w-4" />, label: 'Quiz IA' },
                 historico: { icon: <ClockIcon className="h-4 w-4" />, label: 'Histórico' },
                 gerente: { icon: <ChartBarIcon className="h-4 w-4" />, label: 'Gerente' },
+                candidatos: { icon: <UserGroupIcon className="h-4 w-4" />, label: 'Candidatos' },
                 config: { icon: <Cog6ToothIcon className="h-4 w-4" />, label: 'Config' },
               }
               const l = labels[a]
@@ -900,6 +902,10 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             {gerenteFiltrado.length === 0 && <p className="text-center py-8 text-gray-400 text-sm">Nenhum treinamento encontrado</p>}
           </div>
         </div>
+      )}
+
+      {aba === 'candidatos' && isGerente && (
+        <AcademiaCandidatosPanel />
       )}
 
       {aba === 'config' && (

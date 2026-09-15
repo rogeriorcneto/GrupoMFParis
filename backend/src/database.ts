@@ -978,8 +978,143 @@ export async function fetchAllRoleplaySessions(limit = 1000): Promise<RoleplaySe
   const { data, error } = await supabase
     .from('roleplay_sessions')
     .select('*')
+    .is('academia_link_id', null)
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw error
   return data || []
+}
+
+// ============================================
+// ACADEMIA DE CANDIDATOS (links temporários)
+// ============================================
+
+export interface AcademiaLinkRow {
+  id: number
+  token: string
+  nome_candidato: string
+  valido_de: string
+  valido_ate: string
+  ativo: boolean
+  criado_por: number | null
+  created_at: string
+}
+
+export async function createAcademiaLink(input: {
+  token: string
+  nomeCandidato: string
+  validoAte: string
+  criadoPor?: number | null
+}): Promise<AcademiaLinkRow> {
+  const { data, error } = await supabase
+    .from('academia_links')
+    .insert({
+      token: input.token,
+      nome_candidato: input.nomeCandidato,
+      valido_ate: input.validoAte,
+      criado_por: input.criadoPor || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchAcademiaLinkByToken(token: string): Promise<AcademiaLinkRow | null> {
+  const { data, error } = await supabase
+    .from('academia_links')
+    .select('*')
+    .eq('token', token)
+    .maybeSingle()
+  if (error) throw error
+  return data || null
+}
+
+export async function fetchAcademiaLinks(): Promise<AcademiaLinkRow[]> {
+  const { data, error } = await supabase
+    .from('academia_links')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function updateAcademiaLink(id: number, changes: { ativo?: boolean; validoAte?: string; nomeCandidato?: string }): Promise<void> {
+  const row: any = {}
+  if (changes.ativo !== undefined) row.ativo = changes.ativo
+  if (changes.validoAte !== undefined) row.valido_ate = changes.validoAte
+  if (changes.nomeCandidato !== undefined) row.nome_candidato = changes.nomeCandidato
+  const { error } = await supabase.from('academia_links').update(row).eq('id', id)
+  if (error) throw error
+}
+
+export function academiaLinkStatus(l: AcademiaLinkRow): 'ativo' | 'expirado' | 'revogado' {
+  if (!l.ativo) return 'revogado'
+  const now = Date.now()
+  if (new Date(l.valido_ate).getTime() < now) return 'expirado'
+  if (new Date(l.valido_de).getTime() > now) return 'expirado'
+  return 'ativo'
+}
+
+export async function insertAcademiaRoleplaySession(
+  academiaLinkId: number,
+  sessao: {
+    modulo?: string
+    perfilId?: string
+    perfilNome?: string
+    mensagens: any[]
+    duracaoSegundos: number
+    nota: number | null
+    feedback: any
+  }
+): Promise<RoleplaySessionRow | null> {
+  const { data: row, error } = await supabase
+    .from('roleplay_sessions')
+    .insert({
+      vendedor_id: null,
+      academia_link_id: academiaLinkId,
+      modulo: sessao.modulo || null,
+      perfil_id: sessao.perfilId || null,
+      perfil_nome: sessao.perfilNome || null,
+      mensagens: sessao.mensagens || [],
+      duracao_segundos: sessao.duracaoSegundos,
+      nota: sessao.nota,
+      feedback: sessao.feedback,
+      data: new Date().toISOString().slice(0, 10),
+    })
+    .select()
+    .single()
+  if (error) {
+    log.error({ error }, 'Erro insertAcademiaRoleplaySession')
+    throw error
+  }
+  return row || null
+}
+
+export async function fetchRoleplaySessionsByAcademiaLink(academiaLinkId: number, limit = 200): Promise<RoleplaySessionRow[]> {
+  const { data, error } = await supabase
+    .from('roleplay_sessions')
+    .select('*')
+    .eq('academia_link_id', academiaLinkId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+export async function fetchAcademiaSessionCounts(): Promise<Map<number, { total: number; ultima: string | null }>> {
+  const { data, error } = await supabase
+    .from('roleplay_sessions')
+    .select('academia_link_id, created_at')
+    .not('academia_link_id', 'is', null)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const map = new Map<number, { total: number; ultima: string | null }>()
+  for (const s of data || []) {
+    const id = s.academia_link_id as number
+    const cur = map.get(id)
+    if (cur) cur.total += 1
+    else map.set(id, { total: 1, ultima: s.created_at })
+  }
+  return map
 }

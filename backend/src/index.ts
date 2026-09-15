@@ -27,6 +27,7 @@ import { vendedoresRouter } from './routes/vendedores.js'
 import { missoesRouter } from './routes/missoes.js'
 import { mapsRouter } from './routes/maps.js'
 import twilioRouter from './routes/twilio.js'
+import { academiaCandidatoRouter, academiaGerenteRouter } from './routes/academia.js'
 import twilioVoiceAiRouter from './routes/twilio-voice-ai.js'
 import ttsRouter from './routes/tts.js'
 import ttsOptimizedRouter from './routes/tts-optimized.js'
@@ -1248,6 +1249,11 @@ app.use('/api/leads-rf', requireAuth, leadsRfRouter)
 app.use('/api/vendedores', requireAuth, requireGerente, vendedoresRouter)
 app.use('/api/missoes', missoesRouter)
 app.use('/api/maps', requireAuth, mapsRouter)
+
+// ─── Academia de Candidatos (links temporários, sem login no CRM) ───
+// Ordem importa: /gerente primeiro para não cair no router público
+app.use('/api/academia/gerente', requireAuth, requireGerente, academiaGerenteRouter)
+app.use('/api/academia', rateLimit(30, 60_000), academiaCandidatoRouter)
 
 // ─── Pedido → Omie (automático ao aprovar) ───
 
