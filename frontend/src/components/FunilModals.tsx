@@ -325,17 +325,17 @@ export default function FunilModals({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={cancelAmostra}>
           <div className="bg-white rounded-t-2xl sm:rounded-apple shadow-apple-lg w-full max-w-4xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-900">
                 {draggedItem?.fromStage === 'amostra_perdida' ? '🔄 2ª Tentativa de Amostra' : '📦 Enviar Amostra'}
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">Cliente: <span className="font-medium text-gray-800">{draggedItem?.cliente.razaoSocial}</span></p>
             </div>
 
-            {/* Body — duas colunas */}
-            <div className="flex flex-1 overflow-hidden">
+            {/* Body — empilha no mobile, duas colunas no desktop */}
+            <div className="flex flex-1 flex-col sm:flex-row overflow-y-auto sm:overflow-hidden">
               {/* Coluna esquerda: busca e lista de produtos */}
-              <div className="flex-1 flex flex-col border-r border-gray-200 overflow-hidden">
+              <div className="sm:flex-1 flex flex-col border-b sm:border-b-0 sm:border-r border-gray-200 sm:overflow-hidden">
                 <div className="p-4 border-b border-gray-100 space-y-3 flex-shrink-0">
                   {draggedItem?.fromStage === 'amostra_perdida' && (
                     <div className="bg-amber-50 border border-amber-200 rounded-apple p-3">
@@ -356,7 +356,7 @@ export default function FunilModals({
                   </div>
                   <input type="text" placeholder="🔍 Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-1">
                   {!pedidoSearch.trim() && <p className="text-xs text-gray-400 text-center py-6">Digite para buscar produtos do catálogo</p>}
                   {pedidoSearch.trim() && filteredProdutos.length === 0 && <p className="text-xs text-gray-400 text-center py-6">Nenhum produto encontrado</p>}
                   {filteredProdutos.slice(0, 30).map(p => {
@@ -375,11 +375,11 @@ export default function FunilModals({
               </div>
 
                 {/* Coluna direita: carrinho fixo */}
-              <div className="w-72 flex flex-col bg-gray-50 flex-shrink-0">
+              <div className="w-full sm:w-72 flex flex-col bg-gray-50 flex-shrink-0">
                 <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
                   <p className="text-sm font-semibold text-gray-900">🛒 Itens selecionados</p>
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-2">
                   {pedidoItens.length === 0 && (
                     <p className="text-xs text-gray-400 text-center py-8">Nenhum item adicionado</p>
                   )}
@@ -407,7 +407,7 @@ export default function FunilModals({
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center flex-shrink-0">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-2 flex-shrink-0">
               <p className="text-xs text-gray-400">Cliente será movido para Amostra após envio</p>
               <div className="flex gap-3">
                 <button onClick={cancelAmostra} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
@@ -425,7 +425,7 @@ export default function FunilModals({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={cancelProposta}>
           <div className="bg-white rounded-t-2xl sm:rounded-apple shadow-apple-lg w-full max-w-4xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-900">{isNovoCiclo ? '🔄 Nova Proposta — Novo Ciclo' : '💰 Nova Negociação'}</h2>
               <p className="text-sm text-gray-500 mt-0.5">Cliente: <button
                   onClick={() => draggedItem?.cliente && onClickCliente?.(draggedItem.cliente)}
@@ -435,10 +435,10 @@ export default function FunilModals({
               {isNovoCiclo && <p className="text-xs text-blue-600 mt-1 font-medium">A proposta será salva sem alterar a etapa do cliente no funil.</p>}
             </div>
 
-            {/* Body — duas colunas */}
-            <div className="flex flex-1 overflow-hidden">
+            {/* Body — empilha no mobile, duas colunas no desktop */}
+            <div className="flex flex-1 flex-col sm:flex-row overflow-y-auto sm:overflow-hidden">
               {/* Coluna esquerda: configurações + busca */}
-              <div className="flex-1 flex flex-col border-r border-gray-200 overflow-hidden">
+              <div className="sm:flex-1 flex flex-col border-b sm:border-b-0 sm:border-r border-gray-200 sm:overflow-hidden">
                 <div className="p-4 border-b border-gray-100 space-y-3 flex-shrink-0">
                   {/* Frete */}
                   <div>
@@ -462,7 +462,7 @@ export default function FunilModals({
                   {/* Busca */}
                   <input type="text" placeholder="🔍 Buscar produto..." value={propostaSearch} onChange={e => setPropostaSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-1">
                   {!propostaSearch.trim() && <p className="text-xs text-gray-400 text-center py-6">Digite para buscar produtos do catálogo</p>}
                   {propostaSearch.trim() && propostaFilteredProdutos.length === 0 && <p className="text-xs text-gray-400 text-center py-6">Nenhum produto encontrado</p>}
                   {propostaFilteredProdutos.slice(0, 30).map(p => {
@@ -481,7 +481,7 @@ export default function FunilModals({
               </div>
 
               {/* Coluna direita: abas Itens / Histórico */}
-              <div className="w-80 flex flex-col bg-gray-50 flex-shrink-0">
+              <div className="w-full sm:w-80 flex flex-col bg-gray-50 flex-shrink-0">
                 {/* Tabs */}
                 <div className="flex border-b border-gray-200 flex-shrink-0">
                   <button
@@ -507,7 +507,7 @@ export default function FunilModals({
 
                 {propostaTab === 'itens' ? (
                   <>
-                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-2">
                       {propostaItens.length === 0 && (
                         <p className="text-xs text-gray-400 text-center py-8">Nenhum item adicionado</p>
                       )}
@@ -544,7 +544,7 @@ export default function FunilModals({
                     </div>
                   </>
                 ) : propostaTab === 'historico' ? (
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-2">
                     {propostaHistoricoLoading && (
                       <p className="text-xs text-gray-400 text-center py-8">Carregando histórico...</p>
                     )}
@@ -601,7 +601,7 @@ export default function FunilModals({
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 flex-shrink-0">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 flex-shrink-0">
               <button onClick={cancelProposta} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
               <button onClick={handleConfirmNegociacao} disabled={propostaSaving} className="px-5 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2">
                 {propostaSaving ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Gerando PDF...</> : '📄 Gerar Proposta PDF'}
