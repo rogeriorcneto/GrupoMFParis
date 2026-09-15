@@ -1,6 +1,10 @@
--- Migration 008: Academia de Candidatos — links temporários de acesso
--- Permite gerar links com vigência para candidatos acessarem a Academia de Vendas
--- sem criar login no CRM.
+-- Migration 008 (OPCIONAL): Academia de Candidatos — links temporários de acesso
+--
+-- NOTA: a implementação atual NÃO depende desta migration. Links e sessões de
+-- candidatos são persistidos na tabela whatsapp_session (chave/valor) com os
+-- prefixos "academia_link:" e "academia_sessao:". Rode este script apenas se
+-- quiser formalizar o schema no futuro — seria necessário também migrar os
+-- dados existentes e atualizar backend/src/database.ts.
 
 CREATE TABLE IF NOT EXISTS academia_links (
   id serial PRIMARY KEY,

@@ -978,7 +978,6 @@ export async function fetchAllRoleplaySessions(limit = 1000): Promise<RoleplaySe
   const { data, error } = await supabase
     .from('roleplay_sessions')
     .select('*')
-    .is('academia_link_id', null)
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw error
@@ -988,6 +987,16 @@ export async function fetchAllRoleplaySessions(limit = 1000): Promise<RoleplaySe
 // ============================================
 // ACADEMIA DE CANDIDATOS (links temporários)
 // ============================================
+
+// Links de candidato ficam em whatsapp_session (tabela chave/valor já existente)
+// para não depender de migration. Formato das chaves:
+//   academia_link:<token>   → JSON do link
+//   academia_sessao:<uuid>  → JSON da sessão de roleplay do candidato
+// Quando a migration 008 rodar no Supabase, estes dados podem ser migrados
+// para academia_links/roleplay_sessions.
+
+const ACADEMIA_LINK_PREFIX = 'academia_link:'
+const ACADEMIA_SESSAO_PREFIX = 'academia_sessao:'
 
 export interface AcademiaLinkRow {
   id: number
@@ -1000,52 +1009,74 @@ export interface AcademiaLinkRow {
   created_at: string
 }
 
+async function kvSet(key: string, value: unknown): Promise<void> {
+  const { error } = await supabase
+    .from('whatsapp_session')
+    .upsert({ key, value: JSON.stringify(value), updated_at: new Date().toISOString() })
+  if (error) throw error
+}
+
+async function kvGet<T>(key: string): Promise<T | null> {
+  const { data, error } = await supabase
+    .from('whatsapp_session')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle()
+  if (error) throw error
+  if (!data?.value) return null
+  try { return JSON.parse(data.value) as T } catch { return null }
+}
+
+async function kvListByPrefix<T>(prefix: string): Promise<T[]> {
+  const { data, error } = await supabase
+    .from('whatsapp_session')
+    .select('key, value')
+    .like('key', `${prefix}%`)
+  if (error) throw error
+  const out: T[] = []
+  for (const row of data || []) {
+    try { out.push(JSON.parse(row.value) as T) } catch { /* ignora linha corrompida */ }
+  }
+  return out
+}
+
 export async function createAcademiaLink(input: {
   token: string
   nomeCandidato: string
   validoAte: string
   criadoPor?: number | null
 }): Promise<AcademiaLinkRow> {
-  const { data, error } = await supabase
-    .from('academia_links')
-    .insert({
-      token: input.token,
-      nome_candidato: input.nomeCandidato,
-      valido_ate: input.validoAte,
-      criado_por: input.criadoPor || null,
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return data
+  const link: AcademiaLinkRow = {
+    id: Date.now(),
+    token: input.token,
+    nome_candidato: input.nomeCandidato,
+    valido_de: new Date().toISOString(),
+    valido_ate: input.validoAte,
+    ativo: true,
+    criado_por: input.criadoPor || null,
+    created_at: new Date().toISOString(),
+  }
+  await kvSet(`${ACADEMIA_LINK_PREFIX}${link.token}`, link)
+  return link
 }
 
 export async function fetchAcademiaLinkByToken(token: string): Promise<AcademiaLinkRow | null> {
-  const { data, error } = await supabase
-    .from('academia_links')
-    .select('*')
-    .eq('token', token)
-    .maybeSingle()
-  if (error) throw error
-  return data || null
+  return kvGet<AcademiaLinkRow>(`${ACADEMIA_LINK_PREFIX}${token}`)
 }
 
 export async function fetchAcademiaLinks(): Promise<AcademiaLinkRow[]> {
-  const { data, error } = await supabase
-    .from('academia_links')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data || []
+  const links = await kvListByPrefix<AcademiaLinkRow>(ACADEMIA_LINK_PREFIX)
+  return links.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
 }
 
 export async function updateAcademiaLink(id: number, changes: { ativo?: boolean; validoAte?: string; nomeCandidato?: string }): Promise<void> {
-  const row: any = {}
-  if (changes.ativo !== undefined) row.ativo = changes.ativo
-  if (changes.validoAte !== undefined) row.valido_ate = changes.validoAte
-  if (changes.nomeCandidato !== undefined) row.nome_candidato = changes.nomeCandidato
-  const { error } = await supabase.from('academia_links').update(row).eq('id', id)
-  if (error) throw error
+  const links = await kvListByPrefix<AcademiaLinkRow>(ACADEMIA_LINK_PREFIX)
+  const link = links.find(l => l.id === id)
+  if (!link) throw new Error('Link não encontrado')
+  if (changes.ativo !== undefined) link.ativo = changes.ativo
+  if (changes.validoAte !== undefined) link.valido_ate = changes.validoAte
+  if (changes.nomeCandidato !== undefined) link.nome_candidato = changes.nomeCandidato
+  await kvSet(`${ACADEMIA_LINK_PREFIX}${link.token}`, link)
 }
 
 export function academiaLinkStatus(l: AcademiaLinkRow): 'ativo' | 'expirado' | 'revogado' {
@@ -1054,6 +1085,20 @@ export function academiaLinkStatus(l: AcademiaLinkRow): 'ativo' | 'expirado' | '
   if (new Date(l.valido_ate).getTime() < now) return 'expirado'
   if (new Date(l.valido_de).getTime() > now) return 'expirado'
   return 'ativo'
+}
+
+export interface AcademiaSessaoRow {
+  id: string
+  academia_link_id: number
+  modulo: string | null
+  perfil_id: string | null
+  perfil_nome: string | null
+  mensagens: any[]
+  duracao_segundos: number
+  nota: number | null
+  feedback: any
+  data: string
+  created_at: string
 }
 
 export async function insertAcademiaRoleplaySession(
@@ -1067,54 +1112,49 @@ export async function insertAcademiaRoleplaySession(
     nota: number | null
     feedback: any
   }
-): Promise<RoleplaySessionRow | null> {
-  const { data: row, error } = await supabase
-    .from('roleplay_sessions')
-    .insert({
-      vendedor_id: null,
-      academia_link_id: academiaLinkId,
-      modulo: sessao.modulo || null,
-      perfil_id: sessao.perfilId || null,
-      perfil_nome: sessao.perfilNome || null,
-      mensagens: sessao.mensagens || [],
-      duracao_segundos: sessao.duracaoSegundos,
-      nota: sessao.nota,
-      feedback: sessao.feedback,
-      data: new Date().toISOString().slice(0, 10),
-    })
-    .select()
-    .single()
-  if (error) {
+): Promise<AcademiaSessaoRow> {
+  const id = crypto.randomUUID()
+  const row: AcademiaSessaoRow = {
+    id,
+    academia_link_id: academiaLinkId,
+    modulo: sessao.modulo || null,
+    perfil_id: sessao.perfilId || null,
+    perfil_nome: sessao.perfilNome || null,
+    mensagens: sessao.mensagens || [],
+    duracao_segundos: sessao.duracaoSegundos,
+    nota: sessao.nota,
+    feedback: sessao.feedback,
+    data: new Date().toISOString().slice(0, 10),
+    created_at: new Date().toISOString(),
+  }
+  try {
+    await kvSet(`${ACADEMIA_SESSAO_PREFIX}${id}`, row)
+  } catch (error) {
     log.error({ error }, 'Erro insertAcademiaRoleplaySession')
     throw error
   }
-  return row || null
+  return row
 }
 
-export async function fetchRoleplaySessionsByAcademiaLink(academiaLinkId: number, limit = 200): Promise<RoleplaySessionRow[]> {
-  const { data, error } = await supabase
-    .from('roleplay_sessions')
-    .select('*')
-    .eq('academia_link_id', academiaLinkId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) throw error
-  return data || []
+export async function fetchRoleplaySessionsByAcademiaLink(academiaLinkId: number, limit = 200): Promise<AcademiaSessaoRow[]> {
+  const todas = await kvListByPrefix<AcademiaSessaoRow>(ACADEMIA_SESSAO_PREFIX)
+  return todas
+    .filter(s => s.academia_link_id === academiaLinkId)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .slice(0, limit)
 }
 
 export async function fetchAcademiaSessionCounts(): Promise<Map<number, { total: number; ultima: string | null }>> {
-  const { data, error } = await supabase
-    .from('roleplay_sessions')
-    .select('academia_link_id, created_at')
-    .not('academia_link_id', 'is', null)
-    .order('created_at', { ascending: false })
-  if (error) throw error
+  const todas = await kvListByPrefix<AcademiaSessaoRow>(ACADEMIA_SESSAO_PREFIX)
   const map = new Map<number, { total: number; ultima: string | null }>()
-  for (const s of data || []) {
-    const id = s.academia_link_id as number
-    const cur = map.get(id)
-    if (cur) cur.total += 1
-    else map.set(id, { total: 1, ultima: s.created_at })
+  for (const s of todas) {
+    const cur = map.get(s.academia_link_id)
+    if (cur) {
+      cur.total += 1
+      if (!cur.ultima || s.created_at > cur.ultima) cur.ultima = s.created_at
+    } else {
+      map.set(s.academia_link_id, { total: 1, ultima: s.created_at })
+    }
   }
   return map
 }
