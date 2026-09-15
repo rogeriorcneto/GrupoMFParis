@@ -199,7 +199,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 
   // ─────────────────── RENDER ───────────────────
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)]">
+    <div className="flex flex-col sm:h-[calc(100vh-64px)]">
       {/* Header */}
       <div className="flex items-center justify-between px-1 py-2 flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -241,11 +241,11 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 
       {/* ═══ TAB: NOVO PEDIDO — 3 columns ═══ */}
       {tab === 'novo' && (
-        <div className="flex-1 min-h-0 grid grid-cols-12 gap-3">
+        <div className="sm:flex-1 sm:min-h-0 grid grid-cols-12 gap-3">
 
           {/* COL 1 — Cliente + Config (3/12) */}
-          <div className="col-span-12 xl:col-span-3 flex flex-col min-h-0">
-            <div className="flex-1 overflow-y-auto space-y-3 pr-0.5 pb-1">
+          <div className="col-span-12 xl:col-span-3 flex flex-col sm:min-h-0">
+            <div className="sm:flex-1 sm:overflow-y-auto space-y-3 pr-0.5 pb-1">
               {/* Cliente selector */}
               <div className="bg-white rounded-xl border border-gray-200 p-3">
                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Cliente</p>
@@ -397,7 +397,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
           </div>
 
           {/* COL 2 — Catalogo de Produtos (5/12) */}
-          <div className="col-span-12 xl:col-span-5 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200">
+          <div className="col-span-12 xl:col-span-5 flex flex-col sm:min-h-0 bg-white rounded-xl border border-gray-200">
             <div className="flex items-center gap-2 p-3 border-b border-gray-100 flex-shrink-0">
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Produtos</p>
               <span className="text-[10px] text-gray-400">({produtosFiltrados.length})</span>
@@ -415,7 +415,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                 <option value="outros">Outros</option>
               </select>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            <div className="sm:flex-1 sm:overflow-y-auto p-2 space-y-1">
               {!searchProduto.trim() && !filterCategoria && <p className="text-center py-12 text-gray-400 text-xs">Digite o nome do produto para buscar</p>}
               {(searchProduto.trim() || filterCategoria) && produtosFiltrados.length === 0 && <p className="text-center py-12 text-gray-400 text-xs">Nenhum produto encontrado</p>}
               {(searchProduto.trim() || filterCategoria) && produtosFiltrados.map(produto => {
@@ -449,7 +449,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
           </div>
 
           {/* COL 3 — Carrinho + Resumo (4/12) */}
-          <div className="col-span-12 xl:col-span-4 flex flex-col min-h-0 bg-white rounded-xl border border-gray-200">
+          <div className="col-span-12 xl:col-span-4 flex flex-col sm:min-h-0 bg-white rounded-xl border border-gray-200">
             <div className="flex items-center gap-2 p-3 border-b border-gray-100 flex-shrink-0">
               <ShoppingCartIcon className="h-4 w-4 text-primary-600" />
               <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Carrinho</p>
@@ -462,13 +462,13 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
               )}
             </div>
             {itensPedido.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-300 p-6">
+              <div className="sm:flex-1 flex flex-col items-center justify-center text-gray-300 p-6">
                 <ShoppingCartIcon className="h-12 w-12 mb-2 opacity-40" />
                 <p className="text-xs text-gray-400">Selecione produtos ao lado</p>
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                <div className="sm:flex-1 sm:overflow-y-auto p-2 space-y-1">
                   {itensPedido.map(item => (
                     <div key={item.produtoId} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg group">
                       <div className="flex-1 min-w-0">
@@ -523,7 +523,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
 
       {/* ═══ TAB: HISTORICO ═══ */}
       {tab === 'historico' && (
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="sm:flex-1 sm:min-h-0 flex flex-col">
           <div className="flex items-center gap-2 px-1 pb-2 flex-shrink-0">
             <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
               <option value="">Todos</option><option value="rascunho">Rascunho</option><option value="enviado">Enviado</option><option value="confirmado">Confirmado</option><option value="cancelado">Cancelado</option><option value="cancelamento_solicitado">Cancelamento pendente</option>
@@ -534,7 +534,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
             </select>
             <span className="text-[10px] text-gray-400 ml-auto">{pedidosFiltrados.length} pedido(s)</span>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-2 px-1 pb-2">
+          <div className="sm:flex-1 sm:overflow-y-auto space-y-2 px-1 pb-2">
             {pedidosFiltrados.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-300">
                 <ShoppingCartIcon className="h-12 w-12 mb-3 opacity-40" />

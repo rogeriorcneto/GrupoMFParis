@@ -200,7 +200,7 @@ export default function GrupoParisShell() {
         {crmMontado && <App preloadedUser={vendedorCompleto} />}
         <button
           onClick={() => setSistemaAtivo('portal')}
-          className="fixed bottom-4 right-4 z-[9999] px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg shadow-2xl flex items-center gap-2 font-medium"
+          className="fixed bottom-4 right-4 z-40 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg shadow-2xl flex items-center gap-2 font-medium"
           title="Voltar ao Portal Grupo Paris"
         >
           ← Portal Grupo Paris
