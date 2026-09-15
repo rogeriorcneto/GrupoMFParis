@@ -96,6 +96,7 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
   const transcriptBufferRef = useRef('')
   const transcriptContextRef = useRef('')
   const analyzingRef = useRef(false)
+  const analyzingSinceRef = useRef(0)
   const lastAnalysisErrorRef = useRef(0)
   const analyzeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -158,14 +159,18 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
     if (!buffer || buffer.length < 20) return
     transcriptBufferRef.current = ''
     analyzingRef.current = true
+    analyzingSinceRef.current = Date.now()
     setAnalyzing(true)
     const contexto = transcriptContextRef.current.slice(-600)
 
     try {
-      const resp = await callAI(
-        [{ role: 'user', content: `${contexto ? `Contexto anterior da conversa:\n"${contexto}"\n\n` : ''}Trecho da conversa ouvida agora:\n"${buffer}"` }],
-        MEETING_SYSTEM
-      )
+      const resp = await Promise.race([
+        callAI(
+          [{ role: 'user', content: `${contexto ? `Contexto anterior da conversa:\n"${contexto}"\n\n` : ''}Trecho da conversa ouvida agora:\n"${buffer}"` }],
+          MEETING_SYSTEM
+        ),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 25000)),
+      ])
       transcriptContextRef.current = `${contexto} ${buffer}`.slice(-1200)
       if (resp.trim() && resp.trim() !== '—') {
         const typeMatch = resp.match(/\[(TIP|OBJEÇÃO|PERGUNTA|FECHAMENTO)\]/i)
@@ -254,8 +259,16 @@ export default function FloatingAIAssistant({ vendedor, produtos }: { vendedor: 
       setMeetingDuration(Math.floor((Date.now() - meetingStartRef.current) / 1000))
     }, 1000)
 
-    // Analyze transcript every 12 seconds
-    analyzeTimerRef.current = setInterval(analyzeChunk, 12000)
+    // Analyze transcript every 12 seconds — com watchdog: se uma análise
+    // ficar pendurada >45s (chamada de IA sem resposta), destrava o flag
+    // para não silenciar as sugestões pelo resto da reunião
+    analyzeTimerRef.current = setInterval(() => {
+      if (analyzingRef.current && Date.now() - analyzingSinceRef.current > 45000) {
+        analyzingRef.current = false
+        setAnalyzing(false)
+      }
+      analyzeChunk()
+    }, 12000)
   }, [analyzeChunk, stopMeeting])
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
