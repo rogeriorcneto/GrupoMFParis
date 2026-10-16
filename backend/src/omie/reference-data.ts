@@ -517,7 +517,6 @@ export async function fetchTabelasPreco(creds?: OmieCredentials): Promise<OmieTa
       { credentials }
     )
     const rawList = response.listaTabelasPreco || response.cadastros || []
-    log.info({ responseKeys: Object.keys(response), rawCount: Array.isArray(rawList) ? rawList.length : 'nao_array', rawSample: rawList[0] || null }, 'ListarTabelasPreco resposta bruta')
     const tabelas: OmieTabelaPreco[] = (Array.isArray(rawList) ? rawList : []).map((t: any) => ({
       nCodTabPreco: t.nCodTabPreco || 0,
       cNome: t.cNome || '',
@@ -527,8 +526,12 @@ export async function fetchTabelasPreco(creds?: OmieCredentials): Promise<OmieTa
     setCache('tabelas_preco', tabelas)
     log.info({ count: tabelas.length, tabelas: tabelas.map(t => t.cNome) }, 'Tabelas de preço carregadas do Omie')
     return tabelas
-  } catch (err) {
-    log.warn({ err }, 'Não foi possível buscar tabelas de preço do Omie')
+  } catch (err: any) {
+    // Omie retorna "Não existem registros" quando não há tabelas cadastradas.
+    const msg = String(err?.message || '')
+    if (!/n[aã]o existem registros/i.test(msg)) {
+      log.warn({ err }, 'Não foi possível buscar tabelas de preço do Omie')
+    }
     return []
   }
 }
