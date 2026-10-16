@@ -516,7 +516,9 @@ export async function fetchTabelasPreco(creds?: OmieCredentials): Promise<OmieTa
       [{ nPagina: 1, nRegPorPagina: 100 }],
       { credentials }
     )
-    const tabelas: OmieTabelaPreco[] = (response.listaTabelasPreco || response.cadastros || []).map((t: any) => ({
+    const rawList = response.listaTabelasPreco || response.cadastros || []
+    log.info({ responseKeys: Object.keys(response), rawCount: Array.isArray(rawList) ? rawList.length : 'nao_array', rawSample: rawList[0] || null }, 'ListarTabelasPreco resposta bruta')
+    const tabelas: OmieTabelaPreco[] = (Array.isArray(rawList) ? rawList : []).map((t: any) => ({
       nCodTabPreco: t.nCodTabPreco || 0,
       cNome: t.cNome || '',
       cCodigo: t.cCodigo || '',

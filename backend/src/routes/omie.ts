@@ -199,6 +199,7 @@ omieRouter.get('/tabelas-preco', rateLimit(30, 60_000), async (req, res) => {
       success: true,
       tabelas: tabelas.map(t => ({ codigo: t.nCodTabPreco, nome: t.cNome, codigoExterno: t.cCodigo, ativa: t.cAtiva })),
       resolucao: { A: codigoA, B: codigoB },
+      debug: req.query.debug === '1' ? { count: tabelas.length, first: tabelas[0] || null } : undefined,
     })
   } catch (err: any) {
     log.error({ err }, 'Erro ao buscar tabelas de preço')
