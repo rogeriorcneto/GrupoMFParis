@@ -83,7 +83,13 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
       { skipCache: true, credentials: creds }
     )
   } catch (err: any) {
-    throw new Error(`Não foi possível consultar o cliente pelo CNPJ/CPF ${doc} no Omie: ${err?.message || 'erro de comunicação'}`)
+    // Omie responde "Não existem registros para a página [N]!" como ERRO quando
+    // a busca por documento não retorna nada — isso é resultado vazio (cliente
+    // não cadastrado), não falha de comunicação. Segue para o cadastro automático.
+    const msg = String(err?.message || '')
+    if (!/n[aã]o existem registros/i.test(msg)) {
+      throw new Error(`Não foi possível consultar o cliente pelo CNPJ/CPF ${doc} no Omie: ${msg || 'erro de comunicação'}`)
+    }
   }
 
   const encontrado = busca?.clientes_cadastro?.find((item: any) => {

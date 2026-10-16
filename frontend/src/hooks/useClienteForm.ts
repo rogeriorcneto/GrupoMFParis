@@ -259,6 +259,7 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
           sincronizarClienteOmie(savedC.id).catch(err => logger.warn('Sync Omie falhou (cadastro):', err))
         }
       }
+      setShowModal(false)
     } catch (err: any) {
       logger.error('Erro ao salvar cliente:', err)
       const detalhe = err?.message ? `: ${err.message}` : ''
