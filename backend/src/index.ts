@@ -1299,26 +1299,31 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
 
     // Tabela de preço (A/B) escolhida na tela de aprovação — vai para o pedido Omie
     const tabela: 'A' | 'B' | undefined = req.body?.tabela === 'B' ? 'B' : (req.body?.tabela === 'A' ? 'A' : undefined)
-    const updateData: Record<string, any> = {
-      status: 'confirmado',
-      aprovado_por: aprovadoPorId,
-      data_aprovacao: new Date().toISOString(),
-    }
-    if (tabela) updateData.tabela_preco = tabela
 
-    const { error: updateErr } = await supabase
+    // 1. Atualizar status do pedido (separado da tabela_preco para nao falhar
+    //    caso a migration da coluna ainda nao tenha sido aplicada no banco).
+    const { error: statusErr } = await supabase
       .from('pedidos')
-      .update(updateData)
+      .update({
+        status: 'confirmado',
+        aprovado_por: aprovadoPorId,
+        data_aprovacao: new Date().toISOString(),
+      })
       .eq('id', pedidoId)
 
-    if (updateErr) {
-      // Se a coluna tabela_preco ainda não foi aplicada no banco (migration pendente),
-      // logamos e continuamos — a tabela é repassada diretamente para o Omie.
-      if (updateErr.message?.includes('tabela_preco')) {
-        log.warn({ pedidoId, erro: updateErr.message }, '⚠️ Coluna tabela_preco não encontrada no banco. Migration pendente? Enviando tabela diretamente ao Omie.')
-      } else {
-        res.status(500).json({ success: false, error: updateErr.message })
-        return
+    if (statusErr) {
+      res.status(500).json({ success: false, error: statusErr.message })
+      return
+    }
+
+    // 2. Tentar persistir a tabela escolhida (best-effort — Omie ja recebe via parametro)
+    if (tabela) {
+      const { error: tabelaErr } = await supabase
+        .from('pedidos')
+        .update({ tabela_preco: tabela })
+        .eq('id', pedidoId)
+      if (tabelaErr) {
+        log.warn({ pedidoId, erro: tabelaErr.message }, '⚠️ Coluna tabela_preco nao encontrada no banco. Migration pendente? Enviando tabela diretamente ao Omie.')
       }
     }
 
