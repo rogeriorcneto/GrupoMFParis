@@ -1298,7 +1298,7 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
     const aprovadoPorId = vendedorData?.id || null
 
     // Tabela de preço (A/B) escolhida na tela de aprovação — vai para o pedido Omie
-    const tabela = req.body?.tabela === 'B' ? 'B' : (req.body?.tabela === 'A' ? 'A' : undefined)
+    const tabela: 'A' | 'B' | undefined = req.body?.tabela === 'B' ? 'B' : (req.body?.tabela === 'A' ? 'A' : undefined)
     const updateData: Record<string, any> = {
       status: 'confirmado',
       aprovado_por: aprovadoPorId,
@@ -1312,15 +1312,21 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
       .eq('id', pedidoId)
 
     if (updateErr) {
-      res.status(500).json({ success: false, error: updateErr.message })
-      return
+      // Se a coluna tabela_preco ainda não foi aplicada no banco (migration pendente),
+      // logamos e continuamos — a tabela é repassada diretamente para o Omie.
+      if (updateErr.message?.includes('tabela_preco')) {
+        log.warn({ pedidoId, erro: updateErr.message }, '⚠️ Coluna tabela_preco não encontrada no banco. Migration pendente? Enviando tabela diretamente ao Omie.')
+      } else {
+        res.status(500).json({ success: false, error: updateErr.message })
+        return
+      }
     }
 
     // 2. Responder IMEDIATAMENTE ao frontend (não bloquear pelo Omie)
     res.json({ success: true, pedido_aprovado: true, omie: { pending: true } })
 
     // 3. Enviar ao Omie em background (fire-and-forget)
-    onPedidoAprovado(pedidoId).then(async (omieResult) => {
+    onPedidoAprovado(pedidoId, tabela).then(async (omieResult) => {
       try {
         if (omieResult.success) {
           await supabase.from('pedidos').update({ omie_erro: null, omie_codigo: omieResult.omie_codigo || null }).eq('id', pedidoId)
@@ -1344,7 +1350,8 @@ app.post('/api/pedidos/:id/enviar-omie', requireAuth, requireGerente, async (req
   if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
 
   try {
-    const response = await criarPedidoOmie(pedidoId)
+    const tabela = req.body?.tabela === 'B' ? 'B' : (req.body?.tabela === 'A' ? 'A' : undefined)
+    const response = await criarPedidoOmie(pedidoId, tabela)
     try { await supabase.from('pedidos').update({ omie_erro: null }).eq('id', pedidoId) } catch { /* */ }
     res.json({ success: true, omie: response })
   } catch (err: any) {

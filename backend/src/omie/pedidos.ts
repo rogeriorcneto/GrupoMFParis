@@ -578,7 +578,10 @@ function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisao
 // Criar pedido de venda no Omie
 // ============================================
 
-export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoResponse> {
+export async function criarPedidoOmie(
+  pedidoId: number,
+  tabelaPrecoOverride?: 'A' | 'B',
+): Promise<OmiePedidoResponse> {
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas. Configure em Integrações → Omie ERP.')
 
@@ -810,12 +813,13 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   // Tabela de preço (A/B) — selecionada na aprovação do pedido; afeta comissões
   // no Omie. Se o Omie não tem nenhuma tabela cadastrada, ignora a seleção.
   // Se tem tabelas e a escolhida não existe, erro (comissão sairia errada).
-  if (pedido.tabela_preco) {
+  const tabelaPreco = tabelaPrecoOverride || pedido.tabela_preco
+  if (tabelaPreco) {
     const tabelas = await fetchTabelasPreco(creds)
     if (tabelas.length > 0) {
-      const codTabela = await getCodigoTabelaPreco(String(pedido.tabela_preco), creds)
+      const codTabela = await getCodigoTabelaPreco(String(tabelaPreco), creds)
       if (!codTabela) {
-        throw new Error(`Tabela de preço "${pedido.tabela_preco}" não encontrada no Omie (disponíveis: ${tabelas.map(t => t.cNome).join(', ')})`)
+        throw new Error(`Tabela de preço "${tabelaPreco}" não encontrada no Omie (disponíveis: ${tabelas.map(t => t.cNome).join(', ')})`)
       }
       infAdic.codigo_tabela_preco = codTabela
     }
@@ -1428,10 +1432,13 @@ export async function obterResumoFinanceiro(): Promise<FinanceiroResumo> {
 // Handler: pedido aprovado → enviar ao Omie
 // ============================================
 
-export async function onPedidoAprovado(pedidoId: number): Promise<{ success: boolean; error?: string; omie_codigo?: string }> {
+export async function onPedidoAprovado(
+  pedidoId: number,
+  tabelaPreco?: 'A' | 'B',
+): Promise<{ success: boolean; error?: string; omie_codigo?: string }> {
   try {
-    log.info({ pedidoId }, '🚀 Pedido aprovado — enviando automaticamente ao Omie...')
-    const response = await criarPedidoOmie(pedidoId)
+    log.info({ pedidoId, tabelaPreco }, '🚀 Pedido aprovado — enviando automaticamente ao Omie...')
+    const response = await criarPedidoOmie(pedidoId, tabelaPreco)
     return {
       success: true,
       omie_codigo: String(response.codigo_pedido || ''),
