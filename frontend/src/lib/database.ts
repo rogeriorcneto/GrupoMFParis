@@ -350,6 +350,7 @@ export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
     enderecoEntregaCidade: row.endereco_entrega_cidade || undefined,
     enderecoEntregaEstado: row.endereco_entrega_estado || undefined,
     enderecoEntregaCep: row.endereco_entrega_cep || undefined,
+    tabelaPreco: row.tabela_preco || undefined,
   }
 }
 

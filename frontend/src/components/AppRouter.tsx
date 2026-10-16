@@ -107,13 +107,14 @@ export default function AppRouter({
         showToast={showToast}
         onClickCliente={(c) => setSelectedClientePanel(c)}
         onVerNoFunil={onVerNoFunil}
-        onAprovar={async (pedido) => {
+        onAprovar={async (pedido, tabela) => {
           try {
-            const result = await aprovarPedidoComOmie(pedido.id)
+            const result = await aprovarPedidoComOmie(pedido.id, tabela)
             const omieUpdate: Partial<Pedido> = {
               status: 'confirmado' as const,
               dataAprovacao: new Date().toISOString(),
               aprovadoPor: loggedUser?.id,
+              tabelaPreco: tabela,
             }
             if (result.omie?.pending) {
               addNotificacao('success', 'Pedido aprovado ✅', `Pedido ${pedido.numero} aprovado! Enviando ao Omie em background...`, pedido.clienteId)

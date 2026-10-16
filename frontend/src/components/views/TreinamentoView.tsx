@@ -1103,33 +1103,36 @@ REGRAS PARA A NOTA FINAL:
 - CONSIDERE que foi uma LIGAÇÃO POR VOZ — avalie fluência, naturalidade, uso de pausas e escuta ativa.
 - Você DEVE justificar a nota no "feedback_geral", citando exemplos reais do transcript.`
 
+    let avaliacao: any = null
     try {
       const resp = await callAI(
         [{ role: 'user', content: `TRANSCRIPT DA LIGAÇÃO:\n${transcriptTexto}\n\nDuração: ${Math.floor(duracaoFinal / 60)}min ${duracaoFinal % 60}s\n\nAGORA DÊ O FEEDBACK DETALHADO EM JSON conforme instrução.` }],
         sistemaAvaliacao
       )
       const jsonMatch = resp.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        const avaliacao = JSON.parse(jsonMatch[0])
-        setFeedbackObj(avaliacao)
-        const notaFinal = typeof avaliacao.nota === 'number' ? avaliacao.nota : null
-        const sessao: SessaoTreinamento = {
-          id: Date.now().toString(), modulo: String(moduloId), perfilId: String(perfilId),
-          msgs: transcriptFinal.map(t => ({ role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.text, ts: Date.now() })),
-          duracao: duracaoFinal, nota: notaFinal,
-          feedback: JSON.stringify(avaliacao), createdAt: new Date().toISOString()
-        }
-        const novoHist = [sessao, ...historico]
-        setHistorico(novoHist)
-        try {
-          if (onSaveSessao) await onSaveSessao(sessao, perfilAtual?.nome)
-          else if (vendedor) await saveRoleplaySession(vendedor.id, sessao, perfilAtual?.nome)
-        } catch { /* salvo localmente */ }
-      } else {
-        setFeedbackObj({ nota: null, feedback_geral: 'Não foi possível avaliar a ligação. Tente novamente.' })
+      if (jsonMatch) avaliacao = JSON.parse(jsonMatch[0])
+    } catch { /* avaliação falhou — sessão ainda é salva abaixo */ }
+
+    if (avaliacao) {
+      setFeedbackObj(avaliacao)
+    } else {
+      setFeedbackObj({ nota: null, feedback_geral: 'Não foi possível avaliar a ligação. Tente novamente.' })
+    }
+
+    // Sessão é salva SEMPRE que a ligação tem transcript — mesmo sem avaliação da IA
+    if (transcriptFinal.length > 0) {
+      const sessao: SessaoTreinamento = {
+        id: Date.now().toString(), modulo: String(moduloId), perfilId: String(perfilId),
+        msgs: transcriptFinal.map(t => ({ role: t.role === 'user' ? 'user' as const : 'assistant' as const, content: t.text, ts: Date.now() })),
+        duracao: duracaoFinal, nota: typeof avaliacao?.nota === 'number' ? avaliacao.nota : null,
+        feedback: avaliacao ? JSON.stringify(avaliacao) : JSON.stringify({ feedback_geral: 'Ligação realizada — avaliação da IA indisponível.' }),
+        createdAt: new Date().toISOString()
       }
-    } catch {
-      setFeedbackObj({ nota: null, feedback_geral: 'Erro ao avaliar a ligação. Verifique a conexão.' })
+      setHistorico([sessao, ...historico])
+      try {
+        if (onSaveSessao) await onSaveSessao(sessao, perfilAtual?.nome)
+        else if (vendedor) await saveRoleplaySession(vendedor.id, sessao, perfilAtual?.nome)
+      } catch { /* salvo localmente */ }
     }
     setCallStatus('ended')
   }

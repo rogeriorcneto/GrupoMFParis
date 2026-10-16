@@ -431,6 +431,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     categoriaPerdaSel, setCategoriaPerdaSel, confirmPerda,
     showModalAmostra, setShowModalAmostra, modalAmostraData, setModalAmostraData, confirmAmostra,
     showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
+    criarNovoCiclo,
     selectedClientePanel, setSelectedClientePanel,
 
     transicaoInvalida, pendingDrop, setPendingDrop,
@@ -771,6 +772,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           isNovoCiclo={isNovoCiclo}
           onCloseNovoCiclo={() => { setIsNovoCiclo(false); setDraggedItem(null); setPendingDrop(null) }}
           onClickCliente={handleEditCliente}
+          onCriarNovoCiclo={criarNovoCiclo}
         />
 
         {/* Busca Global */}

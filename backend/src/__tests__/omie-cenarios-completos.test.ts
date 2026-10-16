@@ -338,7 +338,7 @@ describe('criarPedidoOmie — Cenários de VENDA', () => {
     expect(pedidoOmie.cabecalho.quantidade_itens).toBe(3)
   })
 
-  it('✅ Venda 3: parcelada 30/60/90 dias — match por dias no Omie', async () => {
+  it('✅ Venda 3: parcelada 30/60/90 dias — lista explícita com código 999', async () => {
     setupMocks({
       pedido: pedidoBase({ forma_pagamento: '30/60/90 dias', total_valor: 3000 }),
       parcelasOmie: [
@@ -354,8 +354,13 @@ describe('criarPedidoOmie — Cenários de VENDA', () => {
     const incluirCall = mockOmieCall.mock.calls.find(c => c[1] === 'IncluirPedido')!
     const pedidoOmie = incluirCall[2][0]
 
-    // Deve usar o código da parcela 30/60/90
-    expect(pedidoOmie.cabecalho.codigo_parcela).toBe('P3X')
+    // API Omie: lista_parcelas customizada exige codigo_parcela '999' + qtde_parcelas
+    expect(pedidoOmie.cabecalho.codigo_parcela).toBe('999')
+    expect(pedidoOmie.cabecalho.qtde_parcelas).toBe(3)
+    expect(pedidoOmie.lista_parcelas.parcela).toHaveLength(3)
+    expect(pedidoOmie.lista_parcelas.parcela.map((p: any) => p.quantidade_dias)).toEqual([30, 60, 90])
+    const somaParcelas = pedidoOmie.lista_parcelas.parcela.reduce((s: number, p: any) => s + p.valor, 0)
+    expect(somaParcelas).toBeCloseTo(1000, 2) // soma dos itens (10 × 100)
   })
 
   it('✅ Venda 4: interestadual (cliente SP, empresa MG) — CFOP externo', async () => {

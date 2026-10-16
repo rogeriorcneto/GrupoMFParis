@@ -558,11 +558,86 @@ describe('useFunilActions', () => {
       expect(db.insertCliente).not.toHaveBeenCalled()
     })
 
-    it('card de novo ciclo inicia oculto (showNovosCiclos=false por padrão)', () => {
-      // Valida que novoCiclo cards existem mas showNovosCiclos começa false
-      // Esse comportamento é controlado pelo FunilView (useState(false))
-      // Aqui só validamos que insertCliente recebe novoCiclo: true
-      expect(true).toBe(true) // estado de UI testado no componente
+    it('cards de novo ciclo aparecem como cards normais na coluna (UI do FunilView)', () => {
+      // Cards novoCiclo em proposta não são mais filtrados para uma seção oculta —
+      // aparecem como cards normais, arrastáveis e movíveis (testado no componente)
+      expect(true).toBe(true)
+    })
+  })
+
+  describe('criarNovoCiclo', () => {
+    it('cria um NOVO card em negociacao sem mover o card original em follow_up', async () => {
+      const params = defaultParams()
+      params.clientes.push(sampleCliente({ id: 8, etapa: 'follow_up', statusFollowUp: 'concluido', cicloNumero: 1, razaoSocial: 'Cliente Ciclo' }))
+      const { result } = renderHook(() => useFunilActions(params))
+      const clienteOriginal = params.clientes[3]
+
+      let criado: any
+      await act(async () => {
+        criado = await result.current.criarNovoCiclo(clienteOriginal, { valorProposta: 5000, dataProposta: '2025-01-10' })
+      })
+
+      // Novo card é uma NOVA linha (insertCliente), com id próprio diferente do original
+      expect(db.insertCliente).toHaveBeenCalledTimes(1)
+      expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({
+        etapa: 'negociacao',
+        etapaAnterior: 'follow_up',
+        novoCiclo: true,
+        cicloNumero: 2,
+        cnpj: undefined,
+        valorProposta: 5000,
+        dataProposta: '2025-01-10',
+        statusFollowUp: undefined,
+        razaoSocial: 'Cliente Ciclo',
+      }))
+      expect(criado.id).toBe(99)
+      expect(criado.id).not.toBe(clienteOriginal.id)
+
+      // O card original NÃO é movido de etapa — é apenas marcado como "ciclo iniciado"
+      expect(db.moverClienteAtomico).not.toHaveBeenCalled()
+      expect(db.updateCliente).toHaveBeenCalledWith(8, { statusFollowUp: 'novo_ciclo_iniciado' })
+
+      // Entrada no histórico do novo card
+      expect(db.insertHistoricoEtapa).toHaveBeenCalledWith(99, expect.objectContaining({ etapa: 'negociacao', de: 'follow_up' }))
+
+      expect(params.addNotificacao).toHaveBeenCalledWith('info', expect.any(String), expect.stringContaining('Cliente Ciclo'), 99)
+    })
+
+    it('não marca o card original quando a origem não é follow_up', async () => {
+      const params = defaultParams()
+      params.clientes.push(sampleCliente({ id: 9, etapa: 'perdido', etapaAnterior: 'negociacao', cicloNumero: 1 }))
+      const { result } = renderHook(() => useFunilActions(params))
+
+      await act(async () => {
+        await result.current.criarNovoCiclo(params.clientes[3], {})
+      })
+
+      expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({
+        etapa: 'negociacao',
+        etapaAnterior: 'perdido',
+        novoCiclo: true,
+        cicloNumero: 2,
+      }))
+      expect(db.updateCliente).not.toHaveBeenCalled()
+    })
+
+    it('moverCliente no card de novo ciclo usa o id do novo card (card antigo intacto)', async () => {
+      const params = defaultParams()
+      const antigo = sampleCliente({ id: 10, etapa: 'follow_up', cicloNumero: 1 })
+      const novoCard = sampleCliente({ id: 11, etapa: 'proposta', novoCiclo: true, cicloNumero: 2 })
+      params.clientes.push(antigo, novoCard)
+      const { result } = renderHook(() => useFunilActions(params))
+
+      await act(async () => {
+        await result.current.moverCliente(11, 'negociacao', { valorProposta: 1000 })
+      })
+
+      // A RPC atômica recebe o id do NOVO card, não do card antigo em follow_up
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(
+        11, 'negociacao', 'proposta', expect.any(String), expect.objectContaining({ valorProposta: 1000 })
+      )
+      expect(db.moverClienteAtomico).not.toHaveBeenCalledWith(10, expect.anything(), expect.anything(), expect.anything(), expect.anything())
+      expect(db.updateCliente).not.toHaveBeenCalledWith(10, expect.anything())
     })
   })
 

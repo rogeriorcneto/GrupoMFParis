@@ -64,10 +64,12 @@ import {
   consultarPedidoOmie,
   onPedidoAprovado,
 } from '../omie/pedidos.js'
+import { clearCache } from '../omie/reference-data.js'
 
 describe('Omie Pedidos', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    clearCache('tabelas_preco')
     mockFrom.mockImplementation(buildFromChain)
     mockGetCreds.mockResolvedValue({ appKey: 'test-key', appSecret: 'test-secret' })
   })
@@ -412,8 +414,13 @@ describe('Omie Pedidos', () => {
       formaPagamento?: string
       parcelasOmie?: any[]
       totalValor?: number
+      cliente?: any
+      pedido?: any
+      listarClientes?: any
+      tabelasPreco?: any[]
+      upsertClienteResponse?: any
     }) {
-      const captured: { payload?: any } = {}
+      const captured: { payload?: any; upsertCliente?: any } = {}
 
       mockFrom.mockImplementation((table: string) => {
         const single = (data: any) => ({
@@ -426,6 +433,7 @@ describe('Omie Pedidos', () => {
               tipo: 'venda', omie_codigo: null, forma_pagamento: opts.formaPagamento ?? 'À vista',
               tipo_frete: 'CIF', endereco_diferente: false, total_valor: opts.totalValor ?? 0,
               observacoes: '',
+              ...(opts.pedido || {}),
             })),
             update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: null, error: null }) }),
           }
@@ -442,6 +450,7 @@ describe('Omie Pedidos', () => {
             select: vi.fn().mockReturnValue(single({
               id: 10, razao_social: 'CLIENTE TESTE', cnpj: '12345678000190',
               omie_codigo: '123', endereco_estado: 'SP',
+              ...(opts.cliente || {}),
             })),
             update: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: null, error: null }) }),
           }
@@ -462,7 +471,12 @@ describe('Omie Pedidos', () => {
       mockOmieCall.mockImplementation(async (_endpoint: string, call: string, param: any[]) => {
         switch (call) {
           case 'ListarClientes':
-            return { clientes_cadastro: [{ codigo_cliente_omie: 123, cnpj_cpf: '12345678000190' }] }
+            return opts.listarClientes ?? { clientes_cadastro: [{ codigo_cliente_omie: 123, cnpj_cpf: '12345678000190' }] }
+          case 'ListarTabelasPreco':
+            return { listaTabelasPreco: opts.tabelasPreco ?? [] }
+          case 'UpsertClienteCpfCnpj':
+            captured.upsertCliente = param[0]
+            return opts.upsertClienteResponse ?? { codigo_cliente_omie: 456 }
           case 'ListarCenarios':
             return { cenariosEncontrados: [{ nCodigo: 100, cNome: 'VENDAS', padrao: true }] }
           case 'ListarDepartamentos':
@@ -630,6 +644,264 @@ describe('Omie Pedidos', () => {
       expect(p.frete.peso_liquido).toBeCloseTo(5, 3)
       expect(p.frete.peso_bruto).toBeCloseTo(5.2, 3)
       expect(p.lista_parcelas).toBeUndefined() // à vista → sem lista
+    })
+
+    it('produto KG com cadastro Omie por embalagem (25/25.075) usa fator de tara correto', async () => {
+      // Alguns cadastros Omie guardam peso POR EMBALAGEM, não por kg.
+      // A razão bruto/líquido (= tara) é o que importa — evita peso explodido.
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 200, preco: 15.88 }],
+        produtos: {
+          7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 25.075, peso_liq: 25 },
+        },
+        formaPagamento: 'À vista',
+        totalValor: 3176,
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(200, 3)
+      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(200.6, 3) // 200 × (25.075/25)
+      expect(p.frete.peso_liquido).toBeCloseTo(200, 3)
+      expect(p.frete.peso_bruto).toBeCloseTo(200.6, 3)
+    })
+
+    it('produto sem peso_bruto no Omie recebe tara estimada (nunca bruto = líquido)', async () => {
+      // Regressão: pedido saía sem o peso da embalagem quando o cadastro
+      // Omie não tinha peso_bruto — bruto ficava igual ao líquido.
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 50, quantidade: 10, preco: 5 }],
+        produtos: {
+          50: { id: 50, nome: 'CAFE ALMOFADA GM EXTRAFORTE 500G', unidade: 'UN', peso_kg: null, omie_codigo: '9001' },
+        },
+        consultaOmiePorProduto: {
+          50: { codigo_produto: 9001, descricao: 'CAFE ALMOFADA 500G', unidade: 'UN', peso_liq: 0.5 },
+        },
+        formaPagamento: 'À vista',
+        totalValor: 50,
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(5, 3)
+      expect(p.det[0].inf_adic.peso_bruto).toBeGreaterThan(5) // bruto > líquido (tara)
+      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(5.015, 3) // 5 × 1.003
+    })
+
+    it('produto KG sem nenhum peso no Omie ainda envia bruto com embalagem', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 200, preco: 15.88 }],
+        produtos: {
+          7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG' },
+        },
+        formaPagamento: 'À vista',
+        totalValor: 3176,
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.frete.peso_liquido).toBeCloseTo(200, 3)
+      expect(p.frete.peso_bruto).toBeCloseTo(200.6, 3) // 200 × 1.003
+      expect(p.frete.peso_bruto).toBeGreaterThan(p.frete.peso_liquido)
+    })
+
+    it('quantidade_volumes conta embalagens físicas, não kg', async () => {
+      // 200kg de saco de 25kg = 8 volumes; 20kg de embalagem 1kg = 20 volumes.
+      const captured = setupHappyPath({
+        itens: [
+          { produto_id: 7, quantidade: 200, preco: 15.88 },
+          { produto_id: 10, quantidade: 20, preco: 18.05 },
+        ],
+        produtos: {
+          7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' },
+          10: { id: 10, nome: 'OKEY LAC ACAI 1KG', unidade: 'kg', peso_kg: 0.9, omie_codigo: '2071029200' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25kG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 },
+          10: { codigo_produto: 2071029200, descricao: 'OKEY LAC ACAI 1 KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 },
+        },
+        formaPagamento: 'À vista',
+        totalValor: 3537,
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.frete.quantidade_volumes).toBe(28) // 8 sacos de 25kg + 20 embalagens de 1kg
+    })
+
+    it('pedido a prazo usa codigo_parcela 999 + qtde_parcelas + lista explícita', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 100, preco: 10 }],
+        produtos: {
+          7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25kG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 },
+        },
+        formaPagamento: '7/14',
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.cabecalho.codigo_parcela).toBe('999')
+      expect(p.cabecalho.qtde_parcelas).toBe(2)
+      expect(p.lista_parcelas.parcela).toHaveLength(2)
+      expect(p.lista_parcelas.parcela[0].quantidade_dias).toBe(7)
+      expect(p.lista_parcelas.parcela[1].quantidade_dias).toBe(14)
+    })
+
+    it('forma de pagamento "N dias <texto>" gera 1 parcela no prazo correto', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25kG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 },
+        },
+        formaPagamento: '45 dias exclusivo',
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      const parcelas = captured.payload.lista_parcelas.parcela
+      expect(parcelas).toHaveLength(1)
+      expect(parcelas[0].quantidade_dias).toBe(45)
+      expect(parcelas[0].data_vencimento).toBe(fmtData(addDays(new Date(), 45)))
+    })
+
+    // ─── Cadastro automático do cliente + CPF ───
+
+    it('cliente com CPF (sem CNPJ) é localizado no Omie por cnpj_cpf', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071, descricao: 'PRODUTO X', unidade: 'UN', peso_bruto: 1, peso_liq: 1 },
+        },
+        cliente: { cnpj: null, cpf: '12345678901', omie_codigo: null },
+        listarClientes: { clientes_cadastro: [{ codigo_cliente_omie: 555, cnpj_cpf: '12345678901' }] },
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      expect(captured.payload.cabecalho.codigo_cliente).toBe(555)
+    })
+
+    it('cliente com CPF não encontrado no Omie é cadastrado automaticamente (contribuinte N)', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071, descricao: 'PRODUTO X', unidade: 'UN', peso_bruto: 1, peso_liq: 1 },
+        },
+        cliente: { cnpj: null, cpf: '12345678901', omie_codigo: null },
+        listarClientes: { clientes_cadastro: [] },
+        upsertClienteResponse: { codigo_cliente_omie: 456 },
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      expect(captured.upsertCliente.cnpj_cpf).toBe('12345678901')
+      expect(captured.upsertCliente.contribuinte).toBe('N')
+      expect(captured.payload.cabecalho.codigo_cliente).toBe(456)
+    })
+
+    it('cliente sem CNPJ/CPF usa o omie_codigo já vinculado (card de novo ciclo)', async () => {
+      // Cards de novo ciclo nascem sem CNPJ (unicidade no banco). O pedido deve
+      // achar o cliente no Omie pelo código já vinculado no CRM.
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071, descricao: 'PRODUTO X', unidade: 'UN', peso_bruto: 1, peso_liq: 1 },
+        },
+        cliente: { cnpj: null, cpf: null, omie_codigo: '123' },
+        listarClientes: { clientes_cadastro: [{ codigo_cliente_omie: 123, cnpj_cpf: '99999999999' }] },
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      expect(captured.payload.cabecalho.codigo_cliente).toBe(123)
+    })
+
+    it('cliente sem CNPJ/CPF e sem omie_codigo falha com mensagem clara', async () => {
+      setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        cliente: { cnpj: null, cpf: null, omie_codigo: null },
+      })
+
+      await expect(criarPedidoOmie(1)).rejects.toThrow('não tem CNPJ nem CPF')
+    })
+
+    // ─── Tabela de preço A/B (comissões) ───
+
+    it('pedido aprovado na tabela B envia codigo_tabela_preco correspondente', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071, descricao: 'PRODUTO X', unidade: 'UN', peso_bruto: 1, peso_liq: 1 },
+        },
+        pedido: { tabela_preco: 'B' },
+        tabelasPreco: [
+          { nCodTabPreco: 111, cNome: 'Tabela A', cCodigo: 'A', cAtiva: 'S' },
+          { nCodTabPreco: 222, cNome: 'Tabela B', cCodigo: 'B', cAtiva: 'S' },
+        ],
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      expect(captured.payload.informacoes_adicionais.codigo_tabela_preco).toBe(222)
+    })
+
+    it('tabela de preço inexistente no Omie bloqueia o pedido (comissão errada)', async () => {
+      setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        pedido: { tabela_preco: 'B' },
+        tabelasPreco: [{ nCodTabPreco: 111, cNome: 'Tabela A', cCodigo: 'A', cAtiva: 'S' }],
+      })
+
+      await expect(criarPedidoOmie(1)).rejects.toThrow('Tabela de preço "B" não encontrada no Omie')
+    })
+
+    it('Omie sem tabelas cadastradas ignora a seleção sem quebrar o pedido', async () => {
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 10, preco: 100 }],
+        produtos: {
+          7: { id: 7, nome: 'PRODUTO X', unidade: 'un', peso_kg: 1, omie_codigo: '2071' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071, descricao: 'PRODUTO X', unidade: 'UN', peso_bruto: 1, peso_liq: 1 },
+        },
+        pedido: { tabela_preco: 'B' },
+        tabelasPreco: [],
+        totalValor: 1000,
+      })
+
+      await criarPedidoOmie(1)
+      expect(captured.payload.informacoes_adicionais.codigo_tabela_preco).toBeUndefined()
     })
   })
 })

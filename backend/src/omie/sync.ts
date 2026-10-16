@@ -8,10 +8,11 @@ import type { OmieCliente, OmieClienteListResponse } from './types.js'
 // ============================================
 
 export function crmToOmie(cliente: any): Partial<OmieCliente> {
+  const doc = String(cliente.cnpj || cliente.cpf || '').replace(/\D/g, '')
   return {
     razao_social: cliente.razao_social || cliente.razaoSocial || '',
     nome_fantasia: cliente.nome_fantasia || cliente.nomeFantasia || '',
-    cnpj_cpf: cliente.cnpj || '',
+    cnpj_cpf: cliente.cnpj || cliente.cpf || '',
     contato: cliente.contato_nome || cliente.contatoNome || '',
     email: cliente.contato_email || cliente.contatoEmail || '',
     telefone1_numero: cliente.contato_telefone || cliente.contatoTelefone || '',
@@ -25,15 +26,19 @@ export function crmToOmie(cliente: any): Partial<OmieCliente> {
     cep: cliente.endereco_cep || cliente.enderecoCep || '',
     cnae: cliente.cnae_primario || cliente.cnaePrimario || '',
     observacao: cliente.notas || '',
-    contribuinte: 'S',
+    // Pessoa física (CPF) não é contribuinte de ICMS
+    contribuinte: doc.length === 11 ? 'N' : 'S',
   }
 }
 
 export function omieToDbRow(omie: OmieCliente): Record<string, any> {
+  // Omie guarda CPF e CNPJ no mesmo campo — separa pelo tamanho no CRM
+  const doc = (omie.cnpj_cpf || '').replace(/\D/g, '')
   return {
     razao_social: omie.razao_social || '',
     nome_fantasia: omie.nome_fantasia || '',
-    cnpj: omie.cnpj_cpf || '',
+    cnpj: doc.length === 11 ? '' : (omie.cnpj_cpf || ''),
+    cpf: doc.length === 11 ? omie.cnpj_cpf : null,
     inscricao_estadual: omie.inscricao_estadual || '',
     contato_nome: omie.contato || '',
     contato_email: omie.email || '',

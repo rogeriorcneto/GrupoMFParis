@@ -440,6 +440,8 @@ export interface Pedido {
   enderecoEntregaCidade?: string
   enderecoEntregaEstado?: string
   enderecoEntregaCep?: string
+  /** Tabela de preço Omie (A/B) — selecionada na aprovação; afeta comissões */
+  tabelaPreco?: 'A' | 'B'
 }
 
 export interface FunilViewProps {

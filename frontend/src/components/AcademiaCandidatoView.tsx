@@ -84,6 +84,8 @@ export default function AcademiaCandidatoView() {
   const chatRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const msgsRef = useRef<MsgChat[]>([])
+  const sessaoEmAndamentoRef = useRef<{ inicio: number; moduloTitulo: string; perfilId: string; perfilNome: string } | null>(null)
 
   // Valida o token e carrega módulos/perfis + histórico do candidato
   useEffect(() => {
@@ -208,6 +210,52 @@ ${instrucoesModulo}${instrucoesPerfil}
 Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor da MF Paris / Okeylac. Responda como se estivesse digitando no celular, de forma natural, objetiva e no ritmo de uma conversa por mensagem.`
   }, [moduloId, perfilId, modulos, perfis])
 
+  // Mantém msgs atualizadas num ref para o auto-save ao fechar a página
+  useEffect(() => { msgsRef.current = msgs }, [msgs])
+
+  // Se o candidato fechar/sair da aba no meio do treino, salva a sessão parcial (best-effort)
+  useEffect(() => {
+    const onPageHide = () => {
+      const s = sessaoEmAndamentoRef.current
+      if (!s || msgsRef.current.length === 0 || !token) return
+      const msgsTrim = msgsRef.current.slice(-30).map(m => ({ ...m, content: m.content.slice(0, 1000) }))
+      try {
+        fetch(`${BOT_URL}/api/academia/sessao`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({
+            token,
+            modulo: s.moduloTitulo,
+            perfilId: s.perfilId,
+            perfilNome: s.perfilNome,
+            mensagens: msgsTrim,
+            duracaoSegundos: Math.max(0, Math.floor((Date.now() - s.inicio) / 1000)),
+            nota: null,
+            feedback: { feedback_geral: 'Treino encerrado antes da avaliação da IA.' },
+          }),
+        })
+      } catch { /* best-effort */ }
+    }
+    window.addEventListener('pagehide', onPageHide)
+    return () => window.removeEventListener('pagehide', onPageHide)
+  }, [token])
+
+  // POST com checagem de resposta + 1 retry (no mobile o fetch pode falhar por rede)
+  const postSessao = useCallback(async (payload: Record<string, unknown>) => {
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      try {
+        const r = await fetch(`${BOT_URL}/api/academia/sessao`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (r.ok) return
+      } catch { /* tenta de novo */ }
+    }
+    throw new Error('save failed')
+  }, [])
+
   // Salva a sessão no backend (usado pelo roleplay de texto e pela ligação por voz)
   const salvarSessaoBackend = useCallback(async (dados: {
     msgsFinal: MsgChat[]; duracao: number; notaFinal: number | null; avaliacao: any
@@ -220,22 +268,19 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     }
     setHistorico(prev => [nova, ...prev])
     try {
-      await fetch(`${BOT_URL}/api/academia/sessao`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          modulo: modulo?.titulo || '',
-          perfilId: String(perfilId || ''),
-          perfilNome: perfil?.nome || '',
-          mensagens: dados.msgsFinal,
-          duracaoSegundos: dados.duracao,
-          nota: dados.notaFinal,
-          feedback: dados.avaliacao,
-        }),
+      await postSessao({
+        token,
+        modulo: modulo?.titulo || '',
+        perfilId: String(perfilId || ''),
+        perfilNome: perfil?.nome || '',
+        mensagens: dados.msgsFinal,
+        duracaoSegundos: dados.duracao,
+        nota: dados.notaFinal,
+        feedback: dados.avaliacao,
       })
+      sessaoEmAndamentoRef.current = null
     } catch { /* sessão fica só na tela */ }
-  }, [moduloId, perfilId, modulos, perfis, token])
+  }, [moduloId, perfilId, modulos, perfis, token, postSessao])
 
   // Callback para o LigarView (sessão por voz) — converte SessaoTreinamento → formato do backend
   const salvarSessaoVoz = useCallback(async (sessao: SessaoTreinamento, perfilNome?: string) => {
@@ -248,25 +293,29 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     }
     setHistorico(prev => [nova, ...prev])
     try {
-      await fetch(`${BOT_URL}/api/academia/sessao`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          modulo: modulo?.titulo || sessao.modulo,
-          perfilId: sessao.perfilId,
-          perfilNome: perfilNome || '',
-          mensagens: sessao.msgs,
-          duracaoSegundos: sessao.duracao,
-          nota: sessao.nota,
-          feedback: avaliacao,
-        }),
+      await postSessao({
+        token,
+        modulo: modulo?.titulo || sessao.modulo,
+        perfilId: sessao.perfilId,
+        perfilNome: perfilNome || '',
+        mensagens: sessao.msgs,
+        duracaoSegundos: sessao.duracao,
+        nota: sessao.nota,
+        feedback: avaliacao,
       })
     } catch { /* sessão fica só na tela */ }
-  }, [modulos, token])
+  }, [modulos, token, postSessao])
 
   const iniciarSessao = async () => {
     if (!moduloId) return
+    const moduloSel = modulos.find(m => m.id === moduloId)
+    const perfilSel = perfis.find(p => p.id === perfilId)
+    sessaoEmAndamentoRef.current = {
+      inicio: Date.now(),
+      moduloTitulo: moduloSel?.titulo || '',
+      perfilId: String(perfilId || ''),
+      perfilNome: perfilSel?.nome || '',
+    }
     setTempoInicio(Date.now())
     setDuracaoAtual(0)
     setMsgs([])

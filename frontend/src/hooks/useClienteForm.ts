@@ -3,7 +3,7 @@ import type { Cliente, Interacao, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
 import { formatCNPJ, formatCPF, formatTelefone, validarCNPJ, validarCPF } from '../utils/validators'
 import { logger } from '../utils/logger'
-import { fetchCnpjViaBackend } from '../lib/botApi'
+import { fetchCnpjViaBackend, sincronizarClienteOmie } from '../lib/botApi'
 
 const emptyForm: FormData = {
   razaoSocial: '', nomeFantasia: '', cnpj: '', cpf: '', inscricaoEstadual: '', cnpj2: '', contatoNome: '',
@@ -220,6 +220,10 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         }
         setEditingCliente(null)
         showToast('success', `Cliente "${formData.razaoSocial}" atualizado com sucesso!`)
+        // Sync automático para o Omie quando há CNPJ/CPF (background)
+        if (formData.cnpj?.trim() || formData.cpf?.trim()) {
+          sincronizarClienteOmie(editingCliente.id).catch(err => logger.warn('Sync Omie falhou (edição):', err))
+        }
       } else {
         const savedC = await db.insertCliente({
           ...clienteFields,
@@ -249,6 +253,10 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
           } catch (err) {
             logger.error('Não foi possível registrar nota com dados da empresa:', err)
           }
+        }
+        // Cadastro automático no Omie quando o cliente tem CNPJ/CPF (background)
+        if (savedC.cnpj?.trim() || savedC.cpf?.trim()) {
+          sincronizarClienteOmie(savedC.id).catch(err => logger.warn('Sync Omie falhou (cadastro):', err))
         }
       }
     } catch (err: any) {

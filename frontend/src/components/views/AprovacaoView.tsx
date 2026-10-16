@@ -43,7 +43,7 @@ interface AprovacaoViewProps {
   clientes: Cliente[]
   vendedores: Vendedor[]
   loggedUser: Vendedor
-  onAprovar: (pedido: Pedido) => Promise<void>
+  onAprovar: (pedido: Pedido, tabela?: 'A' | 'B') => Promise<void>
   onRecusar: (pedido: Pedido, motivo: string) => Promise<void>
   onConfirmarCancelamento?: (pedido: Pedido) => Promise<void>
   onRejeitarCancelamento?: (pedido: Pedido) => Promise<void>
@@ -76,6 +76,8 @@ export default function AprovacaoView({
   const [activeTab, setActiveTab] = useState<'pendentes' | 'cancelamentos' | 'amostras' | 'historico' | 'parametros'>('pendentes')
   const [loadingCancelId, setLoadingCancelId] = useState<number | null>(null)
   const [pdfLoadingId, setPdfLoadingId] = useState<number | null>(null)
+  // Tabela de preço Omie (A/B) por pedido — afeta comissões
+  const [tabelaPorPedido, setTabelaPorPedido] = useState<Record<number, 'A' | 'B'>>({})
 
   // Parâmetros de auto-aprovação
   const [params, setParams] = useState<ParametrosAprovacao>(() => getParametrosAprovacao())
@@ -168,7 +170,7 @@ export default function AprovacaoView({
   const handleAprovar = async (pedido: Pedido) => {
     setLoadingId(pedido.id)
     try {
-      await onAprovar(pedido)
+      await onAprovar(pedido, tabelaPorPedido[pedido.id] ?? pedido.tabelaPreco ?? 'A')
       // Após aprovação, o pedido terá omieCodigo ou omieErro atualizado no state
       // Vamos marcar localmente para feedback imediato
       const updated = pedidos.find(p => p.id === pedido.id)
@@ -439,23 +441,48 @@ export default function AprovacaoView({
 
           {/* Action buttons */}
           {showActions && !isRecusando && (
-            <div className="flex gap-3 mt-4 pt-3 border-t border-gray-100">
-              <button
-                onClick={() => handleAprovar(pedido)}
-                disabled={isLoading}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
-              >
-                {isLoading ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <CheckCircleIcon className="h-4 w-4" />}
-                Aprovar Pedido
-              </button>
-              <button
-                onClick={() => { setRecusandoId(pedido.id); setMotivoRecusa('') }}
-                disabled={isLoading}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 border border-red-200 text-sm font-semibold rounded-apple transition-colors"
-              >
-                <XCircleIcon className="h-4 w-4" />
-                Recusar
-              </button>
+            <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
+              {/* Tabela de preço Omie (A/B) — afeta comissões */}
+              {pedido.tipo !== 'bonificacao' && (
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-gray-600">Tabela de preço:</span>
+                  <div className="flex rounded-apple border border-gray-300 overflow-hidden">
+                    {(['A', 'B'] as const).map(t => {
+                      const ativo = (tabelaPorPedido[pedido.id] ?? pedido.tabelaPreco ?? 'A') === t
+                      return (
+                        <button
+                          key={t}
+                          onClick={() => setTabelaPorPedido(prev => ({ ...prev, [pedido.id]: t }))}
+                          disabled={isLoading}
+                          className={`px-4 py-1.5 text-xs font-bold transition-colors ${ativo ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                          title={`Aprovar com tabela ${t} (afeta comissões no Omie)`}
+                        >
+                          Tabela {t}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <span className="text-[10px] text-gray-400">afeta comissões</span>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleAprovar(pedido)}
+                  disabled={isLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
+                >
+                  {isLoading ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <CheckCircleIcon className="h-4 w-4" />}
+                  Aprovar Pedido
+                </button>
+                <button
+                  onClick={() => { setRecusandoId(pedido.id); setMotivoRecusa('') }}
+                  disabled={isLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 border border-red-200 text-sm font-semibold rounded-apple transition-colors"
+                >
+                  <XCircleIcon className="h-4 w-4" />
+                  Recusar
+                </button>
+              </div>
             </div>
           )}
 

@@ -1241,6 +1241,20 @@ app.use('/api/gemini-stream', requireAuth, geminiStreamRouter)
 // Streaming de áudio via WebSocket para delay mínimo
 app.use('/api/tts-websocket', requireAuth, ttsWebSocketRouter)
 
+// ─── Sync individual de cliente → Omie (qualquer usuário logado que cadastre cliente) ───
+app.post('/api/omie/sync/cliente/:id', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  try {
+    const clienteId = Number(req.params.id)
+    if (!clienteId) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+    const { syncPushSingleCliente } = await import('./omie/sync.js')
+    const result = await syncPushSingleCliente(clienteId)
+    res.json(result)
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao enviar cliente ao Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
 app.use('/api/places', requireAuth, placesRouter)
@@ -1283,13 +1297,18 @@ app.post('/api/pedidos/:id/aprovar', requireAuth, requireGerente, async (req, re
       .single()
     const aprovadoPorId = vendedorData?.id || null
 
+    // Tabela de preço (A/B) escolhida na tela de aprovação — vai para o pedido Omie
+    const tabela = req.body?.tabela === 'B' ? 'B' : (req.body?.tabela === 'A' ? 'A' : undefined)
+    const updateData: Record<string, any> = {
+      status: 'confirmado',
+      aprovado_por: aprovadoPorId,
+      data_aprovacao: new Date().toISOString(),
+    }
+    if (tabela) updateData.tabela_preco = tabela
+
     const { error: updateErr } = await supabase
       .from('pedidos')
-      .update({
-        status: 'confirmado',
-        aprovado_por: aprovadoPorId,
-        data_aprovacao: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', pedidoId)
 
     if (updateErr) {

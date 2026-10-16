@@ -492,6 +492,66 @@ export async function mapFormaPagamentoToCodigoParcelaOmie(
 }
 
 // ============================================
+// Tabelas de Preço (A/B — afetam comissões)
+// ============================================
+
+export interface OmieTabelaPreco {
+  nCodTabPreco: number
+  cNome: string
+  cCodigo: string
+  cAtiva: string
+}
+
+export async function fetchTabelasPreco(creds?: OmieCredentials): Promise<OmieTabelaPreco[]> {
+  const cached = getCached<OmieTabelaPreco[]>('tabelas_preco')
+  if (cached) return cached
+
+  const credentials = creds || await getOmieCredentials()
+  if (!credentials) throw new Error('Credenciais Omie não configuradas')
+
+  try {
+    const response = await omieCall<any>(
+      '/produtos/tabelaprecos/',
+      'ListarTabelasPreco',
+      [{ nPagina: 1, nRegPorPagina: 100 }],
+      { credentials }
+    )
+    const tabelas: OmieTabelaPreco[] = (response.listaTabelasPreco || response.cadastros || []).map((t: any) => ({
+      nCodTabPreco: t.nCodTabPreco || 0,
+      cNome: t.cNome || '',
+      cCodigo: t.cCodigo || '',
+      cAtiva: t.cAtiva || 'S',
+    }))
+    setCache('tabelas_preco', tabelas)
+    log.info({ count: tabelas.length, tabelas: tabelas.map(t => t.cNome) }, 'Tabelas de preço carregadas do Omie')
+    return tabelas
+  } catch (err) {
+    log.warn({ err }, 'Não foi possível buscar tabelas de preço do Omie')
+    return []
+  }
+}
+
+/**
+ * Resolve o código interno (nCodTabPreco) da tabela de preço pelo nome/código
+ * exibido no Omie. Aceita 'A', 'B', 'Tabela A', 'TABELA B' etc. 0 se não achar.
+ */
+export async function getCodigoTabelaPreco(nome: string, creds?: OmieCredentials): Promise<number> {
+  const alvo = nome.trim().toLowerCase()
+  if (!alvo) return 0
+  const tabelas = await fetchTabelasPreco(creds)
+  const norm = (s: string) => s.toLowerCase().replace(/^tabela\s+/, '').trim()
+  const tabela = tabelas.find(t =>
+    t.cAtiva !== 'N' &&
+    (norm(t.cNome) === alvo || norm(t.cCodigo) === alvo)
+  )
+  if (!tabela) {
+    log.warn({ nome, disponiveis: tabelas.map(t => t.cNome) }, '⚠️ Tabela de preço não encontrada no Omie')
+    return 0
+  }
+  return tabela.nCodTabPreco
+}
+
+// ============================================
 // Dados da Empresa (estado para CFOP)
 // ============================================
 

@@ -14,7 +14,8 @@ import {
   getContaBancoBrasil,
   getLocalEstoqueVilaParis,
   getEstadoEmpresa,
-  mapFormaPagamentoToCodigoParcelaOmie,
+  fetchTabelasPreco,
+  getCodigoTabelaPreco,
 } from './reference-data.js'
 
 // ============================================
@@ -45,52 +46,76 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
   const creds = await getOmieCredentials()
   if (!creds) throw new Error('Credenciais Omie não configuradas')
 
-  const cnpj = String(cliente.cnpj || '').replace(/\D/g, '')
-  if (!cnpj) throw new Error(`Cliente ${clienteId} (${cliente.razao_social}) não tem CNPJ. Cadastre o CNPJ primeiro.`)
+  // CNPJ ou CPF — o campo cnpj_cpf do Omie aceita ambos (11 ou 14 dígitos).
+  const doc = String(cliente.cnpj || cliente.cpf || '').replace(/\D/g, '')
 
-  // Sempre consultar pelo CNPJ: o código salvo no CRM pode estar desatualizado.
+  // Sem documento (ex.: card de novo ciclo, que nasce sem CNPJ por causa da
+  // unicidade): localizar pelo código Omie já vinculado no CRM.
+  if (doc.length < 11) {
+    const codigoVinculado = parseInt(String(cliente.omie_codigo || ''), 10)
+    if (!Number.isInteger(codigoVinculado) || codigoVinculado <= 0) {
+      throw new Error(`Cliente ${clienteId} (${cliente.razao_social}) não tem CNPJ nem CPF. Cadastre um documento primeiro.`)
+    }
+    let encontradoPorCodigo = false
+    try {
+      const busca = await omieCall<any>(
+        '/geral/clientes/',
+        'ListarClientes',
+        [{ pagina: 1, registros_por_pagina: 5, clientesFiltro: { codigo_cliente_omie: codigoVinculado } }],
+        { skipCache: true, credentials: creds }
+      )
+      encontradoPorCodigo = (busca?.clientes_cadastro || []).some((item: any) => Number(item?.codigo_cliente_omie) === codigoVinculado)
+    } catch { /* cai no erro abaixo */ }
+    if (encontradoPorCodigo) {
+      log.info({ clienteId, codigoOmie: codigoVinculado }, '🔗 Cliente sem CNPJ/CPF localizado pelo código Omie vinculado')
+      return codigoVinculado
+    }
+    throw new Error(`Cliente ${clienteId} (${cliente.razao_social}) não tem CNPJ/CPF e o código Omie ${codigoVinculado} não foi localizado no Omie. Cadastre um documento no cliente.`)
+  }
+
+  // Sempre consultar pelo documento: o código salvo no CRM pode estar desatualizado.
   let busca: any
   try {
     busca = await omieCall<any>(
       '/geral/clientes/',
       'ListarClientes',
-      [{ pagina: 1, registros_por_pagina: 5, clientesFiltro: { cnpj_cpf: cnpj } }],
+      [{ pagina: 1, registros_por_pagina: 5, clientesFiltro: { cnpj_cpf: doc } }],
       { skipCache: true, credentials: creds }
     )
   } catch (err: any) {
-    throw new Error(`Não foi possível consultar o cliente pelo CNPJ ${cnpj} no Omie: ${err?.message || 'erro de comunicação'}`)
+    throw new Error(`Não foi possível consultar o cliente pelo CNPJ/CPF ${doc} no Omie: ${err?.message || 'erro de comunicação'}`)
   }
 
   const encontrado = busca?.clientes_cadastro?.find((item: any) => {
     const cnpjOmie = String(item?.cnpj_cpf || '').replace(/\D/g, '')
-    return !cnpjOmie || cnpjOmie === cnpj
+    return !cnpjOmie || cnpjOmie === doc
   })
 
   if (encontrado?.codigo_cliente_omie) {
     const codigoOmie = Number(encontrado.codigo_cliente_omie)
     if (!Number.isInteger(codigoOmie) || codigoOmie <= 0) {
-      throw new Error(`Omie retornou código inválido para o cliente CNPJ ${cnpj}`)
+      throw new Error(`Omie retornou código inválido para o cliente CNPJ/CPF ${doc}`)
     }
     if (String(cliente.omie_codigo || '') !== String(codigoOmie)) {
       await supabase.from('clientes').update({ omie_codigo: String(codigoOmie) }).eq('id', clienteId)
     }
-    log.info({ clienteId, codigoOmie, cnpj }, '🔗 Cliente localizado por CNPJ no Omie — código sincronizado no CRM')
+    log.info({ clienteId, codigoOmie, doc }, '🔗 Cliente localizado por CNPJ/CPF no Omie — código sincronizado no CRM')
     return codigoOmie
   }
 
   // Não criar outro registro se já havia um vínculo no CRM, mas o Omie não o encontrou.
   if (cliente.omie_codigo) {
-    throw new Error(`Cliente CNPJ ${cnpj} não foi encontrado no Omie, embora o CRM tenha o código ${cliente.omie_codigo}. Verifique o cadastro antes de enviar.`)
+    throw new Error(`Cliente CNPJ/CPF ${doc} não foi encontrado no Omie, embora o CRM tenha o código ${cliente.omie_codigo}. Verifique o cadastro antes de enviar.`)
   }
 
-  // 2. Criar via Upsert somente quando o CNPJ realmente não existe no Omie.
-  log.info({ clienteId, cnpj, razao: cliente.razao_social }, '🔄 Cliente não encontrado por CNPJ — criando no Omie...')
+  // 2. Criar via Upsert somente quando o documento realmente não existe no Omie.
+  log.info({ clienteId, doc, razao: cliente.razao_social }, '🔄 Cliente não encontrado por CNPJ/CPF — criando no Omie...')
 
-  // Email: Omie exige email. Se não tiver, gerar um baseado no CNPJ.
-  const emailFinal = (cliente.contato_email || '').trim() || `${cnpj}@semcontato.grupoparis.com.br`
+  // Email: Omie exige email. Se não tiver, gerar um baseado no documento.
+  const emailFinal = (cliente.contato_email || '').trim() || `${doc}@semcontato.grupoparis.com.br`
 
   const omieData = {
-    cnpj_cpf: cnpj,
+    cnpj_cpf: doc,
     razao_social: cliente.razao_social || '',
     nome_fantasia: cliente.nome_fantasia || cliente.razao_social || '',
     contato: cliente.contato_nome || '',
@@ -105,7 +130,8 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
     estado: cliente.endereco_estado || 'SP',
     cep: (cliente.endereco_cep || '01001000').replace(/\D/g, ''),
     inscricao_estadual: cliente.inscricao_estadual || '',
-    contribuinte: 'S',
+    // Pessoa física (CPF) não é contribuinte de ICMS
+    contribuinte: doc.length === 14 ? 'S' : 'N',
   }
 
   let response: any
@@ -122,7 +148,7 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
     const isAddressError = errMsg.includes('cidade') || errMsg.includes('bairro') || errMsg.includes('cep') || errMsg.includes('endereco') || errMsg.includes('endereço') || errMsg.includes('estado')
     if (!isAddressError) throw firstErr
 
-    log.warn({ clienteId, cnpj, firstErr: firstErr.message }, '⚠️ UpsertClienteCpfCnpj falhou por endereço — retentando com endereço mínimo...')
+    log.warn({ clienteId, doc, firstErr: firstErr.message }, '⚠️ UpsertClienteCpfCnpj falhou por endereço — retentando com endereço mínimo...')
     const omieDataMinimo = {
       ...omieData,
       endereco: 'Não informado',
@@ -143,7 +169,7 @@ async function garantirClienteOmie(clienteId: number): Promise<number> {
 
   const codigoOmie = response.codigo_cliente_omie
   if (!codigoOmie) {
-    throw new Error(`Omie não retornou codigo_cliente_omie para CNPJ ${cnpj}`)
+    throw new Error(`Omie não retornou codigo_cliente_omie para CNPJ/CPF ${doc}`)
   }
 
   // Salvar código Omie no CRM
@@ -173,6 +199,8 @@ interface ProdutoOmieResult {
   pesoKg: number          // mantido para compatibilidade (alias do pesoBruto)
   pesoBruto: number
   pesoLiquido: number
+  vendidoPorKg: boolean
+  pesoEmbalagem: number   // tamanho da embalagem em kg, extraído do nome (ex.: "25KG" → 25)
   valorUnitario: number
 }
 
@@ -223,6 +251,13 @@ function arredondar3(n: number): number {
   return Math.round(n * 1000) / 1000
 }
 
+/**
+ * Fator de embalagem padrão (tara) usado quando o cadastro do produto no Omie
+ * não informa peso_bruto. +0,3% sobre o líquido — mesma razão usada no
+ * cadastro Okey Lac (1.000 líq / 1.003 bruto por kg).
+ */
+const TARA_PADRAO_EMBALAGEM = 1.003
+
 function calcularPesoTotal(quantidade: number, pesoKg: number, unidade: string): number {
   if (quantidade <= 0) throw new Error('Quantidade do item deve ser maior que zero')
   // Se temos peso unitário (do Omie, CRM ou nome do produto), multiplica pela quantidade.
@@ -230,7 +265,9 @@ function calcularPesoTotal(quantidade: number, pesoKg: number, unidade: string):
   const unidadeNormalizada = String(unidade || '').trim().toUpperCase()
   // Fallback: quando a unidade é KG e não temos peso unitário, a quantidade é o próprio peso.
   if (unidadeNormalizada === 'KG' || unidadeNormalizada === 'KGS') return arredondar3(quantidade)
-  throw new Error(`Peso unitário não informado para produto vendido em ${unidade || 'unidade'}`)
+  // Sem nenhum dado de peso: envia 0 e avisa — não bloqueia o pedido inteiro.
+  log.warn({ unidade }, '⚠️ Peso unitário não informado — item enviado com peso 0. Complete o cadastro do produto no Omie.')
+  return 0
 }
 
 function buildMetaProduto(produto: any, consultaOmie?: any) {
@@ -243,23 +280,49 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
 
   let pesoLiquido: number
   let pesoBruto: number
+  let pesoBrutoEstimado = false
   if (vendidoPorKg) {
-    // Produto vendido por KG: a quantidade do item já é o peso em kg e o
-    // cadastro Omie guarda peso por kg (~1.0 líquido / ~1.003 bruto c/ embalagem).
+    // Produto vendido por KG: a quantidade do item já é o peso líquido em kg,
+    // então o peso líquido unitário é sempre 1. O bruto é o fator de embalagem
+    // (tara) derivado do cadastro Omie — funciona tanto para cadastro por kg
+    // (1.000/1.003) quanto por embalagem (25.000/25.075).
     // O peso_kg do CRM e o peso do nome são o tamanho da embalagem (ex.: 25KG) —
     // nunca podem ser tratados como peso unitário da venda.
-    pesoLiquido = pesoOmieLiq || 1
-    pesoBruto = pesoOmieBruto || pesoLiquido
+    pesoLiquido = 1
+    if (pesoOmieLiq > 0 && pesoOmieBruto > 0) {
+      pesoBruto = arredondar3(pesoOmieBruto / pesoOmieLiq)
+      if (pesoBruto < 1) pesoBruto = 1
+    } else if (pesoOmieBruto > 0) {
+      pesoBruto = pesoOmieBruto
+    } else {
+      pesoBruto = TARA_PADRAO_EMBALAGEM
+      pesoBrutoEstimado = true
+    }
   } else {
     // Vendido por unidade/fardo/caixa: líquido vem do cadastro Omie, do peso
-    // declarado no nome (conteúdo líquido) ou do CRM. O bruto só vem do cadastro
-    // Omie; sem ele, aproximamos pelo líquido (nunca pelo nome, que é líquido).
+    // declarado no nome (conteúdo líquido) ou do CRM. O bruto vem do cadastro
+    // Omie; sem ele, estimamos pela tara padrão da embalagem.
     pesoLiquido = pesoOmieLiq || pesoNome || pesoCrm || 0
-    pesoBruto = pesoOmieBruto || pesoLiquido
+    if (pesoOmieBruto > 0) {
+      pesoBruto = pesoOmieBruto
+    } else if (pesoLiquido > 0) {
+      // Sem arredondar aqui: o arredondamento acontece no total do item,
+      // senão a tara se perde em pesos unitários pequenos.
+      pesoBruto = pesoLiquido * TARA_PADRAO_EMBALAGEM
+      pesoBrutoEstimado = true
+    } else {
+      pesoBruto = 0
+    }
   }
   // Saneamento: bruto nunca pode ser menor que líquido.
   if (pesoBruto > 0 && pesoLiquido > 0 && pesoBruto < pesoLiquido) {
     pesoBruto = pesoLiquido
+  }
+  if (pesoBrutoEstimado) {
+    log.warn(
+      { produto: produto?.nome, pesoLiquido, pesoBruto },
+      '⚠️ Produto sem peso_bruto no cadastro Omie — tara da embalagem estimada (0,3%). Complete o cadastro no Omie para peso exato.'
+    )
   }
 
   return {
@@ -273,6 +336,8 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
     pesoBruto,
     pesoLiquido,
     pesoKg: pesoBruto,
+    vendidoPorKg,
+    pesoEmbalagem: vendidoPorKg ? pesoNome : 0,
     valorUnitario: toNumberSafe(consultaOmie?.valor_unitario) || toNumberSafe(produto?.preco) || 0,
   }
 }
@@ -464,14 +529,14 @@ function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisao
 
   // À vista → 1 parcela no vencimento base
   if (fpLower === 'à vista' || fpLower === 'a vista') {
-    return [{ numero_parcela: 1, data_vencimento: dataPrevisaoStr, percentual: 100, valor: round2(totalPedido) }]
+    return [{ numero_parcela: 1, data_vencimento: dataPrevisaoStr, quantidade_dias: 0, percentual: 100, valor: round2(totalPedido) }]
   }
 
-  // "N dias" → 1 parcela com N dias de prazo
-  const matchDias = fpLower.match(/^(\d+)\s*dias?$/)
-  if (matchDias) {
+  // "N dias" (também "N dias <qualquer texto>") → 1 parcela com N dias de prazo
+  const matchDias = fpLower.match(/(\d+)\s*dias?/)
+  if (matchDias && !fp.includes('/')) {
     const dias = parseInt(matchDias[1], 10)
-    return [{ numero_parcela: 1, data_vencimento: formatDataOmie(addDays(baseDate, dias)), percentual: 100, valor: round2(totalPedido) }]
+    return [{ numero_parcela: 1, data_vencimento: formatDataOmie(addDays(baseDate, dias)), quantidade_dias: dias, percentual: 100, valor: round2(totalPedido) }]
   }
 
   // "D1/D2/.../Dn" → N parcelas iguais, cada uma com o prazo em dias da data base
@@ -492,13 +557,21 @@ function gerarParcelas(formaPagamento: string, totalPedido: number, dataPrevisao
     return diasParcelas.map((dias, idx) => ({
       numero_parcela: idx + 1,
       data_vencimento: formatDataOmie(addDays(baseDate, dias)),
+      quantidade_dias: dias,
       percentual: idx === n - 1 ? ultimoPct : pct,
       valor: idx === n - 1 ? ultimaP : valorParcela,
     }))
   }
 
+  // Último caso: forma com um único número solto (ex.: "45") → 1 parcela
+  const matchUnico = fpLower.match(/(\d+)/)
+  if (matchUnico) {
+    const dias = parseInt(matchUnico[1], 10)
+    return [{ numero_parcela: 1, data_vencimento: formatDataOmie(addDays(baseDate, dias)), quantidade_dias: dias, percentual: 100, valor: round2(totalPedido) }]
+  }
+
   // Fallback: à vista
-  return [{ numero_parcela: 1, data_vencimento: dataPrevisaoStr, percentual: 100, valor: round2(totalPedido) }]
+  return [{ numero_parcela: 1, data_vencimento: dataPrevisaoStr, quantidade_dias: 0, percentual: 100, valor: round2(totalPedido) }]
 }
 
 // ============================================
@@ -607,7 +680,13 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     const prodOmie = await garantirProdutoOmie(item.produto_id)
     const quantidade = toNumberSafe(item.quantidade)
 
-    totalVolumes += quantidade
+    // Volumes = embalagens físicas, não a quantidade de venda.
+    // KG: quantidade em kg ÷ tamanho da embalagem (ex.: 200kg de saco 25kg = 8 volumes).
+    // Unidade: cada unidade é um volume.
+    const volumesItem = prodOmie.vendidoPorKg
+      ? Math.max(1, Math.ceil(quantidade / (prodOmie.pesoEmbalagem > 0 ? prodOmie.pesoEmbalagem : quantidade)))
+      : Math.max(1, Math.ceil(quantidade))
+    totalVolumes += volumesItem
     if (prodOmie.especieVolume) especieVolume = prodOmie.especieVolume
     if (prodOmie.marca) marcaVolumes = prodOmie.marca
 
@@ -665,7 +744,17 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   const formaPagamento = tipoPedido === 'bonificacao'
     ? 'À vista'
     : (pedido.forma_pagamento || 'À vista').trim()
-  const { codigo: codigoParcela, usarListaParcelas } = await mapFormaPagamentoToCodigoParcelaOmie(formaPagamento, creds)
+  const fpNormalizada = formaPagamento
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+  const ehAVista = fpNormalizada === 'a vista' || fpNormalizada === 'avista'
+
+  // Per a API Omie: lista_parcelas customizada só é aceita com codigo_parcela '999'.
+  // Para garantir que cada parcela saia exatamente como o CRM (datas e valores),
+  // sempre enviamos '999' + qtde_parcelas + lista_parcelas quando não é à vista.
+  const codigoParcela = ehAVista ? '000' : '999'
 
   // 5. Cabeçalho do pedido
   const cabecalho: any = {
@@ -718,6 +807,20 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
   if (contaBB) infAdic.codigo_conta_corrente = contaBB
   if (codigoVendedorOmie) infAdic.codVend = codigoVendedorOmie
 
+  // Tabela de preço (A/B) — selecionada na aprovação do pedido; afeta comissões
+  // no Omie. Se o Omie não tem nenhuma tabela cadastrada, ignora a seleção.
+  // Se tem tabelas e a escolhida não existe, erro (comissão sairia errada).
+  if (pedido.tabela_preco) {
+    const tabelas = await fetchTabelasPreco(creds)
+    if (tabelas.length > 0) {
+      const codTabela = await getCodigoTabelaPreco(String(pedido.tabela_preco), creds)
+      if (!codTabela) {
+        throw new Error(`Tabela de preço "${pedido.tabela_preco}" não encontrada no Omie (disponíveis: ${tabelas.map(t => t.cNome).join(', ')})`)
+      }
+      infAdic.codigo_tabela_preco = codTabela
+    }
+  }
+
   // Endereço de entrega diferente
   if (pedido.endereco_diferente) {
     infAdic.cep_entrega = (pedido.endereco_entrega_cep || '').replace(/\D/g, '')
@@ -741,12 +844,15 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     omiePedido.departamentos = departamentos
   }
 
-  // Parcelas baseadas na forma de pagamento
-  const totalPedido = Number(pedido.total_valor) || itens.reduce((sum: number, item: any) => sum + (item.preco || 0) * (item.quantidade || 1), 0)
-  
-  // Sempre enviar lista_parcelas com datas explícitas para garantir vencimentos corretos no Omie.
-  // Exceção: à vista (codigo '000') — o Omie resolve sozinho.
-  if (codigoParcela === '000') {
+  // Parcelas baseadas na forma de pagamento.
+  // O total das parcelas deve bater com o total que o Omie calcula (soma dos itens),
+  // senão ele recalcula/redistribui e os valores divergem do CRM.
+  const somaItens = itens.reduce((sum: number, item: any) => sum + (toNumberSafe(item.preco) * toNumberSafe(item.quantidade)), 0)
+  const totalPedido = somaItens > 0 ? somaItens : (Number(pedido.total_valor) || 0)
+
+  // À vista (codigo '000'): o Omie resolve sozinho, sem lista_parcelas.
+  // A prazo: '999' + qtde_parcelas + lista_parcelas com datas/valores exatos do CRM.
+  if (ehAVista) {
     log.info({ pedidoId, formaPagamento, codigoParcela }, '✅ À vista — sem lista_parcelas')
   } else {
     // Prazos do CRM ("7/14", "28 dias"...) contam a partir da data da venda/emissão,
@@ -754,6 +860,7 @@ export async function criarPedidoOmie(pedidoId: number): Promise<OmiePedidoRespo
     const hoje = new Date()
     const dataBaseParcelas = `${String(hoje.getDate()).padStart(2, '0')}/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`
     const parcelas = gerarParcelas(formaPagamento, totalPedido, dataBaseParcelas)
+    cabecalho.qtde_parcelas = parcelas.length
     omiePedido.lista_parcelas = { parcela: parcelas }
     log.info({ pedidoId, formaPagamento, codigoParcela, numParcelas: parcelas.length, primeiraParcela: parcelas[0] }, '📅 Parcelas com datas explícitas enviadas para Omie')
   }

@@ -554,6 +554,60 @@ export function useFunilActions({
     setDraggedItem(null); setPendingDrop(null); setShowModalProposta(false); setModalPropostaValor('')
   }
 
+  // Cria um NOVO card (nova linha em clientes) para um novo ciclo de vendas,
+  // preservando o card original no funil. Usado quando um novo ciclo é iniciado
+  // a partir de um card existente (ex.: cliente em follow_up) — antes o fluxo
+  // movia o próprio card antigo, "linkando" o ciclo novo ao antigo.
+  const criarNovoCiclo = async (
+    cliente: Cliente,
+    extras: Partial<Cliente> = {},
+    etapa: string = 'negociacao',
+  ): Promise<Cliente> => {
+    const now = new Date().toISOString()
+    const novoCard: Omit<Cliente, 'id'> = {
+      ...cliente,
+      cnpj: undefined,
+      googlePlaceId: undefined,
+      ...extras,
+      etapa,
+      etapaAnterior: cliente.etapa,
+      novoCiclo: true,
+      cicloNumero: (cliente.cicloNumero || 1) + 1,
+      statusFollowUp: undefined,
+      statusAmostra: undefined,
+      statusEntrega: undefined,
+      statusFaturamento: undefined,
+      statusSatisfacao: undefined,
+      motivoPerda: undefined,
+      categoriaPerda: undefined,
+      dataPerda: undefined,
+      valorEstimado: undefined,
+      dataEntradaEtapa: now,
+      historicoEtapas: [],
+      vendedorId: loggedUser?.id || cliente.vendedorId,
+    }
+    const cardCriado = await db.insertCliente(novoCard)
+    const entradaHistorico: HistoricoEtapa = { etapa, de: cliente.etapa, data: now }
+    try { await db.insertHistoricoEtapa(cardCriado.id, entradaHistorico) } catch { /* non-critical */ }
+    setClientes(prev => [...prev, {
+      ...cardCriado,
+      historicoEtapas: [...(cliente.historicoEtapas || []), entradaHistorico],
+    }])
+    // Marca o card original para não oferecer "novo ciclo" novamente — apenas
+    // quando o ciclo anterior já terminou (não sobrescreve status logístico
+    // de pedido ainda em andamento: faturado, expedido, entregue etc.)
+    const statusCicloTerminado = !cliente.statusFollowUp || ['concluido', 'satisfacao_pendente', 'novo_ciclo_iniciado'].includes(cliente.statusFollowUp)
+    if (cliente.etapa === 'follow_up' && statusCicloTerminado && cliente.statusFollowUp !== 'novo_ciclo_iniciado') {
+      try {
+        await db.updateCliente(cliente.id, { statusFollowUp: 'novo_ciclo_iniciado' })
+        setClientes(prev => prev.map(c => c.id === cliente.id ? { ...c, statusFollowUp: 'novo_ciclo_iniciado' } : c))
+      } catch { /* non-critical */ }
+    }
+    await copiarHistoricoETarefas(cliente.id, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
+    addNotificacao('info', '🔄 Novo ciclo criado', `Card de ${cliente.razaoSocial} criado em ${stageLabels[etapa] || etapa} para um novo ciclo de vendas.`, cardCriado.id)
+    return cardCriado
+  }
+
   return {
     // Drag & drop
     draggedItem, setDraggedItem,
@@ -577,6 +631,8 @@ export function useFunilActions({
     showModalProposta, setShowModalProposta,
     modalPropostaValor, setModalPropostaValor,
     confirmProposta,
+    // Novo ciclo (cria card novo em vez de mover o antigo)
+    criarNovoCiclo,
     // Modal: Satisfação
     showModalSatisfacao, setShowModalSatisfacao,
     modalSatisfacaoNota, setModalSatisfacaoNota,

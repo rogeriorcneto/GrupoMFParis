@@ -367,8 +367,12 @@ export interface OmieApprovalResult {
 }
 
 /** Aprovar pedido e enviar automaticamente ao Omie */
-export async function aprovarPedidoComOmie(pedidoId: number): Promise<OmieApprovalResult> {
-  const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/aprovar`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+export async function aprovarPedidoComOmie(pedidoId: number, tabela?: 'A' | 'B'): Promise<OmieApprovalResult> {
+  const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/aprovar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: tabela ? JSON.stringify({ tabela }) : undefined,
+  })
   return await res.json()
 }
 
@@ -381,6 +385,12 @@ export async function enviarPedidoOmie(pedidoId: number): Promise<{ success: boo
 /** Consultar status do pedido no Omie */
 export async function consultarStatusOmie(pedidoId: number): Promise<{ success: boolean; status?: any; error?: string }> {
   const res = await authFetch(`${BOT_URL}/api/pedidos/${pedidoId}/status-omie`)
+  return await res.json()
+}
+
+/** Sincronizar um cliente do CRM para o Omie (cadastro/upsert automático) */
+export async function sincronizarClienteOmie(clienteId: number): Promise<{ success: boolean; omieCodigo?: string; error?: string }> {
+  const res = await authFetch(`${BOT_URL}/api/omie/sync/cliente/${clienteId}`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
   return await res.json()
 }
 

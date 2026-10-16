@@ -384,36 +384,18 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     const m = new Map<string, Cliente[]>()
     displayedStages.forEach(s => m.set(s.key, []))
     clientesFiltrados.forEach(c => {
-      // Não incluir clientes de novo ciclo na lista normal de proposta
-      if (c.etapa === 'proposta' && c.novoCiclo) return
       const arr = m.get(c.etapa)
       if (arr) arr.push(c)
     })
     return m
   }, [clientesFiltrados, displayedStages])
 
-  // Clientes em proposta que são novos ciclos (duplicados de perdidos)
-  const clientesNovoCicloProposta = useMemo(() => {
-    let base = clientesFiltradosVendedor.filter(c => 
-      c.etapa === 'proposta' && c.novoCiclo === true
-    )
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      base = base.filter(c =>
-        c.razaoSocial.toLowerCase().includes(q) ||
-        (c.nomeFantasia || '').toLowerCase().includes(q) ||
-        (c.contatoNome || '').toLowerCase().includes(q) ||
-        (c.cnpj || '').includes(q)
-      )
-    }
-    return base
-  }, [clientesFiltradosVendedor, search])
-
   // Clientes em follow_up OU perdidos vindo de negociação que podem iniciar novo ciclo
+  // (cards de novo ciclo em proposta já aparecem como cards normais na coluna)
   const clientesNovoCiclo = useMemo(() => {
     const base = clientesFiltradosVendedor.filter(c => {
-      // Clientes em follow-up normais (não aguardando aprovação)
-      if (c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente') return true
+      // Clientes em follow-up normais (não aguardando aprovação e sem ciclo já iniciado)
+      if (c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente' && c.statusFollowUp !== 'novo_ciclo_iniciado') return true
       // Clientes perdidos que vieram de negociação (podem ser revividos)
       if (c.etapa === 'perdido' && c.etapaAnterior === 'negociacao' && (c.statusFollowUp as string) === 'perdido_negociacao') return true
       return false
@@ -814,7 +796,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             const isProposta = stage.key === 'proposta'
-            const novoCicloCount = isProposta ? clientesNovoCiclo.length + clientesNovoCicloProposta.length : 0
+            const novoCicloCount = isProposta ? clientesNovoCiclo.length : 0
             // Cor do header de cada coluna
             const colHeaderColor: Record<string, string> = {
               lead: 'border-t-2 border-t-emerald-400',
@@ -1069,10 +1051,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
                   {/* Novos ciclos: todos juntos, ocultos por padrão, botão 🔄 no header para mostrar — auto-mostrar quando pesquisa encontra */}
                   {isProposta && (showNovosCiclos || search.trim()) && (() => {
-                    const todos = [
-                      ...clientesNovoCicloProposta,
-                      ...clientesNovoCiclo.filter(c => !clientesNovoCicloProposta.some(p => p.id === c.id)),
-                    ].filter(c => !novoCicloEscondidos.has(c.id))
+                    const todos = clientesNovoCiclo.filter(c => !novoCicloEscondidos.has(c.id))
                     if (todos.length === 0) return <div className="p-4 text-center text-gray-400 text-[11px]">Arraste clientes aqui</div>
                     return (
                       <>
@@ -1085,9 +1064,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         )}
                         {todos.map((cliente) => {
                           const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
-                          const handleClick = cliente.novoCiclo
-                            ? () => onClickCliente?.(cliente)
-                            : () => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)
+                          const handleClick = () => onNovoCiclo ? onNovoCiclo(cliente) : onClickCliente?.(cliente)
                           return (
                             <div
                               key={`nc-${cliente.id}`}

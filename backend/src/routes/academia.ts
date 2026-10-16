@@ -91,7 +91,13 @@ router.get('/sessoes', async (req: Request, res: Response) => {
 router.post('/sessao', async (req: Request, res: Response) => {
   try {
     const { token, modulo, perfilId, perfilNome, mensagens, duracaoSegundos, nota, feedback } = req.body || {}
-    const result = await validateToken(String(token || ''))
+    let result = await validateToken(String(token || ''))
+    if ('error' in result && result.error === 'Este link expirou') {
+      // Treino pode ter começado com o link válido — aceita salvar até 24h após expirar
+      const link = await fetchAcademiaLinkByToken(String(token || ''))
+      const expirouHa = link ? Date.now() - new Date(link.valido_ate).getTime() : Infinity
+      if (link && link.ativo && expirouHa <= 24 * 3600 * 1000) result = { link }
+    }
     if ('error' in result) { res.status(403).json({ error: result.error }); return }
     if (!Array.isArray(mensagens)) {
       res.status(400).json({ error: 'Dados da sessão inválidos' })

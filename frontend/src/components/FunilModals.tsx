@@ -43,6 +43,7 @@ interface FunilModalsProps {
   isNovoCiclo?: boolean
   onCloseNovoCiclo?: () => void
   onClickCliente?: (c: Cliente) => void
+  onCriarNovoCiclo?: (cliente: Cliente, extras: Partial<Cliente>) => Promise<Cliente>
 }
 
 const perdaCategorias: { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[] = [
@@ -61,7 +62,7 @@ export default function FunilModals({
   showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
   draggedItem, setDraggedItem, setPendingDrop,
   produtos = [], clientes = [], onAddPedido, showToast,
-  isNovoCiclo = false, onCloseNovoCiclo, onClickCliente
+  isNovoCiclo = false, onCloseNovoCiclo, onClickCliente, onCriarNovoCiclo
 }: FunilModalsProps) {
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
@@ -149,11 +150,39 @@ export default function FunilModals({
         showToast?.('error', 'Erro ao gerar PDF da proposta.')
       }
 
+      // Novo ciclo: criar um NOVO card em Negociação antes de salvar a proposta,
+      // para que a proposta fique vinculada ao novo card (e não ao card antigo,
+      // que permanece intacto no funil)
+      let clienteIdProposta = draggedItem.cliente.id
+      if (isNovoCiclo) {
+        if (!onCriarNovoCiclo) {
+          showToast?.('error', 'Não foi possível criar o novo ciclo.')
+          return
+        }
+        const extrasNovoCiclo: Partial<Cliente> = {
+          valorProposta: valorFinal,
+          dataProposta: new Date().toISOString().split('T')[0],
+        }
+        if (propostaItens.length > 0) extrasNovoCiclo.produtosInteresse = propostaItens.map(i => i.nomeProduto)
+        const notasParts: string[] = ['🔄 Novo ciclo de vendas iniciado']
+        if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
+        if (propostaPagamento && propostaPagamento !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${propostaPagamento}`)
+        if (propostaObs.trim()) notasParts.push(propostaObs.trim())
+        extrasNovoCiclo.notas = notasParts.join(' | ')
+        try {
+          const criado = await onCriarNovoCiclo(draggedItem.cliente, extrasNovoCiclo)
+          clienteIdProposta = criado.id
+        } catch {
+          showToast?.('error', 'Falha ao criar o novo ciclo. O cliente não foi movido.')
+          return
+        }
+      }
+
       // Salvar no histórico
       try {
         const saved = await savePropostaHistorico({
           numero,
-          clienteId: draggedItem.cliente.id,
+          clienteId: clienteIdProposta,
           vendedorNome,
           itens: propostaItens,
           observacoes: propostaObs,
@@ -173,23 +202,11 @@ export default function FunilModals({
       }
 
       if (isNovoCiclo) {
-        // Novo ciclo: salvar proposta E mover cliente de follow_up para negociacao
-        // para iniciar novo ciclo de vendas
-        const extras: Partial<Cliente> = {
-          valorProposta: valorFinal,
-          dataProposta: new Date().toISOString().split('T')[0],
-          statusFollowUp: 'novo_ciclo_iniciado' // marca que iniciou novo ciclo
-        }
-        if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)
-        const notasParts: string[] = ['🔄 Novo ciclo de vendas iniciado']
-        if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
-        if (propostaPagamento && propostaPagamento !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${propostaPagamento}`)
-        if (propostaObs.trim()) notasParts.push(propostaObs.trim())
-        extras.notas = notasParts.join(' | ')
-        confirmProposta(extras)
         setShowModalProposta(false)
+        setDraggedItem(null)
+        setPendingDrop(null)
         onCloseNovoCiclo?.()
-        showToast?.('success', `Proposta ${numero} gerada e cliente movido para Negociação!`)
+        showToast?.('success', `Proposta ${numero} gerada e novo ciclo iniciado em Negociação!`)
       } else {
         const extras: Partial<Cliente> = { valorProposta: valorFinal }
         if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)

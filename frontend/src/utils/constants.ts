@@ -51,4 +51,5 @@ export const subStatusFollowUpLabels: Record<string, string> = {
   'entregue': 'Entregue',
   'satisfacao_pendente': 'Satisfação Pendente',
   'concluido': 'Concluído',
+  'novo_ciclo_iniciado': 'Novo Ciclo Iniciado',
 }
