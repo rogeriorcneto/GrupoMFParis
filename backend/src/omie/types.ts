@@ -1356,6 +1356,15 @@ export const OMIE_MODULES: Record<string, Record<string, OmieModuleConfig>> = {
       label: 'Pedidos de Venda - Etapas',
       description: 'Consulta das etapas de pedido',
     },
+    tabelaprecos: {
+      endpoint: '/produtos/tabelaprecos/',
+      methods: {
+        listar: 'ListarTabelasPreco',
+        consultar: 'ConsultarTabelaPreco',
+      },
+      label: 'Tabelas de Preço',
+      description: 'Tabelas de preço usadas nos pedidos de venda',
+    },
     cte: {
       endpoint: '/produtos/cte/',
       methods: {
