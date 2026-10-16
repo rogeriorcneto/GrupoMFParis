@@ -9,7 +9,13 @@ import type { OmieCliente, OmieClienteListResponse } from './types.js'
 
 export function crmToOmie(cliente: any): Partial<OmieCliente> {
   const doc = String(cliente.cnpj || cliente.cpf || '').replace(/\D/g, '')
-  return {
+  // CNAE: Omie espera apenas o código numérico de 7 dígitos (ex: 4721102),
+  // não a descrição completa que vem da Receita Federal.
+  const cnaeRaw = String(cliente.cnae_primario || cliente.cnaePrimario || '').trim()
+  const cnaeMatch = cnaeRaw.match(/^(\d{7})/)
+  const cnae = cnaeMatch ? cnaeMatch[1] : undefined
+
+  const payload: Partial<OmieCliente> = {
     razao_social: cliente.razao_social || cliente.razaoSocial || '',
     nome_fantasia: cliente.nome_fantasia || cliente.nomeFantasia || '',
     cnpj_cpf: cliente.cnpj || cliente.cpf || '',
@@ -24,11 +30,12 @@ export function crmToOmie(cliente: any): Partial<OmieCliente> {
     cidade: cliente.endereco_cidade || cliente.enderecoCidade || '',
     estado: cliente.endereco_estado || cliente.enderecoEstado || '',
     cep: cliente.endereco_cep || cliente.enderecoCep || '',
-    cnae: cliente.cnae_primario || cliente.cnaePrimario || '',
     observacao: cliente.notas || '',
     // Pessoa física (CPF) não é contribuinte de ICMS
     contribuinte: doc.length === 11 ? 'N' : 'S',
   }
+  if (cnae) payload.cnae = cnae
+  return payload
 }
 
 export function omieToDbRow(omie: OmieCliente): Record<string, any> {
