@@ -4,6 +4,7 @@ import { getSyncDiff, syncPullClientes, syncPullClientesMultiEmpresa, syncPushCl
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { getEmpresas, listarPedidosEmpresa, atualizarRastreioPedido, lancarRastreioPorNF } from '../omie/multi-empresa.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros } from '../omie/pedidos.js'
+import { fetchTabelasPreco, getCodigoTabelaPreco } from '../omie/reference-data.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
 import { OMIE_MODULES } from '../omie/types.js'
@@ -188,6 +189,22 @@ omieRouter.post('/call', rateLimit(60, 60_000), async (req, res) => {
 })
 
 // ─── Paginação completa ───
+
+omieRouter.get('/tabelas-preco', rateLimit(30, 60_000), async (req, res) => {
+  try {
+    const tabelas = await fetchTabelasPreco()
+    const codigoA = await getCodigoTabelaPreco('A')
+    const codigoB = await getCodigoTabelaPreco('B')
+    res.json({
+      success: true,
+      tabelas: tabelas.map(t => ({ codigo: t.nCodTabPreco, nome: t.cNome, codigoExterno: t.cCodigo, ativa: t.cAtiva })),
+      resolucao: { A: codigoA, B: codigoB },
+    })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao buscar tabelas de preço')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
 
 omieRouter.post('/call-all', rateLimit(10, 60_000), async (req, res) => {
   const { group, module, action, params, resultKey } = req.body
