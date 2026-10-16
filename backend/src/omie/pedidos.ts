@@ -295,21 +295,23 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
     // O peso_kg do CRM e o peso do nome são o tamanho da embalagem (ex.: 25KG) —
     // nunca podem ser tratados como peso unitário da venda.
     pesoLiquido = 1
-    if (pesoOmieLiq > 0 && pesoOmieBruto > 0) {
+    if (pesoOmieLiq > 0 && pesoOmieBruto > pesoOmieLiq) {
       pesoBruto = arredondar3(pesoOmieBruto / pesoOmieLiq)
-      if (pesoBruto < 1) pesoBruto = 1
-    } else if (pesoOmieBruto > 0) {
+    } else if (pesoOmieBruto > 0 && pesoOmieLiq <= 0) {
       pesoBruto = pesoOmieBruto
     } else {
+      // Cadastro Omie sem embalagem declarada (bruto ausente ou == líquido):
+      // produto vendido em embalagem (sacaria/fardo) sempre tem tara — estima.
       pesoBruto = TARA_PADRAO_EMBALAGEM
       pesoBrutoEstimado = true
     }
   } else {
     // Vendido por unidade/fardo/caixa: líquido vem do cadastro Omie, do peso
     // declarado no nome (conteúdo líquido) ou do CRM. O bruto vem do cadastro
-    // Omie; sem ele, estimamos pela tara padrão da embalagem.
+    // Omie; quando ele não supera o líquido (ausente ou igual — cadastro sem
+    // embalagem), estimamos pela tara padrão.
     pesoLiquido = pesoOmieLiq || pesoNome || pesoCrm || 0
-    if (pesoOmieBruto > 0) {
+    if (pesoOmieBruto > pesoLiquido && pesoOmieBruto > 0) {
       pesoBruto = pesoOmieBruto
     } else if (pesoLiquido > 0) {
       // Sem arredondar aqui: o arredondamento acontece no total do item,
