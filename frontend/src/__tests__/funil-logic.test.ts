@@ -7,6 +7,7 @@ import {
   mapCategoriaPerdaAgendor,
   sortCards,
   prazosEtapa,
+  buildNovoCicloCliente,
 } from '../utils/funil-logic'
 import type { Cliente } from '../types'
 
@@ -395,5 +396,130 @@ describe('sortCards', () => {
     const original = [...arr]
     sortCards(arr, 'score')
     expect(arr[0].id).toBe(original[0].id)
+  })
+})
+
+// ─── buildNovoCicloCliente ───
+
+describe('buildNovoCicloCliente', () => {
+  it('copia dados base e incrementa cicloNumero', () => {
+    const base = makeCliente({
+      id: 1,
+      razaoSocial: 'Empresa Alpha',
+      contatoNome: 'João',
+      cicloNumero: 2,
+      vendedorId: 5,
+    })
+    const novo = buildNovoCicloCliente(base, 'proposta', 7)
+    expect(novo.razaoSocial).toBe('Empresa Alpha')
+    expect(novo.contatoNome).toBe('João')
+    expect(novo.cicloNumero).toBe(3)
+    expect(novo.novoCiclo).toBe(true)
+    expect(novo.etapa).toBe('proposta')
+    expect(novo.etapaAnterior).toBe('prospecção')
+    expect(novo.vendedorId).toBe(7)
+  })
+
+  it('não copia CNPJ/CPF para evitar duplicata', () => {
+    const base = makeCliente({ id: 1, cnpj: '11.111.111/0001-11', cpf: '12345678901' })
+    const novo = buildNovoCicloCliente(base, 'negociacao')
+    expect(novo.cnpj).toBeUndefined()
+    expect(novo.cpf).toBeUndefined()
+  })
+
+  it('reseta todos os status de ciclo anterior', () => {
+    const base = makeCliente({
+      id: 1,
+      etapa: 'follow_up',
+      statusFollowUp: 'concluido',
+      statusAmostra: 'aprovada',
+      resultadoAmostra: 'aprovada',
+      statusEntrega: 'entregue',
+      statusFaturamento: 'faturado',
+      statusSatisfacao: 'satisfeito',
+      notaSatisfacao: 5,
+      feedbackSatisfacao: 'Ótimo',
+      motivoReprovacao: 'Prazo',
+      valorProposta: 10000,
+      dataProposta: '2025-01-01',
+      valorEstimado: 5000,
+      omieStatusLogistico: 'entregue',
+      omieCodigoRastreio: 'ABC123',
+      omieNotaFiscal: '123',
+      omieDataFaturamento: '2025-01-01',
+      totalCompras: 5,
+      dataUltimoPedido: '2025-01-01',
+      dataProximaRecompra: '2025-02-01',
+    })
+    const novo = buildNovoCicloCliente(base, 'proposta')
+    expect(novo.statusFollowUp).toBeUndefined()
+    expect(novo.statusAmostra).toBeUndefined()
+    expect(novo.resultadoAmostra).toBeUndefined()
+    expect(novo.statusEntrega).toBeUndefined()
+    expect(novo.statusFaturamento).toBeUndefined()
+    expect(novo.statusSatisfacao).toBeUndefined()
+    expect(novo.notaSatisfacao).toBeUndefined()
+    expect(novo.feedbackSatisfacao).toBeUndefined()
+    expect(novo.motivoReprovacao).toBeUndefined()
+    expect(novo.valorProposta).toBeUndefined()
+    expect(novo.dataProposta).toBeUndefined()
+    expect(novo.valorEstimado).toBeUndefined()
+    expect(novo.omieStatusLogistico).toBeUndefined()
+    expect(novo.omieCodigoRastreio).toBeUndefined()
+    expect(novo.omieNotaFiscal).toBeUndefined()
+    expect(novo.omieDataFaturamento).toBeUndefined()
+    expect(novo.totalCompras).toBeUndefined()
+    expect(novo.dataUltimoPedido).toBeUndefined()
+    expect(novo.dataProximaRecompra).toBeUndefined()
+  })
+
+  it('reseta motivo de perda e datas de ciclo anterior', () => {
+    const base = makeCliente({
+      id: 1,
+      etapa: 'perdido',
+      motivoPerda: 'Preço alto',
+      categoriaPerda: 'preco',
+      dataPerda: '2025-01-01',
+      dataEnvioAmostra: '2025-01-01',
+      dataResultadoAmostra: '2025-01-01',
+      tentativaAmostra: 2,
+    })
+    const novo = buildNovoCicloCliente(base, 'proposta')
+    expect(novo.motivoPerda).toBeUndefined()
+    expect(novo.categoriaPerda).toBeUndefined()
+    expect(novo.dataPerda).toBeUndefined()
+    expect(novo.dataEnvioAmostra).toBeUndefined()
+    expect(novo.dataResultadoAmostra).toBeUndefined()
+    expect(novo.tentativaAmostra).toBe(0)
+  })
+
+  it('mantém contato e localização', () => {
+    const base = makeCliente({
+      id: 1,
+      contatoTelefone: '(31) 99999-0000',
+      contatoEmail: 'joao@alpha.com',
+      enderecoCidade: 'Belo Horizonte',
+      enderecoEstado: 'MG',
+      segmento: 'Sorveteria',
+    })
+    const novo = buildNovoCicloCliente(base, 'proposta')
+    expect(novo.contatoTelefone).toBe('(31) 99999-0000')
+    expect(novo.contatoEmail).toBe('joao@alpha.com')
+    expect(novo.enderecoCidade).toBe('Belo Horizonte')
+    expect(novo.enderecoEstado).toBe('MG')
+    expect(novo.segmento).toBe('Sorveteria')
+  })
+
+  it('permite extras sobrescreverem campos', () => {
+    const base = makeCliente({ id: 1, etapa: 'follow_up' })
+    const novo = buildNovoCicloCliente(base, 'negociacao', undefined, { valorProposta: 12345 })
+    expect(novo.etapa).toBe('negociacao')
+    expect(novo.valorProposta).toBe(12345)
+  })
+
+  it('inicia historicoEtapas vazio', () => {
+    const base = makeCliente({ id: 1, historicoEtapas: [{ etapa: 'amostra', data: '2025-01-01' }] })
+    const novo = buildNovoCicloCliente(base, 'proposta')
+    expect(novo.historicoEtapas).toEqual([])
   })
 })

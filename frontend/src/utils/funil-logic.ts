@@ -2,6 +2,135 @@ import type { Cliente } from '../types'
 
 export const prazosEtapa: Record<string, number> = { amostra: 45, proposta: 60, negociacao: 45, follow_up: 60 }
 
+/**
+ * Cria um objeto Cliente "limpo" para um novo ciclo de vendas.
+ * Copia apenas os dados base do cliente e reseta todos os status/datas do ciclo anterior.
+ */
+export function buildNovoCicloCliente(
+  cliente: Cliente,
+  etapaDestino: string,
+  loggedUserId?: number,
+  extras: Partial<Cliente> = {}
+): Omit<Cliente, 'id'> {
+  const now = new Date().toISOString()
+  return {
+    // Dados base (identidade do cliente)
+    razaoSocial: cliente.razaoSocial,
+    nomeFantasia: cliente.nomeFantasia,
+    // CNPJ/CPF não são copiados para evitar violação de índices únicos em novos ciclos
+    cnpj: undefined as any,
+    cpf: undefined,
+    inscricaoEstadual: cliente.inscricaoEstadual,
+    contatoNome: cliente.contatoNome,
+    contatoTelefone: cliente.contatoTelefone,
+    contatoCelular: cliente.contatoCelular,
+    contatoTelefoneFixo: cliente.contatoTelefoneFixo,
+    contatoEmail: cliente.contatoEmail,
+    endereco: cliente.endereco,
+    enderecoRua: cliente.enderecoRua,
+    enderecoNumero: cliente.enderecoNumero,
+    enderecoComplemento: cliente.enderecoComplemento,
+    enderecoBairro: cliente.enderecoBairro,
+    enderecoCidade: cliente.enderecoCidade,
+    enderecoEstado: cliente.enderecoEstado,
+    enderecoCep: cliente.enderecoCep,
+    cnpj2: cliente.cnpj2,
+    enderecoRua2: cliente.enderecoRua2,
+    enderecoNumero2: cliente.enderecoNumero2,
+    enderecoComplemento2: cliente.enderecoComplemento2,
+    enderecoBairro2: cliente.enderecoBairro2,
+    enderecoCidade2: cliente.enderecoCidade2,
+    enderecoEstado2: cliente.enderecoEstado2,
+    enderecoCep2: cliente.enderecoCep2,
+    cnaePrimario: cliente.cnaePrimario,
+    cnaeSecundario: cliente.cnaeSecundario,
+    redesSociais: cliente.redesSociais,
+    whatsapp: cliente.whatsapp,
+    omieCodigo: cliente.omieCodigo,
+    agendorCodigo: cliente.agendorCodigo,
+    instagram: cliente.instagram,
+    facebook: cliente.facebook,
+    linkedin: cliente.linkedin,
+    website: cliente.website,
+    contatoFinanceiroNome: cliente.contatoFinanceiroNome,
+    contatoFinanceiroTelefone: cliente.contatoFinanceiroTelefone,
+    contatoComprasNome: cliente.contatoComprasNome,
+    contatoComprasTelefone: cliente.contatoComprasTelefone,
+    produtosInteresse: cliente.produtosInteresse,
+    produtosQuantidadesMensais: cliente.produtosQuantidadesMensais,
+    segmento: cliente.segmento,
+    classeCliente: cliente.classeCliente,
+    localizacao: cliente.localizacao,
+    origemLead: cliente.origemLead,
+    statusCliente: cliente.statusCliente,
+    grupoEconomicoId: cliente.grupoEconomicoId,
+    descricao: cliente.descricao,
+    latitude: cliente.latitude,
+    longitude: cliente.longitude,
+
+    // Controle de ciclo
+    etapa: etapaDestino,
+    etapaAnterior: cliente.etapa,
+    novoCiclo: true,
+    cicloNumero: (cliente.cicloNumero || 1) + 1,
+    dataEntradaEtapa: now,
+    historicoEtapas: [],
+
+    // Estado do funil resetado
+    score: cliente.score,
+    diasInativo: 0,
+    valorEstimado: undefined,
+    ultimaInteracao: now.split('T')[0],
+    dataEnvioAmostra: undefined,
+    statusAmostra: undefined,
+    dataHomologacao: undefined,
+    proximoPedidoPrevisto: undefined,
+    valorProposta: undefined,
+    dataProposta: undefined,
+    statusEntrega: undefined,
+    dataEntregaPrevista: undefined,
+    dataEntregaRealizada: undefined,
+    statusFaturamento: undefined,
+    dataUltimoPedido: undefined,
+    motivoPerda: undefined,
+    categoriaPerda: undefined,
+    dataPerda: undefined,
+    resultadoAmostra: undefined,
+    dataResultadoAmostra: undefined,
+    motivoReprovacao: undefined,
+    statusFollowUp: undefined,
+    statusSatisfacao: undefined,
+    notaSatisfacao: undefined,
+    feedbackSatisfacao: undefined,
+    cicloRecompra: cliente.cicloRecompra,
+    dataProximaRecompra: undefined,
+    totalCompras: undefined,
+    omieStatusLogistico: undefined,
+    omieCodigoRastreio: undefined,
+    omieNotaFiscal: undefined,
+    omieDataFaturamento: undefined,
+    tentativaAmostra: 0,
+    whatsappValido: cliente.whatsappValido,
+    whatsappJid: cliente.whatsappJid,
+    whatsappValidadoEm: cliente.whatsappValidadoEm,
+    googlePlaceId: undefined,
+    googleRating: cliente.googleRating,
+    googleReviews: cliente.googleReviews,
+    dataUltimaAmostra: undefined,
+    dataUltimaVenda: undefined,
+    motivoInativacao: undefined,
+    dataInativacao: undefined,
+    inativadoPor: undefined,
+    inativadoPorAbandono: undefined,
+
+    // Vendedor responsável
+    vendedorId: loggedUserId || cliente.vendedorId,
+
+    // Extras podem sobrescrever qualquer coisa acima
+    ...extras,
+  }
+}
+
 export function diasDesde(dateStr?: string): number {
   if (!dateStr) return 0
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)

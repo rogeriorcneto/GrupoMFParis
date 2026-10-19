@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import type { Cliente, Interacao, Atividade, Vendedor, Tarefa, JobAutomacao, Campanha, Cadencia, HistoricoEtapa } from '../types'
 import * as db from '../lib/database'
 import { stageLabels, transicoesPermitidas } from '../utils/constants'
+import { buildNovoCicloCliente } from '../utils/funil-logic'
 import { logger } from '../utils/logger'
 
 interface DragItem { cliente: Cliente; fromStage: string }
@@ -262,29 +263,7 @@ export function useFunilActions({
 
     // Novo ciclo automático: ao aprovar amostra (mover para proposta com resultado aprovada)
     if (toStage === 'proposta' && extras.resultadoAmostra === 'aprovada' && fromStage === 'amostra') {
-      const clienteAtualizado = { ...cliente, ...extras, etapa: toStage }
-      const novoCard: Omit<Cliente, 'id'> = {
-        ...clienteAtualizado,
-        cnpj: undefined, googlePlaceId: undefined,
-        etapa: 'proposta',
-        etapaAnterior: 'amostra',
-        novoCiclo: true,
-        cicloNumero: (clienteAtualizado.cicloNumero || 1) + 1,
-        statusAmostra: undefined,
-        dataEnvioAmostra: undefined,
-        resultadoAmostra: undefined,
-        dataResultadoAmostra: undefined,
-        statusFollowUp: undefined,
-        statusEntrega: undefined,
-        statusFaturamento: undefined,
-        statusSatisfacao: undefined,
-        valorEstimado: undefined,
-        valorProposta: undefined,
-        dataProposta: undefined,
-        dataEntradaEtapa: new Date().toISOString(),
-        historicoEtapas: [],
-        vendedorId: loggedUser?.id || clienteAtualizado.vendedorId,
-      }
+      const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await db.insertCliente(novoCard)
         setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
@@ -297,26 +276,7 @@ export function useFunilActions({
 
     // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue
     if (extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue') {
-      const clienteAtualizado = { ...cliente, ...extras, etapa: toStage }
-      const novoCard: Omit<Cliente, 'id'> = {
-        ...clienteAtualizado,
-        cnpj: undefined, googlePlaceId: undefined,
-        etapa: 'proposta',
-        etapaAnterior: 'follow_up',
-        novoCiclo: true,
-        cicloNumero: (clienteAtualizado.cicloNumero || 1) + 1,
-        statusFollowUp: undefined,
-        statusAmostra: undefined,
-        statusEntrega: undefined,
-        statusFaturamento: undefined,
-        statusSatisfacao: undefined,
-        valorEstimado: undefined,
-        valorProposta: undefined,
-        dataProposta: undefined,
-        dataEntradaEtapa: new Date().toISOString(),
-        historicoEtapas: [],
-        vendedorId: loggedUser?.id || clienteAtualizado.vendedorId,
-      }
+      const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await db.insertCliente(novoCard)
         setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
@@ -447,27 +407,11 @@ export function useFunilActions({
         return
       }
 
-      // Sempre cria novo ciclo em Proposta ao perder de qualquer etapa do funil
-      const etapasComNovoCiclo = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up', 'prospecção']
+      // Sempre cria novo ciclo em Proposta ao perder de etapas avançadas do funil
+      // (prospecção perdida não gera novo ciclo automaticamente)
+      const etapasComNovoCiclo = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up']
       if (etapasComNovoCiclo.includes(fromStage)) {
-        const novoCliente: Omit<Cliente, 'id'> = {
-          ...clienteOriginal,
-          cnpj: undefined, googlePlaceId: undefined,
-          etapa: 'proposta',
-          etapaAnterior: 'perdido',
-          novoCiclo: true,
-          cicloNumero: (clienteOriginal.cicloNumero || 1) + 1,
-          statusFollowUp: undefined,
-          motivoPerda: undefined,
-          categoriaPerda: undefined,
-          dataPerda: undefined,
-          valorEstimado: undefined,
-          valorProposta: undefined,
-          dataProposta: undefined,
-          dataEntradaEtapa: now,
-          historicoEtapas: [],
-          vendedorId: loggedUser?.id || clienteOriginal.vendedorId,
-        }
+        const novoCliente = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
         try {
           const clienteCriado = await db.insertCliente(novoCliente)
           setClientes(prev => [...prev, { ...clienteCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
@@ -498,26 +442,7 @@ export function useFunilActions({
       // Ao entrar em amostra (1ª tentativa), gera um novo card em Proposta
       // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up e perdido).
       if (!isRetry) {
-        const novoCard: Omit<Cliente, 'id'> = {
-          ...clienteOriginal,
-          cnpj: undefined, googlePlaceId: undefined,
-          etapa: 'proposta',
-          etapaAnterior: 'amostra',
-          novoCiclo: true,
-          cicloNumero: (clienteOriginal.cicloNumero || 1) + 1,
-          statusAmostra: undefined,
-          statusFollowUp: undefined,
-          statusEntrega: undefined,
-          statusFaturamento: undefined,
-          statusSatisfacao: undefined,
-          resultadoAmostra: undefined,
-          dataResultadoAmostra: undefined,
-          valorProposta: undefined,
-          dataProposta: undefined,
-          dataEntradaEtapa: new Date().toISOString(),
-          historicoEtapas: [],
-          vendedorId: loggedUser?.id || clienteOriginal.vendedorId,
-        }
+        const novoCard = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'amostra' })
         db.insertCliente(novoCard).then(async cardCriado => {
           setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
           addNotificacao('info', '🔄 Novo card em Proposta', `${clienteOriginal.razaoSocial}: amostra iniciada em card próprio, novo card criado em Proposta.`, cardCriado.id)
@@ -564,28 +489,7 @@ export function useFunilActions({
     etapa: string = 'negociacao',
   ): Promise<Cliente> => {
     const now = new Date().toISOString()
-    const novoCard: Omit<Cliente, 'id'> = {
-      ...cliente,
-      cnpj: undefined,
-      googlePlaceId: undefined,
-      ...extras,
-      etapa,
-      etapaAnterior: cliente.etapa,
-      novoCiclo: true,
-      cicloNumero: (cliente.cicloNumero || 1) + 1,
-      statusFollowUp: undefined,
-      statusAmostra: undefined,
-      statusEntrega: undefined,
-      statusFaturamento: undefined,
-      statusSatisfacao: undefined,
-      motivoPerda: undefined,
-      categoriaPerda: undefined,
-      dataPerda: undefined,
-      valorEstimado: undefined,
-      dataEntradaEtapa: now,
-      historicoEtapas: [],
-      vendedorId: loggedUser?.id || cliente.vendedorId,
-    }
+    const novoCard = buildNovoCicloCliente(cliente, etapa, loggedUser?.id, extras)
     const cardCriado = await db.insertCliente(novoCard)
     const entradaHistorico: HistoricoEtapa = { etapa, de: cliente.etapa, data: now }
     try { await db.insertHistoricoEtapa(cardCriado.id, entradaHistorico) } catch { /* non-critical */ }

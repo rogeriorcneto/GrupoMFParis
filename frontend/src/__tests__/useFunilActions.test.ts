@@ -558,6 +558,91 @@ describe('useFunilActions', () => {
       expect(db.insertCliente).not.toHaveBeenCalled()
     })
 
+    it('novo ciclo a partir de follow-up NÃO puxa status anterior', async () => {
+      const params = defaultParams()
+      params.clientes.push(sampleCliente({
+        id: 10,
+        etapa: 'follow_up',
+        cicloNumero: 1,
+        statusFollowUp: 'concluido',
+        statusAmostra: 'aprovada',
+        resultadoAmostra: 'aprovada',
+        statusEntrega: 'entregue',
+        statusFaturamento: 'faturado',
+        statusSatisfacao: 'satisfeito',
+        notaSatisfacao: 5,
+        feedbackSatisfacao: 'Ótimo',
+        motivoReprovacao: 'Prazo',
+        valorProposta: 9999,
+        dataProposta: '2025-01-01',
+        valorEstimado: 8888,
+        omieStatusLogistico: 'entregue',
+        omieCodigoRastreio: 'ABC',
+        omieNotaFiscal: 'NF-1',
+        omieDataFaturamento: '2025-01-01',
+        totalCompras: 3,
+      }))
+      const { result } = renderHook(() => useFunilActions(params))
+
+      await act(async () => {
+        await result.current.moverCliente(10, 'follow_up', { statusFollowUp: 'concluido' })
+      })
+
+      const novoCardArg = vi.mocked(db.insertCliente).mock.calls[0][0] as any
+      expect(novoCardArg.statusFollowUp).toBeUndefined()
+      expect(novoCardArg.statusAmostra).toBeUndefined()
+      expect(novoCardArg.resultadoAmostra).toBeUndefined()
+      expect(novoCardArg.statusEntrega).toBeUndefined()
+      expect(novoCardArg.statusFaturamento).toBeUndefined()
+      expect(novoCardArg.statusSatisfacao).toBeUndefined()
+      expect(novoCardArg.notaSatisfacao).toBeUndefined()
+      expect(novoCardArg.feedbackSatisfacao).toBeUndefined()
+      expect(novoCardArg.motivoReprovacao).toBeUndefined()
+      expect(novoCardArg.valorProposta).toBeUndefined()
+      expect(novoCardArg.dataProposta).toBeUndefined()
+      expect(novoCardArg.valorEstimado).toBeUndefined()
+      expect(novoCardArg.omieStatusLogistico).toBeUndefined()
+      expect(novoCardArg.omieCodigoRastreio).toBeUndefined()
+      expect(novoCardArg.omieNotaFiscal).toBeUndefined()
+      expect(novoCardArg.omieDataFaturamento).toBeUndefined()
+      expect(novoCardArg.totalCompras).toBeUndefined()
+      expect(novoCardArg.cnpj).toBeUndefined()
+      expect(novoCardArg.cicloNumero).toBe(2)
+      expect(novoCardArg.novoCiclo).toBe(true)
+    })
+
+    it('novo ciclo a partir de amostra aprovada NÃO puxa status anterior', async () => {
+      const params = defaultParams()
+      params.clientes.push(sampleCliente({
+        id: 11,
+        etapa: 'amostra',
+        cicloNumero: 1,
+        statusAmostra: 'em_teste',
+        dataEnvioAmostra: '2025-01-01',
+        resultadoAmostra: 'aprovada',
+        dataResultadoAmostra: '2025-01-10',
+        statusFollowUp: 'concluido',
+        statusEntrega: 'entregue',
+        valorProposta: 7777,
+      }))
+      const { result } = renderHook(() => useFunilActions(params))
+
+      await act(async () => {
+        await result.current.moverCliente(11, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: '2025-01-15' })
+      })
+
+      const novoCardArg = vi.mocked(db.insertCliente).mock.calls[0][0] as any
+      expect(novoCardArg.etapa).toBe('proposta')
+      expect(novoCardArg.statusAmostra).toBeUndefined()
+      expect(novoCardArg.dataEnvioAmostra).toBeUndefined()
+      expect(novoCardArg.resultadoAmostra).toBeUndefined()
+      expect(novoCardArg.dataResultadoAmostra).toBeUndefined()
+      expect(novoCardArg.statusFollowUp).toBeUndefined()
+      expect(novoCardArg.statusEntrega).toBeUndefined()
+      expect(novoCardArg.valorProposta).toBeUndefined()
+      expect(novoCardArg.cicloNumero).toBe(2)
+    })
+
     it('cards de novo ciclo aparecem como cards normais na coluna (UI do FunilView)', () => {
       // Cards novoCiclo em proposta não são mais filtrados para uma seção oculta —
       // aparecem como cards normais, arrastáveis e movíveis (testado no componente)
