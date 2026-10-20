@@ -296,6 +296,7 @@ export const FUNCTION_DECLARATIONS = [
             properties: {
               produtoId: { type: 'INTEGER', description: 'ID do produto' },
               quantidade: { type: 'NUMBER', description: 'Quantidade em KG' },
+              preco: { type: 'NUMBER', description: 'Preco unitario negociado (R$/kg). Se omitido, usa o preco do catalogo.' },
             },
             required: ['produtoId', 'quantidade'],
           },
@@ -756,6 +757,18 @@ export async function executeFunction(
       case 'createPedido': {
         const access = await checkClienteAccess(args.clienteId, user)
         if (!access.allowed) return { success: false, message: access.reason! }
+        // Campos comerciais sao OBRIGATORIOS — nao invente defaults.
+        const missing: string[] = []
+        if (!args.tipo || !['venda', 'bonificacao'].includes(args.tipo)) missing.push('tipo do pedido (venda ou bonificacao/amostra)')
+        if (!args.formaPagamento || !String(args.formaPagamento).trim()) missing.push('forma de pagamento / numero de parcelas (ex.: A vista, 30 dias, 30/60/90, 4 parcelas)')
+        if (!args.tipoFrete || !['CIF', 'FOB'].includes(String(args.tipoFrete).toUpperCase())) missing.push('tipo de frete (CIF ou FOB)')
+        if (!Array.isArray(args.itens) || args.itens.length === 0) missing.push('produtos e quantidades em KG')
+        if (missing.length > 0) {
+          return {
+            success: false,
+            message: `Nao e possivel criar o pedido — falta(m): ${missing.join('; ')}. Pergunte esses dados ao vendedor antes de tentar de novo.`,
+          }
+        }
         // Fetch products to validate and get prices
         const produtos = await db.fetchProdutosAtivos()
         const prodMap = new Map(produtos.map(p => [p.id, p]))
@@ -764,13 +777,14 @@ export async function executeFunction(
         for (const item of args.itens) {
           const prod = prodMap.get(item.produtoId)
           if (!prod) return { success: false, message: `Produto ID ${item.produtoId} não encontrado ou inativo.` }
-          const subtotal = prod.preco * item.quantidade
+          const precoItem = item.preco !== undefined && item.preco !== null && Number(item.preco) >= 0 ? Number(item.preco) : prod.preco
+          const subtotal = precoItem * item.quantidade
           itens.push({
             produtoId: prod.id,
             nomeProduto: prod.nome,
             sku: prod.sku || '',
             unidade: 'kg',
-            preco: prod.preco,
+            preco: precoItem,
             quantidade: item.quantidade,
           })
           totalValor += subtotal
@@ -925,6 +939,18 @@ export async function executeFunction(
 
         if (novoStatus === 'enviado' && pedRow.status !== 'rascunho' && user.cargo !== 'gerente') {
           return { success: false, message: 'Vendedor só pode enviar pedidos em rascunho.' }
+        }
+
+        if (novoStatus === 'enviado') {
+          const missingFields: string[] = []
+          if (!pedRow.forma_pagamento || !String(pedRow.forma_pagamento).trim()) missingFields.push('forma de pagamento / numero de parcelas')
+          if (!pedRow.tipo_frete || !['CIF', 'FOB'].includes(String(pedRow.tipo_frete).toUpperCase())) missingFields.push('tipo de frete (CIF ou FOB)')
+          if (missingFields.length > 0) {
+            return {
+              success: false,
+              message: `Nao e possivel enviar o pedido ${pedRow.numero} — falta(m): ${missingFields.join('; ')}. Complete os dados no CRM antes de enviar.`,
+            }
+          }
         }
 
         const updates: Record<string, any> = { status: novoStatus }
