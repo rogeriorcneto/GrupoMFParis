@@ -172,8 +172,9 @@ export default function FunilModals({
         try {
           const criado = await onCriarNovoCiclo(draggedItem.cliente, extrasNovoCiclo)
           clienteIdProposta = criado.id
-        } catch {
-          showToast?.('error', 'Falha ao criar o novo ciclo. O cliente não foi movido.')
+        } catch (err: any) {
+          const msg = err?.message || 'Erro desconhecido'
+          showToast?.('error', `Falha ao criar o novo ciclo: ${msg}`)
           return
         }
       }

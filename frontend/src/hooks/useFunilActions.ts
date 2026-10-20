@@ -490,7 +490,14 @@ export function useFunilActions({
   ): Promise<Cliente> => {
     const now = new Date().toISOString()
     const novoCard = buildNovoCicloCliente(cliente, etapa, loggedUser?.id, extras)
-    const cardCriado = await db.insertCliente(novoCard)
+    let cardCriado: Cliente
+    try {
+      cardCriado = await db.insertCliente(novoCard)
+    } catch (e: any) {
+      logger.error('Falha ao inserir card de novo ciclo:', e)
+      const msg = e?.message || e?.details || e?.hint || 'Erro desconhecido ao criar card no banco'
+      throw new Error(msg)
+    }
     const entradaHistorico: HistoricoEtapa = { etapa, de: cliente.etapa, data: now }
     try { await db.insertHistoricoEtapa(cardCriado.id, entradaHistorico) } catch { /* non-critical */ }
     setClientes(prev => [...prev, {

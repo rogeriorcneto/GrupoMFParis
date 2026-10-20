@@ -1,211 +1,201 @@
-import { omieCall, getOmieCredentials } from './client.js'
+import { omieCall, getOmieCredentials, getOmieEmpresas } from './client.js'
 import { supabase } from '../supabase.js'
 import { log } from '../logger.js'
 
 // ============================================
-// Sync Omie Logistics → CRM (follow_up clients)
-// Pulls: status logístico, código rastreio, NF, data faturamento
+// Sync Omie Logistics → CRM (orientado a PEDIDOS)
+// Cada pedido do CRM tem codigo_pedido_integracao = 'CRM-PED-{id}' ou
+// 'CRM-AMT-{id}' (bonificação) e guarda omie_codigo/omie_numero.
+// Para cada pedido vinculado ao Omie, consulta o pedido EXATO e atualiza:
+//   - pedidos.omie_status / status
+//   - clientes.status_follow_up (pedido de venda) ou status_amostra (bonificação)
+//   - omie_status_logistico, rastreio, NF, faturamento, previsão de entrega
+// Roda para TODAS as empresas Omie configuradas (multi-empresa).
 // ============================================
-
-interface OmiePedidoEtapas {
-  cCodigo?: string
-  cDescricao?: string
-  dDataPrevisao?: string
-  cCodigoRastreio?: string
-  cNumeroNF?: string
-  dDataFaturamento?: string
-  [key: string]: any
-}
 
 export interface SyncLogisticsResult {
   atualizados: number
-  semPedido: number
-  erros: { clienteId: number; erro: string }[]
+  semPedidoOmie: number
+  naoEncontrados: number
+  erros: { pedidoId: number; erro: string }[]
 }
 
-/**
- * For all clients in follow_up stage that have an omie_codigo,
- * fetch the latest order status from Omie and update logistics fields.
- */
+/** Mapeia etapa Omie → sub-status do card */
+function mapEtapaFollowUp(etapa: string): string | null {
+  const e = etapa.trim()
+  const l = e.toLowerCase()
+  if (e === '20' || e === '30') return 'em_producao'
+  if (e === '40' || e === '50' || e === '60') return 'faturado'
+  if (e === '70') return 'expedido'
+  if (e === '80') return 'entregue'
+  if (e === '10') return 'pedido_aprovado'
+  if (l.includes('faturad') || l.includes('faturar')) return 'faturado'
+  if (l.includes('separ') || l.includes('produ')) return 'em_producao'
+  if (l.includes('exped') || l.includes('trânsito') || l.includes('transit') || l.includes('coletado')) return 'expedido'
+  if (l.includes('entreg') || l.includes('finaliz') || l.includes('encerr')) return 'entregue'
+  return null
+}
+
+function mapEtapaAmostra(etapa: string): string | null {
+  const f = mapEtapaFollowUp(etapa)
+  if (f === 'em_producao') return 'liberada'
+  if (f === 'pedido_aprovado') return 'liberada'
+  return f // faturado / expedido / entregue valem igual em amostra
+}
+
+const CANCELADO = (e: string) => ['00', '90', '99'].includes(e.trim())
+
 export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
-  const creds = await getOmieCredentials()
-  if (!creds) {
+  // Multi-empresa: todas as credenciais ativas; fallback para credencial única
+  const empresas = await getOmieEmpresas()
+  const credList = empresas.length > 0
+    ? empresas
+    : [await getOmieCredentials()].filter(Boolean) as { appKey: string; appSecret: string }[]
+
+  if (credList.length === 0) {
     log.warn('syncOmieLogistics: Credenciais Omie não configuradas, pulando')
-    return { atualizados: 0, semPedido: 0, erros: [] }
+    return { atualizados: 0, semPedidoOmie: 0, naoEncontrados: 0, erros: [] }
   }
 
-  // Fetch follow_up clients that have omie_codigo
-  const { data: clientes, error } = await supabase
-    .from('clientes')
-    .select('id, omie_codigo, razao_social, omie_status_logistico, omie_codigo_rastreio, omie_nota_fiscal, omie_data_faturamento, status_follow_up, etapa')
-    .in('etapa', ['follow_up', 'cliente_ativo'])
+  // Pedidos do CRM vinculados ao Omie e ainda não finalizados
+  const { data: pedidos, error } = await supabase
+    .from('pedidos')
+    .select('id, numero, cliente_id, tipo, status, omie_codigo, omie_numero, omie_status')
     .not('omie_codigo', 'is', null)
+    .not('status', 'in', '("cancelado")')
+    .not('omie_status', 'in', '("entregue","cancelado")')
 
   if (error) {
-    log.error({ error }, 'syncOmieLogistics: Erro ao buscar clientes')
-    return { atualizados: 0, semPedido: 0, erros: [{ clienteId: 0, erro: error.message }] }
+    log.error({ error }, 'syncOmieLogistics: Erro ao buscar pedidos')
+    return { atualizados: 0, semPedidoOmie: 0, naoEncontrados: 0, erros: [{ pedidoId: 0, erro: error.message }] }
   }
-
-  if (!clientes || clientes.length === 0) {
-    log.info('syncOmieLogistics: Nenhum cliente em follow_up/cliente_ativo com omie_codigo')
-    return { atualizados: 0, semPedido: 0, erros: [] }
+  if (!pedidos || pedidos.length === 0) {
+    return { atualizados: 0, semPedidoOmie: 0, naoEncontrados: 0, erros: [] }
   }
 
   let atualizados = 0
-  let semPedido = 0
-  const erros: { clienteId: number; erro: string }[] = []
+  let naoEncontrados = 0
+  const erros: { pedidoId: number; erro: string }[] = []
 
-  for (const cliente of clientes) {
+  for (const pedido of pedidos) {
     try {
-      // Search for the latest order for this client in Omie
-      const pedidos = await omieCall<any>(
-        '/produtos/pedido/',
-        'ListarPedidos',
-        [{
-          pagina: 1,
-          registros_por_pagina: 5,
-          apenas_importado_api: 'N',
-          filtrar_por_cliente: Number(cliente.omie_codigo),
-          ordenar_por: 'CODIGO_PEDIDO_DESC',
-        }],
-        { credentials: creds }
-      )
-
-      const listaPedidos = pedidos?.pedido_venda_produto || []
-      if (listaPedidos.length === 0) {
-        semPedido++
-        continue
+      // Consulta o pedido EXATO em cada empresa até encontrar
+      let omiePedido: any = null
+      for (const creds of credList) {
+        try {
+          const r = await omieCall<any>(
+            '/produtos/pedido/',
+            'ConsultarPedido',
+            [{ codigo_pedido: Number(pedido.omie_codigo) }],
+            { credentials: creds, skipCache: true }
+          )
+          const p = r?.pedido_venda_produto || r
+          if (p?.cabecalho?.codigo_pedido) { omiePedido = p; break }
+        } catch { /* pedido não está nesta empresa */ }
       }
 
-      // Get the most recent order
-      const pedido = listaPedidos[0]
-      const cab = pedido.cabecalho || {}
-      const infoCad = pedido.infoCadastro || {}
+      if (!omiePedido) { naoEncontrados++; continue }
 
-      // Extract logistics data
-      const statusLogistico = cab.etapa || infoCad.cEtapa || ''
-      const codigoRastreio = pedido.transporte?.nao_gerar_cte === 'S' ? '' :
-        (pedido.transporte?.codigo_rastreio || cab.codigo_rastreio || '')
-      const notaFiscal = infoCad.nNumeroNF ? String(infoCad.nNumeroNF) : (cab.numero_nf || '')
-      const dataFaturamento = infoCad.dDataFaturamento || infoCad.dDtFat || ''
+      const cab = omiePedido.cabecalho || {}
+      const info = omiePedido.infoCadastro || {}
+      const tr = omiePedido.transporte || {}
+      const etapa = String(cab.etapa || info.cEtapa || '').trim()
+      const rastreio = tr.codigo_rastreio || cab.codigo_rastreio || ''
+      const nf = info.nNumeroNF ? String(info.nNumeroNF) : (cab.numero_nf || '')
+      const dataFat = info.dDataFaturamento || info.dDtFat || ''
+      const dataPrev = cab.data_previsao || ''
+      const cancelado = CANCELADO(etapa)
 
-      // Map Omie etapa to our follow_up sub-status
-      // Uses numeric codes first (confirmed: 10=enviado, 20/30=producao, 40/50/60=faturado, 70=expedido, 80=entregue)
-      let newStatusFollowUp = cliente.status_follow_up || 'pedido_aprovado'
-      const etapaTrimmed = String(statusLogistico).trim()
-      const etapaLower = etapaTrimmed.toLowerCase()
+      // Status textual do pedido no CRM
+      const followUpStatus = mapEtapaFollowUp(etapa)
+      const amostraStatus = mapEtapaAmostra(etapa)
+      const omieStatusLabel = cancelado ? 'cancelado' : (followUpStatus || pedido.omie_status || 'enviado')
 
-      // Numeric etapa codes from Omie (most reliable)
-      if (etapaTrimmed === '20' || etapaTrimmed === '30') {
-        newStatusFollowUp = 'em_producao'
-      } else if (etapaTrimmed === '40' || etapaTrimmed === '50' || etapaTrimmed === '60') {
-        newStatusFollowUp = 'faturado'
-      } else if (etapaTrimmed === '70') {
-        newStatusFollowUp = 'expedido'
-      } else if (etapaTrimmed === '80') {
-        newStatusFollowUp = 'entregue'
-      } else if (etapaTrimmed === '00' || etapaTrimmed === '90' || etapaTrimmed === '99') {
-        // Cancelado — don't change follow-up status
-      } else if (etapaTrimmed === '10') {
-        newStatusFollowUp = 'pedido_aprovado'
-      }
-      // Text-based fallback (if Omie sends descriptive strings)
-      else if (etapaLower.includes('faturad') || etapaLower.includes('faturar')) {
-        newStatusFollowUp = 'faturado'
-      } else if (etapaLower.includes('separ') || etapaLower.includes('produ')) {
-        newStatusFollowUp = 'em_producao'
-      } else if (etapaLower.includes('exped') || etapaLower.includes('trânsito') || etapaLower.includes('transit') || etapaLower.includes('coletado')) {
-        newStatusFollowUp = 'expedido'
-      } else if (etapaLower.includes('entreg') || etapaLower.includes('finaliz') || etapaLower.includes('encerr')) {
-        newStatusFollowUp = 'entregue'
+      // 1) Atualizar o pedido no CRM
+      const pedUpdates: Record<string, any> = {}
+      if (omieStatusLabel !== pedido.omie_status) pedUpdates.omie_status = omieStatusLabel
+      if (cancelado && pedido.status !== 'cancelado') pedUpdates.status = 'cancelado'
+      if (Object.keys(pedUpdates).length > 0) {
+        const { error: e1 } = await supabase.from('pedidos').update(pedUpdates).eq('id', pedido.id)
+        if (e1) throw new Error(`pedido: ${e1.message}`)
       }
 
-      // Check if anything changed
-      const changed =
-        (statusLogistico && statusLogistico !== cliente.omie_status_logistico) ||
-        (codigoRastreio && codigoRastreio !== cliente.omie_codigo_rastreio) ||
-        (notaFiscal && notaFiscal !== cliente.omie_nota_fiscal) ||
-        (dataFaturamento && dataFaturamento !== cliente.omie_data_faturamento) ||
-        (newStatusFollowUp !== cliente.status_follow_up)
+      // 2) Atualizar o card do cliente vinculado ao pedido
+      if (pedido.cliente_id) {
+        const { data: cli } = await supabase
+          .from('clientes')
+          .select('id, etapa, status_follow_up, status_amostra, omie_status_logistico, omie_codigo_rastreio, omie_nota_fiscal, omie_data_faturamento, vendedor_id')
+          .eq('id', pedido.cliente_id)
+          .maybeSingle()
 
-      if (!changed) continue
+        if (cli) {
+          const isAmostra = pedido.tipo === 'bonificacao' && cli.etapa === 'amostra'
+          const novoStatus = cancelado
+            ? (isAmostra ? null : cli.status_follow_up) // cancelado não move status manual — só marca omie_status
+            : (isAmostra ? amostraStatus : followUpStatus)
 
-      const nowIso = new Date().toISOString()
-      const updates: Record<string, any> = { updated_at: nowIso, ultima_interacao: nowIso.split('T')[0] }
-      if (statusLogistico) updates.omie_status_logistico = statusLogistico
-      if (codigoRastreio) updates.omie_codigo_rastreio = codigoRastreio
-      if (notaFiscal) updates.omie_nota_fiscal = notaFiscal
-      if (dataFaturamento) updates.omie_data_faturamento = dataFaturamento
-      const statusChanged = newStatusFollowUp !== cliente.status_follow_up
-      if (statusChanged) updates.status_follow_up = newStatusFollowUp
+          const cliUpdates: Record<string, any> = {}
+          if (etapa && etapa !== cli.omie_status_logistico) cliUpdates.omie_status_logistico = etapa
+          if (rastreio && rastreio !== cli.omie_codigo_rastreio) cliUpdates.omie_codigo_rastreio = rastreio
+          if (nf && nf !== cli.omie_nota_fiscal) cliUpdates.omie_nota_fiscal = nf
+          if (dataFat && dataFat !== cli.omie_data_faturamento) cliUpdates.omie_data_faturamento = dataFat
+          if (dataPrev) cliUpdates.data_entrega_prevista = dataPrev
+          if (novoStatus && novoStatus !== (isAmostra ? cli.status_amostra : cli.status_follow_up)) {
+            if (isAmostra) cliUpdates.status_amostra = novoStatus
+            else cliUpdates.status_follow_up = novoStatus
+          }
 
-      const { error: updateErr } = await supabase
-        .from('clientes')
-        .update(updates)
-        .eq('id', cliente.id)
+          if (Object.keys(cliUpdates).length > 0) {
+            const { error: e2 } = await supabase.from('clientes').update(cliUpdates).eq('id', cli.id)
+            if (e2) throw new Error(`cliente: ${e2.message}`)
 
-      if (updateErr) throw new Error(updateErr.message)
+            // Notificação + tarefa de satisfação ao entregar
+            const labelField = isAmostra ? 'status_amostra' : 'status_follow_up'
+            if (cliUpdates[labelField]) {
+              const { data: cliFull } = await supabase.from('clientes').select('razao_social').eq('id', cli.id).single()
+              const label = novoStatus === 'entregue' ? 'Entregue' : novoStatus === 'expedido' ? 'Expedido' : novoStatus === 'faturado' ? 'Faturado' : novoStatus
+              try {
+                await supabase.from('notificacoes').insert({
+                  tipo: novoStatus === 'entregue' ? 'success' : 'info',
+                  titulo: `📦 ${isAmostra ? 'Amostra' : 'Pedido'} ${label}`,
+                  mensagem: `${cliFull?.razao_social || 'Cliente'}: ${label}${nf ? ` (NF ${nf})` : ''} — status real do Omie.`,
+                  cliente_id: cli.id, vendedor_id: cli.vendedor_id || null,
+                  lida: false, created_at: new Date().toISOString(),
+                })
+              } catch { /* non-critical */ }
+              if (novoStatus === 'entregue' && !isAmostra) {
+                try {
+                  const { data: existente } = await supabase
+                    .from('tarefas')
+                    .select('id')
+                    .eq('cliente_id', cli.id)
+                    .ilike('titulo', 'Coletar satisfação:%')
+                    .in('status', ['pendente', 'em_andamento'])
+                    .limit(1)
+                  if (!existente || existente.length === 0) {
+                    await supabase.from('tarefas').insert({
+                      titulo: `Coletar satisfação: ${cliFull?.razao_social || 'cliente'}`,
+                      descricao: 'Pedido entregue — coletar feedback de satisfação do cliente.',
+                      cliente_id: cli.id, vendedor_id: cli.vendedor_id || null,
+                      tipo: 'follow_up', prioridade: 'alta', status: 'pendente',
+                      data: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+                    })
+                  }
+                } catch { /* non-critical */ }
+              }
+            }
+          }
+        }
+      }
+
       atualizados++
-
-      // Insert notification + activity when follow_up sub-status changes
-      if (statusChanged) {
-        const statusLabels: Record<string, string> = {
-          'faturado': 'Faturado',
-          'em_producao': 'Em Produção',
-          'expedido': 'Expedido/Coletado',
-          'entregue': 'Entregue',
-        }
-        const label = statusLabels[newStatusFollowUp] || newStatusFollowUp
-        const isEntregue = newStatusFollowUp === 'entregue'
-
-        // Insert notification
-        try {
-          await supabase.from('notificacoes').insert({
-            tipo: isEntregue ? 'success' : 'info',
-            titulo: isEntregue ? '📦 Pedido Entregue!' : `📦 Status Omie: ${label}`,
-            mensagem: `${cliente.razao_social}: status atualizado para ${label}${notaFiscal ? ` (NF: ${notaFiscal})` : ''}`,
-            cliente_id: cliente.id,
-            lida: false,
-            created_at: nowIso,
-          })
-        } catch { /* non-critical */ }
-
-        // Insert activity
-        try {
-          await supabase.from('atividades').insert({
-            tipo: 'moveu',
-            descricao: `[Omie] ${cliente.razao_social}: ${label}${notaFiscal ? ` — NF ${notaFiscal}` : ''}`,
-            vendedor_nome: 'Sistema/Omie',
-            timestamp: nowIso,
-          })
-        } catch { /* non-critical */ }
-
-        // If entregue, create follow-up task
-        if (isEntregue) {
-          try {
-            await supabase.from('tarefas').insert({
-              titulo: `Coletar satisfação: ${cliente.razao_social}`,
-              descricao: `Pedido entregue — coletar feedback de satisfação do cliente.`,
-              cliente_id: cliente.id,
-              tipo: 'follow_up',
-              prioridade: 'alta',
-              status: 'pendente',
-              data_vencimento: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-              created_at: nowIso,
-            })
-          } catch { /* non-critical */ }
-        }
-      }
-
-      log.info({ clienteId: cliente.id, razaoSocial: cliente.razao_social, status: statusLogistico, nf: notaFiscal, followUpStatus: newStatusFollowUp },
-        'syncOmieLogistics: Cliente atualizado')
+      log.info({ pedidoId: pedido.id, omie: pedido.omie_codigo, etapa, nf, rastreio }, 'syncOmieLogistics: pedido sincronizado')
     } catch (err: any) {
-      erros.push({ clienteId: cliente.id, erro: err.message })
-      log.error({ err, clienteId: cliente.id }, 'syncOmieLogistics: Erro ao processar cliente')
+      erros.push({ pedidoId: pedido.id, erro: err.message })
+      log.error({ err, pedidoId: pedido.id }, 'syncOmieLogistics: erro ao processar pedido')
     }
   }
 
-  log.info({ atualizados, semPedido, erros: erros.length, total: clientes.length },
-    'syncOmieLogistics: Sync concluído')
-  return { atualizados, semPedido, erros }
+  log.info({ atualizados, naoEncontrados, erros: erros.length, total: pedidos.length }, 'syncOmieLogistics: concluído')
+  return { atualizados, semPedidoOmie: 0, naoEncontrados, erros }
 }

@@ -34,7 +34,8 @@ export function buildNovoCicloCliente(
     enderecoCidade: cliente.enderecoCidade,
     enderecoEstado: cliente.enderecoEstado,
     enderecoCep: cliente.enderecoCep,
-    cnpj2: cliente.cnpj2,
+    // cnpj2 não é copiado: identificador externo que pode ter índice único no banco
+    cnpj2: undefined,
     enderecoRua2: cliente.enderecoRua2,
     enderecoNumero2: cliente.enderecoNumero2,
     enderecoComplemento2: cliente.enderecoComplemento2,
@@ -47,7 +48,8 @@ export function buildNovoCicloCliente(
     redesSociais: cliente.redesSociais,
     whatsapp: cliente.whatsapp,
     omieCodigo: cliente.omieCodigo,
-    agendorCodigo: cliente.agendorCodigo,
+    // agendorCodigo não é copiado: código de importação único do card original
+    agendorCodigo: undefined,
     instagram: cliente.instagram,
     facebook: cliente.facebook,
     linkedin: cliente.linkedin,
@@ -111,8 +113,9 @@ export function buildNovoCicloCliente(
     omieDataFaturamento: undefined,
     tentativaAmostra: 0,
     whatsappValido: cliente.whatsappValido,
-    whatsappJid: cliente.whatsappJid,
-    whatsappValidadoEm: cliente.whatsappValidadoEm,
+    // whatsappJid/validadoEm não são copiados: identificador único da sessão WhatsApp do card original
+    whatsappJid: undefined,
+    whatsappValidadoEm: undefined,
     googlePlaceId: undefined,
     googleRating: cliente.googleRating,
     googleReviews: cliente.googleReviews,

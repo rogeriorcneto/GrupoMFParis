@@ -1561,6 +1561,65 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
   }
 })
 
+// ─── Generic JSON store ───
+// Fallback para coleções cujas tabelas ainda não foram criadas no banco
+// (migrations pendentes). Persiste o payload JSON em `atividades.descricao`
+// com tipo = 'store:<collection>' — funciona até o schema real existir.
+const STORE_COLLECTIONS = new Set([
+  'automacoes', 'automacoes_execucoes', 'ia_contexto', 'classes_clientes', 'documentos',
+])
+const storeTipo = (c: string) => `store:${c}`
+const parseStoreRow = (r: any) => { try { return { id: r.id, criadoEm: r.created_at, ...JSON.parse(r.descricao) } } catch { return { id: r.id, criadoEm: r.created_at } } }
+
+app.get('/api/store/:collection', requireAuth, async (req, res) => {
+  const c = req.params.collection
+  if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  try {
+    let q = supabase.from('atividades').select('id, descricao, created_at').eq('tipo', storeTipo(c)).order('created_at', { ascending: false })
+    const { data, error } = await q
+    if (error) { res.status(500).json({ error: error.message }); return }
+    res.json((data || []).map(parseStoreRow))
+  } catch (err: any) { res.status(500).json({ error: err.message }) }
+})
+
+app.post('/api/store/:collection', requireAuth, async (req, res) => {
+  const c = req.params.collection
+  if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  try {
+    const payload = req.body || {}
+    const { data, error } = await supabase.from('atividades')
+      .insert({ tipo: storeTipo(c), descricao: JSON.stringify(payload), vendedor_nome: (req as any).vendedor?.nome || 'Sistema' })
+      .select('id, created_at').single()
+    if (error) { res.status(500).json({ error: error.message }); return }
+    res.json({ id: data.id, criadoEm: data.created_at, ...payload })
+  } catch (err: any) { res.status(500).json({ error: err.message }) }
+})
+
+app.patch('/api/store/:collection/:id', requireAuth, async (req, res) => {
+  const c = req.params.collection
+  if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  try {
+    const { data: cur } = await supabase.from('atividades').select('id, descricao').eq('id', req.params.id).eq('tipo', storeTipo(c)).single()
+    if (!cur) { res.status(404).json({ error: 'Registro não encontrado' }); return }
+    let merged: any = {}
+    try { merged = JSON.parse(cur.descricao) } catch { /* vazio */ }
+    Object.assign(merged, req.body || {})
+    const { error } = await supabase.from('atividades').update({ descricao: JSON.stringify(merged) }).eq('id', cur.id)
+    if (error) { res.status(500).json({ error: error.message }); return }
+    res.json({ id: cur.id, ...merged })
+  } catch (err: any) { res.status(500).json({ error: err.message }) }
+})
+
+app.delete('/api/store/:collection/:id', requireAuth, async (req, res) => {
+  const c = req.params.collection
+  if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  try {
+    const { error } = await supabase.from('atividades').delete().eq('id', req.params.id).eq('tipo', storeTipo(c))
+    if (error) { res.status(500).json({ error: error.message }); return }
+    res.json({ ok: true })
+  } catch (err: any) { res.status(500).json({ error: err.message }) }
+})
+
 // ─── CNPJ Proxy (evita CORS das APIs públicas) ───
 app.get('/api/cnpj/:cnpj', requireAuth, rateLimit(30, 60_000), async (req, res) => {
   const digits = req.params.cnpj.replace(/\D/g, '')
@@ -1598,6 +1657,16 @@ app.get('/api/cnpj/:cnpj', requireAuth, rateLimit(30, 60_000), async (req, res) 
               cnae_fiscal: raw.atividade_principal?.[0]?.code?.replace(/[^0-9]/g, ''),
               cnae_fiscal_descricao: raw.atividade_principal?.[0]?.text,
               cnaes_secundarios: (raw.atividades_secundarias || []).map((a: any) => ({ codigo: a.code?.replace(/[^0-9]/g, ''), descricao: a.text })),
+              descricao_situacao_cadastral: raw.situacao,
+              data_situacao_cadastral: raw.data_situacao,
+              motivo_situacao_cadastral: raw.motivo_situacao_cadastral,
+              descricao_natureza_juridica: raw.natureza_juridica,
+              capital_social: raw.capital_social,
+              descricao_porte: raw.porte,
+              data_inicio_atividade: raw.abertura,
+              qsa: (raw.qsa || []).map((s: any) => ({ nome_socio: s.nome, qualificacao_socio: s.qual })),
+              email: raw.email,
+              ddd_telefone_1: raw.telefone,
             }
           }
         }

@@ -13,7 +13,7 @@ import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
 import { supabase } from '../lib/supabase'
-import { transcribeCallRecording } from '../lib/botApi'
+import { transcribeCallRecording, fetchCnpjViaBackend } from '../lib/botApi'
 
 function normalizarEmpresa(s: string) {
   return s.toLowerCase().trim()
@@ -169,6 +169,20 @@ export default function ClientePanel({
   const [panelContatoSetor, setPanelContatoSetor] = useState(notasEmpresa.setor)
   const [panelInfoAdicional, setPanelInfoAdicional] = useState(notasEmpresa.info)
   const [editingInfoAdicional, setEditingInfoAdicional] = useState(false)
+  // Dados cadastrais da Receita Federal (BrasilAPI/ReceitaWS via backend)
+  const [dadosCnpj, setDadosCnpj] = useState<any | null>(null)
+  const [loadingCnpj, setLoadingCnpj] = useState(false)
+  useEffect(() => {
+    const digits = (c.cnpj || '').replace(/\D/g, '')
+    if (digits.length !== 14) { setDadosCnpj(null); return }
+    let cancelled = false
+    setLoadingCnpj(true)
+    fetchCnpjViaBackend(digits)
+      .then(data => { if (!cancelled) setDadosCnpj(data) })
+      .catch(() => { if (!cancelled) setDadosCnpj(null) })
+      .finally(() => { if (!cancelled) setLoadingCnpj(false) })
+    return () => { cancelled = true }
+  }, [c.cnpj])
   React.useEffect(() => {
     if (!editingInfoAdicional) {
       setPanelInfoAdicional(notasEmpresa.info)
@@ -1254,6 +1268,81 @@ export default function ClientePanel({
               </p>
             )}
           </div>
+
+          {/* === DADOS CADASTRAIS (RECEITA FEDERAL) === */}
+          {(() => {
+            const formatCapital = (v: any) => {
+              const n = typeof v === 'number' ? v : parseFloat(String(v || '').replace(/\./g, '').replace(',', '.'))
+              return Number.isFinite(n) && n > 0 ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null
+            }
+            const formatData = (v: any) => {
+              if (!v) return null
+              const s = String(v)
+              const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+              if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
+              const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+              if (br) return s.slice(0, 10)
+              return s
+            }
+            const cnaesSec: { codigo?: string; descricao?: string }[] = dadosCnpj?.cnaes_secundarios || []
+            const socios: { nome_socio?: string; qualificacao_socio?: string }[] = dadosCnpj?.qsa || []
+            return (c.cnpj || loadingCnpj || dadosCnpj) ? (
+              <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-gray-900">🏛️ Dados cadastrais <span className="text-xs font-normal text-gray-500">(Receita Federal)</span></h3>
+                {loadingCnpj ? (
+                  <p className="text-sm text-gray-400 italic">Consultando CNPJ...</p>
+                ) : dadosCnpj ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      {dadosCnpj.descricao_situacao_cadastral && (
+                        <div><p className="text-xs text-gray-500">Situação cadastral</p><p className={`font-medium ${/ativa/i.test(dadosCnpj.descricao_situacao_cadastral) ? 'text-emerald-700' : 'text-red-600'}`}>{dadosCnpj.descricao_situacao_cadastral}{dadosCnpj.data_situacao_cadastral ? ` desde ${formatData(dadosCnpj.data_situacao_cadastral)}` : ''}</p></div>
+                      )}
+                      {dadosCnpj.motivo_situacao_cadastral && (
+                        <div><p className="text-xs text-gray-500">Motivo da situação</p><p className="font-medium text-gray-900">{dadosCnpj.motivo_situacao_cadastral}</p></div>
+                      )}
+                      {formatData(dadosCnpj.data_inicio_atividade) && (
+                        <div><p className="text-xs text-gray-500">Data de abertura</p><p className="font-medium text-gray-900">{formatData(dadosCnpj.data_inicio_atividade)}</p></div>
+                      )}
+                      {(dadosCnpj.descricao_natureza_juridica || dadosCnpj.natureza_juridica) && (
+                        <div><p className="text-xs text-gray-500">Natureza jurídica</p><p className="font-medium text-gray-900">{dadosCnpj.descricao_natureza_juridica || dadosCnpj.natureza_juridica}</p></div>
+                      )}
+                      {formatCapital(dadosCnpj.capital_social) && (
+                        <div><p className="text-xs text-gray-500">Capital social</p><p className="font-medium text-gray-900">{formatCapital(dadosCnpj.capital_social)}</p></div>
+                      )}
+                      {(dadosCnpj.descricao_porte || dadosCnpj.porte) && (
+                        <div><p className="text-xs text-gray-500">Porte</p><p className="font-medium text-gray-900">{dadosCnpj.descricao_porte || dadosCnpj.porte}</p></div>
+                      )}
+                      {dadosCnpj.cnae_fiscal_descricao && (
+                        <div className="sm:col-span-2"><p className="text-xs text-gray-500">Atividade principal (CNAE)</p><p className="font-medium text-gray-900">{dadosCnpj.cnae_fiscal ? `${dadosCnpj.cnae_fiscal} - ` : ''}{dadosCnpj.cnae_fiscal_descricao}</p></div>
+                      )}
+                      {(dadosCnpj.ddd_telefone_1 || dadosCnpj.email) && (
+                        <div className="sm:col-span-2"><p className="text-xs text-gray-500">Contato no cadastro</p><p className="font-medium text-gray-900">{[dadosCnpj.ddd_telefone_1, dadosCnpj.email].filter(Boolean).join(' · ')}</p></div>
+                      )}
+                    </div>
+                    {cnaesSec.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Atividades secundárias</p>
+                        <ul className="text-xs text-gray-700 space-y-0.5 list-disc pl-4">
+                          {cnaesSec.slice(0, 8).map((a, i) => <li key={i}>{a.codigo ? `${a.codigo} - ` : ''}{a.descricao}</li>)}
+                          {cnaesSec.length > 8 && <li className="text-gray-400 italic">+ {cnaesSec.length - 8} outras</li>}
+                        </ul>
+                      </div>
+                    )}
+                    {socios.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Quadro de sócios</p>
+                        <ul className="text-xs text-gray-700 space-y-0.5">
+                          {socios.map((s, i) => <li key={i}>• {s.nome_socio}{s.qualificacao_socio ? ` (${s.qualificacao_socio})` : ''}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">Não foi possível consultar o CNPJ.</p>
+                )}
+              </div>
+            ) : null
+          })()}
 
           {/* === CONTATO E LOCALIZAÇÃO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">

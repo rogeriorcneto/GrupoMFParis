@@ -565,6 +565,42 @@ export async function fetchCnpjViaBackend(cnpj: string): Promise<any | null> {
   }
 }
 
+/** Generic JSON store no backend — fallback para tabelas ainda não migradas */
+export async function storeList(collection: string): Promise<any[]> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/store/${collection}`)
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  } catch { return [] }
+}
+
+export async function storeInsert(collection: string, payload: any): Promise<any | null> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/store/${collection}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    return res.ok ? data : null
+  } catch { return null }
+}
+
+export async function storeUpdate(collection: string, id: string | number, payload: any): Promise<any | null> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/store/${collection}/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    return res.ok ? data : null
+  } catch { return null }
+}
+
+export async function storeDelete(collection: string, id: string | number): Promise<boolean> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/store/${collection}/${id}`, { method: 'DELETE' })
+    return res.ok
+  } catch { return false }
+}
+
 /** Envia um batimento de tempo de tela (1 minuto ativo) */
 export async function sendTempoTelaBeat(
   vendedorId: number,

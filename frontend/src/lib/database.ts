@@ -607,7 +607,16 @@ export async function fetchClassesClientes(): Promise<ClasseCliente[]> {
     const result = await supabase.from('classes_clientes').select('id, nome').order('nome')
     return result
   })
-  if (error) throw error
+  if (error) {
+    if (isMissingTable(error)) {
+      const rows = await (await store()).storeList('classes_clientes')
+      if (rows.length > 0) return rows.map(r => ({ id: Number(r.id), nome: r.nome })) as ClasseCliente[]
+      // Seed padrão (mesmo da migration 20260720) enquanto a tabela não existe
+      return ['Indústria', 'Foods', 'Grandes Contas', 'Cozinha Industrial', 'Cesta Básica', 'Outros']
+        .map((nome, i) => ({ id: -(i + 1), nome }))
+    }
+    throw error
+  }
   return (data || []).map((row: any) => ({ id: Number(row.id), nome: row.nome }))
 }
 
@@ -616,7 +625,14 @@ export async function insertClasseCliente(nome: string): Promise<ClasseCliente> 
     const result = await supabase.from('classes_clientes').insert({ nome: nome.trim() }).select('id, nome').single()
     return result
   })
-  if (error) throw error
+  if (error) {
+    if (isMissingTable(error)) {
+      const created = await (await store()).storeInsert('classes_clientes', { nome: nome.trim(), criadoEm: new Date().toISOString() })
+      if (created) return { id: Number(created.id), nome: created.nome }
+      throw new Error('Falha ao salvar classe (tabela ausente no banco)')
+    }
+    throw error
+  }
   return { id: Number(data.id), nome: data.nome }
 }
 
@@ -659,9 +675,18 @@ export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Prom
 
 export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
   const row = clienteToDb(c)
-  const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('clientes').insert(row).select().single(); return r })
-  if (error) throw error
-  return clienteFromDb(data)
+  // Retry: se o banco rejeitar por coluna desconhecida (PGRST204 — migration
+  // ainda não aplicada em produção), remove a coluna e tenta novamente.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data, error } = await withAuthRetry(async () => { const r = await supabase.from('clientes').insert(row).select().single(); return r })
+    if (!error) return clienteFromDb(data)
+    const missing = error?.code === 'PGRST204'
+      ? /'([^']+)' column/i.exec(error.message || '')?.[1]
+      : null
+    if (missing && missing in row) { delete row[missing]; continue }
+    throw error
+  }
+  throw new Error('Falha ao inserir cliente: muitas colunas incompatíveis com o schema do banco')
 }
 
 export interface ImportFalha { razaoSocial: string; cnpj?: string; erro: string }
@@ -1961,6 +1986,11 @@ export function iaContextoFromDb(row: any): IAContexto {
   }
 }
 
+// Detecta "tabela ainda não migrada" no PostgREST
+const isMissingTable = (e: any) =>
+  e?.code === 'PGRST205' || /Could not find the table|does not exist/i.test(e?.message || '')
+const store = () => import('./botApi')
+
 export async function getIAContexto(secao?: string): Promise<IAContexto[]> {
   try {
     let query = supabase
@@ -1978,6 +2008,10 @@ export async function getIAContexto(secao?: string): Promise<IAContexto[]> {
     if (error) throw error
     return data ? data.map(iaContextoFromDb) : []
   } catch (err) {
+    if (isMissingTable(err)) {
+      const rows = await (await store()).storeList('ia_contexto')
+      return rows.filter(r => r.ativo !== false && (!secao || r.secao === secao)) as IAContexto[]
+    }
     console.error('Erro ao buscar contexto da IA:', err)
     return []
   }
@@ -2012,6 +2046,14 @@ export async function createIAContexto(
     if (error) throw error
     return data ? iaContextoFromDb(data) : null
   } catch (err) {
+    if (isMissingTable(err)) {
+      const vendedor = await getLoggedVendedor().catch(() => null)
+      const created = await (await store()).storeInsert('ia_contexto', {
+        secao, titulo, tipo, conteudo, urlArquivo, tamanhoArquivo,
+        criadoPor: vendedor?.id, ativo: true, criadoEm: new Date().toISOString(),
+      })
+      return created as IAContexto | null
+    }
     console.error('Erro ao criar contexto da IA:', err)
     return null
   }
@@ -2045,6 +2087,9 @@ export async function updateIAContexto(
     if (error) throw error
     return data ? iaContextoFromDb(data) : null
   } catch (err) {
+    if (isMissingTable(err)) {
+      return await (await store()).storeUpdate('ia_contexto', id, updates) as IAContexto | null
+    }
     console.error('Erro ao atualizar contexto da IA:', err)
     return null
   }
@@ -2060,6 +2105,9 @@ export async function deleteIAContexto(id: string): Promise<boolean> {
     if (error) throw error
     return true
   } catch (err) {
+    if (isMissingTable(err)) {
+      return await (await store()).storeDelete('ia_contexto', id)
+    }
     console.error('Erro ao deletar contexto da IA:', err)
     return false
   }
@@ -2076,19 +2124,26 @@ export async function uploadArquivoIAContexto(
     const extensao = arquivo.name.split('.').pop()
     const nomeArquivo = `ia-contexto/${secao}/${timestamp}-${arquivo.name}`
 
-    // Fazer upload para o Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('documentos')
+    // Fazer upload para o Supabase Storage (fallback para bucket existente
+    // caso o bucket 'documentos' ainda não tenha sido criado pela migration)
+    let bucket = 'documentos'
+    let { data, error } = await supabase.storage
+      .from(bucket)
       .upload(nomeArquivo, arquivo, {
         cacheControl: '3600',
         upsert: false
       })
+    if (error && /bucket.*not.*found/i.test(error.message || '')) {
+      bucket = 'interacoes-anexos'
+      const retry = await supabase.storage.from(bucket).upload(nomeArquivo, arquivo, { cacheControl: '3600', upsert: false })
+      data = retry.data; error = retry.error
+    }
 
     if (error) throw error
 
     // Obter URL pública
     const { data: { publicUrl } } = supabase.storage
-      .from('documentos')
+      .from(bucket)
       .getPublicUrl(data.path)
 
     return {
@@ -2184,6 +2239,10 @@ export async function getAutomacoes(): Promise<Automacao[]> {
     if (error) throw error
     return data ? data.map(automacaoFromDb) : []
   } catch (err) {
+    if (isMissingTable(err)) {
+      const rows = await (await store()).storeList('automacoes')
+      return rows.filter(r => r.ativo !== false) as Automacao[]
+    }
     console.error('Erro ao buscar automações:', err)
     return []
   }
@@ -2200,6 +2259,10 @@ export async function getAutomacao(id: string): Promise<Automacao | null> {
     if (error) throw error
     return data ? automacaoFromDb(data) : null
   } catch (err) {
+    if (isMissingTable(err)) {
+      const rows = await (await store()).storeList('automacoes')
+      return (rows.find(r => String(r.id) === String(id)) || null) as Automacao | null
+    }
     console.error('Erro ao buscar automação:', err)
     return null
   }
@@ -2238,6 +2301,15 @@ export async function createAutomacao(
     if (error) throw error
     return data ? automacaoFromDb(data) : null
   } catch (err) {
+    if (isMissingTable(err)) {
+      const created = await (await store()).storeInsert('automacoes', {
+        nome, descricao, tipo, status: 'ativa',
+        gatilhoTipo, gatilhoConfig, acoes,
+        ativo: true, execucoes: 0,
+        criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+      })
+      return created as Automacao | null
+    }
     console.error('Erro ao criar automação:', err)
     return null
   }
@@ -2287,6 +2359,9 @@ export async function updateAutomacao(
     if (error) throw error
     return data ? automacaoFromDb(data) : null
   } catch (err) {
+    if (isMissingTable(err)) {
+      return await (await store()).storeUpdate('automacoes', id, { ...updates, atualizadoEm: new Date().toISOString() }) as Automacao | null
+    }
     console.error('Erro ao atualizar automação:', err)
     return null
   }
@@ -2302,6 +2377,9 @@ export async function deleteAutomacao(id: string): Promise<boolean> {
     if (error) throw error
     return true
   } catch (err) {
+    if (isMissingTable(err)) {
+      return await (await store()).storeDelete('automacoes', id)
+    }
     console.error('Erro ao deletar automação:', err)
     return false
   }
@@ -2323,6 +2401,10 @@ export async function getAutomacoesExecucoes(automacaoId?: string): Promise<Auto
     if (error) throw error
     return data ? data.map(automacaoExecucaoFromDb) : []
   } catch (err) {
+    if (isMissingTable(err)) {
+      const rows = await (await store()).storeList('automacoes_execucoes')
+      return rows.filter(r => !automacaoId || String(r.automacaoId) === String(automacaoId)) as AutomacaoExecucao[]
+    }
     console.error('Erro ao buscar execuções de automação:', err)
     return []
   }
@@ -2351,6 +2433,13 @@ export async function registrarExecucaoAutomacao(
     if (error) throw error
     return data ? automacaoExecucaoFromDb(data) : null
   } catch (err) {
+    if (isMissingTable(err)) {
+      const created = await (await store()).storeInsert('automacoes_execucoes', {
+        automacaoId, status, dadosEntrada, resultado, erroMensagem,
+        inicio: new Date().toISOString(), criadoEm: new Date().toISOString(),
+      })
+      return created as AutomacaoExecucao | null
+    }
     console.error('Erro ao registrar execução de automação:', err)
     return null
   }
