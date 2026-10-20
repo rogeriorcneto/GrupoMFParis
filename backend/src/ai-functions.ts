@@ -383,6 +383,18 @@ export const FUNCTION_DECLARATIONS = [
     },
   },
   {
+    name: 'relatorioCrm',
+    description: 'Relatorio agregado do CRM: pedidos no periodo por status/tipo/valor, clientes por etapa do funil, tarefas por status e (para gerente) pedidos por vendedor. Use para perguntas como "vendas da semana", "relatorio do mes", "quantos clientes estao em follow_up", "ultimos 10 dias". Gerente ve a empresa inteira; vendedor ve apenas os proprios dados.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        dataInicio: { type: 'STRING', description: 'Inicio do periodo YYYY-MM-DD (opcional — sem periodo = tudo)' },
+        dataFim: { type: 'STRING', description: 'Fim do periodo YYYY-MM-DD (opcional)' },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'enviarDocumentoPedido',
     description: 'Envia para o vendedor, via WhatsApp, o PDF do pedido de venda ou o DANFE da nota fiscal de um pedido. Vendedor só pode pedir documentos dos próprios pedidos; gerente pode de qualquer um. Use quando o usuário pedir "pdf do pedido", "nota fiscal", "danfe", "nf de tal venda".',
     parameters: {
@@ -990,6 +1002,80 @@ export async function executeFunction(
             success: false,
             message: `❌ Erro ao enviar pedido ${pedRow.numero} ao Omie: ${omieErr.message}`,
           }
+        }
+      }
+
+      case 'relatorioCrm': {
+        const scopeVendedor = user.cargo === 'gerente' ? null : user.id
+
+        // Pedidos do periodo
+        let pq = supabase.from('pedidos').select('id, numero, status, tipo, total_valor, data_criacao, vendedor_id')
+        if (scopeVendedor) pq = pq.eq('vendedor_id', scopeVendedor)
+        if (args.dataInicio) pq = pq.gte('data_criacao', `${args.dataInicio}T00:00:00`)
+        if (args.dataFim) pq = pq.lte('data_criacao', `${args.dataFim}T23:59:59`)
+        const { data: periodosPedidos, error: pErr } = await pq
+        if (pErr) return { success: false, message: `Erro ao consultar pedidos: ${pErr.message}` }
+
+        const porStatus: Record<string, number> = {}
+        const porTipo: Record<string, number> = {}
+        const porVendedor: Record<string, { qtd: number; total: number }> = {}
+        let totalValor = 0
+        for (const p of periodosPedidos || []) {
+          porStatus[p.status || 'desconhecido'] = (porStatus[p.status || 'desconhecido'] || 0) + 1
+          porTipo[p.tipo || 'venda'] = (porTipo[p.tipo || 'venda'] || 0) + 1
+          totalValor += p.total_valor || 0
+          if (!scopeVendedor) {
+            const k = String(p.vendedor_id)
+            porVendedor[k] = porVendedor[k] || { qtd: 0, total: 0 }
+            porVendedor[k].qtd++
+            porVendedor[k].total += p.total_valor || 0
+          }
+        }
+
+        // Clientes por etapa do funil (escopo do usuario)
+        const clientes = scopeVendedor
+          ? await db.fetchClientesByVendedor(user.id)
+          : await db.fetchClientes()
+        const porEtapa: Record<string, number> = {}
+        for (const c of clientes) porEtapa[c.etapa] = (porEtapa[c.etapa] || 0) + 1
+
+        // Tarefas por status (pendentes sempre; concluidas no periodo se houver periodo)
+        let tarefas = await db.fetchTarefasByVendedor(user.id)
+        const pendentes = tarefas.filter(t => t.status === 'pendente').length
+        const concluidasNoPeriodo = tarefas.filter(t =>
+          t.status === 'concluida' &&
+          (!args.dataInicio || String(t.data) >= String(args.dataInicio)) &&
+          (!args.dataFim || String(t.data) <= String(args.dataFim)),
+        ).length
+
+        // Nome dos vendedores para o relatorio por vendedor (gerente)
+        let porVendedorNome: Record<string, { qtd: number; total: number }> | undefined
+        if (!scopeVendedor && Object.keys(porVendedor).length > 0) {
+          const vendedores = await db.fetchVendedores()
+          const vMap = new Map(vendedores.map(ve => [String(ve.id), ve.nome]))
+          porVendedorNome = {}
+          for (const [vid, v] of Object.entries(porVendedor)) porVendedorNome[vMap.get(vid) || `vendedor ${vid}`] = v
+        }
+
+        const periodo = args.dataInicio || args.dataFim
+          ? `${args.dataInicio || 'inicio'} a ${args.dataFim || 'hoje'}`
+          : 'todo o periodo'
+
+        return {
+          success: true,
+          message: `Relatorio (${scopeVendedor ? 'seus dados' : 'empresa inteira'}) — ${periodo}.`,
+          data: {
+            periodo,
+            pedidos: {
+              quantidade: (periodosPedidos || []).length,
+              totalValor: Math.round(totalValor * 100) / 100,
+              porStatus,
+              porTipo,
+              ...(porVendedorNome ? { porVendedor: porVendedorNome } : {}),
+            },
+            clientesPorEtapa: porEtapa,
+            tarefas: { pendentes, concluidasNoPeriodo },
+          },
         }
       }
 
