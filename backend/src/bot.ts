@@ -164,6 +164,11 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
       // O usuário não precisa digitar "7" — conversa direto.
       const { updateSession } = await import('./session.js')
       updateSession(senderNumber, { state: 'chatting_ai' })
-      return handleAIChat(senderNumber, { ...session, state: 'chatting_ai' }, text, image, sendDocument)
+      const aiReply = await handleAIChat(senderNumber, { ...session, state: 'chatting_ai' }, text, image, sendDocument)
+      if (aiReply === 'Erro interno da IA. Tente novamente.') {
+        updateSession(senderNumber, { state: 'logged_in' })
+        return `Não entendi "${text}". Digite o número da opção ou *menu* para ver as opções.\n\n${getMenuText()}`
+      }
+      return aiReply
   }
 }

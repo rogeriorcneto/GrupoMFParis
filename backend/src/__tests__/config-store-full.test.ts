@@ -92,8 +92,8 @@ describe('Config Store — Full Coverage', () => {
       expect(config.emailPass).toBe('senha123')
       expect(config.emailFrom).toBe('noreply@mfparis.com')
       expect(config.whatsappNumero).toBe('5531999991234')
-      expect(config.omieAppKey).toBe('ENC:appkey')
-      expect(config.omieAppSecret).toBe('ENC:appsecret')
+      expect(config.omieAppKey).toBe('appkey')
+      expect(config.omieAppSecret).toBe('appsecret')
     })
 
     it('usa env vars como fallback quando DB retorna vazio', async () => {

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../database.js', () => ({
   signIn: vi.fn(),
   getVendedorByAuthId: vi.fn(),
+  findVendedorByPhone: vi.fn().mockResolvedValue(null),
   fetchClientes: vi.fn().mockResolvedValue([]),
   fetchClientesByVendedor: vi.fn().mockResolvedValue([]),
   fetchClienteById: vi.fn(),
