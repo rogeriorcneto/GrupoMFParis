@@ -905,8 +905,14 @@ export async function executeFunction(
       }
 
       case 'atualizarStatusPedido': {
-        const { data: pedRow, error: pedErr } = await supabase.from('pedidos').select('*').eq('id', args.pedidoId).single()
-        if (pedErr || !pedRow) return { success: false, message: `Pedido ID ${args.pedidoId} não encontrado.` }
+        let pedRow: any = null
+        const { data: byId } = await supabase.from('pedidos').select('*').eq('id', args.pedidoId).single()
+        pedRow = byId
+        if (!pedRow) {
+          const { data: byNumero } = await supabase.from('pedidos').select('*').eq('numero', String(args.pedidoId)).single()
+          pedRow = byNumero
+        }
+        if (!pedRow) return { success: false, message: `Pedido ID ${args.pedidoId} não encontrado.` }
 
         if (user.cargo !== 'gerente' && pedRow.vendedor_id !== user.id) {
           return { success: false, message: 'Você não pode alterar pedido de outro vendedor.' }
@@ -924,7 +930,7 @@ export async function executeFunction(
         const updates: Record<string, any> = { status: novoStatus }
         if (novoStatus === 'enviado') updates.data_envio = new Date().toISOString()
 
-        const { error: updErr } = await supabase.from('pedidos').update(updates).eq('id', args.pedidoId)
+        const { error: updErr } = await supabase.from('pedidos').update(updates).eq('id', pedRow.id)
         if (updErr) return { success: false, message: `Erro ao atualizar pedido: ${updErr.message}` }
 
         await db.insertAtividade({ tipo: 'pedido', descricao: `[IA] Alterou status do pedido ${pedRow.numero} para ${novoStatus}`, vendedorNome: user.nome })

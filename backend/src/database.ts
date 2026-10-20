@@ -415,7 +415,8 @@ export async function updateVendedorCredentials(
 }
 
 /** Localiza um vendedor pelo número de WhatsApp (campo telefone).
- *  Números podem estar salvos com/sem 55 e com/sem 9º dígito. */
+ *  O telefone pode estar salvo com máscara/espaços e com/sem 55 e 9º dígito,
+ *  então a comparação é feita em dígitos normalizados (tabela é pequena). */
 export async function findVendedorByPhone(phone: string): Promise<Vendedor | null> {
   const clean = phone.replace(/\D/g, '')
   if (!clean) return null
@@ -423,27 +424,26 @@ export async function findVendedorByPhone(phone: string): Promise<Vendedor | nul
   const formatted = formatBrazilianPhone(clean)
   const variations = generateBrazilianPhoneVariations(formatted)
 
-  const suffixes = new Set<string>()
+  // Candidatos: número completo e sem o prefixo 55
+  const candidates = new Set<string>()
   for (const v of variations) {
-    suffixes.add(v)
-    if (v.startsWith('55')) suffixes.add(v.slice(2))
+    candidates.add(v)
+    if (v.startsWith('55')) candidates.add(v.slice(2))
   }
-  const orFilter = [...suffixes].map(s => `telefone.ilike.%${s}`).join(',')
 
   const { data, error } = await supabase
     .from('vendedores')
     .select('*')
-    .or(orFilter)
     .eq('ativo', true)
-    .limit(5)
+    .not('telefone', 'is', null)
 
   if (error || !data || data.length === 0) return null
 
-  // Confirma por dígitos (o ilike pode trazer falsos positivos)
   const match = data.find(v => {
     const tel = (v.telefone || '').replace(/\D/g, '')
-    if (!tel) return false
-    return [...suffixes].some(s => tel.endsWith(s) || s.endsWith(tel))
+    if (tel.length < 10) return false
+    // Match exato ou com/sem o 9º dígito, com/sem 55
+    return [...candidates].some(c => tel === c || tel.endsWith(c) || c.endsWith(tel))
   })
   return match ? vendedorFromDb(match) : null
 }
@@ -612,7 +612,33 @@ export async function insertPedido(p: Omit<Pedido, 'id'>): Promise<Pedido> {
     p_data_envio: p.dataEnvio || '',
     p_itens: itensJson,
   })
-  if (error) throw error
+
+  if (error) {
+    // A RPC instalada em produção é a versão antiga (20250228), que insere
+    // p_data_criacao TEXT direto na coluna TIMESTAMPTZ — erro 42804 em toda
+    // chamada. Fallback: inserts diretos até a migration nova ser aplicada.
+    const { data: ped, error: pedErr } = await supabase.from('pedidos').insert({
+      numero: p.numero,
+      cliente_id: p.clienteId,
+      vendedor_id: p.vendedorId,
+      observacoes: p.observacoes || null,
+      status: p.status,
+      total_valor: p.totalValor,
+      data_criacao: p.dataCriacao || new Date().toISOString(),
+      data_envio: p.dataEnvio || null,
+      tipo: p.tipo || 'venda',
+      forma_pagamento: p.formaPagamento || 'À vista',
+      tipo_frete: p.tipoFrete || null,
+    }).select().single()
+    if (pedErr) throw pedErr
+    if (itensJson.length > 0) {
+      const { error: itErr } = await supabase.from('itens_pedido').insert(
+        itensJson.map(i => ({ ...i, pedido_id: ped.id }))
+      )
+      if (itErr) throw itErr
+    }
+    return pedidoFromDb(ped, itensJson)
+  }
 
   // Update extra commercial fields not handled by the RPC
   const extras: Record<string, any> = {}

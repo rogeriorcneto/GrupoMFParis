@@ -148,12 +148,12 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('')
   lines.push('REGRAS DE EXECUCAO:')
   lines.push('- Para CADASTRAR CLIENTE: pergunte razaoSocial, contatoNome, contatoTelefone. Se tiver cnpj e email, melhor. Use createCliente.')
-  lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte: (1) tipo do pedido (venda ou bonificacao/amostra), (2) forma de pagamento (A vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias), (3) tipo de frete (CIF ou FOB), (4) quais produtos e quantidades em KG. Use createPedido com TODOS esses campos.')
+  lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte: (1) tipo do pedido (venda ou bonificacao/amostra), (2) forma de pagamento (A vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias), (3) tipo de frete (CIF ou FOB), (4) quais produtos e quantidades em KG, (5) para VENDA, o preco unitario de cada item se nao informado (bonificacao/amostra usa preco 0). Use createPedido com TODOS esses campos.')
   lines.push('- Para ENVIAR WHATSAPP/EMAIL: primeiro busque o cliente com searchClientes, depois use sendWhatsApp ou sendEmail. SEMPRE confirme a mensagem com o usuario antes de enviar.')
   lines.push('- Para MOVER CLIENTE NO FUNIL: use moverClienteEtapa (somente gerente).')
   lines.push('- Para CRIAR TAREFA: use createTarefa com titulo, data (YYYY-MM-DD), tipo e prioridade.')
   lines.push('- Para PRODUTOS: use listarProdutos/searchProdutos para consultar; use updateProduto para alterar preco, sku, nome, categoria, unidade, descricao ou ativo (somente gerente).')
-  lines.push('- Para PEDIDOS: use listarPedidos para consultar e atualizarStatusPedido para enviar/cancelar/voltar rascunho quando apropriado.')
+  lines.push('- Para PEDIDOS: use listarPedidos para consultar e atualizarStatusPedido para enviar/cancelar/voltar rascunho quando apropriado. Quando o VENDEDOR pedir para "enviar o pedido para aprovacao", use atualizarStatusPedido com novoStatus "enviado" — aprovarPedido/recusarPedido sao apenas para o gerente agir sobre pedidos ja enviados. Para consultar pedidos use SEMPRE listarPedidos, nunca responda de memoria.')
   lines.push('- Para GERAR PROPOSTA: crie um pedido via createPedido e informe que o vendedor pode gerar o PDF pelo CRM web.')
   lines.push('- SEMPRE busque o cliente por nome antes de executar acoes que precisam de ID.')
   lines.push('- Se faltar informacao obrigatoria, PERGUNTE ao usuario antes de executar.')
@@ -267,6 +267,11 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
     // Function calling loop
     const executedActions: string[] = []
     let callCount = 0
+    let hallucinationChecked = false
+
+    // Padrão de "afirmação de ação concluída" — se a IA responder isso SEM
+    // ter chamado nenhuma função neste turno, ela alucinou a execução.
+    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado))/i
 
     while (callCount < MAX_FUNCTION_CALLS_WA) {
       const geminiData = await callGeminiWA(apiKey, contents, tools)
@@ -277,8 +282,23 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
       const functionCallPart = parts.find((p: any) => p.functionCall)
 
       if (!functionCallPart?.functionCall) {
-        // Final text response
         const textResponse = parts.find((p: any) => p.text)?.text || 'Sem resposta da IA.'
+
+        // Guardrail anti-alucinação: afirmou que executou uma ação mas não
+        // chamou função neste turno → repreende e dá uma chance de executar de verdade.
+        if (!hallucinationChecked && executedActions.length === 0 && ACTION_CLAIM.test(textResponse)) {
+          hallucinationChecked = true
+          log.warn({ vendedor: vendedor.nome, text: textResponse.slice(0, 120) }, 'IA WhatsApp afirmou ação sem executar função — forçando nova tentativa')
+          contents.push({ role: 'model', parts: [{ text: textResponse }] })
+          contents.push({
+            role: 'user',
+            parts: [{
+              text: 'ATENÇÃO: você afirmou que executou uma ação, mas nenhuma função foi chamada — nada foi salvo no CRM. Se a ação foi realmente solicitada, chame a função correspondente AGORA com os dados corretos. Se não for possível (falta dados), diga honestamente o que falta, sem inventar número de pedido ou confirmação.',
+            }],
+          })
+          continue
+        }
+
         history.push({ role: 'assistant', content: textResponse })
         updateSession(senderNumber, { aiHistory: history })
         return textResponse
