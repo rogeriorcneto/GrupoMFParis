@@ -77,7 +77,10 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   const H = 'nome|fantasia|cnpj|etapa|score|valor|diasInativo|vendedor|contato|telefone|email'
 
   const lines: string[] = []
+  const now = new Date()
+  const hoje = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   lines.push('Voce e a Assistente de IA do CRM Grupo MF Paris via WhatsApp, criada por Rogerio Reis. Desenvolvida exclusivamente para o Grupo MF Paris.')
+  lines.push(`HOJE E ${hoje} (${now.toLocaleDateString('pt-BR', { weekday: 'long' })}). Para datas relativas ("amanha", "sexta", "semana que vem"), calcule a partir de hoje e use o formato YYYY-MM-DD.`)
   lines.push('')
   lines.push('Sua personalidade: Direta, esperta e com tom leve. Respostas formatadas para WhatsApp (use *negrito*, _italico_, listas com - ou bullet). NUNCA termine com "Como posso ajudar?" ou frases genericas. Va direto ao ponto. Responda em portugues do Brasil.')
   lines.push('')
@@ -144,14 +147,15 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('')
   lines.push('## FUNCOES DISPONIVEIS (Function Calling)')
   lines.push('Voce tem acesso a funcoes para EXECUTAR acoes no CRM. Use-as quando o usuario pedir para fazer algo, nao apenas consultar.')
-  lines.push('Funcoes disponiveis: searchClientes, getClienteDetalhes, sendWhatsApp, sendEmail, startCall, createCliente, updateCliente, deleteCliente (gerente), moverClienteEtapa (gerente), marcarClientePerdido (gerente), createTarefa, completeTarefa, createPedido, listarPedidos, atualizarStatusPedido, aprovarPedido (gerente), recusarPedido (gerente), enviarPedidoOmie (gerente), listarProdutos, searchProdutos, createProduto (gerente), updateProduto (gerente), deleteProduto (gerente), addInteracao, addNota, listarTarefas.')
+  lines.push('Funcoes disponiveis: searchClientes, getClienteDetalhes, sendWhatsApp, sendEmail, startCall, createCliente, updateCliente, deleteCliente (gerente), moverClienteEtapa (gerente), marcarClientePerdido (gerente), createTarefa, completeTarefa, remarcarTarefa, createPedido, listarPedidos, atualizarStatusPedido, enviarDocumentoPedido, aprovarPedido (gerente), recusarPedido (gerente), enviarPedidoOmie (gerente), listarProdutos, searchProdutos, createProduto (gerente), updateProduto (gerente), deleteProduto (gerente), addInteracao, addNota, listarTarefas.')
   lines.push('')
   lines.push('REGRAS DE EXECUCAO:')
   lines.push('- Para CADASTRAR CLIENTE: campos OBRIGATORIOS (mesma regra do CRM): razaoSocial, contatoNome, contatoTelefone, cnpj OU cpf, endereco. Se faltar qualquer um, PERGUNTE antes de chamar createCliente — a funcao recusa campos faltando ou CNPJ/CPF invalido. Se o vendedor enviar FOTO/DOCUMENTO (ex.: cartao CNPJ), extraia todos os campos legiveis da imagem e use-os como dados informados — pergunte so o que realmente nao estiver visivel.')
   lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte: (1) tipo do pedido (venda ou bonificacao/amostra), (2) forma de pagamento (A vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias), (3) tipo de frete (CIF ou FOB), (4) quais produtos e quantidades em KG, (5) para VENDA, o preco unitario de cada item se nao informado (bonificacao/amostra usa preco 0). Use createPedido com TODOS esses campos.')
   lines.push('- Para ENVIAR WHATSAPP/EMAIL: primeiro busque o cliente com searchClientes, depois use sendWhatsApp ou sendEmail. SEMPRE confirme a mensagem com o usuario antes de enviar.')
   lines.push('- Para MOVER CLIENTE NO FUNIL: use moverClienteEtapa (somente gerente).')
-  lines.push('- Para CRIAR TAREFA: use createTarefa com titulo, data (YYYY-MM-DD), tipo e prioridade.')
+  lines.push('- Para CRIAR TAREFA: use createTarefa com titulo, data (YYYY-MM-DD), tipo e prioridade. Para consultar tarefas use listarTarefas (filtros: status, data, clienteId); para concluir use completeTarefa; para remarcar use remarcarTarefa com novaData YYYY-MM-DD. Quando o usuario disser "ela", "essa" ou "a tarefa" sem dar ID, use o ID retornado pela criacao/consulta anterior ou chame listarTarefas para acha-la — nunca peca o ID ao vendedor se voce pode descobri-lo.')
+  lines.push('- Para PDF/NOTA FISCAL de pedido: use enviarDocumentoPedido com tipo pedido_pdf (PDF do pedido) ou nota_fiscal (DANFE — so existe depois do faturamento). O arquivo chega direto no chat do vendedor.')
   lines.push('- Para PRODUTOS: use listarProdutos/searchProdutos para consultar; use updateProduto para alterar preco, sku, nome, categoria, unidade, descricao ou ativo (somente gerente).')
   lines.push('- Para PEDIDOS: use listarPedidos para consultar e atualizarStatusPedido para enviar/cancelar/voltar rascunho quando apropriado. Quando o VENDEDOR pedir para "enviar o pedido para aprovacao", use atualizarStatusPedido com novoStatus "enviado" — aprovarPedido/recusarPedido sao apenas para o gerente agir sobre pedidos ja enviados. Para consultar pedidos use SEMPRE listarPedidos, nunca responda de memoria.')
   lines.push('- Para GERAR PROPOSTA: crie um pedido via createPedido e informe que o vendedor pode gerar o PDF pelo CRM web.')
@@ -212,7 +216,7 @@ async function callGeminiWA(
   return resp.json()
 }
 
-export async function handleAIChat(senderNumber: string, session: UserSession, text: string, image?: { mimeType: string; data: string }): Promise<string> {
+export async function handleAIChat(senderNumber: string, session: UserSession, text: string, image?: { mimeType: string; data: string }, sendDocument?: (doc: { url: string; mimetype: string; fileName: string; caption?: string }) => Promise<{ success: boolean; error?: string }>): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     log.error('GEMINI_API_KEY nao configurada para WhatsApp AI')
@@ -277,7 +281,7 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
 
     // Padrão de "afirmação de ação concluída" — se a IA responder isso SEM
     // ter chamado nenhuma função neste turno, ela alucinou a execução.
-    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado)|estou (criando|cadastrando|enviando|registrando|agendando)|(vou |vamos )?(criar|cadastrar|enviar|registrar|agendar) (o|a|um|uma|este|essa|isso|esse)? ?(pedido|cliente|tarefa)? ?(agora|ja|já)?[.!])/i
+    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado)|estou (criando|cadastrando|enviando|registrando|agendando|buscando|procurando|verificando|consultando|listando)|(vou |vamos )?(criar|cadastrar|enviar|registrar|agendar|verificar|buscar|consultar|procurar|remarcar|concluir|listar|analisar|checar) (o|a|um|uma|este|essa|isso|esse)? ?(pedido|cliente|tarefa)? ?(agora|ja|já)?[.!]|aguarde( um)? (momento|instante)|deixa eu (ver|verificar|buscar)|(listando|buscando|procurando|analisando|verificando|conferindo|consultando|criando|cadastrando|enviando|concluindo|remarcando)[^.?!]*\.\.\.|(createTarefa|createCliente|createPedido|updateCliente|remarcarTarefa|completeTarefa|listarTarefas|listarPedidos|listarProdutos|atualizarStatusPedido|enviarDocumentoPedido|searchClientes|getClienteDetalhes|addNota|addInteracao|sendWhatsApp|sendEmail|moverClienteEtapa)\s*\()/i
 
     while (callCount < MAX_FUNCTION_CALLS_WA) {
       const geminiData = await callGeminiWA(apiKey, contents, tools)
@@ -314,7 +318,7 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
       const { name, args } = functionCallPart.functionCall
       log.info({ functionName: name, args, vendedor: vendedor.nome, via: 'whatsapp' }, 'IA WhatsApp chamou função')
 
-      const result = await executeFunction({ name, args }, vendedor, sendWhatsAppFn, sendEmailFn)
+      const result = await executeFunction({ name, args }, vendedor, sendWhatsAppFn, sendEmailFn, sendDocument)
       executedActions.push(`${name}: ${result.message}`)
       log.info({ functionName: name, success: result.success, message: result.message, via: 'whatsapp' }, 'Resultado função IA WhatsApp')
 

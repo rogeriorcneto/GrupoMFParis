@@ -35,7 +35,7 @@ function checkRateLimit(senderNumber: string): boolean {
  * Central message handler.
  * Receives a WhatsApp message and returns the reply text.
  */
-export async function handleMessage(senderNumber: string, text: string, image?: { mimeType: string; data: string }): Promise<string> {
+export async function handleMessage(senderNumber: string, text: string, image?: { mimeType: string; data: string }, sendDocument?: (doc: { url: string; mimetype: string; fileName: string; caption?: string }) => Promise<{ success: boolean; error?: string }>): Promise<string> {
   // Rate limit
   if (!checkRateLimit(senderNumber)) {
     return '⚠️ Muitas mensagens. Aguarde um momento.'
@@ -55,7 +55,7 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
       newSession.state = 'chatting_ai'
       newSession.aiHistory = []
       const nome = vendedor.nome.split(' ')[0]
-      const resposta = await handleAIChat(senderNumber, newSession, text, image)
+      const resposta = await handleAIChat(senderNumber, newSession, text, image, sendDocument)
       return `👋 *Oi, ${nome}!* Te reconheci pelo seu número.\n\n${resposta}`
     }
 
@@ -86,7 +86,7 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
   // ─── State-specific handling ───
   switch (session.state) {
     case 'chatting_ai':
-      return handleAIChat(senderNumber, session, text, image)
+      return handleAIChat(senderNumber, session, text, image, sendDocument)
 
     case 'creating_client':
       return handleCreateClientStep(senderNumber, session, text)
@@ -164,6 +164,6 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
       // O usuário não precisa digitar "7" — conversa direto.
       const { updateSession } = await import('./session.js')
       updateSession(senderNumber, { state: 'chatting_ai' })
-      return handleAIChat(senderNumber, { ...session, state: 'chatting_ai' }, text, image)
+      return handleAIChat(senderNumber, { ...session, state: 'chatting_ai' }, text, image, sendDocument)
   }
 }

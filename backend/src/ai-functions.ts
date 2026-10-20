@@ -293,6 +293,19 @@ export const FUNCTION_DECLARATIONS = [
       required: ['tarefaId'],
     },
   },
+  {
+    name: 'remarcarTarefa',
+    description: 'Remarca uma tarefa pendente para uma nova data (e opcionalmente nova hora). O vendedor só pode remarcar as próprias tarefas.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        tarefaId: { type: 'INTEGER', description: 'ID da tarefa a remarcar' },
+        novaData: { type: 'STRING', description: 'Nova data de vencimento no formato YYYY-MM-DD' },
+        novaHora: { type: 'STRING', description: 'Nova hora no formato HH:MM (opcional)' },
+      },
+      required: ['tarefaId', 'novaData'],
+    },
+  },
 
   // ── PEDIDOS ──
   {
@@ -367,6 +380,22 @@ export const FUNCTION_DECLARATIONS = [
         pedidoId: { type: 'INTEGER', description: 'ID do pedido a enviar' },
       },
       required: ['pedidoId'],
+    },
+  },
+  {
+    name: 'enviarDocumentoPedido',
+    description: 'Envia para o vendedor, via WhatsApp, o PDF do pedido de venda ou o DANFE da nota fiscal de um pedido. Vendedor só pode pedir documentos dos próprios pedidos; gerente pode de qualquer um. Use quando o usuário pedir "pdf do pedido", "nota fiscal", "danfe", "nf de tal venda".',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        pedidoId: { type: 'STRING', description: 'ID numérico ou numero do pedido (ex.: 638 ou 2026-1020-1942-013)' },
+        tipo: {
+          type: 'STRING',
+          description: 'pedido_pdf = PDF do pedido de venda; nota_fiscal = DANFE da NF-e (só existe depois do faturamento)',
+          enum: ['pedido_pdf', 'nota_fiscal'],
+        },
+      },
+      required: ['pedidoId', 'tipo'],
     },
   },
   {
@@ -498,11 +527,13 @@ export const FUNCTION_DECLARATIONS = [
   // ── CONSULTAS ──
   {
     name: 'listarTarefas',
-    description: 'Lista as tarefas do vendedor logado, opcionalmente filtradas por status ou data.',
+    description: 'Lista as tarefas do vendedor logado, opcionalmente filtradas por status, data ou cliente.',
     parameters: {
       type: 'OBJECT',
       properties: {
         status: { type: 'STRING', description: 'Filtrar por status: pendente ou concluida (opcional)', enum: ['pendente', 'concluida'] },
+        data: { type: 'STRING', description: 'Filtrar por data de vencimento YYYY-MM-DD (opcional)' },
+        clienteId: { type: 'INTEGER', description: 'Filtrar por cliente (opcional)' },
       },
       required: [],
     },
@@ -529,6 +560,8 @@ export async function executeFunction(
   sendWhatsAppFn?: (number: string, text: string, clienteId?: number) => Promise<{ success: boolean; error?: string }>,
   /** Email send function */
   sendEmailFn?: (to: string, subject: string, body: string, clienteId?: number, vendedorNome?: string) => Promise<{ success: boolean; error?: string }>,
+  /** WhatsApp document send function (PDF/DANFE back to the seller's chat) */
+  sendDocumentFn?: (doc: { url: string; mimetype: string; fileName: string; caption?: string }) => Promise<{ success: boolean; error?: string }>,
 ): Promise<AIFunctionResult> {
   const { name, args } = call
 
@@ -806,6 +839,27 @@ export async function executeFunction(
         }
       }
 
+      case 'remarcarTarefa': {
+        const { data: tarefaRow, error: tarefaErr } = await supabase.from('tarefas').select('*').eq('id', args.tarefaId).single()
+        if (tarefaErr || !tarefaRow) return { success: false, message: `Tarefa com ID ${args.tarefaId} não encontrada.` }
+        if (user.cargo !== 'gerente' && tarefaRow.vendedor_id !== user.id) {
+          return { success: false, message: 'Você não pode remarcar tarefas de outro vendedor.' }
+        }
+        if (tarefaRow.status === 'concluida' && user.cargo !== 'gerente') {
+          return { success: false, message: `A tarefa "${tarefaRow.titulo}" já está concluída e não pode ser remarcada.` }
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(args.novaData || ''))) {
+          return { success: false, message: 'Nova data inválida. Use o formato YYYY-MM-DD.' }
+        }
+        await db.remarcarTarefa(args.tarefaId, args.novaData, args.novaHora)
+        await db.insertAtividade({ tipo: 'tarefa', descricao: `[IA] Remarcou tarefa "${tarefaRow.titulo}" para ${args.novaData}`, vendedorNome: user.nome })
+        return {
+          success: true,
+          message: `✅ Tarefa "${tarefaRow.titulo}" remarcada para ${args.novaData}${args.novaHora ? ` às ${args.novaHora}` : ''}.`,
+          uiAction: { type: 'refreshTarefas' },
+        }
+      }
+
       // ── PEDIDOS ──
       case 'createPedido': {
         const access = await checkClienteAccess(args.clienteId, user)
@@ -1020,6 +1074,47 @@ export async function executeFunction(
         }
       }
 
+      case 'enviarDocumentoPedido': {
+        // Resolve pedido por id ou numero
+        let pedRow: any = null
+        if (/^\d+$/.test(String(args.pedidoId))) {
+          const { data } = await supabase.from('pedidos').select('*').eq('id', Number(args.pedidoId)).single()
+          pedRow = data
+        }
+        if (!pedRow) {
+          const { data } = await supabase.from('pedidos').select('*').eq('numero', String(args.pedidoId)).single()
+          pedRow = data
+        }
+        if (!pedRow) return { success: false, message: `Pedido "${args.pedidoId}" não encontrado.` }
+        if (user.cargo !== 'gerente' && pedRow.vendedor_id !== user.id) {
+          return { success: false, message: 'Você só pode baixar documentos dos seus próprios pedidos.' }
+        }
+        if (!pedRow.omie_codigo) return { success: false, message: `Pedido ${pedRow.numero} ainda não foi enviado ao Omie — não há PDF disponível.` }
+        if (!sendDocumentFn) return { success: false, message: 'Envio de documentos indisponível neste canal.' }
+
+        try {
+          const { obterDocumentosPedido } = await import('./omie/documentos.js')
+          const docs = await obterDocumentosPedido(pedRow.id)
+          const tipo = args.tipo || 'pedido_pdf'
+          if (tipo === 'nota_fiscal' && !docs.nfe) {
+            return { success: false, message: `Pedido ${pedRow.numero} ainda não tem NF-e emitida (não foi faturado no Omie).` }
+          }
+          const url = tipo === 'nota_fiscal' ? docs.nfe!.pdfDanfe : docs.pdfPedido
+          if (!url) return { success: false, message: `Documento indisponível para o pedido ${pedRow.numero}.` }
+          const fileName = tipo === 'nota_fiscal' ? `nfe-${docs.nfe!.numero || pedRow.numero}.pdf` : `pedido-${pedRow.numero}.pdf`
+          const sent = await sendDocumentFn({ url, mimetype: 'application/pdf', fileName, caption: `${tipo === 'nota_fiscal' ? 'NF-e' : 'Pedido'} ${pedRow.numero}` })
+          if (!sent.success) return { success: false, message: `Erro ao enviar o documento: ${sent.error}` }
+          await db.insertAtividade({ tipo: 'pedido', descricao: `[IA] Enviou ${tipo === 'nota_fiscal' ? 'DANFE da NF-e' : 'PDF'} do pedido ${pedRow.numero} por WhatsApp`, vendedorNome: user.nome })
+          return {
+            success: true,
+            message: `✅ ${tipo === 'nota_fiscal' ? `DANFE da NF-e ${docs.nfe!.numero}` : 'PDF do pedido'} ${pedRow.numero} enviado aqui no WhatsApp.`,
+            uiAction: { type: 'refreshPedidos' },
+          }
+        } catch (e: any) {
+          return { success: false, message: `Erro ao buscar documento do pedido ${pedRow.numero}: ${e?.message || e}` }
+        }
+      }
+
       // ── PRODUTOS ──
       case 'searchProdutos': {
         const termo = String(args.termo || '').trim()
@@ -1155,10 +1250,16 @@ export async function executeFunction(
 
       // ── CONSULTAS ──
       case 'listarTarefas': {
-        const tarefas = await db.fetchTarefasByVendedor(user.id)
-        const filtered = args.status ? tarefas.filter(t => t.status === args.status) : tarefas
-        if (filtered.length === 0) return { success: true, message: 'Nenhuma tarefa encontrada.', data: [] }
-        const lista = filtered.map(t => ({
+        if (args.clienteId) {
+          const access = await checkClienteAccess(args.clienteId, user)
+          if (!access.allowed) return { success: false, message: access.reason! }
+        }
+        let tarefas = await db.fetchTarefasByVendedor(user.id)
+        if (args.status) tarefas = tarefas.filter(t => t.status === args.status)
+        if (args.data) tarefas = tarefas.filter(t => String(t.data).slice(0, 10) === String(args.data))
+        if (args.clienteId) tarefas = tarefas.filter(t => t.clienteId === args.clienteId)
+        if (tarefas.length === 0) return { success: true, message: 'Nenhuma tarefa encontrada.', data: [] }
+        const lista = tarefas.map(t => ({
           id: t.id,
           titulo: t.titulo,
           data: t.data,
@@ -1166,8 +1267,9 @@ export async function executeFunction(
           tipo: t.tipo,
           status: t.status,
           prioridade: t.prioridade,
+          clienteId: t.clienteId,
         }))
-        return { success: true, message: `${filtered.length} tarefa(s) encontrada(s).`, data: lista }
+        return { success: true, message: `${tarefas.length} tarefa(s) encontrada(s).`, data: lista }
       }
 
       case 'listarProdutos': {

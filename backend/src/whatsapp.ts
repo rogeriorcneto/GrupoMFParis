@@ -303,7 +303,18 @@ export async function connectWhatsApp(): Promise<void> {
         }
 
         try {
-          const reply = await handleMessage(senderNumber, text.trim(), imageData)
+          // Envia documentos (PDF pedido / DANFE) de volta no mesmo chat do bot
+          const sendDocument = async (doc: { url: string; mimetype: string; fileName: string; caption?: string }) => {
+            try {
+              if (!sock) return { success: false, error: 'WhatsApp desconectado' }
+              await sock.sendMessage(from, { document: { url: doc.url }, mimetype: doc.mimetype, fileName: doc.fileName, caption: doc.caption })
+              return { success: true }
+            } catch (e: any) {
+              return { success: false, error: e?.message || 'Erro ao enviar documento' }
+            }
+          }
+
+          const reply = await handleMessage(senderNumber, text.trim(), imageData, sendDocument)
           if (reply && sock) {
             await sock.sendMessage(from, { text: reply })
             // Salvar resposta do bot no histórico

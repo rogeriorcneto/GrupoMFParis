@@ -559,9 +559,16 @@ export async function updateTarefaStatus(id: number, status: 'pendente' | 'concl
   if (error) throw error
 }
 
+export async function remarcarTarefa(id: number, data: string, hora?: string): Promise<void> {
+  const updates: Record<string, string> = { data }
+  if (hora !== undefined) updates.hora = hora
+  const { error } = await supabase.from('tarefas').update(updates).eq('id', id)
+  if (error) throw error
+}
+
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
   const { data, error } = await supabase.from('tarefas').insert({
-    titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora,
+    titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora || null,
     tipo: t.tipo, status: t.status, prioridade: t.prioridade,
     cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
     missao_id: t.missaoId || null, dia_missao: t.diaMissao || null, ordem: t.ordem || null,
