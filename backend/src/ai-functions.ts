@@ -384,7 +384,7 @@ export const FUNCTION_DECLARATIONS = [
   },
   {
     name: 'relatorioCrm',
-    description: 'Relatorio agregado do CRM: pedidos no periodo por status/tipo/valor, clientes por etapa do funil, tarefas por status e (para gerente) pedidos por vendedor. Use para perguntas como "vendas da semana", "relatorio do mes", "quantos clientes estao em follow_up", "ultimos 10 dias". Gerente ve a empresa inteira; vendedor ve apenas os proprios dados.',
+    description: 'Relatorio agregado do CRM (cobre TUDO da pagina Relatorios e Graficos): pedidos no periodo por status/tipo/valor, clientes por etapa do funil, ranking de vendedores (faturamento, volume em kg, taxa de conversao, ligacoes, emails, whatsapp, reunioes, visitas, propostas), perdas (total, valor, por categoria, motivos frequentes, detalhe), funil de conversao (leads, prospeccoes, diagnosticos, propostas, testes, negociacoes, pedidos fechados, taxa de conversao, tempo medio de fechamento), concentracao top 10, taxa de recompra, receita media, tempo de tela por cliente (dias na etapa), missoes em andamento e custo estimado. Use para QUALQUER pergunta de metrica/relatorio — "vendas da semana", "relatorio do mes", "ranking", "motivos de perda", "quantos clientes em follow_up", "concentracao", "recompra", "missoes", "ultimos 10 dias". Gerente ve a empresa inteira; vendedor ve apenas os proprios dados.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -1009,7 +1009,7 @@ export async function executeFunction(
         const scopeVendedor = user.cargo === 'gerente' ? null : user.id
 
         // Pedidos do periodo
-        let pq = supabase.from('pedidos').select('id, numero, status, tipo, total_valor, data_criacao, vendedor_id')
+        let pq = supabase.from('pedidos').select('id, numero, status, tipo, total_valor, data_criacao, vendedor_id, cliente_id')
         if (scopeVendedor) pq = pq.eq('vendedor_id', scopeVendedor)
         if (args.dataInicio) pq = pq.gte('data_criacao', `${args.dataInicio}T00:00:00`)
         if (args.dataFim) pq = pq.lte('data_criacao', `${args.dataFim}T23:59:59`)
@@ -1049,12 +1049,115 @@ export async function executeFunction(
         ).length
 
         // Nome dos vendedores para o relatorio por vendedor (gerente)
+        const vendedoresAll = await db.fetchVendedores()
         let porVendedorNome: Record<string, { qtd: number; total: number }> | undefined
         if (!scopeVendedor && Object.keys(porVendedor).length > 0) {
-          const vendedores = await db.fetchVendedores()
-          const vMap = new Map(vendedores.map(ve => [String(ve.id), ve.nome]))
+          const vMap = new Map(vendedoresAll.map(ve => [String(ve.id), ve.nome]))
           porVendedorNome = {}
           for (const [vid, v] of Object.entries(porVendedor)) porVendedorNome[vMap.get(vid) || `vendedor ${vid}`] = v
+        }
+
+        // ── Ranking de vendedores (mesmas formulas da pagina Relatorios) ──
+        const pedidosConfirmados = (periodosPedidos || []).filter(p => p.status === 'confirmado')
+        const pedidoIds = pedidosConfirmados.map(p => p.id)
+        const volumePorPedido = new Map<number, number>()
+        if (pedidoIds.length > 0) {
+          const { data: itensRows } = await supabase.from('itens_pedido').select('pedido_id, quantidade').in('pedido_id', pedidoIds)
+          for (const it of itensRows || []) volumePorPedido.set(it.pedido_id, (volumePorPedido.get(it.pedido_id) || 0) + (it.quantidade || 0))
+        }
+
+        // Interacoes do periodo (atribuidas ao vendedor dono do cliente)
+        const interacoes = await db.fetchInteracoes()
+        const inPeriod = (d?: string) =>
+          (!args.dataInicio || (d || '') >= String(args.dataInicio)) && (!args.dataFim || (d || '') <= `${args.dataFim}T23:59:59`)
+        const fi = interacoes.filter(i => inPeriod(i.data))
+        const clienteMap = new Map(clientes.map(c => [c.id, c]))
+
+        // Tarefas do periodo (gerente: todas; vendedor: as dele)
+        let tarefasPeriodo: { vendedorId?: number; tipo?: string; status?: string; data?: string }[] = []
+        {
+          const { data: tRows } = await supabase.from('tarefas').select('id, tipo, status, data, vendedor_id')
+          for (const t of tRows || []) {
+            if (scopeVendedor && t.vendedor_id !== scopeVendedor) continue
+            if (!inPeriod(t.data)) continue
+            tarefasPeriodo.push({ vendedorId: t.vendedor_id, tipo: t.tipo, status: t.status, data: t.data })
+          }
+        }
+
+        const rankingVendedores = vendedoresAll
+          .filter(v => v.ativo && (!scopeVendedor || v.id === scopeVendedor))
+          .map(v => {
+            const cv = clientes.filter(c => c.vendedorId === v.id)
+            const pv = pedidosConfirmados.filter(p => p.vendedor_id === v.id)
+            const faturamento = pv.reduce((s, p) => s + (p.total_valor || 0), 0)
+            const volume = pv.reduce((s, p) => s + (volumePorPedido.get(p.id) || 0), 0)
+            const ganhos = cv.filter(c => c.etapa === 'follow_up').length
+            const taxaConv = cv.length > 0 ? Math.round((ganhos / cv.length) * 1000) / 10 : 0
+            const porTipo = (tipo: string) => fi.filter(i => i.tipo === tipo && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
+            const visitas = tarefasPeriodo.filter(t => t.vendedorId === v.id && t.tipo === 'reuniao').length
+            const propostas = cv.filter(c => c.dataProposta).length
+            return { nome: v.nome.split(' ')[0], faturamento, volume, taxaConv, ligacoes: porTipo('ligacao'), emails: porTipo('email'), whats: porTipo('whatsapp'), reunioes: porTipo('reuniao'), visitas, propostas }
+          })
+          .filter(v => v.faturamento > 0 || v.ligacoes > 0 || v.emails > 0 || v.whats > 0 || v.reunioes > 0 || v.visitas > 0 || v.propostas > 0 || v.volume > 0)
+          .sort((a, b) => b.faturamento - a.faturamento)
+
+        // ── Perdas ──
+        const perdasList = clientes.filter(c => c.etapa === 'perdido' && (!args.dataInicio && !args.dataFim ? true : inPeriod(c.dataPerda)))
+        const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
+        const porCategoria: Record<string, number> = {}
+        const motivosFreqMap: Record<string, number> = {}
+        for (const c of perdasList) {
+          const k = catLabels[c.categoriaPerda || 'outro'] || 'Outro'
+          porCategoria[k] = (porCategoria[k] || 0) + 1
+          if (c.motivoPerda) motivosFreqMap[c.motivoPerda] = (motivosFreqMap[c.motivoPerda] || 0) + 1
+        }
+        const motivosFreq = Object.entries(motivosFreqMap).sort((a, b) => b[1] - a[1]).slice(0, 5)
+        const vMapNome = new Map(vendedoresAll.map(ve => [ve.id, ve.nome.split(' ')[0]]))
+        const perdasDetalhe = perdasList
+          .sort((a, b) => (b.dataPerda || '').localeCompare(a.dataPerda || ''))
+          .slice(0, 10)
+          .map(c => ({ cliente: c.razaoSocial, motivo: c.motivoPerda || catLabels[c.categoriaPerda || 'outro'] || '—', etapaAnterior: c.etapaAnterior || '', valor: c.valorEstimado || 0, data: c.dataPerda || '', vendedor: vMapNome.get(c.vendedorId || -1) || '' }))
+
+        // ── Funil de conversao (mesmas formulas da pagina Relatorios) ──
+        const leadsGerados = clientes.filter(c => inPeriod(c.criadoEm || c.dataEntradaEtapa)).length
+        const prospeccoes = fi.filter(i => ['ligacao', 'email', 'whatsapp'].includes(i.tipo)).length
+        const diagnosticos = fi.filter(i => i.tipo === 'reuniao').length
+        const propostasEnviadas = clientes.filter(c => c.dataProposta && inPeriod(c.dataProposta)).length
+        const testesRealizados = clientes.filter(c => c.dataEnvioAmostra && inPeriod(c.dataEnvioAmostra)).length
+        const negociacoes = clientes.filter(c => c.etapa === 'negociacao').length
+        const pedidosFech = pedidosConfirmados.length
+        const taxaConversaoFunil = leadsGerados > 0 ? Math.round((pedidosFech / leadsGerados) * 1000) / 10 : 0
+        const temposFech = clientes
+          .filter(c => c.etapa === 'follow_up' && c.criadoEm && c.dataEntradaEtapa)
+          .map(c => Math.max(0, Math.floor((new Date(c.dataEntradaEtapa!).getTime() - new Date(c.criadoEm!).getTime()) / 86400000)))
+          .filter(d => d > 0)
+        const tempoMedioFech = temposFech.length > 0 ? Math.round(temposFech.reduce((a, b) => a + b, 0) / temposFech.length) : 0
+
+        // ── Concentracao / recompra / medias ──
+        const clientRev = new Map<number, number>()
+        pedidosConfirmados.forEach(p => clientRev.set(p.cliente_id, (clientRev.get(p.cliente_id) || 0) + (p.total_valor || 0)))
+        const revArr = Array.from(clientRev.values()).sort((a, b) => b - a)
+        const totalRev = revArr.reduce((s, v) => s + v, 0)
+        const concentracaoTop10 = totalRev > 0 ? Math.round((revArr.slice(0, 10).reduce((s, v) => s + v, 0) / totalRev) * 1000) / 10 : 0
+        const purchaseCounts: Record<number, number> = {}
+        pedidosConfirmados.forEach(p => { purchaseCounts[p.cliente_id] = (purchaseCounts[p.cliente_id] || 0) + 1 })
+        const clientesAtivosCompra = new Set(pedidosConfirmados.map(p => p.cliente_id))
+        const recompraClientes = [...clientesAtivosCompra].filter(id => purchaseCounts[id] >= 2).length
+        const taxaRecompra = clientesAtivosCompra.size > 0 ? Math.round((recompraClientes / clientesAtivosCompra.size) * 1000) / 10 : 0
+        const receitaMedia = clientesAtivosCompra.size > 0 ? Math.round((totalRev / clientesAtivosCompra.size) * 100) / 100 : 0
+
+        // ── Tempo de tela por cliente (top 5 com mais dias na etapa) ──
+        const tempoNaEtapa = [...clientes]
+          .filter(c => c.etapa !== 'perdido' && (c.diasInativo || 0) > 0)
+          .sort((a, b) => (b.diasInativo || 0) - (a.diasInativo || 0))
+          .slice(0, 5)
+          .map(c => ({ cliente: c.razaoSocial, etapa: c.etapa, diasNaEtapa: c.diasInativo, vendedor: vMapNome.get(c.vendedorId || -1) || '' }))
+
+        // ── Missoes ──
+        let missoes: { emAndamento: number; custoEstimado: number } | undefined
+        {
+          const { data: mRows } = await supabase.from('missoes').select('id, custo_estimado').eq('status', 'em_andamento')
+          if (mRows) missoes = { emAndamento: mRows.length, custoEstimado: mRows.reduce((s, m) => s + (m.custo_estimado || 0), 0) }
         }
 
         const periodo = args.dataInicio || args.dataFim
@@ -1075,6 +1178,12 @@ export async function executeFunction(
             },
             clientesPorEtapa: porEtapa,
             tarefas: { pendentes, concluidasNoPeriodo },
+            rankingVendedores,
+            perdas: { totalPerdidos: perdasList.length, valorPerdido: Math.round(perdasList.reduce((s, c) => s + (c.valorEstimado || 0), 0) * 100) / 100, porCategoria, motivosFrequentes: motivosFreq, detalhe: perdasDetalhe },
+            funilConversao: { leadsGerados, prospeccoes, diagnosticos, propostasEnviadas, testesRealizados, negociacoes, pedidosFech, taxaConversaoFunil, tempoMedioFech },
+            extras: { concentracaoTop10, taxaRecompra, receitaMedia, clientesComCompra: clientesAtivosCompra.size },
+            tempoNaEtapa,
+            missoes,
           },
         }
       }

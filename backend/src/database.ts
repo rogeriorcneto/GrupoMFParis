@@ -52,6 +52,8 @@ export interface Cliente {
   motivoPerda?: string
   dataPerda?: string
   dataProposta?: string
+  dataEnvioAmostra?: string
+  criadoEm?: string
   valorProposta?: number
   whatsappValido?: boolean | null
   whatsappJid?: string
@@ -185,6 +187,8 @@ function clienteFromDb(row: any): Cliente {
     motivoPerda: row.motivo_perda,
     dataPerda: row.data_perda,
     dataProposta: row.data_proposta,
+    dataEnvioAmostra: row.data_envio_amostra ?? undefined,
+    criadoEm: row.created_at ?? undefined,
     valorProposta: row.valor_proposta ? Number(row.valor_proposta) : undefined,
     whatsappValido: row.whatsapp_valido ?? null,
     whatsappJid: row.whatsapp_jid || '',

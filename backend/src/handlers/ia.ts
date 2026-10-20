@@ -157,7 +157,7 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('- Para CRIAR TAREFA: use createTarefa com titulo, data (YYYY-MM-DD), tipo e prioridade. Para consultar tarefas use listarTarefas (filtros: status, data, clienteId); para concluir use completeTarefa; para remarcar use remarcarTarefa com novaData YYYY-MM-DD. Quando o usuario disser "ela", "essa" ou "a tarefa" sem dar ID, use o ID retornado pela criacao/consulta anterior ou chame listarTarefas para acha-la — nunca peca o ID ao vendedor se voce pode descobri-lo.')
   lines.push('- DATAS: o usuario escreve no formato brasileiro DD/MM/YYYY ou "25/10". Converta para YYYY-MM-DD ao chamar funcoes; ao RESPONDER, mostre datas em DD/MM/YYYY. Ano omitido = ano atual (ou proximo, se a data ja passou).')
   lines.push('- Para PDF/NOTA FISCAL de pedido: use enviarDocumentoPedido com tipo pedido_pdf (PDF do pedido) ou nota_fiscal (DANFE — so existe depois do faturamento). O arquivo chega direto no chat do vendedor.')
-  lines.push('- Para RELATORIOS/METRICAS (vendas do dia/semana/mes, ultimos N dias, quantos clientes em cada etapa, total por vendedor): use relatorioCrm com dataInicio/dataFim. Gerente ve tudo; vendedor so os proprios dados. Nunca invente numeros — se a pergunta precisar de dados agregados, chame a funcao.')
+  lines.push('- Para RELATORIOS/METRICAS (vendas do dia/semana/mes, ultimos N dias, quantos clientes em cada etapa, ranking de vendedores, motivos de perda, funil de conversao, concentracao top10, taxa de recompra, receita media, tempo de tela, missoes/custo, total por vendedor): use SEMPRE relatorioCrm com dataInicio/dataFim. Gerente ve tudo; vendedor so os proprios dados. NUNCA diga "nao consigo calcular" nem invente numeros — se a pergunta precisar de dados agregados, chame a funcao; ela cobre todas as metricas da pagina Relatorios. Se o vendedor nao informar periodo, assuma o MES ATUAL e diga isso na resposta.')
   lines.push('- Para PRODUTOS: use listarProdutos/searchProdutos para consultar; use updateProduto para alterar preco, sku, nome, categoria, unidade, descricao ou ativo (somente gerente).')
   lines.push('- Para PEDIDOS: use listarPedidos para consultar e atualizarStatusPedido para enviar/cancelar/voltar rascunho quando apropriado. Quando o VENDEDOR pedir para "enviar o pedido para aprovacao", use atualizarStatusPedido com novoStatus "enviado" — aprovarPedido/recusarPedido sao apenas para o gerente agir sobre pedidos ja enviados. Para consultar pedidos use SEMPRE listarPedidos, nunca responda de memoria.')
   lines.push('- Para GERAR PROPOSTA: crie um pedido via createPedido e informe que o vendedor pode gerar o PDF pelo CRM web.')
@@ -279,11 +279,11 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
     // Function calling loop
     const executedActions: string[] = []
     let callCount = 0
-    let hallucinationChecked = false
+    let hallucinationRetries = 0
 
     // Padrão de "afirmação de ação concluída" — se a IA responder isso SEM
     // ter chamado nenhuma função neste turno, ela alucinou a execução.
-    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado)|estou (criando|cadastrando|enviando|registrando|agendando|buscando|procurando|verificando|consultando|listando)|(vou |vamos )?(criar|cadastrar|enviar|registrar|agendar|verificar|buscar|consultar|procurar|remarcar|concluir|listar|analisar|checar) (o|a|um|uma|este|essa|isso|esse)? ?(pedido|cliente|tarefa)? ?(agora|ja|já)?[.!]|aguarde( um)? (momento|instante)|deixa eu (ver|verificar|buscar)|(listando|buscando|procurando|analisando|verificando|conferindo|consultando|criando|cadastrando|enviando|concluindo|remarcando)[^.?!]*\.\.\.|(tools\.)?(createTarefa|createCliente|createPedido|updateCliente|remarcarTarefa|completeTarefa|listarTarefas|listarPedidos|listarProdutos|atualizarStatusPedido|enviarDocumentoPedido|relatorioCrm|searchClientes|getClienteDetalhes|addNota|addInteracao|sendWhatsApp|sendEmail|moverClienteEtapa|aprovarPedido|recusarPedido|enviarPedidoOmie|listarClientes)\s*\()/i
+    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado)|estou (criando|cadastrando|enviando|registrando|agendando|buscando|procurando|verificando|consultando|listando)|(vou |vamos )?(criar|cadastrar|enviar|registrar|agendar|verificar|buscar|consultar|procurar|remarcar|concluir|listar|analisar|checar) (o|a|um|uma|este|essa|isso|esse)? ?(pedido|cliente|tarefa)? ?(agora|ja|já)?[.!]|aguarde( um)? (momento|instante)|deixa eu (ver|verificar|buscar)|chamando (a )?fun[cç][aã]o|fun[cç][aã]o `?[a-zA-Z]+`? para|(listando|buscando|procurando|analisando|verificando|conferindo|consultando|criando|cadastrando|enviando|concluindo|remarcando)[^.?!]*\.\.\.|(tools\.)?(createTarefa|createCliente|createPedido|updateCliente|remarcarTarefa|completeTarefa|listarTarefas|listarPedidos|listarProdutos|atualizarStatusPedido|enviarDocumentoPedido|relatorioCrm|searchClientes|getClienteDetalhes|addNota|addInteracao|sendWhatsApp|sendEmail|moverClienteEtapa|aprovarPedido|recusarPedido|enviarPedidoOmie|listarClientes)\s*\()/i
 
     while (callCount < MAX_FUNCTION_CALLS_WA) {
       const geminiData = await callGeminiWA(apiKey, contents, tools)
@@ -298,8 +298,15 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
 
         // Guardrail anti-alucinação: afirmou que executou uma ação mas não
         // chamou função neste turno → repreende e dá uma chance de executar de verdade.
-        if (!hallucinationChecked && executedActions.length === 0 && ACTION_CLAIM.test(textResponse)) {
-          hallucinationChecked = true
+        if (executedActions.length === 0 && ACTION_CLAIM.test(textResponse) && hallucinationRetries >= 2) {
+          const honest = 'Desculpe, tive um problema técnico e não consegui executar isso agora. Pode reformular a pergunta ou tentar novamente?'
+          history.push({ role: 'assistant', content: honest })
+          updateSession(senderNumber, { aiHistory: history })
+          return honest
+        }
+
+        if (hallucinationRetries < 2 && executedActions.length === 0 && ACTION_CLAIM.test(textResponse)) {
+          hallucinationRetries++
           log.warn({ vendedor: vendedor.nome, text: textResponse.slice(0, 120) }, 'IA WhatsApp afirmou ação sem executar função — forçando nova tentativa')
           contents.push({ role: 'model', parts: [{ text: textResponse }] })
           contents.push({
