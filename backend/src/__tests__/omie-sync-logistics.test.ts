@@ -114,8 +114,8 @@ describe('syncOmieLogistics (por pedido)', () => {
     expect(cu?.data.omie_status_logistico).toBe('80')
     expect(cu?.data.omie_nota_fiscal).toBe('1234')
     expect(cu?.data.omie_codigo_rastreio).toBe('BR12345')
-    expect(cu?.data.omie_data_faturamento).toBe('10/02/2026')
-    expect(cu?.data.data_entrega_prevista).toBe('01/03/2026')
+    expect(cu?.data.omie_data_faturamento).toBe('2026-02-10')
+    expect(cu?.data.data_entrega_prevista).toBe('2026-03-01')
   })
 
   it('etapa 70 → expedido; 20 → em_producao; 50 → faturado; 10 → pedido_aprovado', async () => {

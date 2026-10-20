@@ -45,6 +45,12 @@ function mapEtapaAmostra(etapa: string): string | null {
 
 const CANCELADO = (e: string) => ['00', '90', '99'].includes(e.trim())
 
+/** Omie devolve datas em DD/MM/YYYY — colunas date/timestamp exigem ISO */
+function brToIso(d?: string): string | null {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(d || '')
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null
+}
+
 export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
   // Multi-empresa: todas as credenciais ativas; fallback para credencial única
   const empresas = await getOmieEmpresas()
@@ -102,8 +108,8 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
       const etapa = String(cab.etapa || info.cEtapa || '').trim()
       const rastreio = tr.codigo_rastreio || cab.codigo_rastreio || ''
       const nf = info.nNumeroNF ? String(info.nNumeroNF) : (cab.numero_nf || '')
-      const dataFat = info.dDataFaturamento || info.dDtFat || ''
-      const dataPrev = cab.data_previsao || ''
+      const dataFat = brToIso(info.dDataFaturamento || info.dDtFat || '')
+      const dataPrev = brToIso(cab.data_previsao || '')
       const cancelado = CANCELADO(etapa)
 
       // Status textual do pedido no CRM
