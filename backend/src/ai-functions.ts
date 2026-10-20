@@ -60,6 +60,33 @@ export function canExecuteFunction(
   return { allowed: true }
 }
 
+// Mesmos validadores do formulario do CRM (frontend/src/utils/validators.ts)
+function validarCNPJ(cnpj: string): boolean {
+  const d = cnpj.replace(/\D/g, '')
+  if (d.length !== 14) return false
+  if (/^(\d)\1{13}$/.test(d)) return false
+  const calc = (len: number) => {
+    const pesos = len === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]
+    let soma = 0
+    for (let i = 0; i < len; i++) soma += Number(d[i]) * pesos[i]
+    const resto = soma % 11
+    return resto < 2 ? 0 : 11 - resto
+  }
+  return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
+}
+
+function validarCPF(cpf: string): boolean {
+  const d = cpf.replace(/\D/g, '')
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
+  const calc = (length: number) => {
+    let sum = 0
+    for (let i = 0; i < length; i++) sum += Number(d[i]) * (length + 1 - i)
+    const remainder = (sum * 10) % 11
+    return remainder === 10 ? 0 : remainder
+  }
+  return calc(9) === Number(d[9]) && calc(10) === Number(d[10])
+}
+
 /** Check if vendedor has access to a specific cliente */
 async function checkClienteAccess(
   clienteId: number,
@@ -143,18 +170,19 @@ export const FUNCTION_DECLARATIONS = [
   // ── CLIENTES ──
   {
     name: 'createCliente',
-    description: 'Cadastra um novo cliente no CRM. Campos obrigatórios: razaoSocial, cnpj, contatoNome, contatoTelefone, contatoEmail. Se faltar algum campo obrigatório, PERGUNTE ao usuário antes de criar.',
+    description: 'Cadastra um novo cliente no CRM. Campos obrigatórios (mesma regra do formulário do CRM): razaoSocial, contatoNome, contatoTelefone, cnpj OU cpf, endereco. Se faltar qualquer campo obrigatório, PERGUNTE ao usuário antes de criar — nunca invente CNPJ, telefone ou endereço.',
     parameters: {
       type: 'OBJECT',
       properties: {
         razaoSocial: { type: 'STRING', description: 'Razão social ou nome da empresa' },
         nomeFantasia: { type: 'STRING', description: 'Nome fantasia (opcional)' },
-        cnpj: { type: 'STRING', description: 'CNPJ da empresa' },
+        cnpj: { type: 'STRING', description: 'CNPJ da empresa (obrigatório se não houver CPF)' },
+        cpf: { type: 'STRING', description: 'CPF (obrigatório se não houver CNPJ — clientes pessoa física)' },
         contatoNome: { type: 'STRING', description: 'Nome do contato principal' },
         contatoTelefone: { type: 'STRING', description: 'Telefone do contato' },
-        contatoEmail: { type: 'STRING', description: 'Email do contato' },
+        contatoEmail: { type: 'STRING', description: 'Email do contato (opcional)' },
         whatsapp: { type: 'STRING', description: 'WhatsApp do contato (opcional)' },
-        endereco: { type: 'STRING', description: 'Endereço (opcional)' },
+        endereco: { type: 'STRING', description: 'Endereço / rua do cliente (obrigatório)' },
         valorEstimado: { type: 'NUMBER', description: 'Valor estimado em R$ (opcional)' },
         segmento: { type: 'STRING', description: 'Segmento de mercado (opcional)' },
       },
@@ -600,10 +628,35 @@ export async function executeFunction(
 
       // ── CLIENTES ──
       case 'createCliente': {
+        // Mesmos campos obrigatorios do formulario do CRM — nao invente defaults.
+        const missingCliente: string[] = []
+        if (!args.razaoSocial || !String(args.razaoSocial).trim()) missingCliente.push('razão social')
+        if (!args.contatoNome || !String(args.contatoNome).trim()) missingCliente.push('nome do contato')
+        if (!args.contatoTelefone || !String(args.contatoTelefone).trim()) missingCliente.push('telefone de contato')
+        if (!args.endereco || !String(args.endereco).trim()) missingCliente.push('endereço (rua)')
+        const cnpjDigits = String(args.cnpj || '').replace(/\D/g, '')
+        const cpfDigits = String(args.cpf || '').replace(/\D/g, '')
+        if (!cnpjDigits && !cpfDigits) missingCliente.push('CNPJ ou CPF')
+        if (missingCliente.length > 0) {
+          return {
+            success: false,
+            message: `Nao e possivel cadastrar o cliente — falta(m): ${missingCliente.join('; ')}. Pergunte esses dados ao vendedor antes de tentar de novo.`,
+          }
+        }
+        if (cnpjDigits && !validarCNPJ(String(args.cnpj))) {
+          return { success: false, message: `CNPJ invalido (${args.cnpj}). Confira os digitos com o vendedor.` }
+        }
+        if (!cnpjDigits && cpfDigits && !validarCPF(String(args.cpf))) {
+          return { success: false, message: `CPF invalido (${args.cpf}). Confira os digitos com o vendedor.` }
+        }
+        if (args.contatoEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(args.contatoEmail).trim())) {
+          return { success: false, message: `Email de contato invalido (${args.contatoEmail}). Confira com o vendedor.` }
+        }
         const newCliente = await db.insertCliente({
           razaoSocial: args.razaoSocial,
           nomeFantasia: args.nomeFantasia || '',
           cnpj: args.cnpj || '',
+          cpf: args.cpf || '',
           contatoNome: args.contatoNome,
           contatoTelefone: args.contatoTelefone,
           contatoEmail: args.contatoEmail || '',

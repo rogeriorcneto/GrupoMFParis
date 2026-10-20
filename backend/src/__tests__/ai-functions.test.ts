@@ -299,7 +299,7 @@ describe('createCliente', () => {
     vi.mocked(db.insertCliente).mockResolvedValue(novoCliente)
     vi.mocked(db.insertAtividade).mockResolvedValue({} as any)
     const result = await executeFunction(
-      { name: 'createCliente', args: { razaoSocial: 'Nova Empresa', contatoNome: 'José', contatoTelefone: '11999990000' } },
+      { name: 'createCliente', args: { razaoSocial: 'Nova Empresa', contatoNome: 'José', contatoTelefone: '11999990000', cnpj: '11.222.333/0001-81', endereco: 'Rua A, 100' } },
       makeVendedor({ id: 2 })
     )
     expect(result.success).toBe(true)
@@ -315,7 +315,7 @@ describe('createCliente', () => {
     vi.mocked(db.insertCliente).mockResolvedValue(makeCliente({ id: 20 }))
     vi.mocked(db.insertAtividade).mockResolvedValue({} as any)
     await executeFunction(
-      { name: 'createCliente', args: { razaoSocial: 'X', contatoNome: 'Y', contatoTelefone: '11000000000' } },
+      { name: 'createCliente', args: { razaoSocial: 'X', contatoNome: 'Y', contatoTelefone: '11000000000', cnpj: '11.222.333/0001-81', endereco: 'Rua B, 200' } },
       makeVendedor()
     )
     expect(db.insertAtividade).toHaveBeenCalledWith(expect.objectContaining({
@@ -330,15 +330,54 @@ describe('createCliente', () => {
     await executeFunction(
       { name: 'createCliente', args: {
         razaoSocial: 'Opt LTDA', contatoNome: 'Opt', contatoTelefone: '11111111111',
-        cnpj: '12.345.678/0001-90', contatoEmail: 'opt@opt.com', valorEstimado: 5000,
+        cnpj: '11.222.333/0001-81', endereco: 'Rua C, 300', contatoEmail: 'opt@opt.com', valorEstimado: 5000,
       }},
       makeVendedor()
     )
     expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({
-      cnpj: '12.345.678/0001-90',
+      cnpj: '11.222.333/0001-81',
       contatoEmail: 'opt@opt.com',
       valorEstimado: 5000,
     }))
+  })
+
+  it('recusa cadastro sem CNPJ/CPF, telefone ou endereco e pede os dados', async () => {
+    const result = await executeFunction(
+      { name: 'createCliente', args: { razaoSocial: 'Incompleta LTDA' } },
+      makeVendedor()
+    )
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('falta')
+    expect(result.message).toContain('CNPJ ou CPF')
+    expect(result.message).toContain('endereço')
+    expect(db.insertCliente).not.toHaveBeenCalled()
+  })
+
+  it('recusa CNPJ invalido', async () => {
+    const result = await executeFunction(
+      { name: 'createCliente', args: {
+        razaoSocial: 'X', contatoNome: 'Y', contatoTelefone: '11000000000',
+        cnpj: '12.345.678/0001-90', endereco: 'Rua D, 400',
+      }},
+      makeVendedor()
+    )
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('CNPJ invalido')
+    expect(db.insertCliente).not.toHaveBeenCalled()
+  })
+
+  it('aceita CPF valido no lugar do CNPJ', async () => {
+    vi.mocked(db.insertCliente).mockResolvedValue(makeCliente({ id: 22 }))
+    vi.mocked(db.insertAtividade).mockResolvedValue({} as any)
+    const result = await executeFunction(
+      { name: 'createCliente', args: {
+        razaoSocial: 'PF Silva', contatoNome: 'Silva', contatoTelefone: '11000000000',
+        cpf: '529.982.247-25', endereco: 'Rua E, 500',
+      }},
+      makeVendedor()
+    )
+    expect(result.success).toBe(true)
+    expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({ cpf: '529.982.247-25' }))
   })
 })
 

@@ -147,7 +147,7 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('Funcoes disponiveis: searchClientes, getClienteDetalhes, sendWhatsApp, sendEmail, startCall, createCliente, updateCliente, deleteCliente (gerente), moverClienteEtapa (gerente), marcarClientePerdido (gerente), createTarefa, completeTarefa, createPedido, listarPedidos, atualizarStatusPedido, aprovarPedido (gerente), recusarPedido (gerente), enviarPedidoOmie (gerente), listarProdutos, searchProdutos, createProduto (gerente), updateProduto (gerente), deleteProduto (gerente), addInteracao, addNota, listarTarefas.')
   lines.push('')
   lines.push('REGRAS DE EXECUCAO:')
-  lines.push('- Para CADASTRAR CLIENTE: pergunte razaoSocial, contatoNome, contatoTelefone. Se tiver cnpj e email, melhor. Use createCliente.')
+  lines.push('- Para CADASTRAR CLIENTE: campos OBRIGATORIOS (mesma regra do CRM): razaoSocial, contatoNome, contatoTelefone, cnpj OU cpf, endereco. Se faltar qualquer um, PERGUNTE antes de chamar createCliente — a funcao recusa campos faltando ou CNPJ/CPF invalido.')
   lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte: (1) tipo do pedido (venda ou bonificacao/amostra), (2) forma de pagamento (A vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias), (3) tipo de frete (CIF ou FOB), (4) quais produtos e quantidades em KG, (5) para VENDA, o preco unitario de cada item se nao informado (bonificacao/amostra usa preco 0). Use createPedido com TODOS esses campos.')
   lines.push('- Para ENVIAR WHATSAPP/EMAIL: primeiro busque o cliente com searchClientes, depois use sendWhatsApp ou sendEmail. SEMPRE confirme a mensagem com o usuario antes de enviar.')
   lines.push('- Para MOVER CLIENTE NO FUNIL: use moverClienteEtapa (somente gerente).')
@@ -271,7 +271,7 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
 
     // Padrão de "afirmação de ação concluída" — se a IA responder isso SEM
     // ter chamado nenhuma função neste turno, ela alucinou a execução.
-    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado))/i
+    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado)|estou (criando|cadastrando|enviando|registrando|agendando)|(vou |vamos )?(criar|cadastrar|enviar|registrar|agendar) (o|a|um|uma|este|essa|isso|esse)? ?(pedido|cliente|tarefa)? ?(agora|ja|já)?[.!])/i
 
     while (callCount < MAX_FUNCTION_CALLS_WA) {
       const geminiData = await callGeminiWA(apiKey, contents, tools)
