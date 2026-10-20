@@ -19,7 +19,7 @@ import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes } from './cron.js'
 import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from './bulk-dispatch.js'
-import { omieRouter } from './routes/omie.js'
+import { omieRouter, omieDocsRouter } from './routes/omie.js'
 import { placesRouter } from './routes/places.js'
 import { traficoRouter } from './routes/trafico.js'
 import { leadsRfRouter } from './routes/leads-rf.js'
@@ -1256,6 +1256,8 @@ app.post('/api/omie/sync/cliente/:id', requireAuth, rateLimit(10, 60_000), async
 })
 
 // ─── Omie ERP Routes (protegidos por auth + gerente) ───
+// Documentos fiscais do pedido: vendedores podem acessar (service restringe ao próprio pedido)
+app.use('/api/omie', requireAuth, omieDocsRouter)
 app.use('/api/omie', requireAuth, requireGerente, omieRouter)
 app.use('/api/places', requireAuth, placesRouter)
 app.use('/api/trafico', requireAuth, requireGerente, traficoRouter)

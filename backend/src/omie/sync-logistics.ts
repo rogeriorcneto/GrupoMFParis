@@ -69,7 +69,7 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
     .select('id, numero, cliente_id, tipo, status, omie_codigo, omie_numero, omie_status')
     .not('omie_codigo', 'is', null)
     .not('status', 'in', '("cancelado")')
-    .not('omie_status', 'in', '("entregue","cancelado")')
+    .not('omie_status', 'in', '("entregue","cancelado","nao_encontrado")')
 
   if (error) {
     log.error({ error }, 'syncOmieLogistics: Erro ao buscar pedidos')
@@ -87,6 +87,7 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
     try {
       // Consulta o pedido EXATO em cada empresa até encontrar
       let omiePedido: any = null
+      let soNaoCadastrado = true
       for (const creds of credList) {
         try {
           const r = await omieCall<any>(
@@ -97,10 +98,24 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
           )
           const p = r?.pedido_venda_produto || r
           if (p?.cabecalho?.codigo_pedido) { omiePedido = p; break }
-        } catch { /* pedido não está nesta empresa */ }
+        } catch (e: any) {
+          if (!/n[ãa]o cadastrado|n[ãa]o encontrado|not found/i.test(e?.message || '')) {
+            soNaoCadastrado = false
+          }
+        }
       }
 
-      if (!omiePedido) { naoEncontrados++; continue }
+      if (!omiePedido) {
+        if (soNaoCadastrado) {
+          // Pedido realmente não existe no Omie — tira da fila (Omie bloqueia após erros seguidos)
+          naoEncontrados++
+          await supabase.from('pedidos').update({ omie_status: 'nao_encontrado' }).eq('id', pedido.id)
+          log.warn({ pedidoId: pedido.id, omie: pedido.omie_codigo }, 'syncOmieLogistics: pedido não existe no Omie — marcado nao_encontrado')
+        } else {
+          erros.push({ pedidoId: pedido.id, erro: 'Falha transitória ao consultar Omie — tentará no próximo ciclo' })
+        }
+        continue
+      }
 
       const cab = omiePedido.cabecalho || {}
       const info = omiePedido.infoCadastro || {}

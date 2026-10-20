@@ -709,3 +709,58 @@ export async function fetchRoleplayHistoryGerente(): Promise<{ sessoes: any[]; e
     return { sessoes: [], error: err?.message || 'Erro ao buscar histórico' }
   }
 }
+
+// ─── Documentos fiscais do pedido (Omie) ───
+
+export interface PedidoDocumentos {
+  pedidoId: number
+  omieCodigo: number
+  omieNumero?: string
+  pdfPedido: string | null
+  nfe: {
+    nIdNfe: number
+    numero: string
+    serie: string
+    chave: string
+    valor: number | null
+    emissao: string | null
+    pdfDanfe: string | null
+    linkPortal: string | null
+    temXml: boolean
+  } | null
+}
+
+/** Busca documentos do pedido no Omie: PDF do pedido + NF-e (DANFE/XML/chave) */
+export async function fetchPedidoDocumentosOmie(pedidoId: number): Promise<{ success: boolean; data?: PedidoDocumentos; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/omie/pedidos/${pedidoId}/documentos`)
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao buscar documentos do pedido' }
+  }
+}
+
+/** Baixa o XML da NF-e do pedido como arquivo */
+export async function downloadXmlNfePedido(pedidoId: number): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/omie/pedidos/${pedidoId}/documentos/xml`)
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      return { success: false, error: body?.error || `Erro ${res.status} ao baixar XML` }
+    }
+    const blob = await res.blob()
+    const disp = res.headers.get('Content-Disposition') || ''
+    const match = /filename="?([^";]+)"?/.exec(disp)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = match?.[1] || `nfe-pedido-${pedidoId}.xml`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao baixar XML da NF-e' }
+  }
+}

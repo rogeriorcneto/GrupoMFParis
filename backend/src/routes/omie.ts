@@ -4,6 +4,7 @@ import { getSyncDiff, syncPullClientes, syncPullClientesMultiEmpresa, syncPushCl
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { getEmpresas, listarPedidosEmpresa, atualizarRastreioPedido, lancarRastreioPorNF } from '../omie/multi-empresa.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros } from '../omie/pedidos.js'
+import { obterDocumentosPedido, obterXmlNfePedido, PedidoDocsError } from '../omie/documentos.js'
 import { fetchTabelasPreco, getCodigoTabelaPreco } from '../omie/reference-data.js'
 import { loadConfig, saveConfig } from '../config-store.js'
 import { encrypt, decrypt } from '../crypto.js'
@@ -270,6 +271,44 @@ omieRouter.post('/pedidos/:id/consultar-entrega', rateLimit(30, 60_000), async (
   } catch (err: any) {
     log.error({ err, pedidoId }, 'Erro ao consultar entrega do pedido no Omie')
     res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Documentos do pedido (PDF pedido + NF-e XML/DANFE) ───
+// Router próprio montado em /api/omie APENAS com requireAuth (sem requireGerente) —
+// o service garante que vendedor só acessa pedidos dos quais é responsável.
+export const omieDocsRouter = Router()
+
+omieDocsRouter.get('/pedidos/:id/documentos', rateLimit(20, 60_000), async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    const data = await obterDocumentosPedido(pedidoId, (req as any).userId)
+    // XML completo (~11KB) só sai pelo endpoint de download dedicado
+    const nfe = data.nfe ? { ...data.nfe, xml: null, temXml: !!data.nfe.xml } : null
+    res.json({ success: true, data: { ...data, nfe } })
+  } catch (err: any) {
+    const status = err instanceof PedidoDocsError ? err.status : 500
+    if (status >= 500) log.error({ err, pedidoId }, 'Erro ao obter documentos do pedido no Omie')
+    res.status(status).json({ success: false, error: err.message })
+  }
+})
+
+omieDocsRouter.get('/pedidos/:id/documentos/xml', rateLimit(20, 60_000), async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    const { xml, chave } = await obterXmlNfePedido(pedidoId, (req as any).userId)
+    const nomeArquivo = `nfe-${(chave || `pedido-${pedidoId}`).replace(/[^\w-]/g, '')}.xml`
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.send(xml)
+  } catch (err: any) {
+    const status = err instanceof PedidoDocsError ? err.status : 500
+    if (status >= 500) log.error({ err, pedidoId }, 'Erro ao obter XML da NF-e')
+    res.status(status).json({ success: false, error: err.message })
   }
 })
 

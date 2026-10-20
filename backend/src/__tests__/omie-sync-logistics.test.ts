@@ -155,6 +155,16 @@ describe('syncOmieLogistics (por pedido)', () => {
     db.pedidos_list = [pedidoRow()]
     const r = await syncOmieLogistics()
     expect(r.naoEncontrados).toBe(1)
+    // marca o pedido como nao_encontrado para sair da fila (evita erro repetido/loop de bloqueio Omie)
+    expect(updates.find(u => u.table === 'pedidos')?.data.omie_status).toBe('nao_encontrado')
+  })
+
+  it('erro transitório (não "não cadastrado") não marca nem sai da fila', async () => {
+    mockOmieCall.mockRejectedValue(new Error('Omie bloqueou requisições por excesso de erros'))
+    db.pedidos_list = [pedidoRow()]
+    const r = await syncOmieLogistics()
+    expect(r.naoEncontrados).toBe(0)
+    expect(r.erros).toHaveLength(1)
     expect(updates.filter(u => u.table === 'pedidos')).toHaveLength(0)
   })
 

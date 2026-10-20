@@ -13,7 +13,7 @@ import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
 import { supabase } from '../lib/supabase'
-import { transcribeCallRecording, fetchCnpjViaBackend } from '../lib/botApi'
+import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos } from '../lib/botApi'
 
 function normalizarEmpresa(s: string) {
   return s.toLowerCase().trim()
@@ -169,6 +169,20 @@ export default function ClientePanel({
   const [panelContatoSetor, setPanelContatoSetor] = useState(notasEmpresa.setor)
   const [panelInfoAdicional, setPanelInfoAdicional] = useState(notasEmpresa.info)
   const [editingInfoAdicional, setEditingInfoAdicional] = useState(false)
+  // Documentos fiscais do pedido (Omie): PDF pedido + NF-e
+  const [docsPedido, setDocsPedido] = useState<Record<number, PedidoDocumentos | 'loading' | 'error'>>({})
+  const toggleDocsPedido = async (pedidoId: number) => {
+    const atual = docsPedido[pedidoId]
+    if (atual === 'loading') return
+    if (atual && atual !== 'error') {
+      setDocsPedido(prev => { const n = { ...prev }; delete n[pedidoId]; return n })
+      return
+    }
+    setDocsPedido(prev => ({ ...prev, [pedidoId]: 'loading' }))
+    const r = await fetchPedidoDocumentosOmie(pedidoId)
+    setDocsPedido(prev => ({ ...prev, [pedidoId]: r.success && r.data ? r.data : 'error' }))
+    if (!r.success) showToast?.('error', r.error || 'Falha ao buscar documentos no Omie')
+  }
   // Dados cadastrais da Receita Federal (BrasilAPI/ReceitaWS via backend)
   const [dadosCnpj, setDadosCnpj] = useState<any | null>(null)
   const [loadingCnpj, setLoadingCnpj] = useState(false)
@@ -1671,9 +1685,21 @@ export default function ClientePanel({
                               <p className="text-sm font-medium text-gray-900">{p.numero} {p.tipo === 'bonificacao' && <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">amostra</span>}</p>
                               <p className="text-[11px] text-gray-500">{new Date(p.dataCriacao).toLocaleDateString('pt-BR')} · {(p.itens || []).length} item(ns)</p>
                             </div>
-                            <div className="text-right flex-shrink-0">
+                            <div className="text-right flex-shrink-0 space-y-1">
                               <p className="text-sm font-bold text-gray-900">{p.tipo === 'bonificacao' ? '—' : `R$ ${(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>
                               <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${statusBadge[p.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel[p.status] || p.status}</span>
+                              {p.omieCodigo && (
+                                <div>
+                                  <button
+                                    onClick={() => toggleDocsPedido(p.id)}
+                                    disabled={docsPedido[p.id] === 'loading'}
+                                    className="px-2 py-0.5 text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50"
+                                    title="Documentos fiscais do pedido no Omie"
+                                  >
+                                    {docsPedido[p.id] === 'loading' ? '⏳' : docsPedido[p.id] ? '▲ Docs' : '📄 NF/PDF'}
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                           {p.itens && p.itens.length > 0 && (
@@ -1681,6 +1707,37 @@ export default function ClientePanel({
                               {p.itens.map(it => `${it.quantidade}× ${it.nomeProduto}`).join(' · ')}
                             </p>
                           )}
+                          {(() => {
+                            const docs = docsPedido[p.id]
+                            if (!docs || docs === 'loading' || docs === 'error') return null
+                            return (
+                              <div className="mt-2 p-2 bg-sky-50 border border-sky-100 rounded-lg space-y-1.5">
+                                {docs.pdfPedido && (
+                                  <a href={docs.pdfPedido} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">📄 PDF do pedido (Omie)</a>
+                                )}
+                                {docs.nfe ? (
+                                  <>
+                                    <p className="text-[11px] text-gray-600 font-medium">
+                                      NF-e nº {docs.nfe.numero || '-'}{docs.nfe.serie ? ` · série ${docs.nfe.serie}` : ''}
+                                      {docs.nfe.emissao ? ` · emitida em ${docs.nfe.emissao}` : ''}
+                                      {docs.nfe.valor != null ? ` · R$ ${Number(docs.nfe.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
+                                    </p>
+                                    {docs.nfe.pdfDanfe && (
+                                      <a href={docs.nfe.pdfDanfe} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">🧾 DANFE — NF-e nº {docs.nfe.numero || '-'}{docs.nfe.serie ? `/${docs.nfe.serie}` : ''}</a>
+                                    )}
+                                    {docs.nfe.temXml && (
+                                      <button onClick={async () => { const r = await downloadXmlNfePedido(p.id); if (!r.success) showToast?.('error', r.error || 'Falha ao baixar XML') }} className="block text-[11px] text-sky-700 hover:underline font-medium">⬇ XML da NF-e{docs.nfe.chave ? ` (${docs.nfe.chave.slice(-8)})` : ''}</button>
+                                    )}
+                                    {docs.nfe.linkPortal && (
+                                      <a href={docs.nfe.linkPortal} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">🔗 Documentos no portal Omie</a>
+                                    )}
+                                  </>
+                                ) : (
+                                  <p className="text-[11px] text-gray-500">Sem NF-e emitida ainda (pedido não faturado).</p>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                       ))}
                     </div>
