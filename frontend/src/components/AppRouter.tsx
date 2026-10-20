@@ -16,7 +16,7 @@ import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { buildNovoCicloCliente } from '../utils/funil-logic'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
-import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie } from '../lib/botApi'
+import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -385,8 +385,24 @@ export default function AppRouter({
             const cnpjsEnfileirados = new Set<string>()
             const razoesEnfileiradas = new Set<string>()
 
+            // Checagem global de CNPJ: o dedup local só vê os clientes DO PRÓPRIO
+            // vendedor (RLS). Sem isso, vendedor importaria CNPJ de outro vendedor
+            // criando duplicata invisível. O backend responde sem vazar dados.
+            const cnpjAlheios = new Set<string>()
+            if (loggedUser?.cargo !== 'gerente') {
+              try {
+                const cnpjsNovos = comVendedor.map(c => (c.cnpj || '').replace(/\D/g, '')).filter(d => d.length >= 11)
+                const global = await checkCnpjsGlobais(cnpjsNovos)
+                for (const g of global) if (g.exists && g.outroVendedor) cnpjAlheios.add(g.cnpj)
+              } catch (err) { logger.error('Erro na checagem global de CNPJ na importação:', err) }
+            }
+            let bloqueadosOutroVendedor = 0
+
             for (const novoCliente of comVendedor) {
               const cnpjNorm = (novoCliente.cnpj || '').replace(/[^\d]/g, '')
+
+              // CNPJ pertence a cliente de outro vendedor → bloqueia
+              if (cnpjNorm && cnpjAlheios.has(cnpjNorm)) { bloqueadosOutroVendedor++; continue }
               const razaoNorm = (novoCliente.razaoSocial || '').toLowerCase().trim()
 
               // Pular se já enfileirado nesta mesma importação
@@ -439,6 +455,7 @@ export default function AppRouter({
             const msgs: string[] = []
             if (novosInseridos > 0) msgs.push(`${novosInseridos} novo(s)`)
             if (atualizados > 0) msgs.push(`${atualizados} atualizado(s) para você`)
+            if (bloqueadosOutroVendedor > 0) msgs.push(`${bloqueadosOutroVendedor} ignorado(s) — CNPJ de outro vendedor`)
             if (falhas.length > 0) {
               showToast('error', `${falhas.length} falharam. Ex: ${falhas[0].razaoSocial} — ${falhas[0].erro}`)
             } else {

@@ -3,7 +3,7 @@ import type { Cliente, Interacao, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
 import { formatCNPJ, formatCPF, formatTelefone, validarCNPJ, validarCPF } from '../utils/validators'
 import { logger } from '../utils/logger'
-import { fetchCnpjViaBackend, sincronizarClienteOmie } from '../lib/botApi'
+import { fetchCnpjViaBackend, sincronizarClienteOmie, checkCnpjsGlobais } from '../lib/botApi'
 
 const emptyForm: FormData = {
   razaoSocial: '', nomeFantasia: '', cnpj: '', cpf: '', inscricaoEstadual: '', cnpj2: '', contatoNome: '',
@@ -165,6 +165,22 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
         }
       } catch (err) {
         logger.error('Erro ao verificar CNPJ duplicado:', err)
+      }
+
+      // Checagem global (backend ignora RLS): vendedor não pode cadastrar
+      // CNPJ que já pertence à carteira de outro vendedor. Se chegou aqui,
+      // o CNPJ não é duplicata visível — falta ver os clientes dos outros.
+      if (loggedUser?.cargo !== 'gerente') {
+        try {
+          const global = await checkCnpjsGlobais([formData.cnpj])
+          const hit = global.find(g => g.exists && g.outroVendedor)
+          if (hit) {
+            showToast('error', 'Este CNPJ já está cadastrado na carteira de outro vendedor. Fale com o gerente se precisar assumir o cliente.')
+            return
+          }
+        } catch (err) {
+          logger.error('Erro na checagem global de CNPJ:', err)
+        }
       }
     }
     const produtosArray = formData.produtosInteresse

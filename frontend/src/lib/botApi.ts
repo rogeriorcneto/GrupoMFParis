@@ -710,6 +710,32 @@ export async function fetchRoleplayHistoryGerente(): Promise<{ sessoes: any[]; e
   }
 }
 
+// ─── Checagem global de CNPJ (backend vê todos os clientes, ignora RLS) ───
+
+export interface CnpjCheckResult {
+  cnpj: string
+  exists: boolean
+  outroVendedor?: boolean
+  razaoSocial?: string
+  etapa?: string
+  clienteId?: number
+}
+
+/** Checa se CNPJs já existem em clientes de QUALQUER vendedor (sem vazar dados alheios) */
+export async function checkCnpjsGlobais(cnpjs: string[]): Promise<CnpjCheckResult[]> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/clientes/check-cnpj`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cnpjs }),
+    })
+    const body = await res.json()
+    return body?.success ? body.data : []
+  } catch {
+    return []
+  }
+}
+
 // ─── Documentos fiscais do pedido (Omie) ───
 
 export interface PedidoDocumentos {

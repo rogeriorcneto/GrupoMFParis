@@ -1622,6 +1622,43 @@ app.delete('/api/store/:collection/:id', requireAuth, async (req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }) }
 })
 
+// ─── Checagem global de CNPJ ───
+// RLS impede o vendedor de ver clientes de outros — então a checagem local
+// nunca detecta CNPJ de terceiros. Aqui o service role vê TODOS os clientes
+// e informa só se o CNPJ já existe e se pertence a outro vendedor (sem vazar dados).
+app.post('/api/clientes/check-cnpj', requireAuth, rateLimit(60, 60_000), async (req, res) => {
+  const lista: string[] = Array.isArray(req.body?.cnpjs) ? req.body.cnpjs.slice(0, 1000) : []
+  const digitsList = [...new Set(lista.map(c => String(c).replace(/\D/g, '')).filter(d => d.length >= 11))]
+  if (digitsList.length === 0) { res.json({ success: true, data: [] }); return }
+  try {
+    const authUserId = (req as any).userId
+    const { data: me } = await supabase.from('vendedores').select('id, cargo').eq('auth_id', authUserId).maybeSingle()
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const isGerente = me.cargo === 'gerente'
+
+    // Uma única query: clientes com CNPJ, comparação por dígitos em memória
+    const { data: todos, error } = await supabase.from('clientes').select('id, razao_social, cnpj, etapa, vendedor_id').not('cnpj', 'is', null).neq('cnpj', '')
+    if (error) { res.status(500).json({ success: false, error: error.message }); return }
+
+    const resultado = digitsList.map(digits => {
+      const match = (todos || []).find(c => (c.cnpj || '').replace(/\D/g, '') === digits)
+      if (!match) return { cnpj: digits, exists: false }
+      const outroVendedor = !isGerente && match.vendedor_id !== me.id
+      return {
+        cnpj: digits,
+        exists: true,
+        outroVendedor,
+        // Só expõe detalhes se o cliente é do próprio vendedor (ou gerente)
+        ...(outroVendedor ? {} : { razaoSocial: match.razao_social, etapa: match.etapa, clienteId: match.id }),
+      }
+    })
+    res.json({ success: true, data: resultado })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao checar CNPJ global')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 // ─── CNPJ Proxy (evita CORS das APIs públicas) ───
 app.get('/api/cnpj/:cnpj', requireAuth, rateLimit(30, 60_000), async (req, res) => {
   const digits = req.params.cnpj.replace(/\D/g, '')
