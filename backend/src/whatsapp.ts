@@ -226,6 +226,23 @@ export async function connectWhatsApp(): Promise<void> {
           msg.message.extendedTextMessage?.text ||
           ''
 
+        // Imagem (ex.: foto de cartão CNPJ/documento) — passa para a IA como contexto visual
+        let imageData: { mimeType: string; data: string } | undefined
+        if (msg.message.imageMessage) {
+          try {
+            const imageMsg = msg.message.imageMessage
+            const caption = imageMsg.caption || ''
+            const stream = await (sock as any).downloadMediaMessage(msg, 'buffer')
+            if (stream && stream.length > 0) {
+              imageData = { mimeType: imageMsg.mimetype || 'image/jpeg', data: (stream as Buffer).toString('base64') }
+              text = caption || 'Analise esta imagem/documento que enviei. Extraia TODOS os dados visiveis (ex.: razao social, CNPJ, endereco, nomes, telefones) e me ajude com o que precisar — ex.: cadastrar cliente a partir de um cartao CNPJ. Depois pergunte apenas o que faltar.'
+              log.info({ senderNumber: from.replace('@s.whatsapp.net', ''), hasCaption: !!caption }, '📷 Imagem recebida para a IA')
+            }
+          } catch (imgErr) {
+            log.error({ err: imgErr }, 'Erro ao baixar imagem WhatsApp')
+          }
+        }
+
         // Transcrever áudio via Gemini se não houver texto
         if (!text.trim() && msg.message.audioMessage) {
           try {
@@ -286,7 +303,7 @@ export async function connectWhatsApp(): Promise<void> {
         }
 
         try {
-          const reply = await handleMessage(senderNumber, text.trim())
+          const reply = await handleMessage(senderNumber, text.trim(), imageData)
           if (reply && sock) {
             await sock.sendMessage(from, { text: reply })
             // Salvar resposta do bot no histórico

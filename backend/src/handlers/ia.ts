@@ -147,7 +147,7 @@ async function buildWhatsAppContext(session: UserSession): Promise<string> {
   lines.push('Funcoes disponiveis: searchClientes, getClienteDetalhes, sendWhatsApp, sendEmail, startCall, createCliente, updateCliente, deleteCliente (gerente), moverClienteEtapa (gerente), marcarClientePerdido (gerente), createTarefa, completeTarefa, createPedido, listarPedidos, atualizarStatusPedido, aprovarPedido (gerente), recusarPedido (gerente), enviarPedidoOmie (gerente), listarProdutos, searchProdutos, createProduto (gerente), updateProduto (gerente), deleteProduto (gerente), addInteracao, addNota, listarTarefas.')
   lines.push('')
   lines.push('REGRAS DE EXECUCAO:')
-  lines.push('- Para CADASTRAR CLIENTE: campos OBRIGATORIOS (mesma regra do CRM): razaoSocial, contatoNome, contatoTelefone, cnpj OU cpf, endereco. Se faltar qualquer um, PERGUNTE antes de chamar createCliente — a funcao recusa campos faltando ou CNPJ/CPF invalido.')
+  lines.push('- Para CADASTRAR CLIENTE: campos OBRIGATORIOS (mesma regra do CRM): razaoSocial, contatoNome, contatoTelefone, cnpj OU cpf, endereco. Se faltar qualquer um, PERGUNTE antes de chamar createCliente — a funcao recusa campos faltando ou CNPJ/CPF invalido. Se o vendedor enviar FOTO/DOCUMENTO (ex.: cartao CNPJ), extraia todos os campos legiveis da imagem e use-os como dados informados — pergunte so o que realmente nao estiver visivel.')
   lines.push('- Para CRIAR PEDIDO: primeiro use searchClientes para achar o cliente. Depois use listarProdutos para ver o catalogo. Pergunte: (1) tipo do pedido (venda ou bonificacao/amostra), (2) forma de pagamento (A vista, 7 dias, 14 dias, 21 dias, 28 dias, 30 dias, 45 dias ou 60 dias), (3) tipo de frete (CIF ou FOB), (4) quais produtos e quantidades em KG, (5) para VENDA, o preco unitario de cada item se nao informado (bonificacao/amostra usa preco 0). Use createPedido com TODOS esses campos.')
   lines.push('- Para ENVIAR WHATSAPP/EMAIL: primeiro busque o cliente com searchClientes, depois use sendWhatsApp ou sendEmail. SEMPRE confirme a mensagem com o usuario antes de enviar.')
   lines.push('- Para MOVER CLIENTE NO FUNIL: use moverClienteEtapa (somente gerente).')
@@ -212,7 +212,7 @@ async function callGeminiWA(
   return resp.json()
 }
 
-export async function handleAIChat(senderNumber: string, session: UserSession, text: string): Promise<string> {
+export async function handleAIChat(senderNumber: string, session: UserSession, text: string, image?: { mimeType: string; data: string }): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     log.error('GEMINI_API_KEY nao configurada para WhatsApp AI')
@@ -224,7 +224,7 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
     const vendedor = session.vendedor
 
     const history = session.aiHistory || []
-    history.push({ role: 'user', content: text })
+    history.push({ role: 'user', content: image ? `${text}\n[imagem enviada neste turno]` : text })
 
     if (history.length > MAX_AI_HISTORY) {
       history.splice(0, history.length - MAX_AI_HISTORY)
@@ -233,10 +233,16 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
     const contents: any[] = [
       { role: 'user', parts: [{ text: systemInstruction }] },
       { role: 'model', parts: [{ text: 'Entendido, tenho acesso completo ao CRM e posso executar ações. Vou responder de forma direta via WhatsApp.' }] },
-      ...history.map(m => ({
+      ...history.slice(0, -1).map(m => ({
         role: m.role === 'assistant' ? 'model' as const : 'user' as const,
         parts: [{ text: m.content }],
       })),
+      {
+        role: 'user',
+        parts: image
+          ? [{ text }, { inline_data: { mime_type: image.mimeType, data: image.data } }]
+          : [{ text }],
+      },
     ]
 
     // Build tools with all CRM function declarations
