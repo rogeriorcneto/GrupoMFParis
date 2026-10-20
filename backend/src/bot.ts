@@ -1,4 +1,5 @@
-import { getSession } from './session.js'
+import { getSession, createSession } from './session.js'
+import { findVendedorByPhone } from './database.js'
 import { handleLogin, handleLogout, getWelcomeText, getMenuText } from './handlers/auth.js'
 import { handleMenu } from './handlers/menu.js'
 import {
@@ -45,6 +46,19 @@ export async function handleMessage(senderNumber: string, text: string): Promise
 
   // ─── Not logged in ───
   if (!session) {
+    // Identificação automática pelo número de WhatsApp cadastrado no CRM.
+    // O número do remetente é autêntico — se pertence a um vendedor ativo,
+    // cria a sessão e vai direto pro modo IA (experiência natural, sem login).
+    const vendedor = await findVendedorByPhone(senderNumber).catch(() => null)
+    if (vendedor) {
+      const newSession = createSession(senderNumber, vendedor)
+      newSession.state = 'chatting_ai'
+      newSession.aiHistory = []
+      const nome = vendedor.nome.split(' ')[0]
+      const resposta = await handleAIChat(senderNumber, newSession, text)
+      return `👋 *Oi, ${nome}!* Te reconheci pelo seu número.\n\n${resposta}`
+    }
+
     if (lower.startsWith('login ')) {
       return handleLogin(senderNumber, text)
     }
@@ -146,6 +160,10 @@ export async function handleMessage(senderNumber: string, text: string): Promise
         return handleClientListNavigation(senderNumber, session, text)
       }
 
-      return `⚠️ Não entendi "${text}".\n\n` + getMenuText()
+      // Experiência natural: qualquer texto que não é comando vai direto pra IA.
+      // O usuário não precisa digitar "7" — conversa direto.
+      const { updateSession } = await import('./session.js')
+      updateSession(senderNumber, { state: 'chatting_ai' })
+      return handleAIChat(senderNumber, { ...session, state: 'chatting_ai' }, text)
   }
 }

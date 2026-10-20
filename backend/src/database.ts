@@ -414,12 +414,38 @@ export async function updateVendedorCredentials(
   }
 }
 
+/** Localiza um vendedor pelo número de WhatsApp (campo telefone).
+ *  Números podem estar salvos com/sem 55 e com/sem 9º dígito. */
 export async function findVendedorByPhone(phone: string): Promise<Vendedor | null> {
   const clean = phone.replace(/\D/g, '')
   if (!clean) return null
-  const { data, error } = await supabase.from('vendedores').select('*').eq('telefone', clean).single()
-  if (error || !data) return null
-  return vendedorFromDb(data)
+
+  const formatted = formatBrazilianPhone(clean)
+  const variations = generateBrazilianPhoneVariations(formatted)
+
+  const suffixes = new Set<string>()
+  for (const v of variations) {
+    suffixes.add(v)
+    if (v.startsWith('55')) suffixes.add(v.slice(2))
+  }
+  const orFilter = [...suffixes].map(s => `telefone.ilike.%${s}`).join(',')
+
+  const { data, error } = await supabase
+    .from('vendedores')
+    .select('*')
+    .or(orFilter)
+    .eq('ativo', true)
+    .limit(5)
+
+  if (error || !data || data.length === 0) return null
+
+  // Confirma por dígitos (o ilike pode trazer falsos positivos)
+  const match = data.find(v => {
+    const tel = (v.telefone || '').replace(/\D/g, '')
+    if (!tel) return false
+    return [...suffixes].some(s => tel.endsWith(s) || s.endsWith(tel))
+  })
+  return match ? vendedorFromDb(match) : null
 }
 
 // ============================================
