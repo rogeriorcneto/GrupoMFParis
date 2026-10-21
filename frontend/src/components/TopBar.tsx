@@ -31,6 +31,7 @@ const viewTitles: Record<ViewType, string> = {
   'configuracao-tarefas': '⚙️ Automação de Tarefas',
   'configuracao-mensagens': '💬 Mensagens Automáticas',
   protocolos: '🐛 Protocolos de Erro',
+  sac: '💬 SAC',
   'tabela-precos': '💰 Tabela de Preços',
 }
 

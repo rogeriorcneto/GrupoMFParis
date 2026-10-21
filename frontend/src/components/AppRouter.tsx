@@ -7,7 +7,7 @@ import type {
 import {
   DashboardView, DashboardVendedorView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
-  IntegracoesView, VendedoresView, RelatoriosView, TemplatesView, ProtocolosView, TabelaPrecosView,
+  IntegracoesView, VendedoresView, RelatoriosView, TemplatesView, ProtocolosView, SacView, TabelaPrecosView,
   ProdutosView, PedidosView, AssistenteIAView, IAContextoView, CriarAutomacaoView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
   ConfiguracaoTarefasView, ConfiguracaoMensagensView,
   MissaoView
@@ -619,6 +619,8 @@ export default function AppRouter({
       return <RelatoriosView clientes={clientes} vendedores={vendedores} interacoes={interacoes} produtos={produtos} pedidos={pedidos} tarefas={tarefas} atividades={atividades} />
     case 'protocolos':
       return <ProtocolosView loggedUser={loggedUser} showToast={showToast} />
+    case 'sac':
+      return <SacView loggedUser={loggedUser} showToast={showToast} />
     case 'tabela-precos':
       return <TabelaPrecosView loggedUser={loggedUser} showToast={showToast} />
     case 'templates':

@@ -36,7 +36,7 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos', 'tabela-precos'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos', 'sac', 'tabela-precos'],
   vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento', 'protocolos', 'tabela-precos'],
   sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos', 'protocolos', 'tabela-precos'],
 }
@@ -69,6 +69,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'trafico', icon: ChartBarIcon, label: '📊 Tráfego Pago' },
   { id: 'licitacoes', icon: BuildingLibraryIcon, label: '🏛️ Licitações' },
   { id: 'protocolos', icon: DocumentTextIcon, label: '🐛 Protocolos' },
+  { id: 'sac', icon: ChatBubbleLeftIcon, label: '💬 SAC' },
   { id: 'tabela-precos', icon: ChartBarIcon, label: '💰 Tabela de Preços' },
 ]
 

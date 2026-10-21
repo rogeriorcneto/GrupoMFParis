@@ -431,7 +431,7 @@ describe('database.ts — mappers (tested via exported functions)', () => {
   // ─── fetchWhatsAppMessages ───
 
   describe('fetchWhatsAppMessages', () => {
-    it('cleans numero and fetches by variations', async () => {
+    it('fetches exact numero first, variations only as fallback', async () => {
       const chain = resetChain()
       chain.limit = vi.fn().mockResolvedValue({
         data: [{
@@ -445,10 +445,25 @@ describe('database.ts — mappers (tested via exported functions)', () => {
       expect(result[0].numero).toBe('5531999990000')
       expect(result[0].clienteId).toBe(10)
       expect(result[0].direcao).toBe('enviada')
-      expect(chain.in).toHaveBeenCalled()
-      const inArgs = chain.in.mock.calls[0]
-      expect(inArgs[0]).toBe('numero')
-      expect(inArgs[1]).toEqual(['5531999990000', '553199990000'])
+      // exato encontrou dados — variações NÃO entram (evita misturar conversa de outro número)
+      expect(chain.eq).toHaveBeenCalledWith('numero', '5531999990000')
+      const numeroInCalls = chain.in.mock.calls.filter((c: any[]) => c[0] === 'numero')
+      expect(numeroInCalls).toHaveLength(0)
+    })
+
+    it('falls back to 9-digit variations when exact match is empty', async () => {
+      const chain = resetChain()
+      const rows = [{
+        id: 2, numero: '553199990000', cliente_id: 11, vendedor_id: 1,
+        direcao: 'recebida', mensagem: 'Oi', tipo: 'text', created_at: '2025-01-01',
+      }]
+      chain.limit = vi.fn()
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: rows, error: null })
+      const result = await db.fetchWhatsAppMessages('(31) 99999-0000')
+      expect(result).toHaveLength(1)
+      expect(result[0].numero).toBe('553199990000')
+      expect(chain.in).toHaveBeenCalledWith('numero', ['553199990000'])
     })
   })
 

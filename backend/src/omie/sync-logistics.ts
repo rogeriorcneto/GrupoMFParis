@@ -187,6 +187,10 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
                 })
               } catch { /* non-critical */ }
               if (novoStatus === 'entregue' && !isAmostra) {
+                // Pesquisa de satisfação via WhatsApp SAC (não bloqueia o sync)
+                import('../sac.js').then(({ enviarPesquisaSac }) =>
+                  enviarPesquisaSac(pedido.id, cli.id, pedido.numero)
+                ).catch(err => log.warn({ err, pedidoId: pedido.id }, 'SAC: falha ao disparar pesquisa'))
                 try {
                   const { data: existente } = await supabase
                     .from('tarefas')

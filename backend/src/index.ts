@@ -906,6 +906,65 @@ app.get('/api/whatsapp/user/sessions', requireAuth, requireGerente, (_req, res) 
   res.json(getAllUserSessions())
 })
 
+// ─── WhatsApp SAC (pesquisa de satisfação) ───
+
+app.get('/api/sac/status', requireAuth, async (_req, res) => {
+  try {
+    const { getSacStatus } = await import('./whatsapp-sac.js')
+    res.json(getSacStatus())
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+app.get('/api/sac/qr', requireAuth, async (_req, res) => {
+  try {
+    const { getSacQr } = await import('./whatsapp-sac.js')
+    res.json({ qr: getSacQr() })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+app.post('/api/sac/connect', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
+  try {
+    const { connectSacWhatsApp } = await import('./whatsapp-sac.js')
+    connectSacWhatsApp().catch(err => log.error({ err }, 'Falha ao conectar WhatsApp SAC'))
+    res.json({ success: true, message: 'Conexão iniciada' })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+app.post('/api/sac/disconnect', requireAuth, requireGerente, rateLimit(5, 60_000), async (_req, res) => {
+  try {
+    const { disconnectSacWhatsApp } = await import('./whatsapp-sac.js')
+    await disconnectSacWhatsApp()
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+app.get('/api/sac/config', requireAuth, async (_req, res) => {
+  try {
+    const { getSacConfig } = await import('./sac.js')
+    res.json(await getSacConfig())
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+app.put('/api/sac/config', requireAuth, requireGerente, rateLimit(10, 60_000), async (req, res) => {
+  try {
+    const { setSacConfig } = await import('./sac.js')
+    await setSacConfig(req.body)
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message || 'Config inválida' })
+  }
+})
+
 // ─── Vendedor Histórico (gerente only) ───
 
 app.get('/api/vendedor/:id/historico', requireAuth, requireGerente, async (req, res) => {
@@ -1921,6 +1980,11 @@ async function start() {
       if (r.restored.length > 0) log.info({ restored: r.restored }, '✅ Sessões WhatsApp de vendedores restauradas no boot')
     })
     .catch(err => log.warn({ err }, 'Erro ao restaurar sessões de vendedor no boot'))
+
+  // Restaurar sessão WhatsApp SAC (número dedicado à pesquisa de satisfação)
+  import('./whatsapp-sac.js').then(({ restoreSacSession }) => restoreSacSession())
+    .then(ok => { if (ok) log.info('✅ Sessão WhatsApp SAC restaurada no boot') })
+    .catch(err => log.warn({ err }, 'Erro ao restaurar sessão SAC no boot'))
 
   // Start per-user WhatsApp session watchdog (reconecta sessões caídas a cada 5 min)
   startSessionCleanup()
