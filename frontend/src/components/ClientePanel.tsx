@@ -1716,6 +1716,25 @@ export default function ClientePanel({
               .filter(p => p.clienteId === c.id)
               .sort((a, b) => dataMaisRecente(b).localeCompare(dataMaisRecente(a)))
             const total = pedidosCli.filter(p => p.status !== 'cancelado' && p.tipo !== 'bonificacao').reduce((s, p) => s + (p.totalValor || 0), 0)
+            // Conta corrente de margem (item 6.1): margem estimada por pedido
+            // = Σ preço × qtd × (margemLucro% cadastrada no produto)
+            const ledgerMargem = pedidosCli
+              .filter(p => p.status !== 'cancelado' && p.tipo !== 'bonificacao')
+              .map(p => {
+                let receita = 0, margem = 0, semMargem = 0
+                for (const it of (p.itens || [])) {
+                  const valor = it.preco * it.quantidade
+                  receita += valor
+                  const prod = (produtos || []).find(pr => pr.id === it.produtoId)
+                  if (prod?.margemLucro != null) margem += valor * (prod.margemLucro / 100)
+                  else semMargem += valor
+                }
+                return { p, receita, margem, semMargem }
+              })
+            const margemTotal = ledgerMargem.reduce((s, l) => s + l.margem, 0)
+            const receitaComMargem = ledgerMargem.reduce((s, l) => s + (l.receita - l.semMargem), 0)
+            const receitaSemMargem = ledgerMargem.reduce((s, l) => s + l.semMargem, 0)
+            const margemPct = receitaComMargem > 0 ? (margemTotal / receitaComMargem) * 100 : 0
             const statusBadge: Record<string, string> = {
               rascunho: 'bg-gray-100 text-gray-700',
               enviado: 'bg-yellow-100 text-yellow-700',
@@ -1850,6 +1869,55 @@ export default function ClientePanel({
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+
+                {/* Conta corrente de margem (item 6.1) */}
+                <div className="bg-white rounded-apple border border-gray-200">
+                  <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-900">💰 Conta Corrente de Margem</p>
+                    <span className="text-[10px] text-gray-400">estimada via margem cadastrada no produto</span>
+                  </div>
+                  {ledgerMargem.length === 0 ? (
+                    <p className="text-sm text-gray-400 p-4 text-center">Sem vendas para compor a margem.</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-3 gap-2 p-3 border-b border-gray-100">
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Receita</p>
+                          <p className="text-sm font-bold text-gray-900">R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Margem R$</p>
+                          <p className="text-sm font-bold text-green-700">R$ {margemTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">Margem %</p>
+                          <p className={`text-sm font-bold ${margemPct >= 15 ? 'text-green-700' : 'text-red-600'}`}>{margemPct.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                      {receitaSemMargem > 0 && (
+                        <p className="px-4 py-1.5 text-[10px] text-amber-700 bg-amber-50 border-b border-amber-100">
+                          ⚠️ R$ {receitaSemMargem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em vendas sem margem cadastrada no produto — fora do cálculo.
+                        </p>
+                      )}
+                      <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                        {ledgerMargem.map(({ p, receita, margem, semMargem }) => (
+                          <div key={p.id} className="px-4 py-2 flex items-center justify-between gap-2 text-[11px]">
+                            <div className="min-w-0">
+                              <span className="font-medium text-gray-800">{p.numero}</span>
+                              <span className="text-gray-400 ml-1.5">{new Date(p.dataCriacao).toLocaleDateString('pt-BR')}</span>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <span className="text-gray-500">R$ {receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                              <span className={`ml-2 font-semibold ${margem >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                {semMargem >= receita ? 's/ margem' : `+R$ ${margem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
 
