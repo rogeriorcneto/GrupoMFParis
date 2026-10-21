@@ -1681,7 +1681,7 @@ export default function ClientePanel({
               )}
               {waHistorico.map(m => (
                 <div key={m.id} className={`flex ${m.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm ${m.direcao === 'enviada' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
+                  <div className={`text-sm text-gray-900 px-3 py-2 rounded-lg max-w-[85%] shadow-sm ${m.direcao === 'enviada' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
                     {m.mediaUrl && m.tipo === 'audio' && (
                       <audio controls src={m.mediaUrl} className="w-full max-w-[240px] h-9" />
                     )}
