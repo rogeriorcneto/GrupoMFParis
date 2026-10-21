@@ -60,7 +60,7 @@ export interface Cliente {
   resultadoAmostra?: 'aprovada' | 'reprovada'
   dataResultadoAmostra?: string
   motivoReprovacao?: string
-  statusFollowUp?: 'aguardando_aprovacao_gerente' | 'pedido_aprovado' | 'em_producao' | 'faturado' | 'expedido' | 'entregue' | 'satisfacao_pendente' | 'concluido' | 'novo_ciclo_iniciado' | 'perdido_negociacao'
+  statusFollowUp?: 'aguardando_aprovacao_gerente' | 'pedido_aprovado' | 'em_producao' | 'faturado' | 'expedido' | 'entregue' | 'satisfacao_pendente' | 'concluido' | 'novo_ciclo_iniciado' | 'perdido_negociacao' | 'cancelado'
   statusSatisfacao?: 'pendente' | 'satisfeito' | 'insatisfeito'
   notaSatisfacao?: number
   feedbackSatisfacao?: string

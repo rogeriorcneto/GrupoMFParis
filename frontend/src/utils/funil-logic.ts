@@ -193,6 +193,7 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       if (sub === 'entregue') return { text: '📋 Entregue — avaliar satisfação', color: 'text-green-600' }
       if (sub === 'satisfacao_pendente') return { text: '⭐ Coletar feedback do cliente', color: 'text-purple-600' }
       if (sub === 'concluido') return { text: '✅ Ciclo concluído — acompanhar recompra', color: 'text-green-600' }
+      if (sub === 'cancelado') return { text: '❌ Pedido cancelado no Omie — verificar motivo', color: 'text-red-600' }
       if (diasEtapa >= 50) return { text: '📦 Follow-up parado há ' + diasEtapa + 'd', color: 'text-red-600' }
       return { text: '📦 Acompanhar logística', color: 'text-blue-600' }
     }

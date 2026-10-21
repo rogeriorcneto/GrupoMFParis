@@ -559,7 +559,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         const subLabel = cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando'
         const subIdx = cliente.statusFollowUp ? ['aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0
         const pctSub = Math.min(((subIdx + 1) / 8) * 100, 100)
-        const subBadgeColor = cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' :
+        const subBadgeColor = cliente.statusFollowUp === 'cancelado' ? 'bg-red-100 text-red-700' :
+          cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' :
           cliente.statusFollowUp === 'entregue' ? 'bg-emerald-100 text-emerald-700' :
           cliente.statusFollowUp === 'expedido' ? 'bg-cyan-100 text-cyan-700' :
           cliente.statusFollowUp === 'faturado' ? 'bg-indigo-100 text-indigo-700' :

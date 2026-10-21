@@ -27,7 +27,7 @@ export const subStatusAmostra = [
 ] as const
 
 export const subStatusFollowUp = [
-  'aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'
+  'aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido', 'cancelado'
 ] as const
 
 export const subStatusAmostraLabels: Record<string, string> = {
@@ -52,4 +52,5 @@ export const subStatusFollowUpLabels: Record<string, string> = {
   'satisfacao_pendente': 'Satisfação Pendente',
   'concluido': 'Concluído',
   'novo_ciclo_iniciado': 'Novo Ciclo Iniciado',
+  'cancelado': 'Cancelado (Omie)',
 }

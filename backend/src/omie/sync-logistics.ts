@@ -125,7 +125,9 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
       const nf = info.nNumeroNF ? String(info.nNumeroNF) : (cab.numero_nf || '')
       const dataFat = brToIso(info.dDataFaturamento || info.dDtFat || '')
       const dataPrev = brToIso(cab.data_previsao || '')
-      const cancelado = CANCELADO(etapa)
+      // Pedido cancelado no Omie mantém a etapa original (ex.: 60 faturado) —
+      // o cancelamento vem em infoCadastro.cancelado/denegado, não na etapa.
+      const cancelado = CANCELADO(etapa) || info.cancelado === 'S' || info.denegado === 'S'
 
       // Status textual do pedido no CRM
       const followUpStatus = mapEtapaFollowUp(etapa)
@@ -152,7 +154,7 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
         if (cli) {
           const isAmostra = pedido.tipo === 'bonificacao' && cli.etapa === 'amostra'
           const novoStatus = cancelado
-            ? (isAmostra ? null : cli.status_follow_up) // cancelado não move status manual — só marca omie_status
+            ? (isAmostra ? null : 'cancelado') // card mostra "Cancelado (Omie)" em vez de status obsoleto
             : (isAmostra ? amostraStatus : followUpStatus)
 
           const cliUpdates: Record<string, any> = {}

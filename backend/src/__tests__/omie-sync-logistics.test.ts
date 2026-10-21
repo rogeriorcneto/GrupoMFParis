@@ -139,7 +139,7 @@ describe('syncOmieLogistics (por pedido)', () => {
     expect(cu?.data.status_follow_up).toBeUndefined()
   })
 
-  it('etapa cancelada (00) marca pedido como cancelado sem mover status do card', async () => {
+  it('etapa cancelada (00) marca pedido e card como cancelado', async () => {
     mockOmieCall.mockResolvedValue(omiePedido('00'))
     db.pedidos_list = [pedidoRow()]
     await syncOmieLogistics()
@@ -147,7 +147,20 @@ describe('syncOmieLogistics (por pedido)', () => {
     expect(pu?.data.omie_status).toBe('cancelado')
     expect(pu?.data.status).toBe('cancelado')
     const cu = updates.find(u => u.table === 'clientes')
-    expect(cu?.data.status_follow_up).toBeUndefined()
+    expect(cu?.data.status_follow_up).toBe('cancelado')
+  })
+
+  it('infoCadastro.cancelado=S com etapa normal (60) também marca cancelado', async () => {
+    // Caso real: pedido faturado (etapa 60) depois cancelado — Omie mantém a
+    // etapa e sinaliza só em infoCadastro.cancelado.
+    mockOmieCall.mockResolvedValue(omiePedido('60', { infoCadastro: { cancelado: 'S' } }))
+    db.pedidos_list = [pedidoRow({ omie_status: 'faturado' })]
+    db.clientes_row = { ...db.clientes_row, status_follow_up: 'faturado' }
+    await syncOmieLogistics()
+    const pu = updates.find(u => u.table === 'pedidos')
+    expect(pu?.data.omie_status).toBe('cancelado')
+    expect(pu?.data.status).toBe('cancelado')
+    expect(updates.find(u => u.table === 'clientes')?.data.status_follow_up).toBe('cancelado')
   })
 
   it('pedido não encontrado em nenhuma empresa → naoEncontrados', async () => {
