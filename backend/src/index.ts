@@ -570,61 +570,77 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     const session = getUserWhatsAppSession(vendedor.id)
     if (!session) { res.json([]); return }
 
-    // Build list of all JID variations to look up
-    const jidsToCheck = new Set<string>()
-    jidsToCheck.add(chatJid)
+    // Build list of JID variations to look up.
+    // primaryJids: JIDs que são com certeza este contato (jid exato, numero exato, LIDs mapeados)
+    // variantJids: variações com/sem o 9 — só usadas como FALLBACK, porque a variante
+    //   sem o 9 pode ser o número fixo de OUTRA pessoa (ex.: 553133639795 do cliente
+    //   colide com 55313639795 de um contato pessoal) e misturava conversas.
+    const primaryJids = new Set<string>()
+    const variantJids = new Set<string>()
+    primaryJids.add(chatJid)
     if (numero) {
       const raw = String(numero).replace(/\D/g, '')
-      jidsToCheck.add(`${raw}@s.whatsapp.net`)
-      jidsToCheck.add(`55${raw}@s.whatsapp.net`)
-      if (raw.startsWith('55')) jidsToCheck.add(`${raw.slice(2)}@s.whatsapp.net`)
-      // Brazilian mobile: add variation with/without the 9 digit
-      // e.g. 5531973248705 ↔ 553173248705
+      primaryJids.add(`${raw}@s.whatsapp.net`)
+      primaryJids.add(`55${raw}@s.whatsapp.net`)
+      if (raw.startsWith('55')) primaryJids.add(`${raw.slice(2)}@s.whatsapp.net`)
       const with55 = raw.startsWith('55') ? raw : `55${raw}`
       const without55 = raw.startsWith('55') ? raw.slice(2) : raw
       if (with55.length === 13 && with55[4] === '9') {
-        jidsToCheck.add(`${with55.slice(0, 4)}${with55.slice(5)}@s.whatsapp.net`)
+        variantJids.add(`${with55.slice(0, 4)}${with55.slice(5)}@s.whatsapp.net`)
       }
       if (without55.length === 11 && without55[2] === '9') {
-        jidsToCheck.add(`${without55.slice(0, 2)}${without55.slice(3)}@s.whatsapp.net`)
+        variantJids.add(`${without55.slice(0, 2)}${without55.slice(3)}@s.whatsapp.net`)
       }
       if (with55.length === 12 && with55[4] !== '9') {
-        jidsToCheck.add(`${with55.slice(0, 4)}9${with55.slice(4)}@s.whatsapp.net`)
+        variantJids.add(`${with55.slice(0, 4)}9${with55.slice(4)}@s.whatsapp.net`)
       }
       if (without55.length === 10 && without55[2] !== '9') {
-        jidsToCheck.add(`${without55.slice(0, 2)}9${without55.slice(2)}@s.whatsapp.net`)
+        variantJids.add(`${without55.slice(0, 2)}9${without55.slice(2)}@s.whatsapp.net`)
       }
     }
+    // Variantes nunca "vencem" um JID primário igual
+    for (const v of Array.from(variantJids)) {
+      if (primaryJids.has(v)) variantJids.delete(v)
+    }
 
-    // Find @lid JIDs that map to this phone number via session.lidMap
+    // Find @lid JIDs that map to this phone number via session.lidMap (primários)
     for (const [lid, phoneJid] of session.lidMap.entries()) {
-      if (jidsToCheck.has(phoneJid)) {
-        jidsToCheck.add(lid)
+      if (primaryJids.has(phoneJid) || variantJids.has(phoneJid)) {
+        primaryJids.add(lid)
       }
     }
     // Include @lid JIDs only when explicitly mapped to this phone number.
-    // Unmapped @lid JIDs are excluded — they could belong to any contact.
     const allStoreKeys = Array.from(session.messageStore.keys())
     for (const key of allStoreKeys) {
-      if (key.endsWith('@lid') && !jidsToCheck.has(key)) {
+      if (key.endsWith('@lid') && !primaryJids.has(key)) {
         const mapped = session.lidMap.get(key)
-        if (mapped && jidsToCheck.has(mapped)) {
-          jidsToCheck.add(key)
+        if (mapped && (primaryJids.has(mapped) || variantJids.has(mapped))) {
+          primaryJids.add(key)
         }
       }
     }
 
-    // Merge messages from all matching JIDs, dedup by message id
-    const seenIds = new Set<string>()
-    const merged: any[] = []
-    for (const j of jidsToCheck) {
-      const msgs = session.messageStore.get(j) || []
-      for (const m of msgs) {
-        if (!seenIds.has(m.id)) {
-          seenIds.add(m.id)
-          merged.push(m)
+    // Merge messages, dedup by message id. Variantes entram só se os JIDs
+    // primários não tiverem mensagens — evita misturar conversa de outra
+    // pessoa cujo número coincide com a variante sem o 9.
+    const mergeFrom = (jids: Set<string>, seenIds: Set<string>, into: any[]) => {
+      for (const j of jids) {
+        const msgs = session.messageStore.get(j) || []
+        for (const m of msgs) {
+          if (!seenIds.has(m.id)) {
+            seenIds.add(m.id)
+            into.push(m)
+          }
         }
       }
+    }
+    const seenIds = new Set<string>()
+    const merged: any[] = []
+    mergeFrom(primaryJids, seenIds, merged)
+    const jidsToCheck = new Set<string>([...primaryJids])
+    if (merged.length === 0) {
+      mergeFrom(variantJids, seenIds, merged)
+      for (const v of variantJids) jidsToCheck.add(v)
     }
 
     // Sort by timestamp ascending and take last N

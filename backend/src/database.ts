@@ -947,14 +947,30 @@ async function attachMediaFromKV(msgs: WhatsAppMessage[]): Promise<WhatsAppMessa
 
 export async function fetchWhatsAppMessages(numero: string, limit = 100): Promise<WhatsAppMessage[]> {
   const cleanNum = formatBrazilianPhone(numero.replace(/\D/g, ''))
-  const variations = generateBrazilianPhoneVariations(cleanNum)
-  const { data, error } = await supabase
+  // Busca primeiro pelo número exato. As variações com/sem o 9 só entram
+  // como fallback — a variante pode ser o número de OUTRA pessoa e
+  // misturava conversas pessoais dentro do histórico do cliente.
+  const exact = await supabase
     .from('whatsapp_messages')
     .select('*')
-    .in('numero', variations)
+    .eq('numero', cleanNum)
     .order('created_at', { ascending: true })
     .limit(limit)
-  if (error) throw error
+  if (exact.error) throw exact.error
+  let data = exact.data
+  if (!data || data.length === 0) {
+    const variations = generateBrazilianPhoneVariations(cleanNum).filter(v => v !== cleanNum)
+    if (variations.length > 0) {
+      const res = await supabase
+        .from('whatsapp_messages')
+        .select('*')
+        .in('numero', variations)
+        .order('created_at', { ascending: true })
+        .limit(limit)
+      if (res.error) throw res.error
+      data = res.data
+    }
+  }
   return attachMediaFromKV((data || []).map((row: any) => ({
     id: row.id,
     numero: row.numero,
