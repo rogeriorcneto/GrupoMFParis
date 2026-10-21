@@ -36,9 +36,9 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens'],
-  vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento'],
-  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos'],
+  vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento', 'protocolos'],
+  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos', 'protocolos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
@@ -68,6 +68,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'omie', icon: CloudArrowUpIcon, label: 'Omie ERP' },
   { id: 'trafico', icon: ChartBarIcon, label: '📊 Tráfego Pago' },
   { id: 'licitacoes', icon: BuildingLibraryIcon, label: '🏛️ Licitações' },
+  { id: 'protocolos', icon: DocumentTextIcon, label: '🐛 Protocolos' },
 ]
 
 export { viewsPermitidas }

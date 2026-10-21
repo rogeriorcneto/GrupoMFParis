@@ -36,6 +36,7 @@ import geminiStreamRouter from './routes/gemini-stream.js'
 import ttsWebSocketRouter from './routes/tts-websocket.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie, cancelarPedidoOmie } from './omie/pedidos.js'
 import { generateBackupDump, runDailyBackup, backupFileName } from './backup.js'
+import { createProtocolo, listProtocolos, updateProtocolo, withSla } from './protocolos.js'
 import { gzipSync } from 'node:zlib'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
@@ -1407,6 +1408,56 @@ app.get('/api/admin/backup/export', requireAuth, requireGerente, rateLimit(2, 30
   } catch (err: any) {
     log.error({ err }, 'Erro ao exportar backup')
     res.status(500).json({ success: false, error: err?.message || 'Erro ao exportar backup' })
+  }
+})
+
+// ── Protocolo de erro (Anexo I, item 3.3) ──
+app.post('/api/protocolos', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  try {
+    const { titulo, descricao, severidade } = req.body || {}
+    if (!titulo?.trim() || !descricao?.trim()) {
+      res.status(400).json({ success: false, error: 'Campos obrigatórios: titulo, descricao' })
+      return
+    }
+    const sev = severidade === 'critico' ? 'critico' : 'normal'
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId((req as any).userId).catch(() => null)
+    const p = await createProtocolo({
+      titulo, descricao, severidade: sev,
+      vendedorId: vendedor?.id ?? null,
+      autorNome: vendedor?.nome || 'Usuário',
+    })
+    res.json({ success: true, protocolo: p })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao abrir protocolo')
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao abrir protocolo' })
+  }
+})
+
+app.get('/api/protocolos', requireAuth, async (req, res) => {
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId((req as any).userId).catch(() => null)
+    const gerente = vendedor?.cargo === 'gerente'
+    const list = await listProtocolos({ gerente, vendedorId: vendedor?.id })
+    res.json({ success: true, protocolos: list.map(p => withSla(p)) })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao listar protocolos' })
+  }
+})
+
+app.patch('/api/protocolos/:numero', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const { status, resposta } = req.body || {}
+    if (status && !['aberto', 'em_atendimento', 'resolvido'].includes(status)) {
+      res.status(400).json({ success: false, error: 'Status inválido' })
+      return
+    }
+    const p = await updateProtocolo(req.params.numero, { status, resposta })
+    if (!p) { res.status(404).json({ success: false, error: 'Protocolo não encontrado' }); return }
+    res.json({ success: true, protocolo: withSla(p) })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao atualizar protocolo' })
   }
 })
 

@@ -30,6 +30,7 @@ const viewTitles: Record<ViewType, string> = {
   treinamento: '🎓 Academia de Vendas',
   'configuracao-tarefas': '⚙️ Automação de Tarefas',
   'configuracao-mensagens': '💬 Mensagens Automáticas',
+  protocolos: '🐛 Protocolos de Erro',
 }
 
 interface TopBarProps {
