@@ -71,6 +71,8 @@ interface ClientePanelProps {
   pedidos?: Pedido[]
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
   onSolicitarCancelamentoPedido?: (pedidoId: number, motivo: string) => Promise<void>
+  /** Edita conteúdo de pedido ainda não integrado ao Omie (rascunho/enviado). */
+  onEditarPedido?: (pedidoId: number, fields: { observacoes?: string; formaPagamento?: string; tipoFrete?: 'CIF' | 'FOB' | null; itens?: ItemPedido[]; totalValor?: number }) => Promise<void>
   /** Redireciona para o Funil já posicionado no card deste cliente. */
   onVerNoFunil?: (c: Cliente) => void
   /** Redireciona para a página de Tarefas. */
@@ -148,7 +150,7 @@ export default function ClientePanel({
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
-  produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido,
+  produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido, onEditarPedido,
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
@@ -288,6 +290,15 @@ export default function ClientePanel({
   const [cancelPedidoId, setCancelPedidoId] = useState<number | null>(null)
   const [cancelMotivo, setCancelMotivo] = useState('')
   const [cancelSaving, setCancelSaving] = useState(false)
+
+  // Modal edição de pedido (item 4.6 — só rascunho/enviado, antes do Omie)
+  const [editPedido, setEditPedido] = useState<Pedido | null>(null)
+  const [editPedidoItens, setEditPedidoItens] = useState<ItemPedido[]>([])
+  const [editPedidoObs, setEditPedidoObs] = useState('')
+  const [editPedidoPagamento, setEditPedidoPagamento] = useState(DEFAULT_PAYMENT_TERM)
+  const [editPedidoFrete, setEditPedidoFrete] = useState<'CIF' | 'FOB' | ''>('')
+  const [editPedidoProdutoSel, setEditPedidoProdutoSel] = useState<number | ''>('')
+  const [editPedidoSaving, setEditPedidoSaving] = useState(false)
   const [ganhouLoading, setGanhouLoading] = useState(false)
 
   // Modal aprovação por item de amostra
@@ -1777,6 +1788,24 @@ export default function ClientePanel({
                                   {ocorrenciasAbertas[p.id] ? '▲ Ocorrências' : '⚠️ Ocorrências'}
                                 </button>
                               </div>
+                              {(p.status === 'rascunho' || p.status === 'enviado') && (
+                                <div>
+                                  <button
+                                    onClick={() => {
+                                      setEditPedido(p)
+                                      setEditPedidoItens((p.itens || []).map(i => ({ ...i })))
+                                      setEditPedidoObs(p.observacoes || '')
+                                      setEditPedidoPagamento(p.formaPagamento || DEFAULT_PAYMENT_TERM)
+                                      setEditPedidoFrete((p.tipoFrete as 'CIF' | 'FOB' | '') || '')
+                                      setEditPedidoProdutoSel('')
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100"
+                                    title="Editar pedido (antes de integrar ao Omie)"
+                                  >
+                                    ✏️ Editar
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                           {p.itens && p.itens.length > 0 && (
@@ -2922,6 +2951,126 @@ export default function ClientePanel({
           </div>
         </div>
       )}
+
+      {/* Modal: Editar Pedido (antes de integrar ao Omie) */}
+      {editPedido && (() => {
+        const totalEdit = editPedidoItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+        const ehBonificacao = editPedido.tipo === 'bonificacao'
+        const valido = editPedidoItens.length > 0
+          && editPedidoItens.every(i => i.quantidade > 0 && (ehBonificacao || i.preco > 0))
+          && editPedidoFrete !== ''
+          && editPedidoPagamento.trim() !== ''
+          && editPedidoObs.trim() !== ''
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onClick={() => !editPedidoSaving && setEditPedido(null)}>
+            <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">✏️ Editar Pedido {editPedido.numero}</h2>
+              <p className="text-xs text-gray-500 mb-4">Edição disponível enquanto o pedido não foi integrado ao Omie. Após a aprovação, use o cancelamento.</p>
+
+              <label className="block text-sm font-medium text-gray-700 mb-1">Itens</label>
+              <div className="border border-gray-200 rounded-apple divide-y divide-gray-100 mb-2">
+                {editPedidoItens.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-2.5 py-1.5">
+                    <span className="flex-1 text-xs text-gray-800 truncate" title={item.nomeProduto}>{item.nomeProduto}</span>
+                    <input type="number" min={1} value={item.quantidade}
+                      onChange={e => setEditPedidoItens(prev => prev.map((x, i) => i === idx ? { ...x, quantidade: Math.max(1, Number(e.target.value) || 0) } : x))}
+                      className="w-16 px-1.5 py-1 text-xs border border-gray-300 rounded text-right" title="Quantidade" />
+                    <span className="text-[10px] text-gray-400">×</span>
+                    <input type="number" min={0} step={0.01} value={item.preco} disabled={ehBonificacao}
+                      onChange={e => setEditPedidoItens(prev => prev.map((x, i) => i === idx ? { ...x, preco: Math.max(0, Number(e.target.value) || 0) } : x))}
+                      className="w-20 px-1.5 py-1 text-xs border border-gray-300 rounded text-right disabled:bg-gray-50" title="Preço unitário" />
+                    <button onClick={() => setEditPedidoItens(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-red-500 hover:text-red-700 text-sm font-bold" title="Remover item">×</button>
+                  </div>
+                ))}
+                {editPedidoItens.length === 0 && <p className="text-xs text-gray-400 text-center py-3">Sem itens — adicione um produto abaixo.</p>}
+              </div>
+              <div className="flex gap-2 mb-4">
+                <select value={editPedidoProdutoSel} onChange={e => setEditPedidoProdutoSel(e.target.value ? Number(e.target.value) : '')}
+                  className="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-apple">
+                  <option value="">Adicionar produto…</option>
+                  {(produtos || []).filter(pr => !editPedidoItens.some(i => i.produtoId === pr.id)).map(pr => (
+                    <option key={pr.id} value={pr.id}>{pr.nome}{pr.sku ? ` (${pr.sku})` : ''}</option>
+                  ))}
+                </select>
+                <button
+                  disabled={!editPedidoProdutoSel}
+                  onClick={() => {
+                    const pr = (produtos || []).find(x => x.id === Number(editPedidoProdutoSel))
+                    if (!pr) return
+                    setEditPedidoItens(prev => [...prev, { produtoId: pr.id, nomeProduto: pr.nome, sku: pr.sku || '', unidade: pr.unidade || 'un', preco: ehBonificacao ? 0 : (pr.preco || 0), quantidade: 1 }])
+                    setEditPedidoProdutoSel('')
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium bg-gray-100 border border-gray-300 rounded-apple hover:bg-gray-200 disabled:opacity-50"
+                >+ Item</button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Forma de pagamento</label>
+                  <select value={editPedidoPagamento} onChange={e => setEditPedidoPagamento(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-apple">
+                    {PAYMENT_TERM_GROUPS.map(g => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.options.map(o => <option key={o} value={o}>{o}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Frete</label>
+                  <select value={editPedidoFrete} onChange={e => setEditPedidoFrete(e.target.value as 'CIF' | 'FOB')}
+                    className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-apple">
+                    <option value="">Selecione…</option>
+                    <option value="CIF">CIF (emitente paga)</option>
+                    <option value="FOB">FOB (cliente paga)</option>
+                  </select>
+                </div>
+              </div>
+
+              <label className="block text-sm font-medium text-gray-700 mb-1">Observações <span className="text-red-500">*</span></label>
+              <textarea value={editPedidoObs} onChange={e => setEditPedidoObs(e.target.value)} rows={2}
+                className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4 text-sm resize-none" />
+
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-900">
+                  {ehBonificacao ? 'Amostra/bonificação' : `Total: R$ ${totalEdit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setEditPedido(null)} disabled={editPedidoSaving}
+                    className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Voltar</button>
+                  <button
+                    disabled={!valido || editPedidoSaving || !onEditarPedido}
+                    onClick={async () => {
+                      if (!onEditarPedido) { addNotificacao('error', 'Erro', 'Função de edição não disponível.', c.id); return }
+                      setEditPedidoSaving(true)
+                      try {
+                        await onEditarPedido(editPedido.id, {
+                          observacoes: editPedidoObs.trim(),
+                          formaPagamento: editPedidoPagamento,
+                          tipoFrete: editPedidoFrete || null,
+                          itens: editPedidoItens,
+                          totalValor: ehBonificacao ? 0 : totalEdit,
+                        })
+                        addNotificacao('success', 'Pedido atualizado', `Pedido ${editPedido.numero} salvo.`, c.id)
+                        setEditPedido(null)
+                      } catch (err) {
+                        logger.error('Erro ao editar pedido:', err)
+                        addNotificacao('error', 'Erro', 'Falha ao salvar o pedido. Tente novamente.', c.id)
+                      } finally {
+                        setEditPedidoSaving(false)
+                      }
+                    }}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-apple hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {editPedidoSaving ? '⏳ Salvando...' : 'Salvar alterações'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal: Avaliação por Item de Amostra */}
       {showAvaliarAmostra && (() => {

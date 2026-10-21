@@ -707,6 +707,10 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
               await db.solicitarCancelamentoPedido(pedidoId, motivo)
               setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, status: 'cancelamento_solicitado', motivoRecusa: motivo } : p))
             }}
+            onEditarPedido={async (pedidoId, fields) => {
+              const atualizado = await db.updatePedido(pedidoId, fields)
+              setPedidos(prev => prev.map(p => p.id === pedidoId ? atualizado : p))
+            }}
             onVerTarefas={() => {
               setActiveView('tarefas')
               setSelectedClientePanel(null)

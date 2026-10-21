@@ -1282,6 +1282,45 @@ export async function rejeitarCancelamentoPedido(id: number): Promise<void> {
   if (error) throw error
 }
 
+/** Edita conteúdo de um pedido (item 4.6). Pedidos já integrados ao Omie
+ *  devem ser bloqueados pela UI — aqui só o CRM é alterado. */
+export async function updatePedido(id: number, fields: {
+  observacoes?: string
+  formaPagamento?: string
+  tipoFrete?: 'CIF' | 'FOB' | null
+  itens?: ItemPedido[]
+  totalValor?: number
+}): Promise<Pedido> {
+  const row: any = {}
+  if (fields.observacoes !== undefined) row.observacoes = fields.observacoes
+  if (fields.formaPagamento !== undefined) row.forma_pagamento = fields.formaPagamento
+  if (fields.tipoFrete !== undefined) row.tipo_frete = fields.tipoFrete
+  if (fields.totalValor !== undefined) row.total_valor = fields.totalValor
+  const { data, error } = await supabase.from('pedidos').update(row).eq('id', id).select().single()
+  if (error) throw error
+
+  if (fields.itens) {
+    const { error: delErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', id)
+    if (delErr) throw delErr
+    const itensRows = fields.itens.map(i => ({
+      pedido_id: id,
+      produto_id: i.produtoId,
+      nome_produto: i.nomeProduto,
+      sku: i.sku || '',
+      unidade: i.unidade,
+      preco: i.preco,
+      quantidade: i.quantidade,
+    }))
+    if (itensRows.length > 0) {
+      const { error: insErr } = await supabase.from('itens_pedido').insert(itensRows)
+      if (insErr) throw insErr
+    }
+  }
+
+  const { data: itensAtuais } = await supabase.from('itens_pedido').select('*').eq('pedido_id', id)
+  return pedidoFromDb(data, itensAtuais || [])
+}
+
 // ============================================
 // TEMPLATES
 // ============================================
