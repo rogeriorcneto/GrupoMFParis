@@ -532,7 +532,7 @@ export async function sendUserWhatsAppMessage(
 }
 
 /** Busca contatos do WhatsApp do vendedor (Baileys + DB fallback) */
-export async function getUserWhatsAppContacts(vendedorId: number): Promise<WAContact[]> {
+export async function getUserWhatsAppContacts(vendedorId: number, isGerente = false): Promise<WAContact[]> {
   const session = sessions.get(vendedorId)
   if (!session || session.status !== 'connected') return []
 
@@ -541,15 +541,18 @@ export async function getUserWhatsAppContacts(vendedorId: number): Promise<WACon
   // If Baileys has enough contacts, return them directly
   if (baileysContacts.length >= 5) return baileysContacts
 
-  // Fallback: also include validated CRM clients from DB
+  // Fallback: also include validated CRM clients from DB —
+  // vendedor só vê os clientes da própria carteira
   try {
     const { supabase } = await import('./supabase.js')
-    const { data: dbClients } = await supabase
+    let query = supabase
       .from('clientes')
       .select('razao_social, contato_nome, whatsapp_jid, contato_celular, contato_telefone, whatsapp')
       .eq('whatsapp_valido', true)
       .not('whatsapp_jid', 'is', null)
       .limit(500)
+    if (!isGerente) query = query.eq('vendedor_id', vendedorId)
+    const { data: dbClients } = await query
 
     if (dbClients && dbClients.length > 0) {
       const existingJids = new Set(baileysContacts.map(c => c.jid))
@@ -791,7 +794,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         // sem isso elas só existem em memória e se perdem no restart.
         const phoneNumber = formatBrazilianPhone(phoneJid.replace('@s.whatsapp.net', ''))
         import('./database.js').then(async ({ insertWhatsAppMessage, findClienteByPhone }) => {
-          const cliente = await findClienteByPhone(phoneNumber)
+          const cliente = await findClienteByPhone(phoneNumber, vendedorId)
           for (const m of lidMsgs) {
             try {
               await insertWhatsAppMessage({
@@ -1249,7 +1252,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
         try {
           const { insertWhatsAppMessage, findClienteByPhone, uploadWhatsAppMedia } = await import('./database.js')
-          const cliente = await findClienteByPhone(senderNumber)
+          const cliente = await findClienteByPhone(senderNumber, vendedorId)
 
           // Persistir mídia (áudio, imagem, vídeo, documento) no Storage
           let mediaUrl: string | undefined

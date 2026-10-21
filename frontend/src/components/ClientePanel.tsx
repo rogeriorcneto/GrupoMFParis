@@ -13,7 +13,7 @@ import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
 import { supabase } from '../lib/supabase'
-import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos } from '../lib/botApi'
+import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages } from '../lib/botApi'
 
 function normalizarEmpresa(s: string) {
   return s.toLowerCase().trim()
@@ -157,7 +157,7 @@ export default function ClientePanel({
   const [showExcluirConfirm, setShowExcluirConfirm] = useState(false)
   const [excluirConfirmText, setExcluirConfirmText] = useState('')
   // Abas do perfil (referência Agendor): Histórico (default) | Negócios
-  const [activeTab, setActiveTab] = useState<'historico' | 'negocios'>('historico')
+  const [activeTab, setActiveTab] = useState<'historico' | 'negocios' | 'whatsapp'>('historico')
   const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | 'proposta' | 'visita' | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
@@ -197,6 +197,17 @@ export default function ClientePanel({
       .finally(() => { if (!cancelled) setLoadingCnpj(false) })
     return () => { cancelled = true }
   }, [c.cnpj])
+  // Histórico WhatsApp completo do cliente (tab "Ver WhatsApp")
+  useEffect(() => {
+    if (activeTab !== 'whatsapp' || !c.id) return
+    let cancelled = false
+    setWaHistoricoLoading(true)
+    fetchWhatsAppMessages({ clienteId: c.id, limit: 300 })
+      .then(msgs => { if (!cancelled) setWaHistorico(msgs || []) })
+      .catch(() => { if (!cancelled) setWaHistorico([]) })
+      .finally(() => { if (!cancelled) setWaHistoricoLoading(false) })
+    return () => { cancelled = true }
+  }, [activeTab, c.id])
   React.useEffect(() => {
     if (!editingInfoAdicional) {
       setPanelInfoAdicional(notasEmpresa.info)
@@ -351,6 +362,8 @@ export default function ClientePanel({
   }, [])
   const [showWhatsApp, setShowWhatsApp] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
+  const [waHistorico, setWaHistorico] = useState<any[]>([])
+  const [waHistoricoLoading, setWaHistoricoLoading] = useState(false)
   const [produtoInteresseBusca, setProdutoInteresseBusca] = useState('')
   const [salvandoProdutosInteresse, setSalvandoProdutosInteresse] = useState(false)
 
@@ -1627,8 +1640,61 @@ export default function ClientePanel({
                   return count > 0 ? <span className="bg-gray-200 text-gray-700 text-[10px] font-bold rounded-full px-1.5">{count}</span> : null
                 })()}
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('whatsapp')}
+                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'whatsapp' ? 'text-green-700 border-green-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+              >
+                <WhatsAppIcon variant="outline" className="h-4 w-4" />
+                Ver WhatsApp
+              </button>
             </div>
           </div>
+
+          {/* ===== ABA WHATSAPP — conversa completa do cliente ===== */}
+          {activeTab === 'whatsapp' && (
+            <div className="bg-[#e5ddd5] rounded-apple border border-gray-200 min-h-[400px] max-h-[60vh] overflow-y-auto p-4 space-y-3">
+              {waHistoricoLoading && (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin h-6 w-6 border-2 border-green-600 border-t-transparent rounded-full" />
+                </div>
+              )}
+              {!waHistoricoLoading && waHistorico.length === 0 && (
+                <div className="text-center py-12">
+                  <p className="text-sm text-gray-600 bg-white bg-opacity-80 inline-block px-4 py-2 rounded-lg shadow-sm">
+                    Nenhuma mensagem WhatsApp registrada para este cliente ainda.
+                  </p>
+                </div>
+              )}
+              {waHistorico.map(m => (
+                <div key={m.id} className={`flex ${m.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm ${m.direcao === 'enviada' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
+                    {m.mediaUrl && m.tipo === 'audio' && (
+                      <audio controls src={m.mediaUrl} className="w-full max-w-[240px] h-9" />
+                    )}
+                    {m.mediaUrl && m.tipo === 'image' && (
+                      <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer">
+                        <img src={m.mediaUrl} alt={m.mensagem} className="rounded-lg max-w-[240px] max-h-[240px] object-cover mb-1" />
+                      </a>
+                    )}
+                    {m.mediaUrl && m.tipo === 'video' && (
+                      <video controls src={m.mediaUrl} className="rounded-lg max-w-[240px] max-h-[240px] mb-1" />
+                    )}
+                    {m.mediaUrl && m.tipo === 'document' && (
+                      <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline text-xs block mb-1">
+                        📎 {m.fileName || 'Documento'}
+                      </a>
+                    )}
+                    <p className="whitespace-pre-wrap">{m.mensagem}</p>
+                    <p className="text-[10px] text-gray-500 text-right mt-1">
+                      {m.createdAt ? new Date(m.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                      {m.direcao === 'enviada' ? ' ✓✓' : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* ===== ABA NEGÓCIOS ===== */}
           {activeTab === 'negocios' && (() => {

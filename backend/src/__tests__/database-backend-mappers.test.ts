@@ -296,18 +296,43 @@ describe('database.ts — mappers (tested via exported functions)', () => {
   // ─── findClienteByPhone ───
 
   describe('findClienteByPhone', () => {
-    it('cleans phone number and searches', async () => {
+    it('matches cliente by normalized digits', async () => {
       const chain = resetChain()
-      chain.limit = vi.fn().mockResolvedValue({
-        data: [{ id: 1, razao_social: 'Test', etapa: 'prospecção', cnpj: '', contato_nome: '', contato_telefone: '', contato_email: '' }],
+      // Query de candidatos retorna clientes com telefone; a função
+      // filtra por dígitos normalizados em JS (match exato, não substring)
+      chain.or = vi.fn().mockResolvedValue({
+        data: [
+          { id: 9, razao_social: 'Outro', etapa: 'prospecção', contato_celular: '11888887777', whatsapp: null, contato_telefone: null, vendedor_id: 2 },
+          { id: 1, razao_social: 'Test', etapa: 'prospecção', cnpj: '', contato_nome: '', contato_telefone: '', contato_email: '', contato_celular: '(31) 99999-0000', whatsapp: null, vendedor_id: 3 },
+        ],
+        error: null,
+      })
+      chain.single = vi.fn().mockResolvedValue({
+        data: { id: 1, razao_social: 'Test', etapa: 'prospecção', cnpj: '', contato_nome: '', contato_telefone: '', contato_email: '' },
         error: null,
       })
       const result = await db.findClienteByPhone('(31) 99999-0000')
       expect(result).not.toBeNull()
-      // Check the or() was called with cleaned number
+      expect(result!.id).toBe(1)
       expect(chain.or).toHaveBeenCalled()
-      const orArg = chain.or.mock.calls[0][0] as string
-      expect(orArg).toContain('31999990000')
+    })
+
+    it('prefers cliente of the session vendedor on duplicates', async () => {
+      const chain = resetChain()
+      chain.or = vi.fn().mockResolvedValue({
+        data: [
+          { id: 10, razao_social: 'Dup Outro', etapa: 'prospecção', contato_celular: '31999990000', whatsapp: null, contato_telefone: null, vendedor_id: 2 },
+          { id: 11, razao_social: 'Dup Minha', etapa: 'prospecção', contato_celular: '31999990000', whatsapp: null, contato_telefone: null, vendedor_id: 7 },
+        ],
+        error: null,
+      })
+      chain.single = vi.fn().mockResolvedValue({
+        data: { id: 11, razao_social: 'Dup Minha', etapa: 'prospecção', cnpj: '', contato_nome: '', contato_telefone: '', contato_email: '' },
+        error: null,
+      })
+      const result = await db.findClienteByPhone('31999990000', 7)
+      expect(result).not.toBeNull()
+      expect(result!.id).toBe(11)
     })
 
     it('returns null for empty phone', async () => {
@@ -317,7 +342,7 @@ describe('database.ts — mappers (tested via exported functions)', () => {
 
     it('returns null for no matches', async () => {
       const chain = resetChain()
-      chain.limit = vi.fn().mockResolvedValue({ data: [], error: null })
+      chain.or = vi.fn().mockResolvedValue({ data: [{ id: 1, contato_celular: '11888887777', whatsapp: null, contato_telefone: null, vendedor_id: 2 }], error: null })
       const result = await db.findClienteByPhone('0000000')
       expect(result).toBeNull()
     })

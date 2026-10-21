@@ -526,7 +526,7 @@ app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
-    const contacts = await getUserWhatsAppContacts(vendedor.id)
+    const contacts = await getUserWhatsAppContacts(vendedor.id, vendedor.cargo === 'gerente')
     const chats = getUserWhatsAppChats(vendedor.id)
     // Merge: enrich contacts with chat data (last message time, unread count)
     const merged = contacts

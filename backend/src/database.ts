@@ -502,29 +502,61 @@ export async function fetchClienteById(id: number): Promise<Cliente | null> {
   return clienteFromDb(data)
 }
 
-export async function findClienteByPhone(phone: string): Promise<Cliente | null> {
+/**
+ * Encontra o cliente dono de um número de telefone/WhatsApp.
+ * Compara dígitos normalizados (o banco pode ter "(31) 99999-1234",
+ * "31999991234", "5531999991234"...). Se mais de um cliente tem o
+ * mesmo número (duplicatas), prefere o da carteira do vendedor da
+ * sessão — senão pegava um card arbitrário e a conversa caía na
+ * janela do cliente errado.
+ */
+export async function findClienteByPhone(phone: string, vendedorId?: number): Promise<Cliente | null> {
   const clean = phone.replace(/\D/g, '')
   if (!clean) return null
 
   const formatted = formatBrazilianPhone(clean)
   const variations = generateBrazilianPhoneVariations(formatted)
+  // Match exato por dígitos — ilike parcial pegava cliente errado
+  const wanted = new Set(variations)
+  const wantedShort = new Set(variations.map(v => v.replace(/^55/, '')))
 
-  const orFilter = variations
-    .flatMap(v => [
-      `whatsapp.ilike.%${v}%`,
-      `contato_celular.ilike.%${v}%`,
-      `contato_telefone.ilike.%${v}%`,
-    ])
-    .join(',')
-
-  const { data, error } = await supabase
+  const { data: candidates, error } = await supabase
     .from('clientes')
-    .select('*')
-    .or(orFilter)
-    .limit(5)
+    .select('id, razao_social, contato_nome, contato_telefone, contato_celular, whatsapp, vendedor_id, etapa')
+    .or('contato_celular.not.is.null,whatsapp.not.is.null,contato_telefone.not.is.null')
 
-  if (error || !data || data.length === 0) return null
-  return clienteFromDb(data[0])
+  if (error || !candidates) return null
+  const seen = new Set<number>()
+  const matches: any[] = []
+
+  for (const c of candidates) {
+    if (seen.has(c.id)) continue
+    const phones = [c.whatsapp, c.contato_celular, c.contato_telefone]
+      .filter(Boolean)
+      .map((p: string) => p.replace(/\D/g, ''))
+    for (const p of phones) {
+      const normalized = p.startsWith('55') && p.length >= 12 ? p : `55${p}`
+      if (wanted.has(normalized) || wantedShort.has(p) || wantedShort.has(p.replace(/^55/, ''))) {
+        seen.add(c.id)
+        matches.push(c)
+        break
+      }
+    }
+  }
+
+  if (matches.length === 0) return null
+
+  // Desempate: cliente da carteira do vendedor da sessão primeiro
+  matches.sort((a, b) => {
+    if (vendedorId) {
+      if (a.vendedor_id === vendedorId && b.vendedor_id !== vendedorId) return -1
+      if (b.vendedor_id === vendedorId && a.vendedor_id !== vendedorId) return 1
+    }
+    return b.id - a.id // mais recente como fallback
+  })
+
+  const { data: full } = await supabase.from('clientes').select('*').eq('id', matches[0].id).single()
+  return full ? clienteFromDb(full) : null
 }
 
 export async function fetchClientesByIds(ids: number[]): Promise<Cliente[]> {
