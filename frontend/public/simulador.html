@@ -31,7 +31,7 @@ body{font-family:'Inter',sans-serif;background:var(--bg);min-height:100vh;displa
 #login button{width:100%;padding:14px;background:var(--azul);color:#fff;border:none;border-radius:10px;font-family:'Montserrat',sans-serif;font-size:1rem;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:background .2s}
 #login button:hover{background:var(--azul2)}
 #erroLogin{color:var(--vermelho);font-size:.85rem;margin-top:10px;display:none}
-#app{display:none;width:100%;max-width:520px}
+#app{width:100%;max-width:520px}
 .card{background:var(--card);border-radius:var(--r);box-shadow:var(--sombra);padding:36px 32px 32px}
 .topo{text-align:center;margin-bottom:28px;padding-bottom:22px;border-bottom:1px solid var(--borda)}
 .topo .marca-nome{font-size:1.3rem}
@@ -61,18 +61,6 @@ select:focus{border-color:var(--azul2)}
 </style>
 </head>
 <body>
-
-<div id="login">
-  <div class="marca">
-    <div class="marca-nome">GRUPO MF PARIS</div>
-    <div class="marca-sub">Tabela de Preços</div>
-    <div class="divisor"></div>
-  </div>
-  <h2>Acesso Restrito</h2>
-  <input type="password" id="senha" placeholder="Digite a senha" onkeydown="if(event.key==='Enter')entrar()"/>
-  <button onclick="entrar()">Entrar</button>
-  <p id="erroLogin">Senha incorreta. Tente novamente.</p>
-</div>
 
 <div id="app">
   <div class="card">
@@ -117,11 +105,9 @@ select:focus{border-color:var(--azul2)}
       </div>
     </div>
   </div>
-  <button class="sair" onclick="sair()">Sair</button>
 </div>
 
 <script>
-const SENHA = 'cafe.2026';
 const API_URL = 'https://grupomfparis-production.up.railway.app';
 
 let PRODUTOS = {"ACHOCOLATADO CHOCOMINAS CESTA 200G":{"custo":6.929158338,"comA":0.03,"comB":0.02,"margA":0.175,"margB":0.125},"CAFE VACUO BELVEDER 250G L2002":{"custo":12.489158338,"comA":0.03,"comB":0.02,"margA":0.325,"margB":0.275},"CAFE VACUO VILLA RICA TRADICIONAL 500G":{"custo":24.579158338,"comA":0.03,"comB":0.02,"margA":0.105,"margB":0.075},"CD - GLUCOSE EM PO - 25KG":{"custo":5.49,"comA":0.03,"comB":0.02,"margA":0.33,"margB":0.28},"CD - LEITE EM PO DESNATADO IMPORTADO 25KG":{"custo":22.29,"comA":0.015,"comB":0.01,"margA":0.115,"margB":0.065},"CD - LEITE EM PO INTEGRAL IMPORTADO 25KG":{"custo":22.29,"comA":0.015,"comB":0.01,"margA":0.115,"margB":0.065},"CD - MANIMALTO - MALTODEXTRINA 25KG":{"custo":5.49,"comA":0.03,"comB":0.02,"margA":0.265,"margB":0.215},"CD - PERMEADO LITORAL 25KG":{"custo":5.19,"comA":0.02,"comB":0.01,"margA":0.155,"margB":0.105},"CD - SORO DE LEITE EM PO 25KG":{"custo":9.09,"comA":0.02,"comB":0.01,"margA":0.125,"margB":0.075},"COMPOSTO LACTEO HORIZONTE COM MALTODEXTRINA 200G":{"custo":13.969158338,"comA":0.03,"comB":0.02,"margA":0.125,"margB":0.075},"LEITE EM PO DESNATADO HORIZONTE 25KG":{"custo":23.000158338,"comA":0.015,"comB":0.01,"margA":0.115,"margB":0.065},"LEITE EM PO INTEGRAL HORIZONTE 200g":{"custo":25.939158338,"comA":0.015,"comB":0.01,"margA":0.115,"margB":0.065},"LEITE EM PO INTEGRAL HORIZONTE 25KG":{"custo":23.000158338,"comA":0.015,"comB":0.01,"margA":0.115,"margB":0.065},"OKEY LAC 300 25KG":{"custo":11.240158338,"comA":0.03,"comB":0.02,"margA":0.155,"margB":0.105},"OKEY LAC ACAI 1 KG":{"custo":15.179158338,"comA":0.03,"comB":0.02,"margA":0.125,"margB":0.075},"OKEY LAC ACAI 25KG":{"custo":12.240158338,"comA":0.03,"comB":0.02,"margA":0.155,"margB":0.105},"OKEY LAC CREAM 25KG":{"custo":16.540158338,"comA":0.03,"comB":0.02,"margA":0.155,"margB":0.105},"OKEY LAC GOURMET 25KG":{"custo":12.390158338,"comA":0.03,"comB":0.02,"margA":0.155,"margB":0.105},"OKEY LAC PANIFICACAO 1KG":{"custo":13.579158338,"comA":0.03,"comB":0.02,"margA":0.125,"margB":0.075},"OKEY LAC PANIFICACAO 25KG":{"custo":10.640158338,"comA":0.03,"comB":0.02,"margA":0.155,"margB":0.105},"OKEY LAC PRO 25KG":{"custo":12.900158338,"comA":0.03,"comB":0.02,"margA":0.155,"margB":0.105},"PERMEADO LITORAL 25KG":{"custo":5.900158338,"comA":0.02,"comB":0.01,"margA":0.155,"margB":0.105},"SORO DE LEITE EM PO HORIZONTE 25KG":{"custo":9.800158338,"comA":0.02,"comB":0.01,"margA":0.125,"margB":0.075}};
@@ -142,23 +128,7 @@ async function carregarParams(){
   }catch(e){ /* offline — usa dados embutidos */ }
 }
 
-function entrar(){
-  if(document.getElementById('senha').value===SENHA){
-    document.getElementById('login').style.display='none';
-    document.getElementById('app').style.display='block';
-    carregarParams().then(iniciar);
-  } else {
-    document.getElementById('erroLogin').style.display='block';
-    document.getElementById('senha').value='';
-  }
-}
-
-function sair(){
-  document.getElementById('app').style.display='none';
-  document.getElementById('login').style.display='block';
-  document.getElementById('senha').value='';
-  document.getElementById('erroLogin').style.display='none';
-}
+carregarParams().then(iniciar);
 
 function iniciar(){
   const selProd = document.getElementById('produto');
