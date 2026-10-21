@@ -7,10 +7,40 @@ import { formatBrazilianPhone } from '../utils/validators'
 import EmailCenterPanel from './EmailCenterPanel'
 
 interface Message {
-  id: number
+  id: number | string
   text: string
   from: 'me' | 'them' | 'system'
   time: string
+  mediaUrl?: string
+  tipo?: string
+  fileName?: string
+}
+
+/** Renderiza o corpo da mensagem — mídia (áudio, imagem, vídeo, doc) ou texto */
+function renderWaContent(msg: Message) {
+  if (msg.mediaUrl) {
+    switch (msg.tipo) {
+      case 'audio':
+        return <audio controls src={msg.mediaUrl} className="w-full max-w-[240px] h-9" />
+      case 'image':
+        return (
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
+            <img src={msg.mediaUrl} alt={msg.text} className="rounded-lg max-w-[240px] max-h-[240px] object-cover mb-1" />
+          </a>
+        )
+      case 'video':
+        return <video controls src={msg.mediaUrl} className="rounded-lg max-w-[240px] max-h-[240px] mb-1" />
+      case 'document':
+        return (
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline text-xs block mb-1">
+            📎 {msg.fileName || 'Documento'}
+          </a>
+        )
+      default:
+        break
+    }
+  }
+  return <p className="whitespace-pre-wrap">{msg.text}</p>
 }
 
 interface HistoricoItem {
@@ -82,6 +112,9 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
       setWaMessages(msgs.map((m: any) => ({
         id: m.id || Date.now(),
         text: m.mensagem,
+        mediaUrl: m.mediaUrl,
+        tipo: m.tipo,
+        fileName: m.fileName,
         from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
         time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
       })))
@@ -301,12 +334,12 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                           </div>
                         ) : msg.from === 'them' ? (
                           <div className="bg-white text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            {renderWaContent(msg)}
                             <p className="text-[10px] text-gray-500 text-right mt-1">{msg.time}</p>
                           </div>
                         ) : (
                           <div className="bg-[#dcf8c6] text-gray-900 text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm">
-                            <p className="whitespace-pre-wrap">{msg.text}</p>
+                            {renderWaContent(msg)}
                             <p className="text-[10px] text-gray-500 text-right mt-1">{msg.time} ✓✓</p>
                           </div>
                         )}

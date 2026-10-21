@@ -11,6 +11,7 @@ import {
   getUserWhatsAppContacts, getUserWhatsAppChats, getUserWhatsAppChatMessages,
   sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
   validateContactsOnWhatsApp, cacheMessage, getUserWhatsAppSession,
+  restoreSavedUserSessions,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection, fetchInboxEmails } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -731,15 +732,20 @@ app.post('/api/whatsapp/user/send-audio', requireAuth, rateLimit(10, 60_000), as
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
-    const result = await sendUserWhatsAppAudio(vendedor.id, number, audioBase64, mimetype || 'audio/ogg; codecs=opus')
+    const mime = mimetype || 'audio/ogg; codecs=opus'
+    const result = await sendUserWhatsAppAudio(vendedor.id, number, audioBase64, mime)
     if (result.success) {
       try {
+        const mediaUrl = await db.uploadWhatsAppMedia(Buffer.from(audioBase64, 'base64'), mime)
         await db.insertWhatsAppMessage({
           numero: formatBrazilianPhone(number),
           clienteId: clienteId || undefined,
           vendedorId: vendedor.id,
           direcao: 'enviada',
           mensagem: '🎙️ [Áudio]',
+          tipo: 'audio',
+          mediaUrl: mediaUrl || undefined,
+          mimetype: mime,
         })
       } catch { /* non-critical */ }
     }
@@ -761,15 +767,20 @@ app.post('/api/whatsapp/user/send-image', requireAuth, rateLimit(10, 60_000), as
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
-    const result = await sendUserWhatsAppImage(vendedor.id, number, imageBase64, mimetype || 'image/jpeg', caption)
+    const mime = mimetype || 'image/jpeg'
+    const result = await sendUserWhatsAppImage(vendedor.id, number, imageBase64, mime, caption)
     if (result.success) {
       try {
+        const mediaUrl = await db.uploadWhatsAppMedia(Buffer.from(imageBase64, 'base64'), mime)
         await db.insertWhatsAppMessage({
           numero: formatBrazilianPhone(number),
           clienteId: clienteId || undefined,
           vendedorId: vendedor.id,
           direcao: 'enviada',
           mensagem: caption ? `📷 [Imagem] ${caption}` : '📷 [Imagem]',
+          tipo: 'image',
+          mediaUrl: mediaUrl || undefined,
+          mimetype: mime,
         })
       } catch { /* non-critical */ }
     }
@@ -1745,7 +1756,15 @@ async function start() {
   // Verify whatsapp_session table exists
   checkWhatsAppSessionTable().catch(() => {})
 
-  // Start per-user WhatsApp session cleanup (removes inactive sessions after 24h)
+  // Restaurar sessões WhatsApp de vendedores salvas no Supabase
+  // (sem isso, todo deploy mata as conexões até cada vendedor clicar "Conectar")
+  restoreSavedUserSessions()
+    .then(r => {
+      if (r.restored.length > 0) log.info({ restored: r.restored }, '✅ Sessões WhatsApp de vendedores restauradas no boot')
+    })
+    .catch(err => log.warn({ err }, 'Erro ao restaurar sessões de vendedor no boot'))
+
+  // Start per-user WhatsApp session watchdog (reconecta sessões caídas a cada 5 min)
   startSessionCleanup()
 
   // Cron: processar jobs de automação a cada 5 minutos (com guard anti-overlap)

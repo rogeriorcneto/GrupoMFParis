@@ -67,7 +67,7 @@ export interface UserWhatsAppStatus {
 
 const MAX_RECONNECT = 3
 const MAX_SESSIONS = 20
-const INACTIVE_TIMEOUT = 24 * 60 * 60 * 1000 // 24h
+const SESSION_WATCHDOG_MS = 5 * 60 * 1000 // 5 min
 
 const sessions = new Map<number, UserWhatsAppSession>()
 const reconnectTimers = new Map<number, ReturnType<typeof setTimeout>>()
@@ -110,18 +110,67 @@ async function fetchVersionSafe(): Promise<{ version: [number, number, number] }
 export function startSessionCleanup(): void {
   if (cleanupInterval) return
   cleanupInterval = setInterval(() => {
-    for (const [vendedorId, session] of sessions) {
-      if (session.status === 'connected') {
-        log.debug(`Sessão WhatsApp do vendedor ${vendedorId} permanece ativa`)
-      }
-    }
-  }, 60 * 60 * 1000)
+    // Watchdog: reconecta sessões salvas que não estão ativas.
+    // Cobre deploys, crashes e esgotamento das tentativas rápidas.
+    restoreSavedUserSessions().catch(err => {
+      log.warn({ err }, 'Watchdog: falha ao restaurar sessões de vendedor')
+    })
+  }, SESSION_WATCHDOG_MS)
 }
 
 export function stopSessionCleanup(): void {
   if (cleanupInterval) {
     clearInterval(cleanupInterval)
     cleanupInterval = null
+  }
+}
+
+/**
+ * Reconecta todas as sessões de vendedor que têm credenciais salvas no
+ * Supabase (`user_<id>:creds` na tabela whatsapp_session) mas não estão
+ * ativas em memória. Idempotente: connectUserWhatsApp ignora sessões já
+ * conectadas/conectando. Chamada no boot e periodicamente pelo watchdog.
+ */
+export async function restoreSavedUserSessions(): Promise<{ restored: number[]; failed: number[] }> {
+  try {
+    const { supabase } = await import('./supabase.js')
+    const { data, error } = await supabase
+      .from('whatsapp_session')
+      .select('key')
+      .like('key', 'user_%:creds')
+    if (error || !data) return { restored: [], failed: [] }
+
+    const restored: number[] = []
+    const failed: number[] = []
+
+    for (const row of data) {
+      const match = /^user_(\d+):creds$/.exec(row.key)
+      if (!match) continue
+      const vendedorId = Number(match[1])
+      const existing = sessions.get(vendedorId)
+      if (existing && (existing.status === 'connected' || existing.status === 'connecting' || existing.status === 'qr')) {
+        continue // Já ativa
+      }
+      if (reconnectTimers.has(vendedorId)) continue // Reconexão já agendada
+      try {
+        log.info(`🔄 Restaurando sessão WhatsApp do vendedor ${vendedorId} (creds salvas)`)
+        await connectUserWhatsApp(vendedorId)
+        restored.push(vendedorId)
+        // Espaçar conexões para não sobrecarregar o WhatsApp
+        await new Promise(r => setTimeout(r, 2_000))
+      } catch (err) {
+        log.warn({ err, vendedorId }, 'Falha ao restaurar sessão de vendedor')
+        failed.push(vendedorId)
+      }
+    }
+
+    if (restored.length > 0) {
+      log.info({ restored }, `✅ Sessões de vendedor restauradas: ${restored.length}`)
+    }
+    return { restored, failed }
+  } catch (err) {
+    log.warn({ err }, 'Erro ao listar sessões salvas de vendedor')
+    return { restored: [], failed: [] }
   }
 }
 
@@ -737,6 +786,28 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         }
         session.messageStore.delete(lid)
         log.info(`📦 Migradas ${lidMsgs.length} mensagens de ${lid} para ${phoneJid}`)
+
+        // Persistir no DB as mensagens que foram puladas por serem LID —
+        // sem isso elas só existem em memória e se perdem no restart.
+        const phoneNumber = formatBrazilianPhone(phoneJid.replace('@s.whatsapp.net', ''))
+        import('./database.js').then(async ({ insertWhatsAppMessage, findClienteByPhone }) => {
+          const cliente = await findClienteByPhone(phoneNumber)
+          for (const m of lidMsgs) {
+            try {
+              await insertWhatsAppMessage({
+                numero: phoneNumber,
+                clienteId: cliente?.id,
+                vendedorId,
+                direcao: m.fromMe ? 'enviada' : 'recebida',
+                mensagem: m.text,
+                tipo: m.type,
+              })
+            } catch (err) {
+              log.warn({ err, msgId: m.id }, 'Falha ao persistir mensagem LID migrada')
+            }
+          }
+          log.info(`📩 ${lidMsgs.length} mensagens LID migradas persistidas no DB (${phoneJid})`)
+        }).catch(err => log.warn({ err }, 'Falha ao persistir mensagens LID migradas'))
       }
     }
 
@@ -1177,8 +1248,29 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         log.info(`📩 [msg] SAVING to DB: sender=${senderNumber} (raw=${rawSenderNumber}) type=${msgType} text=${text.substring(0, 50)}`)
 
         try {
-          const { insertWhatsAppMessage, findClienteByPhone } = await import('./database.js')
+          const { insertWhatsAppMessage, findClienteByPhone, uploadWhatsAppMedia } = await import('./database.js')
           const cliente = await findClienteByPhone(senderNumber)
+
+          // Persistir mídia (áudio, imagem, vídeo, documento) no Storage
+          let mediaUrl: string | undefined
+          let mimetype: string | undefined
+          let fileName: string | undefined
+          if (['image', 'audio', 'video', 'document', 'sticker'].includes(msgType)) {
+            const m = msg.message
+            const mediaNode = m.imageMessage || m.audioMessage || m.videoMessage || m.documentMessage || m.stickerMessage
+            mimetype = mediaNode?.mimetype || undefined
+            fileName = (mediaNode as any)?.fileName
+            try {
+              const buffer = await downloadMediaMessage(msg, 'buffer', {})
+              if (buffer && buffer.length > 0 && buffer.length < 15_000_000) {
+                const url = await uploadWhatsAppMedia(buffer as Buffer, mimetype || 'application/octet-stream', fileName)
+                if (url) mediaUrl = url
+              }
+            } catch (mediaErr) {
+              log.warn({ err: mediaErr }, `Mídia não baixada para mensagem ${msg.key?.id} — salvando só o texto`)
+            }
+          }
+
           await insertWhatsAppMessage({
             numero: senderNumber,
             clienteId: cliente?.id,
@@ -1186,8 +1278,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             direcao: msg.key.fromMe ? 'enviada' : 'recebida',
             mensagem: text.trim(),
             tipo: msgType,
+            mediaUrl,
+            fileName,
+            mimetype,
           })
-          log.info(`📩 [msg] SAVED to DB OK: sender=${senderNumber} clienteId=${cliente?.id} fromMe=${fromMe}`)
+          log.info(`📩 [msg] SAVED to DB OK: sender=${senderNumber} clienteId=${cliente?.id} fromMe=${fromMe} media=${!!mediaUrl}`)
         } catch (dbErr) {
           log.error({ err: dbErr }, `Erro ao salvar mensagem recebida (vendedor ${vendedorId})`)
         }

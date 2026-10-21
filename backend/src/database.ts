@@ -769,18 +769,66 @@ export interface WhatsAppMessage {
   direcao: 'enviada' | 'recebida'
   mensagem: string
   tipo?: string
+  mediaUrl?: string
+  fileName?: string
+  mimetype?: string
   createdAt?: string
 }
 
+let waMediaColumnKnown: boolean | null = null
+
+/**
+ * Faz upload de mídia de mensagem WhatsApp para o bucket `whatsapp-media`
+ * no Supabase Storage e retorna a URL pública. Cria o bucket se não existir.
+ */
+export async function uploadWhatsAppMedia(buffer: Buffer, mimetype: string, fileName?: string): Promise<string | null> {
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets()
+    if (!buckets?.some(b => b.name === 'whatsapp-media')) {
+      const { error: createErr } = await supabase.storage.createBucket('whatsapp-media', { public: true })
+      if (createErr && !/already exists|duplicate/i.test(createErr.message)) {
+        log.warn({ err: createErr }, 'Falha ao criar bucket whatsapp-media')
+      }
+    }
+    const ext = fileName?.includes('.') ? fileName.split('.').pop() : (mimetype.split('/')[1]?.split(';')[0] || 'bin')
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const { error: upErr } = await supabase.storage
+      .from('whatsapp-media')
+      .upload(path, buffer, { contentType: mimetype, upsert: false })
+    if (upErr) {
+      log.warn({ err: upErr }, 'Falha ao subir mídia WhatsApp')
+      return null
+    }
+    const { data } = supabase.storage.from('whatsapp-media').getPublicUrl(path)
+    return data?.publicUrl || null
+  } catch (err) {
+    log.warn({ err }, 'Erro no upload de mídia WhatsApp')
+    return null
+  }
+}
+
 export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'createdAt'>): Promise<void> {
-  const { error } = await supabase.from('whatsapp_messages').insert({
+  const base: Record<string, any> = {
     numero: msg.numero,
     cliente_id: msg.clienteId || null,
     vendedor_id: msg.vendedorId || null,
     direcao: msg.direcao,
     mensagem: msg.mensagem,
     tipo: msg.tipo || 'text',
-  })
+  }
+  const withMedia = { ...base, media_url: msg.mediaUrl || null, file_name: msg.fileName || null, mimetype: msg.mimetype || null }
+
+  if (waMediaColumnKnown !== false && (msg.mediaUrl || msg.fileName || msg.mimetype || waMediaColumnKnown === true)) {
+    const { error } = await supabase.from('whatsapp_messages').insert(withMedia)
+    if (!error) { waMediaColumnKnown = true; return }
+    if (/media_url|file_name|mimetype/i.test(error.message)) {
+      waMediaColumnKnown = false
+      log.warn('Colunas de mídia ausentes em whatsapp_messages — rode a migration de media_url')
+    } else {
+      throw error
+    }
+  }
+  const { error } = await supabase.from('whatsapp_messages').insert(base)
   if (error) throw error
 }
 
@@ -802,6 +850,9 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100): Promis
     direcao: row.direcao,
     mensagem: row.mensagem,
     tipo: row.tipo || 'text',
+    mediaUrl: row.media_url || undefined,
+    fileName: row.file_name || undefined,
+    mimetype: row.mimetype || undefined,
     createdAt: row.created_at,
   }))
 }
@@ -822,6 +873,9 @@ export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 
     direcao: row.direcao,
     mensagem: row.mensagem,
     tipo: row.tipo || 'text',
+    mediaUrl: row.media_url || undefined,
+    fileName: row.file_name || undefined,
+    mimetype: row.mimetype || undefined,
     createdAt: row.created_at,
   }))
 }
@@ -858,6 +912,9 @@ export async function fetchRecentWhatsAppMessagesByVendedor(
         direcao: row.direcao,
         mensagem: row.mensagem,
         tipo: row.tipo || 'text',
+        mediaUrl: row.media_url || undefined,
+        fileName: row.file_name || undefined,
+        mimetype: row.mimetype || undefined,
         createdAt: row.created_at,
       })
     }

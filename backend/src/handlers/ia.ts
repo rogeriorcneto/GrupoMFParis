@@ -285,7 +285,25 @@ export async function handleAIChat(senderNumber: string, session: UserSession, t
     // Padrão de "afirmação de ação concluída" ou resultado fabricado — se a IA
     // responder isso SEM ter chamado nenhuma função neste turno, ela alucinou
     // a execução/consulta (vale também para "não encontrei nada" inventado).
-    const ACTION_CLAIM = /(criad[ao]|cadastrad[ao]|enviad[ao]|registrad[ao]|conclu[íi]d[ao]|feito!|pronto[!,.]|pedido (criado|registrado|enviado)|tarefa (criada|agendada)|cliente (criado|cadastrado)|estou (criando|cadastrando|enviando|registrando|agendando|buscando|procurando|verificando|consultando|listando)|(vou |vamos )(usar|criar|cadastrar|enviar|registrar|agendar|verificar|buscar|consultar|procurar|remarcar|concluir|listar|analisar|checar)[^.?!]*|aguarde( um)? (momento|instante)|deixa eu (ver|verificar|buscar)|chamando (a )?fun[cç][aã]o|usando (a )?fun[cç][aã]o|fun[cç][aã]o `?[a-zA-Z_]+`?|(listando|buscando|procurando|analisando|verificando|conferindo|consultando|criando|cadastrando|enviando|concluindo|remarcando)[^.?!]*\.\.\.|(tools\.)?(createTarefa|createCliente|createPedido|updateCliente|remarcarTarefa|completeTarefa|listarTarefas|listarPedidos|listarProdutos|atualizarStatusPedido|enviarDocumentoPedido|relatorioCrm|searchClientes|getClienteDetalhes|addNota|addInteracao|sendWhatsApp|sendEmail|moverClienteEtapa|aprovarPedido|recusarPedido|enviarPedidoOmie|listarClientes)\s*\()|n[ãa]o (encontrei|achei|localizei|existe|existem|há|ha|consta|constam|vejo)[^.?!]*(tarefa|pedido|cliente|produto|nota|intera[çc][aã]o|registro|resultado|dado|informa[çc][aã]o|venda|miss[aã]o)?|nenhum[oa]? (tarefa|pedido|cliente|produto|nota|intera[çc][aã]o|registro|venda|miss[aã]o)[^.?!]*(encontrad|agendad|cadastrad|existente|no momento|pendente)?|encontrei \d+ (tarefa|pedido|cliente|produto|resultado)/i
+    // "Afirmação de ação concluída" precisa de um objeto do CRM por perto —
+    // senão frases como "Fui criada pelo Rogerio" disparam falso-positivo.
+    const ACTION_VERB = 'criad|cadastrad|enviad|registrad|conclu[íi]d|remarcad|atualizad|agendad|completad|criei|cadastrei|enviei|registrei|agendei|remarquei|conclui'
+    const CRM_OBJECT = 'pedido|cliente|tarefa|proposta|amostra|nota|intera[çc][aã]o|mensagem|documento|relat[óo]rio|venda|bonifica[çc][aã]o|miss[aã]o|produto'
+    const ACTION_CLAIM = new RegExp(
+      `(${CRM_OBJECT})[^.?!\\n]{0,45}(${ACTION_VERB})` +
+      `|(${ACTION_VERB})[^.?!\\n]{0,45}(${CRM_OBJECT})` +
+      `|feito!|pronto[!,.]` +
+      `|estou (criando|cadastrando|enviando|registrando|agendando|buscando|procurando|verificando|consultando|listando)` +
+      `|(vou |vamos )(usar|criar|cadastrar|enviar|registrar|agendar|verificar|buscar|consultar|procurar|remarcar|concluir|listar|analisar|checar)[^.?!]*` +
+      `|aguarde( um)? (momento|instante)|deixa eu (ver|verificar|buscar)` +
+      `|chamando (a )?fun[cç][aã]o|usando (a )?fun[cç][aã]o|fun[cç][aã]o \`?[a-zA-Z_]+\`?` +
+      `|(listando|buscando|procurando|analisando|verificando|conferindo|consultando|criando|cadastrando|enviando|concluindo|remarcando)[^.?!]*\\.\\.\\.` +
+      `|(tools\\.)?(createTarefa|createCliente|createPedido|updateCliente|remarcarTarefa|completeTarefa|listarTarefas|listarPedidos|listarProdutos|atualizarStatusPedido|enviarDocumentoPedido|relatorioCrm|searchClientes|getClienteDetalhes|addNota|addInteracao|sendWhatsApp|sendEmail|moverClienteEtapa|aprovarPedido|recusarPedido|enviarPedidoOmie|listarClientes)\\s*\\(` +
+      `|n[ãa]o (encontrei|achei|localizei|existe|existem|há|ha|consta|constam|vejo)[^.?!]*(${CRM_OBJECT}|resultado|dado|informa[çc][aã]o)?` +
+      `|nenhum[oa]? (${CRM_OBJECT})[^.?!]*(encontrad|agendad|cadastrad|existente|no momento|pendente)?` +
+      `|encontrei \\d+ (tarefa|pedido|cliente|produto|resultado)`,
+      'i'
+    )
 
     while (callCount < MAX_FUNCTION_CALLS_WA) {
       const geminiData = await callGeminiWA(apiKey, contents, tools)
