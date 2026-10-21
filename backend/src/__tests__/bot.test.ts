@@ -5,6 +5,7 @@ vi.mock('../database.js', () => ({
   signIn: vi.fn(),
   getVendedorByAuthId: vi.fn(),
   findVendedorByPhone: vi.fn().mockResolvedValue(null),
+  findClienteByPhone: vi.fn().mockResolvedValue(null),
   fetchClientes: vi.fn().mockResolvedValue([]),
   fetchClientesByVendedor: vi.fn().mockResolvedValue([]),
   fetchClienteById: vi.fn(),
@@ -20,7 +21,8 @@ vi.mock('../database.js', () => ({
 }))
 
 import { handleMessage } from '../bot.js'
-import { createSession, deleteSession, getSession } from '../session.js'
+import { createSession, deleteSession, getSession, deleteSacSession } from '../session.js'
+import { findClienteByPhone } from '../database.js'
 import type { Vendedor } from '../database.js'
 
 const vendedor: Vendedor = {
@@ -29,10 +31,13 @@ const vendedor: Vendedor = {
 }
 
 const PHONE = '5531900000001'
+const CLIENT_PHONE = '5531900000002'
 
 describe('handleMessage', () => {
   beforeEach(() => {
     deleteSession(PHONE)
+    deleteSacSession(CLIENT_PHONE)
+    vi.mocked(findClienteByPhone).mockResolvedValue(null)
   })
 
   // ─── Sem sessão ───
@@ -47,6 +52,26 @@ describe('handleMessage', () => {
     const reply = await handleMessage(PHONE, 'login')
     // "login" without space after is not "login " prefix, so returns welcome
     expect(reply).toContain('Bem-vindo')
+  })
+
+  // ─── SAC (cliente) ───
+
+  it('sem sessão: número de cliente abre atendimento SAC', async () => {
+    vi.mocked(findClienteByPhone).mockResolvedValueOnce({
+      id: 5, nomeFantasia: 'Padaria X', razaoSocial: 'Padaria X LTDA',
+    } as any)
+    const reply = await handleMessage(CLIENT_PHONE, 'oi')
+    expect(reply).toContain('atendimento automático')
+    expect(reply).toContain('Meus pedidos')
+  })
+
+  it('SAC: "0" encerra atendimento', async () => {
+    vi.mocked(findClienteByPhone).mockResolvedValue({
+      id: 5, nomeFantasia: 'Padaria X', razaoSocial: 'Padaria X LTDA',
+    } as any)
+    await handleMessage(CLIENT_PHONE, 'oi')
+    const reply = await handleMessage(CLIENT_PHONE, '0')
+    expect(reply).toContain('encerrado')
   })
 
   // ─── Com sessão ───

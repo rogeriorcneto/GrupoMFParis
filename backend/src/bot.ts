@@ -1,5 +1,6 @@
-import { getSession, createSession } from './session.js'
-import { findVendedorByPhone } from './database.js'
+import { getSession, createSession, getSacSession, createSacSession } from './session.js'
+import { findVendedorByPhone, findClienteByPhone } from './database.js'
+import { sacWelcome, handleSACMessage } from './handlers/sac.js'
 import { handleLogin, handleLogout, getWelcomeText, getMenuText } from './handlers/auth.js'
 import { handleMenu } from './handlers/menu.js'
 import {
@@ -46,6 +47,17 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
 
   // ─── Not logged in ───
   if (!session) {
+    // login explícito tem prioridade sobre qualquer sessão SAC aberta.
+    if (lower.startsWith('login ')) {
+      return handleLogin(senderNumber, text)
+    }
+
+    // SAC (item 7.2): sessão de cliente já aberta continua no atendimento restrito.
+    const sac = getSacSession(senderNumber)
+    if (sac) {
+      return handleSACMessage(senderNumber, sac, text)
+    }
+
     // Identificação automática pelo número de WhatsApp cadastrado no CRM.
     // O número do remetente é autêntico — se pertence a um vendedor ativo,
     // cria a sessão e vai direto pro modo IA (experiência natural, sem login).
@@ -59,9 +71,16 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
       return `👋 *Oi, ${nome}!* Te reconheci pelo seu número.\n\n${resposta}`
     }
 
-    if (lower.startsWith('login ')) {
-      return handleLogin(senderNumber, text)
+    // SAC (item 7.2): número de um cliente → atendimento automático restrito.
+    // Vem depois do vendedor para que números cadastrados nos dois lados
+    // mantenham o acesso de vendedor.
+    const cliente = await findClienteByPhone(senderNumber).catch(() => null)
+    if (cliente) {
+      const nome = cliente.nomeFantasia || cliente.razaoSocial
+      createSacSession(senderNumber, cliente.id, nome)
+      return sacWelcome(nome)
     }
+
     return getWelcomeText()
   }
 

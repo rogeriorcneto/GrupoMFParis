@@ -83,6 +83,40 @@ export function updateSession(whatsappNumber: string, updates: Partial<UserSessi
   return session
 }
 
+// ============================================
+// Sessões SAC — clientes falando com o bot (item 7.2)
+// Separadas das sessões de vendedor: sem acesso às funções do CRM.
+// ============================================
+
+export interface SacSession {
+  clienteId: number
+  clienteNome: string
+  lastActivity: number
+}
+
+const sacSessions = new Map<string, SacSession>()
+
+export function getSacSession(whatsappNumber: string): SacSession | null {
+  const s = sacSessions.get(whatsappNumber)
+  if (!s) return null
+  if (Date.now() - s.lastActivity > SESSION_TIMEOUT_MS) {
+    sacSessions.delete(whatsappNumber)
+    return null
+  }
+  s.lastActivity = Date.now()
+  return s
+}
+
+export function createSacSession(whatsappNumber: string, clienteId: number, clienteNome: string): SacSession {
+  const s: SacSession = { clienteId, clienteNome, lastActivity: Date.now() }
+  sacSessions.set(whatsappNumber, s)
+  return s
+}
+
+export function deleteSacSession(whatsappNumber: string): void {
+  sacSessions.delete(whatsappNumber)
+}
+
 export function getActiveSessions(): number {
   // Cleanup expired sessions
   const now = Date.now()
