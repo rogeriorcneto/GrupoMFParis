@@ -1435,6 +1435,27 @@ app.post('/api/protocolos', requireAuth, rateLimit(10, 60_000), async (req, res)
   }
 })
 
+// Simulador / Tabela de Preços — GET é público: a página /simulador.html
+// (protegida por senha própria) e o painel do CRM leem da mesma fonte.
+app.get('/api/simulador/params', async (req, res) => {
+  try {
+    const { getSimuladorParams } = await import('./simulador.js')
+    res.json({ success: true, params: await getSimuladorParams() })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao ler parâmetros' })
+  }
+})
+
+app.put('/api/simulador/params', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const { setSimuladorParams } = await import('./simulador.js')
+    await setSimuladorParams(req.body?.params)
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message || 'Erro ao salvar parâmetros' })
+  }
+})
+
 app.get('/api/protocolos', requireAuth, async (req, res) => {
   try {
     const db = await import('./database.js')

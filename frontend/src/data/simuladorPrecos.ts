@@ -516,10 +516,13 @@ export function normalizarNome(nome: string): string {
     .replace(/[^a-z0-9]/g, '')
 }
 
-export function encontrarProdutoSimulador(nomeProduto: string): string | null {
+export function encontrarProdutoSimulador(
+  nomeProduto: string,
+  prods: Record<string, SimuladorProduto> = SIMULADOR_PRODUTOS
+): string | null {
   const alvo = normalizarNome(nomeProduto)
   if (!alvo) return null
-  const chaves = Object.keys(SIMULADOR_PRODUTOS)
+  const chaves = Object.keys(prods)
   // exata
   for (const chave of chaves) {
     if (normalizarNome(chave) === alvo) return chave
@@ -542,16 +545,41 @@ export interface PrecosCalculados {
   comB: number
 }
 
+export interface SimuladorParams {
+  produtos: Record<string, SimuladorProduto>
+  prazos: Record<string, number>
+  fretes: { key: string; label: string; valor: number }[]
+}
+
+/**
+ * Busca os parâmetros vivos da tabela de preços no backend (KV).
+ * Fallback: o dataset estático deste arquivo — mesmos números do seed.
+ */
+export async function fetchSimuladorParams(botUrl: string): Promise<SimuladorParams> {
+  try {
+    const res = await fetch(`${botUrl}/api/simulador/params`)
+    const j = await res.json()
+    if (j?.success && j.params?.produtos) return j.params as SimuladorParams
+  } catch {
+    // offline — cai no fallback estático
+  }
+  return { produtos: SIMULADOR_PRODUTOS, prazos: SIMULADOR_PRAZOS, fretes: SIMULADOR_FRETES }
+}
+
 export function calcularPrecosTabela(
   nomeProduto: string,
   prazo: string,
-  freteKey: string
+  freteKey: string,
+  params?: SimuladorParams
 ): PrecosCalculados | null {
-  const prodKey = encontrarProdutoSimulador(nomeProduto)
-  if (!prodKey) return null
-  const prod = SIMULADOR_PRODUTOS[prodKey]
-  const taxa = SIMULADOR_PRAZOS[prazo]
-  const freteObj = SIMULADOR_FRETES.find(f => f.key === freteKey)
+  const prods = params?.produtos ?? SIMULADOR_PRODUTOS
+  const prazos = params?.prazos ?? SIMULADOR_PRAZOS
+  const fretes = params?.fretes ?? SIMULADOR_FRETES
+  const prodKey = encontrarProdutoSimulador(nomeProduto, prods)
+  if (!prodKey || !prods[prodKey]) return null
+  const prod = prods[prodKey]
+  const taxa = prazos[prazo]
+  const freteObj = fretes.find(f => f.key === freteKey)
   if (taxa === undefined || !freteObj) return null
   const base = prod.custo + freteObj.valor
   const denomA = 1 - taxa - prod.comA - prod.margA

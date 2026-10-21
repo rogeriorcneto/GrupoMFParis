@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  SIMULADOR_PRODUTOS,
-  SIMULADOR_PRAZOS,
-  SIMULADOR_FRETES,
   encontrarProdutoSimulador,
   calcularPrecosTabela,
+  fetchSimuladorParams,
   formatarMoeda,
+  type SimuladorParams,
 } from '../data/simuladorPrecos'
+import { BOT_URL } from '../lib/botApi'
 
 interface SimuladorPrecoPanelProps {
   produtoNome?: string
@@ -15,22 +15,39 @@ interface SimuladorPrecoPanelProps {
 }
 
 export default function SimuladorPrecoPanel({ produtoNome, onUsarTabelaA, onUsarTabelaB }: SimuladorPrecoPanelProps) {
-  const produtoKeys = Object.keys(SIMULADOR_PRODUTOS)
-  const [produto, setProduto] = useState(produtoKeys[0] || '')
+  const [params, setParams] = useState<SimuladorParams | null>(null)
 
   useEffect(() => {
-    if (produtoNome) {
-      const match = encontrarProdutoSimulador(produtoNome)
+    fetchSimuladorParams(BOT_URL).then(setParams)
+  }, [])
+
+  const produtoKeys = useMemo(() => Object.keys(params?.produtos ?? {}), [params])
+  const prazoKeys = useMemo(() => Object.keys(params?.prazos ?? {}), [params])
+  const freteOptions = useMemo(() => params?.fretes ?? [], [params])
+
+  const [produto, setProduto] = useState('')
+  const [prazo, setPrazo] = useState('')
+  const [freteKey, setFreteKey] = useState('')
+
+  useEffect(() => {
+    if (produtoKeys.length && !produto) {
+      setProduto(produtoKeys[0])
+      setPrazo(prazoKeys[0] || '')
+      setFreteKey(freteOptions[0]?.key || '')
+    }
+  }, [produtoKeys, prazoKeys, freteOptions, produto])
+
+  useEffect(() => {
+    if (produtoNome && params) {
+      const match = encontrarProdutoSimulador(produtoNome, params.produtos)
       if (match) setProduto(match)
     }
-  }, [produtoNome])
+  }, [produtoNome, params])
 
-  const prazoKeys = Object.keys(SIMULADOR_PRAZOS)
-  const freteOptions = SIMULADOR_FRETES
-  const [prazo, setPrazo] = useState(prazoKeys[0] || '')
-  const [freteKey, setFreteKey] = useState(freteOptions[0]?.key || '')
-
-  const result = useMemo(() => calcularPrecosTabela(produto, prazo, freteKey), [produto, prazo, freteKey])
+  const result = useMemo(
+    () => (params ? calcularPrecosTabela(produto, prazo, freteKey, params) : null),
+    [params, produto, prazo, freteKey]
+  )
 
   return (
     <div className="space-y-2">

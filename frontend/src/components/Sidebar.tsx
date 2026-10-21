@@ -36,9 +36,9 @@ interface SidebarProps {
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos'],
-  vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento', 'protocolos'],
-  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos', 'protocolos'],
+  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'pedidos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos', 'tabela-precos'],
+  vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento', 'protocolos', 'tabela-precos'],
+  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'pedidos', 'protocolos', 'tabela-precos'],
 }
 
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
@@ -69,6 +69,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'trafico', icon: ChartBarIcon, label: '📊 Tráfego Pago' },
   { id: 'licitacoes', icon: BuildingLibraryIcon, label: '🏛️ Licitações' },
   { id: 'protocolos', icon: DocumentTextIcon, label: '🐛 Protocolos' },
+  { id: 'tabela-precos', icon: ChartBarIcon, label: '💰 Tabela de Preços' },
 ]
 
 export { viewsPermitidas }
@@ -116,16 +117,6 @@ export default function Sidebar({
               )}
             </button>
           ))}
-
-        <a
-          href="/simulador.html"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-apple transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
-        >
-          <span className="mr-3 text-lg">💰</span>
-          <span className="flex-1 text-left">Tabela de Preços</span>
-        </a>
 
       </nav>
 
