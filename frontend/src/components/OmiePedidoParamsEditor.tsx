@@ -110,7 +110,10 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
   const infAdic = estrutura?.informacoes_adicionais || {}
   const parcelas: any[] = estrutura?.lista_parcelas?.parcela || []
   const obs = estrutura?.observacoes || {}
+  const totalPedido = estrutura?.total_pedido || {}
   void cab; void frete; void infAdic; void obs
+
+  const fmt = (v: any) => v == null ? '—' : `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onClick={() => !saving && onClose()}>
@@ -164,10 +167,16 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
                         {input(`det.${i}.produto.percentual_desconto`, 'Desconto %', 'number')}
                         {input(`det.${i}.produto.cfop`, 'CFOP')}
                         {input(`det.${i}.produto.ncm`, 'NCM')}
-                        {input(`det.${i}.produto.codigo_local_estoque`, 'Local estoque')}
+                        {input(`det.${i}.inf_adic.codigo_local_estoque`, 'Local estoque')}
                         {input(`det.${i}.inf_adic.peso_bruto`, 'Peso bruto (kg)', 'number')}
                         {input(`det.${i}.inf_adic.peso_liquido`, 'Peso líquido (kg)', 'number')}
                       </div>
+                      {item?.imposto && Object.keys(item.imposto).length > 0 && (
+                        <details className="mt-2">
+                          <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600">Impostos do item (calculado pelo Omie — somente leitura)</summary>
+                          <pre className="mt-1 p-2 bg-gray-100 rounded text-[10px] text-gray-600 overflow-x-auto max-h-32 overflow-y-auto">{JSON.stringify(item.imposto, null, 1)}</pre>
+                        </details>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -237,6 +246,30 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
                   {input('informacoes_adicionais.estado_entrega', 'Entrega — UF')}
                 </div>
               </section>
+
+              {/* ── Totais/impostos calculados pelo Omie (read-only) ── */}
+              {Object.keys(totalPedido).length > 0 && (
+                <section>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">🧮 Totais e impostos <span className="text-[10px] font-normal text-gray-400">(calculado pelo Omie — somente leitura)</span></h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-50 border border-gray-200 rounded-apple p-3">
+                    {[
+                      ['Mercadorias', totalPedido.valor_mercadorias],
+                      ['Total pedido', totalPedido.valor_total_pedido],
+                      ['ICMS', totalPedido.valor_icms],
+                      ['Base ICMS', totalPedido.base_calculo_icms],
+                      ['PIS', totalPedido.valor_pis],
+                      ['COFINS', totalPedido.valor_cofins],
+                      ['CBS', totalPedido.valor_cbs],
+                      ['IBS', totalPedido.valor_ibs],
+                    ].map(([label, v]) => (
+                      <div key={String(label)}>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</p>
+                        <p className="text-xs font-semibold text-gray-700">{fmt(v)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* ── Observações ── */}
               <section>

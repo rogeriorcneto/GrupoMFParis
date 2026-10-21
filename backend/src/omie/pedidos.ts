@@ -961,12 +961,18 @@ export async function obterEstruturaPedidoOmie(pedidoId: number): Promise<any> {
     throw new Error(`Pedido ${pedidoId} não tem código Omie`)
   }
 
-  return omieCall<any>(
+  // skipCache: o editor de parâmetros precisa sempre do estado real do pedido —
+  // uma resposta cacheada de 60s mostraria valores pré-alteração (falso "não salvou").
+  const result = await omieCall<any>(
     '/produtos/pedido/',
     'ConsultarPedido',
     [{ codigo_pedido: parseInt(pedido.omie_codigo, 10) }],
-    { credentials: creds }
+    { skipCache: true, credentials: creds }
   )
+
+  // A resposta vem embrulhada em pedido_venda_produto — o pedido
+  // real (cabecalho/det/frete…) fica um nível abaixo.
+  return result?.pedido_venda_produto || result
 }
 
 /** Regrava o pedido inteiro no Omie via AlterarPedidoVenda.
@@ -987,10 +993,11 @@ export async function alterarPedidoOmie(pedidoId: number, estrutura: any): Promi
   }
 
   const omieCodigo = parseInt(pedido.omie_codigo, 10)
-  const body: any = { ...(estrutura || {}) }
+  const body: any = { ...(estrutura?.pedido_venda_produto || estrutura || {}) }
 
-  // Seções somente-leitura do ConsultarPedido não voltam pro Omie
+  // Seções somente-leitura/calculadas do ConsultarPedido não voltam pro Omie
   delete body.infoCadastro
+  delete body.total_pedido
 
   // ConsultarPedido pode devolver a seção de frete como "transporte";
   // o payload de escrita usa "frete". Normaliza pra não perder a seção.
@@ -1004,11 +1011,13 @@ export async function alterarPedidoOmie(pedidoId: number, estrutura: any): Promi
     codigo_pedido: omieCodigo,
     codigo_pedido_integracao: estrutura?.cabecalho?.codigo_pedido_integracao || `CRM-PED-${pedidoId}`,
   }
+  // Campos de cabeçalho que o Omie recusa na alteração
+  delete body.cabecalho.numero_pedido
 
   log.info({ pedidoId, omieCodigo }, '✏️ Alterando parâmetros do pedido no Omie (AlterarPedidoVenda)...')
 
   return omieCall<any>(
-    '/produtos/pedidovenda/',
+    '/produtos/pedido/',
     'AlterarPedidoVenda',
     [body],
     { skipCache: true, credentials: creds }
@@ -1053,18 +1062,22 @@ export async function consultarEntregaOmie(pedidoId: number): Promise<EntregaOmi
   }
 
   // Consultar pedido completo para extrair dados logísticos
-  const result = await omieCall<any>(
+  const raw = await omieCall<any>(
     '/produtos/pedido/',
     'ConsultarPedido',
     [{ codigo_pedido: codigoPedido }],
     { credentials: creds }
   )
 
+  // Resposta vem embrulhada em pedido_venda_produto — sem unwrap todos
+  // os campos extraídos abaixo vinham vazios (bug silencioso).
+  const result = raw?.pedido_venda_produto || raw
+
   log.info({ codigoPedido, result }, 'Omie ConsultarPedido resposta')
 
   const cab = result?.cabecalho || {}
   const infoCad = result?.infoCadastro || {}
-  const transporte = result?.transporte || {}
+  const transporte = result?.transporte || result?.frete || {}
 
   // Log all available fields for debugging
   log.info({ cab, infoCad, transporte }, 'Omie pedido detalhes extraídos')
