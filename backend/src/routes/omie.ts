@@ -3,7 +3,7 @@ import { omieCall, omieCallAllPages, testOmieConnection, getOmieCredentials } fr
 import { getSyncDiff, syncPullClientes, syncPullClientesMultiEmpresa, syncPushClientes, syncPushSingleCliente, associarClientesPorCnpj } from '../omie/sync.js'
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { getEmpresas, listarPedidosEmpresa, atualizarRastreioPedido, lancarRastreioPorNF } from '../omie/multi-empresa.js'
-import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros } from '../omie/pedidos.js'
+import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros, obterEstruturaPedidoOmie, alterarPedidoOmie } from '../omie/pedidos.js'
 import { obterDocumentosPedido, obterXmlNfePedido, PedidoDocsError } from '../omie/documentos.js'
 import { fetchTabelasPreco, getCodigoTabelaPreco } from '../omie/reference-data.js'
 import { loadConfig, saveConfig } from '../config-store.js'
@@ -309,6 +309,44 @@ omieDocsRouter.get('/pedidos/:id/documentos/xml', rateLimit(20, 60_000), async (
     const status = err instanceof PedidoDocsError ? err.status : 500
     if (status >= 500) log.error({ err, pedidoId }, 'Erro ao obter XML da NF-e')
     res.status(status).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Painel de parâmetros do pedido no Omie (gerente) ───
+// GET retorna a estrutura completa do pedido (ConsultarPedido);
+// PUT regrava o pedido inteiro via AlterarPedidoVenda (edição deve
+// partir da estrutura consultada — o Omie substitui tudo).
+
+omieRouter.get('/pedidos/:id/estrutura', rateLimit(20, 60_000), async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  try {
+    const estrutura = await obterEstruturaPedidoOmie(pedidoId)
+    res.json({ success: true, data: estrutura })
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao consultar estrutura do pedido no Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.put('/pedidos/:id/estrutura', rateLimit(10, 60_000), async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+
+  const estrutura = req.body?.estrutura
+  if (!estrutura || typeof estrutura !== 'object') {
+    res.status(400).json({ success: false, error: 'Campo obrigatório: estrutura (objeto completo do pedido Omie)' })
+    return
+  }
+
+  try {
+    const response = await alterarPedidoOmie(pedidoId, estrutura)
+    log.info({ pedidoId, response }, 'Pedido alterado no Omie via painel de parâmetros')
+    res.json({ success: true, data: response })
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao alterar pedido no Omie')
+    res.status(500).json({ success: false, error: err.message })
   }
 })
 

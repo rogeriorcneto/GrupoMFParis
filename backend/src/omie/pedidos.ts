@@ -941,6 +941,81 @@ export async function consultarPedidoOmie(pedidoId: number): Promise<any> {
 }
 
 // ============================================
+// Painel de parâmetros do pedido no Omie
+// (consultar estrutura completa + alterar)
+// ============================================
+
+/** Retorna a estrutura completa do pedido no Omie (cabecalho, det, frete,
+ *  informacoes_adicionais, lista_parcelas, departamentos, observacoes…). */
+export async function obterEstruturaPedidoOmie(pedidoId: number): Promise<any> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  const { data: pedido } = await supabase
+    .from('pedidos')
+    .select('omie_codigo')
+    .eq('id', pedidoId)
+    .single()
+
+  if (!pedido?.omie_codigo) {
+    throw new Error(`Pedido ${pedidoId} não tem código Omie`)
+  }
+
+  return omieCall<any>(
+    '/produtos/pedido/',
+    'ConsultarPedido',
+    [{ codigo_pedido: parseInt(pedido.omie_codigo, 10) }],
+    { credentials: creds }
+  )
+}
+
+/** Regrava o pedido inteiro no Omie via AlterarPedidoVenda.
+ *  ATENÇÃO: o Omie substitui o pedido completo — a estrutura enviada
+ *  deve conter todas as seções (a edição deve partir do ConsultarPedido). */
+export async function alterarPedidoOmie(pedidoId: number, estrutura: any): Promise<any> {
+  const creds = await getOmieCredentials()
+  if (!creds) throw new Error('Credenciais Omie não configuradas')
+
+  const { data: pedido } = await supabase
+    .from('pedidos')
+    .select('omie_codigo, numero')
+    .eq('id', pedidoId)
+    .single()
+
+  if (!pedido?.omie_codigo) {
+    throw new Error(`Pedido ${pedidoId} não tem código Omie`)
+  }
+
+  const omieCodigo = parseInt(pedido.omie_codigo, 10)
+  const body: any = { ...(estrutura || {}) }
+
+  // Seções somente-leitura do ConsultarPedido não voltam pro Omie
+  delete body.infoCadastro
+
+  // ConsultarPedido pode devolver a seção de frete como "transporte";
+  // o payload de escrita usa "frete". Normaliza pra não perder a seção.
+  if (body.transporte && !body.frete) {
+    body.frete = body.transporte
+    delete body.transporte
+  }
+
+  body.cabecalho = {
+    ...(estrutura?.cabecalho || {}),
+    codigo_pedido: omieCodigo,
+    codigo_pedido_integracao: estrutura?.cabecalho?.codigo_pedido_integracao || `CRM-PED-${pedidoId}`,
+  }
+
+  log.info({ pedidoId, omieCodigo }, '✏️ Alterando parâmetros do pedido no Omie (AlterarPedidoVenda)...')
+
+  return omieCall<any>(
+    '/produtos/pedidovenda/',
+    'AlterarPedidoVenda',
+    [body],
+    { skipCache: true, credentials: creds }
+  )
+}
+
+// ============================================
 // Consultar entrega / etapas de um pedido
 // ============================================
 

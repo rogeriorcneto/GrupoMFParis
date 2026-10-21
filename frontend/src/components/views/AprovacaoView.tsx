@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon, ArrowPathIcon, CloudArrowUpIcon, DocumentArrowDownIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 import type { Pedido, Cliente, Vendedor } from '../../types'
+import OmiePedidoParamsEditor from '../OmiePedidoParamsEditor'
 
 export interface ParametrosAprovacao {
   ativo: boolean
@@ -78,6 +79,8 @@ export default function AprovacaoView({
   const [pdfLoadingId, setPdfLoadingId] = useState<number | null>(null)
   // Tabela de preço Omie (A/B) por pedido — afeta comissões
   const [tabelaPorPedido, setTabelaPorPedido] = useState<Record<number, 'A' | 'B'>>({})
+  // Painel de parâmetros Omie (edição completa do pedido integrado)
+  const [paramsPedido, setParamsPedido] = useState<Pedido | null>(null)
 
   // Parâmetros de auto-aprovação
   const [params, setParams] = useState<ParametrosAprovacao>(() => getParametrosAprovacao())
@@ -367,6 +370,15 @@ export default function AprovacaoView({
                   {pedido.omieNumero && <span>Nº: <strong>{pedido.omieNumero}</strong></span>}
                   {pedido.omieStatus && <span>Status: <strong>{pedido.omieStatus}</strong></span>}
                 </div>
+                {loggedUser.cargo === 'gerente' && (
+                  <button
+                    onClick={() => setParamsPedido(pedido)}
+                    className="mt-2 px-2.5 py-1 bg-white border border-green-300 text-green-700 text-[10px] font-bold rounded-lg hover:bg-green-100 transition-colors"
+                    title="Ver e editar todos os parâmetros do pedido no Omie (frete, impostos, parcelas, itens…)"
+                  >
+                    ⚙️ Parâmetros Omie
+                  </button>
+                )}
               </div>
             )}
             {pedido.status === 'confirmado' && !pedido.omieCodigo && pedido.omieErro && (
@@ -919,6 +931,16 @@ export default function AprovacaoView({
             </div>
           )}
         </>
+      )}
+
+      {/* Painel de parâmetros Omie (pedido integrado) */}
+      {paramsPedido && (
+        <OmiePedidoParamsEditor
+          pedidoId={paramsPedido.id}
+          pedidoNumero={paramsPedido.numero}
+          onClose={() => setParamsPedido(null)}
+          showToast={showToast}
+        />
       )}
     </div>
   )
