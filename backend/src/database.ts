@@ -848,20 +848,60 @@ export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'c
     mensagem: msg.mensagem,
     tipo: msg.tipo || 'text',
   }
+  const hasMedia = !!(msg.mediaUrl || msg.fileName || msg.mimetype)
   const withMedia = { ...base, media_url: msg.mediaUrl || null, file_name: msg.fileName || null, mimetype: msg.mimetype || null }
 
-  if (waMediaColumnKnown !== false && (msg.mediaUrl || msg.fileName || msg.mimetype || waMediaColumnKnown === true)) {
-    const { error } = await supabase.from('whatsapp_messages').insert(withMedia)
-    if (!error) { waMediaColumnKnown = true; return }
-    if (/media_url|file_name|mimetype/i.test(error.message)) {
+  let insertedId: number | undefined
+  let inserted = false
+  if (waMediaColumnKnown !== false && (hasMedia || waMediaColumnKnown === true)) {
+    const { data, error } = await supabase.from('whatsapp_messages').insert(withMedia).select('id')
+    if (!error) { waMediaColumnKnown = true; inserted = true; insertedId = data?.[0]?.id }
+    else if (/media_url|file_name|mimetype/i.test(error.message)) {
       waMediaColumnKnown = false
-      log.warn('Colunas de mídia ausentes em whatsapp_messages — rode a migration de media_url')
     } else {
       throw error
     }
   }
-  const { error } = await supabase.from('whatsapp_messages').insert(base)
-  if (error) throw error
+  if (!inserted) {
+    const { data, error } = await supabase.from('whatsapp_messages').insert(base).select('id')
+    if (error) throw error
+    insertedId = data?.[0]?.id
+  }
+  // Sem acesso ao dashboard p/ rodar ALTER TABLE: metadados de mídia ficam no
+  // KV whatsapp_session (mesmo padrão dos links da Academia).
+  if (hasMedia && insertedId) {
+    try {
+      await kvSet(`${WA_MEDIA_PREFIX}${insertedId}`, { url: msg.mediaUrl, fileName: msg.fileName, mimetype: msg.mimetype })
+    } catch (err) {
+      log.warn({ err, id: insertedId }, 'Falha ao gravar mídia da mensagem no KV')
+    }
+  }
+}
+
+const WA_MEDIA_PREFIX = 'wa_media:'
+
+/** Mescla metadados de mídia guardados no KV whatsapp_session (fallback sem coluna media_url) */
+async function attachMediaFromKV(msgs: WhatsAppMessage[]): Promise<WhatsAppMessage[]> {
+  const keyed = msgs.filter(m => m.id && (!m.mediaUrl || !m.fileName || !m.mimetype))
+  if (!keyed.length) return msgs
+  const { data, error } = await supabase
+    .from('whatsapp_session')
+    .select('key, value')
+    .in('key', keyed.map(m => `${WA_MEDIA_PREFIX}${m.id}`))
+  if (error || !data) return msgs
+  const map = new Map<string, { url?: string; fileName?: string; mimetype?: string }>()
+  for (const row of data) {
+    try { map.set(row.key, JSON.parse(row.value)) } catch { /* ignora */ }
+  }
+  for (const m of keyed) {
+    const kv = map.get(`${WA_MEDIA_PREFIX}${m.id}`)
+    if (kv) {
+      m.mediaUrl = m.mediaUrl || kv.url || undefined
+      m.fileName = m.fileName || kv.fileName || undefined
+      m.mimetype = m.mimetype || kv.mimetype || undefined
+    }
+  }
+  return msgs
 }
 
 export async function fetchWhatsAppMessages(numero: string, limit = 100): Promise<WhatsAppMessage[]> {
@@ -874,7 +914,7 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100): Promis
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error) throw error
-  return (data || []).map((row: any) => ({
+  return attachMediaFromKV((data || []).map((row: any) => ({
     id: row.id,
     numero: row.numero,
     clienteId: row.cliente_id,
@@ -886,7 +926,7 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100): Promis
     fileName: row.file_name || undefined,
     mimetype: row.mimetype || undefined,
     createdAt: row.created_at,
-  }))
+  })))
 }
 
 export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 100): Promise<WhatsAppMessage[]> {
@@ -897,7 +937,7 @@ export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 
     .order('created_at', { ascending: true })
     .limit(limit)
   if (error) throw error
-  return (data || []).map((row: any) => ({
+  return attachMediaFromKV((data || []).map((row: any) => ({
     id: row.id,
     numero: row.numero,
     clienteId: row.cliente_id,
@@ -909,7 +949,7 @@ export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 
     fileName: row.file_name || undefined,
     mimetype: row.mimetype || undefined,
     createdAt: row.created_at,
-  }))
+  })))
 }
 
 /** Busca as últimas N mensagens por conversa para um vendedor, para pré-popular cache após reconexão */
@@ -951,7 +991,7 @@ export async function fetchRecentWhatsAppMessagesByVendedor(
       })
     }
   }
-  return result
+  return attachMediaFromKV(result)
 }
 
 // ============================================
