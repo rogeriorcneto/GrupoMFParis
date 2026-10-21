@@ -1855,6 +1855,11 @@ async function start() {
   // Init email (loads config from Supabase)
   await initEmail()
 
+  // Hidratar sessões do bot (vendedor logado + SAC) do KV — sem isso,
+  // todo deploy zera o Map em memória e o vendedor precisa mandar "login".
+  const { hydrateSessions } = await import('./session.js')
+  await hydrateSessions()
+
   // Start Express
   app.listen(CONFIG.port, () => {
     log.info(`✅ API disponível em http://localhost:${CONFIG.port}`)

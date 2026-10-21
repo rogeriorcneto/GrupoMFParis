@@ -1,4 +1,4 @@
-import { getSession, createSession, getSacSession, createSacSession } from './session.js'
+import { getSessionAsync, createSession, getSacSessionAsync, createSacSession } from './session.js'
 import { findVendedorByPhone, findClienteByPhone } from './database.js'
 import { sacWelcome, handleSACMessage } from './handlers/sac.js'
 import { handleLogin, handleLogout, getWelcomeText, getMenuText } from './handlers/auth.js'
@@ -43,7 +43,7 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
   }
 
   const lower = text.toLowerCase().trim()
-  const session = getSession(senderNumber)
+  const session = await getSessionAsync(senderNumber)
 
   // ─── Not logged in ───
   if (!session) {
@@ -53,7 +53,7 @@ export async function handleMessage(senderNumber: string, text: string, image?: 
     }
 
     // SAC (item 7.2): sessão de cliente já aberta continua no atendimento restrito.
-    const sac = getSacSession(senderNumber)
+    const sac = await getSacSessionAsync(senderNumber)
     if (sac) {
       return handleSACMessage(senderNumber, sac, text)
     }
