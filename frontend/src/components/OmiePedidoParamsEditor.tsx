@@ -62,7 +62,54 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
 
   const num = (v: any) => (v === '' || v == null ? undefined : Number(v))
 
-  const salvar = async () => {
+  const TEMPLATE_PATHS = [
+    'cabecalho.etapa', 'cabecalho.codigo_cenario_impostos',
+    'frete.modalidade', 'frete.valor_seguro', 'frete.outras_despesas',
+    'frete.especie_volumes', 'frete.marca_volumes',
+    'informacoes_adicionais.codigo_categoria', 'informacoes_adicionais.codigo_conta_corrente',
+    'informacoes_adicionais.codigo_tabela_preco', 'informacoes_adicionais.consumidor_final',
+    'informacoes_adicionais.enviar_email', 'observacoes.obs_venda',
+  ]
+
+  const getPath = (obj: any, path: string) => path.split('.').reduce((o, k) => o?.[k], obj)
+
+  const aplicarPadrao = async () => {
+    if (!estrutura || saving) return
+    setSaving(true)
+    try {
+      const res = await authFetch(`${BOT_URL}/api/omie/parametros-padrao`)
+      const j = await res.json()
+      const template = j.data
+      if (!j.success || !template || Object.keys(template).length === 0) {
+        showToast?.('error', 'Nenhum parâmetro padrão salvo ainda. Use "Salvar como padrão".')
+        return
+      }
+      setEstrutura(prev => {
+        if (!prev) return prev
+        const clone = structuredClone(prev)
+        for (const path of TEMPLATE_PATHS) {
+          const v = getPath(template, path)
+          if (v !== undefined && v !== null && v !== '') {
+            const keys = path.split('.')
+            let obj: any = clone
+            for (let i = 0; i < keys.length - 1; i++) {
+              if (obj[keys[i]] == null) obj[keys[i]] = {}
+              obj = obj[keys[i]]
+            }
+            obj[keys[keys.length - 1]] = v
+          }
+        }
+        return clone
+      })
+      showToast?.('success', 'Parâmetros padrão aplicados — revise e salve no pedido.')
+    } catch (err: any) {
+      showToast?.('error', err?.message || 'Erro ao carregar padrão')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const salvar = async (comoPadrao = false) => {
     if (!estrutura || saving) return
     setSaving(true)
     try {
@@ -72,12 +119,27 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
         body: JSON.stringify({ estrutura }),
       })
       const j = await res.json()
-      if (j.success) {
-        showToast?.('success', `Pedido ${pedidoNumero} atualizado no Omie`)
-        onClose()
-      } else {
+      if (!j.success) {
         showToast?.('error', j.error || 'Omie rejeitou a alteração')
+        return
       }
+      if (comoPadrao) {
+        const resPadrao = await authFetch(`${BOT_URL}/api/omie/parametros-padrao`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estrutura }),
+        })
+        const jPadrao = await resPadrao.json()
+        if (!jPadrao.success) {
+          showToast?.('error', `Pedido salvo, mas falhou ao gravar padrão: ${jPadrao.error || 'erro'}`)
+          onClose()
+          return
+        }
+        showToast?.('success', `Pedido ${pedidoNumero} atualizado e parâmetros viraram padrão para próximas vendas`)
+      } else {
+        showToast?.('success', `Pedido ${pedidoNumero} atualizado no Omie`)
+      }
+      onClose()
     } catch (err: any) {
       showToast?.('error', err?.message || 'Erro ao salvar no Omie')
     } finally {
@@ -288,15 +350,26 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
 
         {estrutura && !loading && (
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-            <p className="text-[11px] text-amber-700">⚠️ Salvar substitui o pedido inteiro no Omie.</p>
-            <div className="flex gap-3">
+            <div>
+              <p className="text-[11px] text-amber-700">⚠️ Salvar substitui o pedido inteiro no Omie.</p>
+              <button onClick={aplicarPadrao} disabled={saving}
+                className="mt-1 text-[11px] text-blue-600 hover:text-blue-800 underline disabled:opacity-50">
+                ⬇️ Aplicar parâmetros padrão salvos
+              </button>
+            </div>
+            <div className="flex gap-2">
               <button onClick={onClose} disabled={saving}
                 className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm disabled:opacity-50">
                 Cancelar
               </button>
-              <button onClick={salvar} disabled={saving}
+              <button onClick={() => salvar(false)} disabled={saving}
                 className="px-4 py-2 bg-green-600 text-white rounded-apple hover:bg-green-700 text-sm font-medium disabled:opacity-50">
-                {saving ? '⏳ Salvando no Omie…' : '💾 Salvar no Omie'}
+                {saving ? '⏳ Salvando…' : '💾 Salvar neste pedido'}
+              </button>
+              <button onClick={() => salvar(true)} disabled={saving}
+                title="Salva este pedido E grava estes parâmetros como padrão para as próximas vendas"
+                className="px-4 py-2 bg-blue-600 text-white rounded-apple hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
+                {saving ? '⏳ Salvando…' : '⭐ Salvar como padrão'}
               </button>
             </div>
           </div>

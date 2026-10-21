@@ -4,6 +4,7 @@ import { getSyncDiff, syncPullClientes, syncPullClientesMultiEmpresa, syncPushCl
 import { syncOmieLogistics } from '../omie/sync-logistics.js'
 import { getEmpresas, listarPedidosEmpresa, atualizarRastreioPedido, lancarRastreioPorNF } from '../omie/multi-empresa.js'
 import { listarPedidosOmieAcompanhamento, consultarEntregaOmie, obterResumoFinanceiro, buscarPedidoOmie, onPedidoAprovado, syncOmieNumeros, obterEstruturaPedidoOmie, alterarPedidoOmie } from '../omie/pedidos.js'
+import { obterParametrosPadrao, salvarParametrosPadrao } from '../omie/parametros-padrao.js'
 import { obterDocumentosPedido, obterXmlNfePedido, PedidoDocsError } from '../omie/documentos.js'
 import { fetchTabelasPreco, getCodigoTabelaPreco } from '../omie/reference-data.js'
 import { loadConfig, saveConfig } from '../config-store.js'
@@ -346,6 +347,34 @@ omieRouter.put('/pedidos/:id/estrutura', rateLimit(10, 60_000), async (req, res)
     res.json({ success: true, data: response })
   } catch (err: any) {
     log.error({ err, pedidoId }, 'Erro ao alterar pedido no Omie')
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Parâmetros padrão de pedido Omie (template do gerente) ───
+// GET retorna o template salvo; PUT salva os campos reutilizáveis
+// extraídos de uma estrutura ConsultarPedido editada no painel.
+
+omieRouter.get('/parametros-padrao', async (_req, res) => {
+  try {
+    const data = await obterParametrosPadrao()
+    res.json({ success: true, data })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+omieRouter.put('/parametros-padrao', rateLimit(10, 60_000), async (req, res) => {
+  const estrutura = req.body?.estrutura
+  if (!estrutura || typeof estrutura !== 'object') {
+    res.status(400).json({ success: false, error: 'Campo obrigatório: estrutura' })
+    return
+  }
+  try {
+    const template = await salvarParametrosPadrao(estrutura)
+    res.json({ success: true, data: template })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao salvar parâmetros padrão Omie')
     res.status(500).json({ success: false, error: err.message })
   }
 })

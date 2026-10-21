@@ -882,6 +882,16 @@ export async function criarPedidoOmie(
     omiePedido.observacoes = { obs_venda: pedido.observacoes }
   }
 
+  // Parâmetros padrão salvos pelo gerente no painel (template) — aplica
+  // sobre cabeçalho/frete/info adicionais; a obs padrão nunca apaga a
+  // observação específica da venda.
+  try {
+    const { aplicarParametrosPadrao } = await import('./parametros-padrao.js')
+    await aplicarParametrosPadrao(omiePedido, { incluirObservacoes: false })
+  } catch (err: any) {
+    log.warn({ pedidoId, err: err?.message }, '⚠️ Falha ao aplicar parâmetros padrão — seguindo sem template')
+  }
+
   log.info({ pedidoId, tipoPedido, cenarioFiscal, modalidadeFrete, codigoVendedorOmie, dataPrevisao }, '📤 Enviando pedido para Omie...')
 
   // 10. Enviar ao Omie
