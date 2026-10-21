@@ -522,7 +522,11 @@ export async function sendUserWhatsAppMessage(
     }
     log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
     const sent = await sock.sendMessage(jid, { text })
-    if (sent?.key?.id) session.outgoingMessageIds.add(sent.key.id)
+    if (sent?.key?.id) {
+      session.outgoingMessageIds.add(sent.key.id)
+      // Marca como vista p/ o re-sync não duplicar no histórico após restart
+      import('./database.js').then(d => d.claimWhatsAppExternalId(sent.key.id!)).catch(() => {})
+    }
     log.info({ messageId: sent?.key?.id, jid }, `📨 Mensagem aceita pelo WhatsApp para vendedor ${vendedorId}`)
     return { success: true }
   } catch (err: any) {
@@ -682,11 +686,15 @@ export async function sendUserWhatsAppAudio(
       return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
     const buffer = Buffer.from(audioBase64, 'base64')
-    await session.sock.sendMessage(jid, {
+    const sent = await session.sock.sendMessage(jid, {
       audio: buffer,
       mimetype,
       ptt: true,
     })
+    if (sent?.key?.id) {
+      session.outgoingMessageIds.add(sent.key.id)
+      import('./database.js').then(d => d.claimWhatsAppExternalId(sent.key.id!)).catch(() => {})
+    }
     return { success: true }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar áudio para ${number}`)
@@ -712,10 +720,14 @@ export async function sendUserWhatsAppImage(
       return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
     const buffer = Buffer.from(imageBase64, 'base64')
-    await session.sock.sendMessage(jid, {      image: buffer,
+    const sent = await session.sock.sendMessage(jid, {      image: buffer,
       mimetype,
       caption: caption || undefined,
     })
+    if (sent?.key?.id) {
+      session.outgoingMessageIds.add(sent.key.id)
+      import('./database.js').then(d => d.claimWhatsAppExternalId(sent.key.id!)).catch(() => {})
+    }
     return { success: true }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar imagem para ${number}`)
@@ -804,7 +816,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
                 direcao: m.fromMe ? 'enviada' : 'recebida',
                 mensagem: m.text,
                 tipo: m.type,
-              })
+              }, m.id)
             } catch (err) {
               log.warn({ err, msgId: m.id }, 'Falha ao persistir mensagem LID migrada')
             }
@@ -1118,6 +1130,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           if (msgCount > 0) {
             log.info(`📨 Vendedor ${vendedorId}: ${msgCount} mensagens cacheadas em background`)
           }
+          await persistSyncedMessages(syncMessages)
         })
       }
     })
@@ -1185,6 +1198,62 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       return raw
     }
 
+    // Persiste no DB mensagens sincronizadas (gap offline / history sync).
+    // Sem isso elas ficam só no cache em memória e se perdem no restart —
+    // mensagem enviada pelo celular enquanto a sessão estava caída sumia
+    // do histórico do CRM. Dedup via KV wa_seen p/ não duplicar em re-syncs.
+    const persistSyncedMessages = async (msgs: any[]) => {
+      const nowS = Math.floor(Date.now() / 1000)
+      const recent = msgs.filter(m => {
+        if (!m.message || !m.key?.id) return false
+        const ts = Number(m.messageTimestamp || 0)
+        return ts > 0 && nowS - ts <= 14 * 24 * 3600
+      }).slice(-500)
+      if (!recent.length) return
+      try {
+        const db = await import('./database.js')
+        const newIds = await db.filterNewWhatsAppExternalIds(recent.map(m => m.key.id))
+        if (!newIds.size) return
+        const clienteCache = new Map<string, number | undefined>()
+        const persisted: string[] = []
+        for (const msg of recent) {
+          if (!newIds.has(msg.key.id)) continue
+          const jid = await resolveJid(msg)
+          // LID não marcado como visto — tenta de novo no próximo sync
+          if (!jid || jid.endsWith('@lid')) continue
+          const { text, type: msgType } = extractMessageContent(msg)
+          if (!text.trim()) { persisted.push(msg.key.id); continue }
+          if (msg.key.fromMe && session.outgoingMessageIds.has(msg.key.id)) {
+            persisted.push(msg.key.id); continue
+          }
+          const senderNumber = formatBrazilianPhone(jid.replace('@s.whatsapp.net', ''))
+          if (!clienteCache.has(jid)) {
+            try { clienteCache.set(jid, (await db.findClienteByPhone(senderNumber, vendedorId))?.id) }
+            catch { clienteCache.set(jid, undefined) }
+          }
+          try {
+            await db.insertWhatsAppMessage({
+              numero: senderNumber,
+              clienteId: clienteCache.get(jid),
+              vendedorId,
+              direcao: msg.key.fromMe ? 'enviada' : 'recebida',
+              mensagem: text.trim(),
+              tipo: msgType,
+            })
+            persisted.push(msg.key.id)
+          } catch (err) {
+            log.warn({ err, msgId: msg.key.id }, 'Falha ao persistir mensagem sincronizada')
+          }
+        }
+        if (persisted.length) {
+          await db.markWhatsAppExternalIds(persisted)
+          log.info(`📨 Vendedor ${vendedorId}: ${persisted.length} mensagens sincronizadas persistidas no DB`)
+        }
+      } catch (err) {
+        log.warn({ err }, 'Erro ao persistir mensagens sincronizadas')
+      }
+    }
+
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
       log.info(`📩 [messages.upsert] vendedor=${vendedorId} type=${type} count=${msgs.length}`)
 
@@ -1200,7 +1269,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         }
       }
 
-      // History sync (append) — cache in background, don't block event loop
+      // History sync (append) — cache + persist in background, don't block event loop
       if (type !== 'notify') {
         setImmediate(async () => {
           for (const msg of msgs) {
@@ -1209,6 +1278,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             if (!jid) continue
             cacheMessage(session, jid, msg)
           }
+          await persistSyncedMessages(msgs)
         })
         return
       }
@@ -1284,7 +1354,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             mediaUrl,
             fileName,
             mimetype,
-          })
+          }, messageId || undefined)
           log.info(`📩 [msg] SAVED to DB OK: sender=${senderNumber} clienteId=${cliente?.id} fromMe=${fromMe} media=${!!mediaUrl}`)
         } catch (dbErr) {
           log.error({ err: dbErr }, `Erro ao salvar mensagem recebida (vendedor ${vendedorId})`)

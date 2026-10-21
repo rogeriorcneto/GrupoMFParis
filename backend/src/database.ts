@@ -839,7 +839,12 @@ export async function uploadWhatsAppMedia(buffer: Buffer, mimetype: string, file
   }
 }
 
-export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'createdAt'>): Promise<void> {
+export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'createdAt'>, externalId?: string): Promise<void> {
+  if (externalId) {
+    try {
+      if (!(await claimWhatsAppExternalId(externalId))) return // já gravada (re-sync)
+    } catch { /* KV falhou — segue sem dedup */ }
+  }
   const base: Record<string, any> = {
     numero: msg.numero,
     cliente_id: msg.clienteId || null,
@@ -879,6 +884,36 @@ export async function insertWhatsAppMessage(msg: Omit<WhatsAppMessage, 'id' | 'c
 }
 
 const WA_MEDIA_PREFIX = 'wa_media:'
+
+// Dedup de mensagens WhatsApp por ID externo — sem coluna própria no DB,
+// usa o KV whatsapp_session (chave wa_seen:{id}). Evita duplicar o histórico
+// quando o WhatsApp re-sincroniza mensagens após reconexão.
+const WA_SEEN_PREFIX = 'wa_seen:'
+
+export async function claimWhatsAppExternalId(waId: string): Promise<boolean> {
+  const existing = await kvGet<number>(`${WA_SEEN_PREFIX}${waId}`)
+  if (existing !== null && existing !== undefined) return false
+  await kvSet(`${WA_SEEN_PREFIX}${waId}`, 1)
+  return true
+}
+
+/** Retorna o conjunto de IDs ainda não vistos (batch, uma query) */
+export async function filterNewWhatsAppExternalIds(waIds: string[]): Promise<Set<string>> {
+  if (!waIds.length) return new Set()
+  const { data } = await supabase
+    .from('whatsapp_session')
+    .select('key')
+    .in('key', waIds.map(id => `${WA_SEEN_PREFIX}${id}`))
+  const seen = new Set((data || []).map((r: any) => r.key))
+  return new Set(waIds.filter(id => !seen.has(`${WA_SEEN_PREFIX}${id}`)))
+}
+
+export async function markWhatsAppExternalIds(waIds: string[]): Promise<void> {
+  if (!waIds.length) return
+  await supabase.from('whatsapp_session').upsert(
+    waIds.map(id => ({ key: `${WA_SEEN_PREFIX}${id}`, value: '1', updated_at: new Date().toISOString() }))
+  )
+}
 
 /** Mescla metadados de mídia guardados no KV whatsapp_session (fallback sem coluna media_url) */
 async function attachMediaFromKV(msgs: WhatsAppMessage[]): Promise<WhatsAppMessage[]> {
