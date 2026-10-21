@@ -708,6 +708,12 @@ export async function fetchPedidos(): Promise<Pedido[]> {
   return (data || []).map(row => pedidoFromDb(row, row.itens || []))
 }
 
+export async function getPedidoOwner(id: number): Promise<{ vendedorId: number | null; clienteId: number | null } | null> {
+  const { data, error } = await supabase.from('pedidos').select('vendedor_id, cliente_id').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data ? { vendedorId: data.vendedor_id ?? null, clienteId: data.cliente_id ?? null } : null
+}
+
 // ============================================
 // INTERAÇÕES
 // ============================================

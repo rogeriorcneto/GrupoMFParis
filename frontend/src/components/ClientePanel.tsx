@@ -9,6 +9,7 @@ import { logger } from '../utils/logger'
 import { formatCNPJ, formatBrazilianPhone } from '../utils/validators'
 import { isMobileDevice } from '../utils/device'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
+import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
 import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
@@ -171,6 +172,7 @@ export default function ClientePanel({
   const [editingInfoAdicional, setEditingInfoAdicional] = useState(false)
   // Documentos fiscais do pedido (Omie): PDF pedido + NF-e
   const [docsPedido, setDocsPedido] = useState<Record<number, PedidoDocumentos | 'loading' | 'error'>>({})
+  const [ocorrenciasAbertas, setOcorrenciasAbertas] = useState<Record<number, boolean>>({})
   const toggleDocsPedido = async (pedidoId: number) => {
     const atual = docsPedido[pedidoId]
     if (atual === 'loading') return
@@ -1766,6 +1768,15 @@ export default function ClientePanel({
                                   </button>
                                 </div>
                               )}
+                              <div>
+                                <button
+                                  onClick={() => setOcorrenciasAbertas(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                                  className="px-2 py-0.5 text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100"
+                                  title="Reportar e ver ocorrências do pedido"
+                                >
+                                  {ocorrenciasAbertas[p.id] ? '▲ Ocorrências' : '⚠️ Ocorrências'}
+                                </button>
+                              </div>
                             </div>
                           </div>
                           {p.itens && p.itens.length > 0 && (
@@ -1804,6 +1815,9 @@ export default function ClientePanel({
                               </div>
                             )
                           })()}
+                          {ocorrenciasAbertas[p.id] && (
+                            <OcorrenciasPedido pedidoId={p.id} showToast={showToast} />
+                          )}
                         </div>
                       ))}
                     </div>

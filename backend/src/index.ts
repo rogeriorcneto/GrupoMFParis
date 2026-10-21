@@ -37,6 +37,7 @@ import ttsWebSocketRouter from './routes/tts-websocket.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie, cancelarPedidoOmie } from './omie/pedidos.js'
 import { generateBackupDump, runDailyBackup, backupFileName } from './backup.js'
 import { createProtocolo, listProtocolos, updateProtocolo, withSla } from './protocolos.js'
+import { addOcorrencia, listOcorrencias } from './ocorrencias.js'
 import { gzipSync } from 'node:zlib'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
@@ -1458,6 +1459,53 @@ app.patch('/api/protocolos/:numero', requireAuth, requireGerente, async (req, re
     res.json({ success: true, protocolo: withSla(p) })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro ao atualizar protocolo' })
+  }
+})
+
+// ── Ocorrências em pedidos (Anexo I, item 5.7) ──
+// Vendedor vê/registra apenas nos próprios pedidos (ou dos seus clientes); gerente vê todos.
+app.get('/api/pedidos/:id/ocorrencias', requireAuth, async (req, res) => {
+  try {
+    const pedidoId = parseInt(req.params.id, 10)
+    if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId((req as any).userId).catch(() => null)
+    const pedido = await db.getPedidoOwner(pedidoId)
+    if (!pedido) { res.status(404).json({ success: false, error: 'Pedido não encontrado' }); return }
+    if (vendedor?.cargo !== 'gerente' && pedido.vendedorId !== vendedor?.id) {
+      res.status(403).json({ success: false, error: 'Sem permissão para este pedido' })
+      return
+    }
+    res.json({ success: true, ocorrencias: await listOcorrencias(pedidoId) })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao listar ocorrências' })
+  }
+})
+
+app.post('/api/pedidos/:id/ocorrencias', requireAuth, rateLimit(20, 60_000), async (req, res) => {
+  try {
+    const pedidoId = parseInt(req.params.id, 10)
+    if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
+    const { tipo, descricao } = req.body || {}
+    if (!descricao?.trim()) { res.status(400).json({ success: false, error: 'Campo obrigatório: descricao' }); return }
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId((req as any).userId).catch(() => null)
+    const pedido = await db.getPedidoOwner(pedidoId)
+    if (!pedido) { res.status(404).json({ success: false, error: 'Pedido não encontrado' }); return }
+    if (vendedor?.cargo !== 'gerente' && pedido.vendedorId !== vendedor?.id) {
+      res.status(403).json({ success: false, error: 'Sem permissão para este pedido' })
+      return
+    }
+    const o = await addOcorrencia(pedidoId, {
+      tipo: tipo || 'outro',
+      descricao,
+      autorNome: vendedor?.nome || 'Usuário',
+      vendedorId: vendedor?.id ?? null,
+    })
+    res.json({ success: true, ocorrencia: o })
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao registrar ocorrência')
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao registrar ocorrência' })
   }
 })
 
