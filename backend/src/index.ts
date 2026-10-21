@@ -35,6 +35,8 @@ import ttsOptimizedRouter from './routes/tts-optimized.js'
 import geminiStreamRouter from './routes/gemini-stream.js'
 import ttsWebSocketRouter from './routes/tts-websocket.js'
 import { onPedidoAprovado, criarPedidoOmie, consultarPedidoOmie, cancelarPedidoOmie } from './omie/pedidos.js'
+import { generateBackupDump, runDailyBackup, backupFileName } from './backup.js'
+import { gzipSync } from 'node:zlib'
 import { syncOmieLogistics } from './omie/sync-logistics.js'
 import { geminiHandler } from './gemini.js'
 import { log } from './logger.js'
@@ -1393,6 +1395,21 @@ app.get('/api/pedidos/:id/status-omie', requireAuth, async (req, res) => {
 
 // ─── Cancelar pedido no CRM e no Omie ───
 
+// Backup da base completa — download JSON (somente gerente). Item 3.2 do escopo.
+app.get('/api/admin/backup/export', requireAuth, requireGerente, rateLimit(2, 300_000), async (_req, res) => {
+  try {
+    const dump = await generateBackupDump()
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Encoding', 'gzip')
+    res.setHeader('Content-Disposition', `attachment; filename="${backupFileName()}"`)
+    res.send(gzipSync(dump.json))
+    log.info(`💾 Backup exportado manualmente (${dump.tables} tabelas, ${dump.rows} linhas)`)
+  } catch (err: any) {
+    log.error({ err }, 'Erro ao exportar backup')
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao exportar backup' })
+  }
+})
+
 app.post('/api/pedidos/:id/cancelar', requireAuth, requireGerente, async (req, res) => {
   const pedidoId = parseInt(req.params.id, 10)
   if (isNaN(pedidoId)) { res.status(400).json({ success: false, error: 'ID inválido' }); return }
@@ -1784,6 +1801,13 @@ async function start() {
     try { await syncOmieLogistics() } catch (err) { log.error({ err }, 'Erro no sync logístico Omie') } finally { logisticsRunning = false }
   }, 3 * 60 * 1000)
   log.info('🚚 Sync logístico Omie: a cada 3 minutos')
+
+  // Backup diário da base para o bucket `backups` (verifica a cada hora; gera 1/dia)
+  runDailyBackup().catch(err => log.warn({ err }, 'Backup diário falhou no boot'))
+  setInterval(() => {
+    runDailyBackup().catch(err => log.warn({ err }, 'Backup diário falhou'))
+  }, 60 * 60 * 1000)
+  log.info('💾 Backup diário: verificado a cada hora, retenção 30 dias')
 }
 
 start().catch(err => log.fatal({ err }, 'Falha ao iniciar servidor'))

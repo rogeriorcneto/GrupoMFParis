@@ -36,6 +36,7 @@ interface EmailFormData {
 const IntegracoesView: React.FC = () => {
   const [waStatus, setWaStatus] = useState<WhatsAppStatus>({ connected: false, status: 'disconnected', number: null, uptime: 0 })
   const [emailStatus, setEmailStatus] = useState<EmailStatus>({ configured: false, from: '' })
+  const [backupLoading, setBackupLoading] = useState(false)
   const [qrData, setQrData] = useState<string | null>(null)
   const [waLoading, setWaLoading] = useState(false)
   const [waError, setWaError] = useState<string | null>(null)
@@ -616,6 +617,47 @@ const IntegracoesView: React.FC = () => {
 
       {/* ═══════════════ OMIE ERP ═══════════════ */}
       <OmieIntegration botOnline={botOnline} />
+
+      {/* ═══════════════ BACKUP DA BASE ═══════════════ */}
+      <div className="bg-white rounded-apple shadow-apple-sm border-2 border-gray-200 p-6">
+        <div className="flex items-start gap-4">
+          <div className="text-4xl">💾</div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900">Backup da base</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              O sistema gera um backup completo de todas as tabelas automaticamente uma vez por dia
+              (retidos os últimos 30 dias). Aqui você também pode baixar uma cópia agora.
+            </p>
+            <button
+              disabled={backupLoading}
+              onClick={async () => {
+                setBackupLoading(true)
+                try {
+                  const res = await authFetch(`${BOT_URL}/api/admin/backup/export`)
+                  if (!res.ok) {
+                    const j = await res.json().catch(() => ({}))
+                    alert(j.error || `Erro ao exportar backup (${res.status})`)
+                    return
+                  }
+                  const blob = await res.blob()
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(blob)
+                  a.download = `backup-${new Date().toISOString().slice(0, 10)}.json`
+                  a.click()
+                  URL.revokeObjectURL(a.href)
+                } catch {
+                  alert('Erro ao exportar backup. Tente novamente.')
+                } finally {
+                  setBackupLoading(false)
+                }
+              }}
+              className="mt-4 px-4 py-2 rounded-apple shadow-apple-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50"
+            >
+              {backupLoading ? '⏳ Gerando backup...' : '⬇️ Exportar base agora'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* ═══════════════ OTHER INTEGRATIONS ═══════════════ */}
       <div>
