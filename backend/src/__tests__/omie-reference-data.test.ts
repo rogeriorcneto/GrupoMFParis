@@ -291,3 +291,47 @@ describe('fetchLocaisEstoque (cache already warm from getLocalEstoqueVilaParis)'
     expect(Array.isArray(result)).toBe(true)
   })
 })
+
+// ── extrairBaseVendedor / tagTabelaVendedor (funções puras) ─────────────────
+import { extrairBaseVendedor, tagTabelaVendedor } from '../omie/reference-data.js'
+
+describe('extrairBaseVendedor', () => {
+  it.each([
+    ['Eridiane Couto - A', 'eridiane couto'],
+    ['Eridiane Couto - B', 'eridiane couto'],
+    ['Artur Parente - FDS RJ - TABELA A', 'artur parente'],
+    ['Artur Parente - FDS RJ - TABELA B', 'artur parente'],
+    ['Gabriel Vieira - Interno - Tabela A', 'gabriel vieira'],
+    ['Izidório Santos - Interno  Tabela A', 'izidorio santos'],
+    ['Rafael Careli - INTERNO - Tabela B', 'rafael careli'],
+    ['Ursulla Lopes   A', 'ursulla lopes'],
+    ['Ursulla Lopes   B', 'ursulla lopes'],
+    ['Laender A', 'laender'],
+    ['Wiliam Rodrigues', 'wiliam rodrigues'],
+    ['SAMARA', 'samara'],
+    ['Artur Parente', 'artur parente'],
+    ['Flavia Raphaella - B', 'flavia raphaella'],
+  ])('%s → %s', (nome, esperado) => {
+    expect(extrairBaseVendedor(nome)).toBe(esperado)
+  })
+})
+
+describe('tagTabelaVendedor', () => {
+  it.each([
+    ['Eridiane Couto - A', 'A'],
+    ['Eridiane Couto - B', 'B'],
+    ['Artur Parente - FDS RJ - TABELA A', 'A'],
+    ['Gabriel Vieira - Interno - Tabela B', 'B'],
+    ['Izidório Santos - Interno  Tabela A', 'A'],
+    ['Ursulla Lopes   B', 'B'],
+    ['Laender A', 'A'],
+    ['Wiliam Rodrigues', null],
+    ['SAMARA', null],
+    ['Artur Parente', null],
+    ['INTEGRA REPRESENTACOES', null],
+    ['TUDO DE BOM', null],
+    ['Vendas 05', null],
+  ])('%s → %s', (nome, esperado) => {
+    expect(tagTabelaVendedor(nome)).toBe(esperado)
+  })
+})

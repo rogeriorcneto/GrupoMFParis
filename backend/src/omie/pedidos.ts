@@ -4,6 +4,7 @@ import { log } from '../logger.js'
 import {
   calcularDataPrevisao,
   garantirVendedorOmie,
+  resolverVendedorOmie,
   fetchVendedoresOmie,
   fetchCenariosFiscais,
   clearCache,
@@ -277,7 +278,6 @@ function calcularPesoTotal(quantidade: number, pesoKg: number, unidade: string):
 }
 
 function buildMetaProduto(produto: any, consultaOmie?: any) {
-  const pesoCrm = toNumberSafe(produto?.peso_kg)
   const pesoNome = pesoFromNomeProduto(produto?.nome || '')
   const pesoOmieBruto = toNumberSafe(consultaOmie?.peso_bruto)
   const pesoOmieLiq = toNumberSafe(consultaOmie?.peso_liq)
@@ -306,20 +306,16 @@ function buildMetaProduto(produto: any, consultaOmie?: any) {
       pesoBrutoEstimado = true
     }
   } else {
-    // Vendido por unidade/fardo/caixa: líquido vem do cadastro Omie, do peso
-    // declarado no nome (conteúdo líquido) ou do CRM. O bruto vem do cadastro
-    // Omie; quando ele não supera o líquido (ausente ou igual — cadastro sem
-    // embalagem), estimamos pela tara padrão.
-    pesoLiquido = pesoOmieLiq || pesoNome || pesoCrm || 0
-    if (pesoOmieBruto > pesoLiquido && pesoOmieBruto > 0) {
-      pesoBruto = pesoOmieBruto
-    } else if (pesoLiquido > 0) {
-      // Sem arredondar aqui: o arredondamento acontece no total do item,
-      // senão a tara se perde em pesos unitários pequenos.
-      pesoBruto = pesoLiquido * TARA_PADRAO_EMBALAGEM
-      pesoBrutoEstimado = true
+    // Vendido por unidade/fardo/caixa: cada unidade vendida é um volume de 1kg.
+    // O cadastro Omie pode guardar o peso da embalagem (saco 5kg/25kg etc.) —
+    // não pode ser usado como peso unitário da venda, senão o frete explode
+    // (bug do pedido #13038: 50 volumes → 250kg em vez de 50kg).
+    pesoLiquido = 1
+    if (pesoOmieLiq > 0 && pesoOmieBruto > pesoOmieLiq) {
+      pesoBruto = arredondar3(pesoOmieBruto / pesoOmieLiq)
     } else {
-      pesoBruto = 0
+      pesoBruto = TARA_PADRAO_EMBALAGEM
+      pesoBrutoEstimado = true
     }
   }
   // Saneamento: bruto nunca pode ser menor que líquido.
@@ -653,6 +649,10 @@ export async function criarPedidoOmie(
   clearCache('cenarios')
   await fetchCenariosFiscais(creds, true)
 
+  // Tabela de preço (A/B) — selecionada na aprovação; define QUAL cadastro de
+  // vendedor o pedido usa no Omie (cada vendedor tem "Nome - A" / "Nome - B").
+  const tabelaPreco = tabelaPrecoOverride || pedido.tabela_preco
+
   // 2. Buscar dados de referência do Omie em paralelo
   const [
     codigoVendedorOmie,
@@ -663,7 +663,7 @@ export async function criarPedidoOmie(
     contaBB,
     localEstoque,
   ] = await Promise.all([
-    pedido.vendedor_id ? garantirVendedorOmie(pedido.vendedor_id, creds) : Promise.resolve(0),
+    pedido.vendedor_id ? resolverVendedorOmie(pedido.vendedor_id, creds, tabelaPreco) : Promise.resolve(0),
     getCenarioVendas(creds),
     getCenarioAmostra(creds),
     getDepartamentoComercial(creds),
@@ -818,10 +818,9 @@ export async function criarPedidoOmie(
   if (contaBB) infAdic.codigo_conta_corrente = contaBB
   if (codigoVendedorOmie) infAdic.codVend = codigoVendedorOmie
 
-  // Tabela de preço (A/B) — selecionada na aprovação do pedido; afeta comissões
-  // no Omie. Se o Omie não tem nenhuma tabela cadastrada, ignora a seleção.
-  // Se tem tabelas e a escolhida não existe, erro (comissão sairia errada).
-  const tabelaPreco = tabelaPrecoOverride || pedido.tabela_preco
+  // Tabela de preço (A/B) — já resolvida acima para escolher o cadastro de
+  // vendedor. Se o Omie tem tabelas cadastradas no módulo, envia também o
+  // código da tabela; se a escolhida não existe, erro (comissão sairia errada).
   if (tabelaPreco) {
     const tabelas = await fetchTabelasPreco(creds)
     if (tabelas.length > 0) {

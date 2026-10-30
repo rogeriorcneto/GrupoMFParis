@@ -11,8 +11,9 @@ import ProducaoSystem from './components/erp/ProducaoSystem'
 import RhSystem from './components/erp/RhSystem'
 import BiSystem from './components/erp/BiSystem'
 import DocumentosSystem from './components/erp/DocumentosSystem'
+import AcademiaSystem from './components/erp/AcademiaSystem'
 
-type SistemaAtivo = 'portal' | 'crm' | 'logistica' | 'financeiro' | 'producao' | 'rh' | 'bi' | 'documentos' | 'cerebro'
+type SistemaAtivo = 'portal' | 'crm' | 'logistica' | 'financeiro' | 'producao' | 'rh' | 'bi' | 'documentos' | 'cerebro' | 'academia'
 
 let _explicitSignOut = false
 
@@ -216,6 +217,7 @@ export default function GrupoParisShell() {
   if (sistemaAtivo === 'rh') return <RhSystem onVoltar={voltarPortal} />
   if (sistemaAtivo === 'bi') return <BiSystem onVoltar={voltarPortal} />
   if (sistemaAtivo === 'documentos') return <DocumentosSystem onVoltar={voltarPortal} />
+  if (sistemaAtivo === 'academia') return <AcademiaSystem onVoltar={voltarPortal} />
 
   // Fallback para sistema desconhecido
   return (

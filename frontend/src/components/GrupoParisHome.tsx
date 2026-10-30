@@ -23,6 +23,15 @@ const sistemas: SistemaCard[] = [
     categoria: 'Comercial'
   },
   {
+    id: 'academia',
+    nome: 'Academia de Vendas',
+    descricao: 'Treinamento comercial, simulações de vendas e desenvolvimento da equipe',
+    icone: '🎓',
+    cor: 'from-violet-500 to-purple-700',
+    status: 'disponivel',
+    categoria: 'Comercial'
+  },
+  {
     id: 'cerebro',
     nome: 'Cérebro Paris (IA)',
     descricao: 'IA contextual com visão 360° de todas operações da empresa',

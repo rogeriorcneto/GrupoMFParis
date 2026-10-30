@@ -261,6 +261,22 @@ export function useFunilActions({
       logger.error('Erro ao processar regras de automação:', err)
     }
 
+    // Novo ciclo automático: perda em etapa avançada → card novo em Proposta.
+    // Mesma regra do confirmPerda (drag + modal de motivo): qualquer caminho
+    // que mova para 'perdido' via moverCliente precisa gerar o próximo ciclo.
+    const ETAPAS_PERDA_COM_CICLO = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up']
+    if (toStage === 'perdido' && ETAPAS_PERDA_COM_CICLO.includes(fromStage)) {
+      const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
+      try {
+        const cardCriado = await db.insertCliente(novoCard)
+        setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
+        addNotificacao('info', '🔄 Novo ciclo criado', `${cliente.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, cardCriado.id)
+        await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
+      } catch (e) {
+        logger.error('Erro ao criar novo ciclo após perda:', e)
+      }
+    }
+
     // Novo ciclo automático: ao aprovar amostra (mover para proposta com resultado aprovada)
     if (toStage === 'proposta' && extras.resultadoAmostra === 'aprovada' && fromStage === 'amostra') {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)

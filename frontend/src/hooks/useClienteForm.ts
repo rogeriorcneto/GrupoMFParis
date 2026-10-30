@@ -208,9 +208,14 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
     setIsSaving(true)
     try {
       if (editingCliente) {
+        // Na edição, o dono da carteira não muda: só o gerente pode reatribuir
+        // (via campo vendedorId do form). Um vendedor editando o cadastro não
+        // pode "puxar" o cliente para a própria carteira.
         const updatedFields: Partial<Cliente> = {
           ...clienteFields,
-          vendedorId: vendedorResponsavelId || editingCliente.vendedorId || loggedUser?.id,
+          vendedorId: loggedUser?.cargo === 'gerente'
+            ? (vendedorResponsavelId || editingCliente.vendedorId || loggedUser?.id)
+            : (editingCliente.vendedorId || loggedUser?.id),
         }
         await db.updateCliente(editingCliente.id, updatedFields)
         setClientes(prev => prev.map(c => c.id === editingCliente.id ? { ...c, ...updatedFields } : c))

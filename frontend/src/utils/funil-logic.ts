@@ -126,8 +126,10 @@ export function buildNovoCicloCliente(
     inativadoPor: undefined,
     inativadoPorAbandono: undefined,
 
-    // Vendedor responsável
-    vendedorId: loggedUserId || cliente.vendedorId,
+    // Vendedor responsável: o novo ciclo continua com o dono da carteira.
+    // loggedUserId é só fallback — quem clica (ex.: gerente aprovando pedido)
+    // não pode roubar o card do vendedor do cliente (bug do card duplicado).
+    vendedorId: cliente.vendedorId || loggedUserId,
 
     // Extras podem sobrescrever qualquer coisa acima
     ...extras,

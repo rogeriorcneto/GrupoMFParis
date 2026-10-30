@@ -314,6 +314,107 @@ export async function fetchVendedoresOmie(creds?: OmieCredentials): Promise<Omie
   return vendedores
 }
 
+/** Busca TODAS as páginas de vendedores do Omie (a API pagina de 100 em 100). */
+export async function fetchTodosVendedoresOmie(creds?: OmieCredentials): Promise<OmieVendedor[]> {
+  const cached = getCached<OmieVendedor[]>('vendedores_omie_all')
+  if (cached) return cached
+
+  const credentials = creds || await getOmieCredentials()
+  if (!credentials) throw new Error('Credenciais Omie não configuradas')
+
+  const todos: OmieVendedor[] = []
+  let pagina = 1
+  let totalPaginas = 1
+  do {
+    const response = await omieCall<any>(
+      '/geral/vendedores/',
+      'ListarVendedores',
+      [{ pagina, registros_por_pagina: 100 }],
+      { credentials, skipCache: pagina === 1 }
+    )
+    totalPaginas = Number(response?.total_de_paginas) || 1
+    for (const v of response?.cadastro || []) {
+      todos.push({ codigo: v.codigo || 0, codInt: v.codInt || '', nome: v.nome || '', email: v.email || '', inativo: v.inativo || 'N' })
+    }
+    pagina++
+  } while (pagina <= totalPaginas && pagina <= 10)
+
+  setCache('vendedores_omie_all', todos)
+  return todos
+}
+
+function normalizarNomeVendedor(nome: string): string {
+  return String(nome || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Nome-base do cadastro de vendedor, sem o sufixo de tabela.
+ * Omie usa variantes por tabela: "Eridiane Couto - A", "Artur Parente - FDS RJ - TABELA B",
+ * "Ursulla Lopes   A", "Izidório Santos - Interno  Tabela A".
+ * Base = trecho antes do primeiro " - "; sem hífen, remove " A"/" B" solto no fim.
+ */
+export function extrairBaseVendedor(nome: string): string {
+  const n = normalizarNomeVendedor(nome)
+  const idx = n.indexOf(' - ')
+  let base = idx > 0 ? n.slice(0, idx) : n
+  base = base.replace(/\s+[ab]$/, '')
+  return base.trim()
+}
+
+/** Sufixo de tabela do cadastro ("- A", "  B", "TABELA A", "Interno Tabela B") → 'A' | 'B' | null */
+export function tagTabelaVendedor(nome: string): 'A' | 'B' | null {
+  const m = normalizarNomeVendedor(nome).match(/[\s-]+(?:tabela\s+)?([ab])$/)
+  return m ? (m[1].toUpperCase() as 'A' | 'B') : null
+}
+
+function tokensCompativeis(base: string, cand: string): boolean {
+  const tBase = new Set(base.split(' ').filter(Boolean))
+  const tCand = new Set(cand.split(' ').filter(Boolean))
+  if (!tBase.size || !tCand.size) return false
+  const baseFirst = base.split(' ')[0]
+  const candFirst = cand.split(' ')[0]
+  if (baseFirst !== candFirst) return false
+  const sub = (a: Set<string>, b: Set<string>) => [...a].every(t => b.has(t))
+  return sub(tCand, tBase) || sub(tBase, tCand)
+}
+
+/**
+ * Resolve o cadastro de vendedor no Omie conforme a tabela de preço (A/B)
+ * escolhida na aprovação. No Omie, cada vendedor tem cadastros-irmãos com
+ * sufixo de tabela ("Nome - A", "Nome - Interno - Tabela B" etc.) — o pedido
+ * herda preços/comissão do cadastro usado. Sem variante, cai no código base.
+ */
+export async function resolverVendedorOmie(vendedorCrmId: number, creds?: OmieCredentials, tabela?: 'A' | 'B'): Promise<number> {
+  const codigoBase = await garantirVendedorOmie(vendedorCrmId, creds)
+  if (!tabela || !codigoBase) return codigoBase
+
+  const credentials = creds || await getOmieCredentials()
+  if (!credentials) return codigoBase
+
+  const { data: crm } = await supabase.from('vendedores').select('nome').eq('id', vendedorCrmId).single()
+  const todos = await fetchTodosVendedoresOmie(credentials)
+  const registroBase = todos.find(v => v.codigo === codigoBase)
+  const baseNome = registroBase ? extrairBaseVendedor(registroBase.nome) : extrairBaseVendedor(crm?.nome || '')
+  if (!baseNome) return codigoBase
+
+  const candidatos = todos.filter(v => v.inativo !== 'S' && tokensCompativeis(baseNome, extrairBaseVendedor(v.nome)))
+  const comTabela = candidatos.filter(v => tagTabelaVendedor(v.nome) === tabela)
+  if (comTabela.length === 0) {
+    log.warn({ vendedorCrmId, codigoBase, tabela, baseNome }, '⚠️ Nenhum cadastro de vendedor com a tabela escolhida — usando código base')
+    return codigoBase
+  }
+  const escolhido = comTabela[0]
+  if (escolhido.codigo !== codigoBase) {
+    log.info({ vendedorCrmId, codigoBase, escolhido: escolhido.codigo, nome: escolhido.nome, tabela }, `🔄 Vendedor Omie resolvido para tabela ${tabela}`)
+  }
+  return escolhido.codigo
+}
+
 export async function garantirVendedorOmie(vendedorCrmId: number, creds?: OmieCredentials): Promise<number> {
   const credentials = creds || await getOmieCredentials()
   if (!credentials) throw new Error('Credenciais Omie não configuradas')

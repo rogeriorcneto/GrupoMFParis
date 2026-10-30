@@ -624,7 +624,9 @@ describe('Omie Pedidos', () => {
       expect(parcelas[0].valor).toBe(1000)
     })
 
-    it('produto vendido por unidade usa peso líquido do nome/cadastro e bruto do Omie', async () => {
+    it('produto vendido por unidade: 1kg por volume, bruto pela tara do cadastro', async () => {
+      // Regra de negócio: produto vendido por UN/fardo = 1kg por volume.
+      // O cadastro Omie pode guardar peso da embalagem — nunca é o peso unitário.
       const captured = setupHappyPath({
         itens: [{ produto_id: 50, quantidade: 10, preco: 5 }],
         produtos: {
@@ -639,11 +641,36 @@ describe('Omie Pedidos', () => {
 
       await criarPedidoOmie(1)
       const p = captured.payload
-      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(5, 3)   // 10 × 0.5
-      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(5.2, 3)    // 10 × 0.52
-      expect(p.frete.peso_liquido).toBeCloseTo(5, 3)
-      expect(p.frete.peso_bruto).toBeCloseTo(5.2, 3)
+      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(10, 3)   // 10 volumes × 1kg
+      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(10.4, 3)   // 10 × (0.52/0.5)
+      expect(p.frete.peso_liquido).toBeCloseTo(10, 3)
+      expect(p.frete.peso_bruto).toBeCloseTo(10.4, 3)
+      expect(p.frete.quantidade_volumes).toBe(10)
       expect(p.lista_parcelas).toBeUndefined() // à vista → sem lista
+    })
+
+    it('regressão pedido #13038: 50 unidades com peso de embalagem 5kg no Omie → 50kg, não 250kg', async () => {
+      // Bug real: produto vendido por UN cujo cadastro Omie tinha peso_liq=5
+      // (peso do fardo/embalagem). O frete caía com 250kg em vez de 50kg.
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 60, quantidade: 50, preco: 10 }],
+        produtos: {
+          60: { id: 60, nome: 'OKEY LAC LEITE 1KG', unidade: 'UN', peso_kg: null, omie_codigo: '9101' },
+        },
+        consultaOmiePorProduto: {
+          60: { codigo_produto: 9101, descricao: 'OKEY LAC LEITE 1KG', unidade: 'UN', peso_bruto: 5.015, peso_liq: 5, ncm: '0402' },
+        },
+        formaPagamento: 'À vista',
+        totalValor: 500,
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.frete.quantidade_volumes).toBe(50)
+      expect(p.frete.peso_liquido).toBeCloseTo(50, 3)      // 50 × 1kg
+      expect(p.frete.peso_bruto).toBeCloseTo(50.15, 3)     // 50 × (5.015/5)
+      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(50, 3)
+      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(50.15, 3)
     })
 
     it('produto KG com cadastro Omie por embalagem (25/25.075) usa fator de tara correto', async () => {
@@ -686,9 +713,9 @@ describe('Omie Pedidos', () => {
 
       await criarPedidoOmie(1)
       const p = captured.payload
-      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(5, 3)
-      expect(p.det[0].inf_adic.peso_bruto).toBeGreaterThan(5) // bruto > líquido (tara)
-      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(5.015, 3) // 5 × 1.003
+      expect(p.det[0].inf_adic.peso_liquido).toBeCloseTo(10, 3)
+      expect(p.det[0].inf_adic.peso_bruto).toBeGreaterThan(10) // bruto > líquido (tara)
+      expect(p.det[0].inf_adic.peso_bruto).toBeCloseTo(10.03, 3) // 10 × 1.003
     })
 
     it('produto KG sem nenhum peso no Omie ainda envia bruto com embalagem', async () => {

@@ -417,6 +417,14 @@ describe('buildNovoCicloCliente', () => {
     expect(novo.novoCiclo).toBe(true)
     expect(novo.etapa).toBe('proposta')
     expect(novo.etapaAnterior).toBe('prospecção')
+    // O novo ciclo fica com o dono da carteira (5), não com quem clicou (7).
+    // Regressão: gerente aprovando pedido roubava o card do vendedor.
+    expect(novo.vendedorId).toBe(5)
+  })
+
+  it('usa loggedUserId apenas quando o cliente não tem vendedor', () => {
+    const base = makeCliente({ id: 1, vendedorId: undefined })
+    const novo = buildNovoCicloCliente(base, 'proposta', 7)
     expect(novo.vendedorId).toBe(7)
   })
 
