@@ -15,8 +15,8 @@ export const transicoesPermitidas: Record<string, string[]> = {
   'prospecção': ['lead', 'amostra', 'perdido'],
   'amostra': ['proposta', 'amostra_perdida'],
   'amostra_perdida': ['amostra', 'perdido'],
-  'proposta': ['negociacao', 'inativo', 'perdido'],
-  'negociacao': ['follow_up', 'proposta', 'perdido'],
+  'proposta': ['negociacao', 'amostra', 'inativo', 'perdido'],
+  'negociacao': ['follow_up', 'perdido'],
   'follow_up': ['proposta', 'negociacao', 'perdido'],
   'inativo': ['prospecção', 'proposta', 'perdido'],
   'perdido': ['prospecção', 'proposta']
@@ -54,3 +54,22 @@ export const subStatusFollowUpLabels: Record<string, string> = {
   'novo_ciclo_iniciado': 'Novo Ciclo Iniciado',
   'cancelado': 'Cancelado (Omie)',
 }
+
+/** Status do kanban de pedidos no Omie: etapa crua (10-80) ou canônica → label */
+export const omieEtapaLabels: Record<string, string> = {
+  '10': 'Análise Financeiro',
+  '20': 'Faturar',
+  '30': 'Separado no Estoque',
+  '40': 'Faturado',
+  '50': 'Coletado',
+  '60': 'Entregue',
+  '70': 'Entregue',
+  '80': 'Entregue',
+  analise_financeiro: 'Análise Financeiro',
+  faturar: 'Faturar',
+  separado_no_estoque: 'Separado no Estoque',
+  faturado: 'Faturado',
+  coletado: 'Coletado',
+  entregue: 'Entregue',
+}
+export const labelOmieEtapa = (s?: string | null) => (s ? omieEtapaLabels[s] || s : s)

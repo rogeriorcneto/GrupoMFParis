@@ -8,6 +8,7 @@ import {
   sortCards,
   prazosEtapa,
   buildNovoCicloCliente,
+  existeCardAtivoNoFunil,
 } from '../utils/funil-logic'
 import type { Cliente } from '../types'
 
@@ -529,5 +530,27 @@ describe('buildNovoCicloCliente', () => {
     const base = makeCliente({ id: 1, historicoEtapas: [{ etapa: 'amostra', data: '2025-01-01' }] })
     const novo = buildNovoCicloCliente(base, 'proposta')
     expect(novo.historicoEtapas).toEqual([])
+  })
+})
+
+describe('existeCardAtivoNoFunil (anti-duplicata de ciclo)', () => {
+  const base = { id: 1, razaoSocial: 'ACME LTDA', etapa: 'amostra', cnpj: '111' } as Cliente
+  const clone = { id: 2, razaoSocial: 'ACME LTDA', etapa: 'amostra', cnpj: '' } as Cliente
+
+  it('bloqueia novo ciclo quando já existe card em proposta', () => {
+    const lista = [base, { id: 3, razaoSocial: 'ACME LTDA', etapa: 'proposta', cnpj: '' } as Cliente]
+    expect(existeCardAtivoNoFunil(lista, clone)).toBe(true)
+  })
+  it('bloqueia quando card ativo está em negociacao', () => {
+    const lista = [base, { id: 3, razaoSocial: 'acme ltda', etapa: 'negociacao', cnpj: '' } as Cliente]
+    expect(existeCardAtivoNoFunil(lista, clone)).toBe(true)
+  })
+  it('permite novo ciclo quando card ativo é em outra etapa', () => {
+    const lista = [base, { id: 3, razaoSocial: 'ACME LTDA', etapa: 'amostra', cnpj: '' } as Cliente]
+    expect(existeCardAtivoNoFunil(lista, clone)).toBe(false)
+  })
+  it('ignora o próprio card e empresas diferentes', () => {
+    const lista = [clone, { id: 3, razaoSocial: 'OUTRA EMPRESA', etapa: 'proposta', cnpj: '' } as Cliente]
+    expect(existeCardAtivoNoFunil(lista, clone)).toBe(false)
   })
 })

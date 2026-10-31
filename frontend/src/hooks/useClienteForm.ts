@@ -96,8 +96,8 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
       }))
       showToast('success', 'Dados preenchidos pela Receita Federal!')
     } catch (err: any) {
-      if (err?.message === 'Não autenticado') {
-        showToast('error', 'Sessão expirada. Faça login novamente.')
+      if (err?.message === 'Não autenticado' || err?.message === 'AUTH_EXPIRED' || err?.message === 'AUTH_SESSION_TIMEOUT') {
+        showToast('error', 'Sessão expirada ou lenta. Faça login novamente.')
       } else {
         showToast('error', 'Erro ao consultar CNPJ. Verifique a conexão com o servidor.')
       }

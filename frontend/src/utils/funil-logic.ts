@@ -276,3 +276,19 @@ export function sortCards(
     return (b.valorEstimado || 0) - (a.valorEstimado || 0)
   })
 }
+
+/**
+ * Identidade da empresa no funil: clones de ciclo nascem sem cnpj
+ * (índice único), então a chave é a razão social normalizada.
+ */
+export function chaveClienteFunil(c: Pick<Cliente, 'razaoSocial' | 'cnpj'>): string {
+  return c.razaoSocial.trim().toLowerCase() || (c.cnpj || '').replace(/\D/g, '')
+}
+
+/**
+ * Regra: só pode haver 1 card ativo (proposta/negociacao) por empresa.
+ * Usado como guard antes de qualquer criação de novo ciclo.
+ */
+export function existeCardAtivoNoFunil(lista: Cliente[], cliente: Cliente, etapas = ['proposta', 'negociacao']): boolean {
+  return lista.some(c => c.id !== cliente.id && etapas.includes(c.etapa) && chaveClienteFunil(c) === chaveClienteFunil(cliente))
+}

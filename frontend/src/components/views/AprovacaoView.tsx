@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { fetchSimuladorParams, calcularPrecosTabela, type SimuladorParams } from '../../data/simuladorPrecos'
 import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon, ArrowPathIcon, CloudArrowUpIcon, DocumentArrowDownIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 import type { Pedido, Cliente, Vendedor } from '../../types'
@@ -144,6 +145,11 @@ export default function AprovacaoView({
       .sort((a, b) => new Date(a.dataEntradaEtapa || a.dataEnvioAmostra || '').getTime() - new Date(b.dataEntradaEtapa || b.dataEnvioAmostra || '').getTime())
   , [clientes, filtroVendedor])
 
+  const [limiteHistorico, setLimiteHistorico] = useState<'50' | '100' | 'todos'>('50')
+  const [simParams, setSimParams] = useState<SimuladorParams | null>(null)
+  useEffect(() => {
+    fetchSimuladorParams((import.meta as any).env?.VITE_BOT_URL || '').then(setSimParams).catch(() => {})
+  }, [])
   const historicoList = useMemo(() =>
     pedidos
       .filter(p =>
@@ -151,8 +157,8 @@ export default function AprovacaoView({
         (filtroVendedor === '' || p.vendedorId === filtroVendedor)
       )
       .sort((a, b) => new Date(b.dataAprovacao || b.dataCriacao).getTime() - new Date(a.dataAprovacao || a.dataCriacao).getTime())
-      .slice(0, 50)
-  , [pedidos, filtroVendedor])
+      .slice(0, limiteHistorico === 'todos' ? undefined : Number(limiteHistorico))
+  , [pedidos, filtroVendedor, limiteHistorico])
 
   // Metrics
   const historico = activeTab === 'historico'
@@ -330,6 +336,22 @@ export default function AprovacaoView({
                 <div className="sm:col-span-2 text-left sm:text-right text-gray-600 text-sm">
                   R$ {item.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   <span className="text-xs text-gray-400">/{item.unidade}</span>
+                  {(() => {
+                    const tabela = tabelaPorPedido[pedido.id] ?? pedido.tabelaPreco ?? 'A'
+                    const prazo = pedido.formaPagamento && pedido.formaPagamento in (simParams?.prazos ?? {})
+                      ? pedido.formaPagamento
+                      : 'À vista'
+                    const t = calcularPrecosTabela(item.nomeProduto, prazo, 'FOB', simParams ?? undefined)
+                    if (!t) return null
+                    const ref = tabela === 'B' ? t.precoB : t.precoA
+                    const diff = item.preco - ref
+                    const cor = diff < -0.005 ? 'text-red-600' : 'text-green-600'
+                    return (
+                      <div className={`text-[10px] font-bold ${cor}`} title={`VT (tabela ${tabela} ${prazo} FOB): R$ ${ref.toFixed(2)}/un`}>
+                        VT {diff >= 0 ? '+' : ''}{diff.toFixed(2).replace('.', ',')}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <div className="sm:col-span-3 text-left sm:text-right font-medium text-gray-900">
                   R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -585,13 +607,7 @@ export default function AprovacaoView({
             onClick={() => setActiveTab('cancelamentos')}
             className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'cancelamentos' ? 'bg-red-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
-            🚫 Cancelamentos {cancelamentosPendentes.length > 0 && <span className="ml-1.5 bg-white text-red-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{cancelamentosPendentes.length}</span>}
-          </button>
-          <button
-            onClick={() => setActiveTab('amostras')}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'amostras' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-          >
-            🧪 Amostras {amostrasCancelamentoPendentes.length > 0 && <span className="ml-1.5 bg-white text-amber-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{amostrasCancelamentoPendentes.length}</span>}
+            🚫 Cancelamentos {(cancelamentosPendentes.length + amostrasCancelamentoPendentes.length) > 0 && <span className="ml-1.5 bg-white text-red-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{cancelamentosPendentes.length + amostrasCancelamentoPendentes.length}</span>}
           </button>
           <button
             onClick={() => setActiveTab('historico')}
@@ -759,15 +775,57 @@ export default function AprovacaoView({
       {/* Tab: Cancelamentos Pendentes */}
       {activeTab === 'cancelamentos' && (
         <>
-          {cancelamentosPendentes.length === 0 ? (
+          {cancelamentosPendentes.length === 0 && amostrasCancelamentoPendentes.length === 0 ? (
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-16 text-center">
               <CheckCircleIcon className="h-16 w-16 text-green-300 mx-auto mb-4" />
               <p className="text-lg font-semibold text-gray-700">Nenhuma solicitação de cancelamento pendente</p>
-              <p className="text-sm text-gray-400 mt-1">Quando um vendedor solicitar cancelamento de pedido, aparecerá aqui.</p>
+              <p className="text-sm text-gray-400 mt-1">Quando um vendedor solicitar cancelamento de pedido ou amostra, aparecerá aqui.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-gray-500">{cancelamentosPendentes.length} solicitação(ões) de cancelamento aguardando aprovação</p>
+              <p className="text-sm text-gray-500">{cancelamentosPendentes.length + amostrasCancelamentoPendentes.length} solicitação(ões) de cancelamento aguardando aprovação</p>
+              {amostrasCancelamentoPendentes.map(cliente => {
+                const vendedor = vendedorMap.get(cliente.vendedorId || 0)
+                const isLoading = loadingId === cliente.id
+                return (
+                  <div key={`amostra-${cliente.id}`} className="bg-white rounded-apple shadow-apple-sm border-2 border-amber-300 p-5">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-base font-bold text-gray-900">{cliente.razaoSocial}</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full border border-purple-200">🧪 Amostra</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">🚫 Cancelamento Solicitado</span>
+                        </div>
+                        <div className="mt-1 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+                            {vendedor && <span>👤 {vendedor.nome}</span>}
+                            <span>·</span>
+                            {cliente.dataEnvioAmostra && <span>📤 Envio da amostra: {new Date(cliente.dataEnvioAmostra).toLocaleDateString('pt-BR')}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={async () => {
+                          if (!onAprovarCancelamentoAmostra) return
+                          setLoadingId(cliente.id)
+                          try {
+                            await onAprovarCancelamentoAmostra(cliente)
+                            showToast('success', `Cancelamento da amostra de ${cliente.razaoSocial} aprovado. Cliente voltou para Prospecção.`)
+                          } catch {
+                            showToast('error', 'Erro ao aprovar cancelamento da amostra.')
+                          } finally { setLoadingId(null) }
+                        }}
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
+                      >
+                        {isLoading ? '⏳ Processando...' : '✅ Aprovar Cancelamento'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
               {cancelamentosPendentes.map(pedido => {
                 const cliente = clienteMap.get(pedido.clienteId)
                 const vendedor = vendedorMap.get(pedido.vendedorId)
@@ -778,6 +836,7 @@ export default function AprovacaoView({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-base font-bold text-gray-900">{pedido.numero}</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full border border-indigo-200">📦 Pedido</span>
                           <span className="px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full border border-red-200 animate-pulse">🚫 Cancelamento Solicitado</span>
                         </div>
                         <div className="mt-1 space-y-0.5">
@@ -840,64 +899,6 @@ export default function AprovacaoView({
         </>
       )}
 
-      {/* Tab: Amostras Cancelamento */}
-      {activeTab === 'amostras' && (
-        <>
-          {amostrasCancelamentoPendentes.length === 0 ? (
-            <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-16 text-center">
-              <CheckCircleIcon className="h-16 w-16 text-amber-300 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-gray-700">Nenhum cancelamento de amostra pendente</p>
-              <p className="text-sm text-gray-400 mt-1">Quando um vendedor solicitar cancelamento de amostra, aparecerá aqui.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-500">{amostrasCancelamentoPendentes.length} cancelamento(s) de amostra aguardando aprovação</p>
-              {amostrasCancelamentoPendentes.map(cliente => {
-                const vendedor = vendedorMap.get(cliente.vendedorId || 0)
-                const isLoading = loadingId === cliente.id
-                return (
-                  <div key={cliente.id} className="bg-white rounded-apple shadow-apple-sm border-2 border-amber-300 p-5">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-base font-bold text-gray-900">{cliente.razaoSocial}</span>
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">🚫 Cancelamento Solicitado</span>
-                        </div>
-                        <div className="mt-1 space-y-0.5">
-                          <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
-                            {vendedor && <span>👤 {vendedor.nome}</span>}
-                            <span>·</span>
-                            {cliente.dataEnvioAmostra && <span>📤 Envio da amostra: {new Date(cliente.dataEnvioAmostra).toLocaleDateString('pt-BR')}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 pt-3 border-t border-gray-100">
-                      <button
-                        onClick={async () => {
-                          if (!onAprovarCancelamentoAmostra) return
-                          setLoadingId(cliente.id)
-                          try {
-                            await onAprovarCancelamentoAmostra(cliente)
-                            showToast('success', `Cancelamento da amostra de ${cliente.razaoSocial} aprovado. Cliente voltou para Prospecção.`)
-                          } catch {
-                            showToast('error', 'Erro ao aprovar cancelamento da amostra.')
-                          } finally { setLoadingId(null) }
-                        }}
-                        disabled={isLoading}
-                        className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
-                      >
-                        {isLoading ? '⏳ Processando...' : '✅ Aprovar Cancelamento'}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-
       {/* Lista pedidos pendentes */}
       {activeTab === 'pendentes' && (
         <>
@@ -926,7 +927,21 @@ export default function AprovacaoView({
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">{historicoList.length} pedido(s) processados (últimos 50)</p>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <p className="text-sm text-gray-500">{historicoList.length} pedido(s) processados{limiteHistorico !== 'todos' ? ` (últimos ${limiteHistorico})` : ' (todos)'}</p>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <span className="text-gray-500">Exibir:</span>
+                  {(['50', '100', 'todos'] as const).map(op => (
+                    <button
+                      key={op}
+                      onClick={() => setLimiteHistorico(op)}
+                      className={`px-3 py-1 rounded-apple text-xs font-medium transition-colors ${limiteHistorico === op ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {op === 'todos' ? 'Todos' : op}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {historicoList.map(p => renderPedidoCard(p, false))}
             </div>
           )}

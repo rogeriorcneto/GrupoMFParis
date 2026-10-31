@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
-import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels } from '../../utils/constants'
+import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { fetchPropostasByCliente } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
@@ -571,7 +571,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             <div className="flex items-center gap-1 flex-wrap">
               <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${subBadgeColor}`}>{subLabel}</span>
               {cliente.omieStatusLogistico && (
-                <span className="inline-block px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded-full border border-gray-200">🔄 Omie: {cliente.omieStatusLogistico}</span>
+                <span className="inline-block px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded-full border border-gray-200">🔄 Omie: {labelOmieEtapa(cliente.omieStatusLogistico)}</span>
               )}
             </div>
             <div className="flex items-center gap-1">
@@ -997,7 +997,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                   <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-gray-100 dark:bg-gray-600/40 text-gray-600 dark:text-gray-300 truncate max-w-[110px]">{p.formaPagamento}</span>
                                 )}
                               </div>
-                              {p.omieStatus && <p className="text-[9px] text-gray-400 dark:text-gray-500">🔄 Omie: {p.omieStatus}</p>}
+                              {p.omieStatus && <p className="text-[9px] text-gray-400 dark:text-gray-500">🔄 Omie: {labelOmieEtapa(p.omieStatus)}</p>}
                               {p.omieErro && <p className="text-[9px] text-red-500 dark:text-red-400 leading-tight mt-0.5" title={p.omieErro}>⚠️ {p.omieErro.slice(0, 80)}{p.omieErro.length > 80 ? '…' : ''}</p>}
                               {p.motivoRecusa && (
                                 <div className="mt-1 p-1.5 rounded bg-red-900/20 dark:bg-red-900/20 border border-red-800/30 dark:border-red-800/30">

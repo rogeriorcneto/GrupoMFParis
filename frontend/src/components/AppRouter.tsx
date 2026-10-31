@@ -14,7 +14,7 @@ import {
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { buildNovoCicloCliente } from '../utils/funil-logic'
+import { buildNovoCicloCliente, existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
 import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
 
@@ -124,10 +124,21 @@ export default function AppRouter({
               omieUpdate.omieErro = undefined
               addNotificacao('success', 'Pedido aprovado + Omie ✅', `Pedido ${pedido.numero} aprovado e enviado ao Omie com sucesso! (Cód: ${result.omie.omie_codigo})`, pedido.clienteId)
             } else {
+              // Omie rejeitou → NÃO confirmar: mantém 'enviado' (pendente) com o erro
+              // registrado para reenvio, senão o pedido some no histórico.
+              omieUpdate.status = 'enviado' as any
+              omieUpdate.dataAprovacao = undefined
+              omieUpdate.aprovadoPor = undefined
               omieUpdate.omieErro = result.omie?.error || 'Erro desconhecido ao enviar para o Omie'
-              addNotificacao('warning', 'Pedido aprovado — Omie com erro', `Pedido ${pedido.numero} foi aprovado, mas o Omie rejeitou: ${result.omie?.error || 'erro desconhecido'}`, pedido.clienteId)
+              addNotificacao('warning', 'Omie rejeitou o pedido ⚠️', `Pedido ${pedido.numero} NÃO foi aprovado — o Omie rejeitou: ${result.omie?.error || 'erro desconhecido'}. Corrija e aprove novamente.`, pedido.clienteId)
             }
+            const omieFalhou = !result.omie?.pending && !result.omie?.success
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, ...omieUpdate } : p))
+            if (omieFalhou) {
+              // Reverter no banco também (aprovarPedidoComOmie já gravou 'confirmado')
+              try { await db.updatePedidoStatus(pedido.id, 'enviado') } catch (e) { logger.error('Erro ao reverter status do pedido:', e) }
+              return
+            }
             // Auto-move client to follow_up only for clear sales orders
             const cliAprov = clientes.find(c => c.id === pedido.clienteId)
             const isAmostraFlow = pedido.tipo === 'bonificacao' || cliAprov?.etapa === 'amostra' || cliAprov?.etapa === 'amostra_perdida'
@@ -152,10 +163,13 @@ export default function AppRouter({
               if (cliAprov) {
                 try {
                   const clienteOriginal = clientes.find(c => c.id === pedido.clienteId) || cliAprov
+                  const jaTemCard = existeCardAtivoNoFunil(clientes, cliAprov)
+                  if (!jaTemCard) {
                   const novoCliente = buildNovoCicloCliente(clienteOriginal, 'negociacao', loggedUser?.id)
                   const saved = await db.insertCliente(novoCliente)
                   setClientes(prev => [saved, ...prev])
                   addNotificacao('info', 'Novo ciclo criado', `Card de ${clienteOriginal.razaoSocial} criado em Negociação para o próximo ciclo.`, saved.id)
+                  }
                 } catch (cicloErr) {
                   logger.error('Erro ao criar novo ciclo em negociacao:', cicloErr)
                 }
@@ -256,6 +270,7 @@ export default function AppRouter({
                       : c
                     ))
                   }
+                  if (existeCardAtivoNoFunil(clientes, cli)) throw new Error('ja_existe')
                   const novoCard = buildNovoCicloCliente(cli, 'proposta', cli.vendedorId)
                   const cardCriado = await db.insertCliente(novoCard)
                   setClientes(prev => [...prev, cardCriado])
@@ -293,7 +308,19 @@ export default function AppRouter({
           }
         }}
         onAprovarCancelamentoAmostra={async (cliente) => {
-          await moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined })
+          // O RPC mover_cliente_atomico usa COALESCE nos extras — nem undefined nem null
+          // limpam status_amostra. Move para prospecção e depois limpa via update direto.
+          await moverCliente(cliente.id, 'prospecção')
+          await db.updateCliente(cliente.id, {
+            statusAmostra: null as any,
+            dataEnvioAmostra: null as any,
+            resultadoAmostra: null as any,
+            dataResultadoAmostra: null as any,
+          })
+          setClientes(prev => prev.map(c => c.id === cliente.id
+            ? { ...c, statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }
+            : c
+          ))
         }}
       />
     case 'trafico':

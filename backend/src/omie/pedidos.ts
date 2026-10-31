@@ -916,7 +916,9 @@ export async function criarPedidoOmie(
     .update({
       omie_codigo: String(response.codigo_pedido || ''),
       omie_numero: omieNumero,
-      omie_status: 'enviado',
+      // Pedido novo no Omie nasce na etapa 10 (Análise Financeiro) — o sync
+      // de logística corrige depois conforme avança no kanban.
+      omie_status: (response as any).etapa || 'analise_financeiro',
     })
     .eq('id', pedidoId)
 

@@ -3,8 +3,17 @@ import { supabase } from './supabase'
 const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
 
 /** Fetch with Supabase auth token attached */
+const SESSION_TIMEOUT_MS = 15_000
+
+/** Fetch with Supabase auth token attached */
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const { data: { session } } = await supabase.auth.getSession()
+  // getSession pode pendurar no iOS quando tenta refresh contra auth indisponível —
+  // timeout evita spinner infinito silencioso em todos os botões que chamam a API.
+  const sessionP = supabase.auth.getSession()
+  const timeoutP = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('AUTH_SESSION_TIMEOUT')), SESSION_TIMEOUT_MS)
+  )
+  const { data: { session } } = await Promise.race([sessionP, timeoutP])
   const token = session?.access_token
   if (!token) {
     throw new Error('Não autenticado')

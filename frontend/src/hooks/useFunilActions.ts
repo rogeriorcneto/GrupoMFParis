@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import type { Cliente, Interacao, Atividade, Vendedor, Tarefa, JobAutomacao, Campanha, Cadencia, HistoricoEtapa } from '../types'
 import * as db from '../lib/database'
 import { stageLabels, transicoesPermitidas } from '../utils/constants'
-import { buildNovoCicloCliente } from '../utils/funil-logic'
+import { buildNovoCicloCliente, existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { logger } from '../utils/logger'
 
 interface DragItem { cliente: Cliente; fromStage: string }
@@ -57,6 +57,10 @@ export function useFunilActions({
   setAtividades, addNotificacao, jobs, setJobs, campanhas, setCampanhas,
   cadencias, tarefas, setTarefas, loadAllData
 }: UseFunilActionsParams) {
+  // Regra anti-duplicata: só pode existir 1 card em proposta/negociacao por cliente.
+  const existeCardAtivo = (cliente: Cliente, etapas: string[], lista?: Cliente[]) =>
+    existeCardAtivoNoFunil(lista || clientes, cliente, etapas)
+
   const draggedItemRef = useRef<DragItem | null>(null)
   const [draggedItem, setDraggedItemState] = useState<DragItem | null>(null)
   const setDraggedItem = (v: DragItem | null) => { draggedItemRef.current = v; setDraggedItemState(v) }
@@ -265,7 +269,7 @@ export function useFunilActions({
     // Mesma regra do confirmPerda (drag + modal de motivo): qualquer caminho
     // que mova para 'perdido' via moverCliente precisa gerar o próximo ciclo.
     const ETAPAS_PERDA_COM_CICLO = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up']
-    if (toStage === 'perdido' && ETAPAS_PERDA_COM_CICLO.includes(fromStage)) {
+    if (toStage === 'perdido' && ETAPAS_PERDA_COM_CICLO.includes(fromStage) && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
       try {
         const cardCriado = await db.insertCliente(novoCard)
@@ -278,7 +282,7 @@ export function useFunilActions({
     }
 
     // Novo ciclo automático: ao aprovar amostra (mover para proposta com resultado aprovada)
-    if (toStage === 'proposta' && extras.resultadoAmostra === 'aprovada' && fromStage === 'amostra') {
+    if (toStage === 'proposta' && extras.resultadoAmostra === 'aprovada' && fromStage === 'amostra' && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await db.insertCliente(novoCard)
@@ -291,7 +295,7 @@ export function useFunilActions({
     }
 
     // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue
-    if (extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue') {
+    if ((extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue') && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await db.insertCliente(novoCard)
@@ -313,6 +317,14 @@ export function useFunilActions({
     setDraggedItem({ cliente, fromStage })
 
     const isGerente = loggedUser?.cargo === 'gerente'
+    // Regra dura (vale pra gerente também): negociação não volta pra proposta —
+    // ou clica ganhou/perdido, ou ajusta a proposta no próprio card.
+    if (fromStage === 'negociacao' && toStage === 'proposta') {
+      setTransicaoInvalida(`Negociação não pode voltar para Proposta. Use Ganhou (Follow-up), Perdido, ou edite a proposta no card.`)
+      setTimeout(() => setTransicaoInvalida(''), 5000)
+      setDraggedItem(null)
+      return
+    }
     const permitidas = transicoesPermitidas[fromStage] || []
     if (!isGerente && !permitidas.includes(toStage)) {
       setTransicaoInvalida(`Não é possível mover de "${stageLabels[fromStage]}" para "${stageLabels[toStage]}". Transições permitidas: ${permitidas.map(s => stageLabels[s]).join(', ')}`)
@@ -426,7 +438,7 @@ export function useFunilActions({
       // Sempre cria novo ciclo em Proposta ao perder de etapas avançadas do funil
       // (prospecção perdida não gera novo ciclo automaticamente)
       const etapasComNovoCiclo = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up']
-      if (etapasComNovoCiclo.includes(fromStage)) {
+      if (etapasComNovoCiclo.includes(fromStage) && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
         const novoCliente = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
         try {
           const clienteCriado = await db.insertCliente(novoCliente)
@@ -457,7 +469,7 @@ export function useFunilActions({
 
       // Ao entrar em amostra (1ª tentativa), gera um novo card em Proposta
       // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up e perdido).
-      if (!isRetry) {
+      if (!isRetry && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
         const novoCard = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'amostra' })
         db.insertCliente(novoCard).then(async cardCriado => {
           setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
