@@ -343,11 +343,13 @@ export default function AprovacaoView({
                       : 'À vista'
                     const t = calcularPrecosTabela(item.nomeProduto, prazo, 'FOB', simParams ?? undefined)
                     if (!t) return null
+                    const diff = item.preco - (tabela === 'B' ? t.precoB : t.precoA)
+                    const diffB = item.preco - t.precoB
+                    // Aceitável se está dentro da tabela B mesmo abaixo da A
+                    const cor = diff < -0.005 ? (diffB >= -0.005 ? 'text-amber-500' : 'text-red-600') : 'text-green-600'
                     const ref = tabela === 'B' ? t.precoB : t.precoA
-                    const diff = item.preco - ref
-                    const cor = diff < -0.005 ? 'text-red-600' : 'text-green-600'
                     return (
-                      <div className={`text-[10px] font-bold ${cor}`} title={`VT (tabela ${tabela} ${prazo} FOB): R$ ${ref.toFixed(2)}/un`}>
+                      <div className={`text-[10px] font-bold ${cor}`} title={`VT (tabela ${tabela} ${prazo} FOB): R$ ${ref.toFixed(2)}/un | tabela B: R$ ${t.precoB.toFixed(2)}/un`}>
                         VT {diff >= 0 ? '+' : ''}{diff.toFixed(2).replace('.', ',')}
                       </div>
                     )
