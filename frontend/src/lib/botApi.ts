@@ -20,6 +20,7 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   }
   const res = await fetch(url, {
     ...options,
+    signal: options.signal ?? AbortSignal.timeout(60_000),
     headers: {
       ...options.headers,
       'Authorization': `Bearer ${token}`,
