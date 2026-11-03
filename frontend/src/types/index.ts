@@ -89,6 +89,12 @@ export interface Cliente {
   whatsappValidadoEm?: string
   novoCiclo?: boolean
   cicloNumero?: number
+  empresaFunilId?: number
+  origemCicloId?: number
+  arquivadoDuplicata?: boolean
+  cardPrincipalId?: number
+  motivoArquivamento?: string
+  regularizacaoHistorico?: { acao: 'arquivar' | 'restaurar'; data: string; usuario: string | null; principal_id: number; motivo: string }[]
   googlePlaceId?: string
   googleRating?: number
   googleReviews?: number

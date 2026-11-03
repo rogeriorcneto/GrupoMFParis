@@ -359,7 +359,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   const clientesFiltrados = useMemo(() => {
     let base = clientesFiltradosVendedor.filter(c =>
-      FUNIL_ETAPAS.has(c.etapa) || c.etapa === 'perdido'
+      !c.arquivadoDuplicata && (FUNIL_ETAPAS.has(c.etapa) || c.etapa === 'perdido')
     )
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -394,6 +394,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   // (cards de novo ciclo em proposta já aparecem como cards normais na coluna)
   const clientesNovoCiclo = useMemo(() => {
     const base = clientesFiltradosVendedor.filter(c => {
+      if (c.arquivadoDuplicata) return false
       // Clientes em follow-up normais (não aguardando aprovação e sem ciclo já iniciado)
       if (c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente' && c.statusFollowUp !== 'novo_ciclo_iniciado') return true
       // Clientes perdidos que vieram de negociação (podem ser revividos)

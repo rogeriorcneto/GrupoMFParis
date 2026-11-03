@@ -111,7 +111,7 @@ describe('Workspace Component', () => {
   it('mostra botões da sidebar de ferramentas', () => {
     render(<Workspace {...mockProps} />)
     expect(screen.getByTitle('Buscar Cliente')).toBeTruthy()
-    expect(screen.getByTitle('WhatsApp')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^WhatsApp/ })).toBeTruthy()
     expect(screen.getByTitle('Email')).toBeTruthy()
     expect(screen.getByTitle('Observações')).toBeTruthy()
     expect(screen.getByTitle('Tarefa Rápida')).toBeTruthy()
@@ -172,7 +172,7 @@ describe('Workspace Component', () => {
 
   it('mostra aviso para selecionar cliente no WhatsApp', () => {
     render(<Workspace {...mockProps} />)
-    fireEvent.click(screen.getByTitle('WhatsApp'))
+    fireEvent.click(screen.getByRole('button', { name: /^WhatsApp/ }))
     expect(screen.getByText('Selecione um cliente primeiro')).toBeTruthy()
   })
 

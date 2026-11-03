@@ -64,8 +64,9 @@ export function useNotificacoes(
     if (notifGenRef.current === key) return
     notifGenRef.current = key
 
-    // Filtrar apenas clientes do vendedor logado (gerente vê todos)
-    const meusClientes = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedVendedorId)
+    // Filtrar apenas clientes do vendedor logado (gerente vê todos);
+    // cards arquivados como duplicata não geram alertas.
+    const meusClientes = clientes.filter(c => !c.arquivadoDuplicata && (isGerente || c.vendedorId === loggedVendedorId))
     const minhasTarefas = isGerente ? tarefas : tarefas.filter(t => t.vendedorId === loggedVendedorId)
 
     const novas: Notificacao[] = []

@@ -1,0 +1,91 @@
+empresa;classe;acao_proposta_sem_execucao;cards_comerciais_id_etapa_ciclo;pedidos_desses_cards_id_status_tipo;outros_cards_preservar
+BERSAGLIO COMERCIO DE ALIMENTOS LTDA.;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;18809:P:c1,23259:P:c2,23889:P:c2;409@18809:cancelado:bonificacao;-
+C. DO FERMENTO COMERCIO DE PRODUTOS ALIMENTICIOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;18812:P:c1,23890:P:c2;414@18812:cancelado:bonificacao;-
+CASA REAL PRODUTOS ALIMENTICIOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;23236:P:c1,23908:P:c2;350@23236:cancelado:bonificacao;-
+CENTRO COMERCIAL DE ALIMENTOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22677:P:c1,23906:P:c2;379@22677:cancelado:bonificacao;-
+COMERCIO DE GENEROS ALIMENTICIOS MATHESCH LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22263:P:c1,23252:P:c2,23894:P:c2;396@22263:cancelado:bonificacao,397@22263:cancelado:bonificacao;-
+CUNHAPAN DISTRIBUIDORA DE PRODUTOS PARA PANIFICACAO LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22264:P:c1,23248:P:c2,23895:P:c2;388@22264:cancelado:bonificacao;-
+DA NOSSA INDUSTRIA E COMERCIO DE PRODUTOS PARA PANIFICACAO LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22265:P:c1,23249:P:c2,23896:P:c2;389@22265:cancelado:bonificacao;-
+ERLAN S/A - EM RECUPERACAO JUDICIAL EM RECUPERACAO JUDICIAL;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;23581:N:c1,24028:N:c3,24029:N:c3;963@23581:cancelado:venda;23973:follow_up:c2
+GESB COMERCIO DE ALIMENTOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22260:P:c1,23243:P:c2,23892:P:c2;375@22260:cancelado:bonificacao;-
+GOLD - INDUSTRIA E COMERCIO LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;23264:P:c1,23909:P:c2;429@23264:cancelado:bonificacao;-
+J D A ROCHA SERENA SORVETES;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;23470:N:c2,23612:N:c2,23939:N:c2,23956:N:c3;916@23939:cancelado:venda;18602:follow_up:c1,23953:follow_up:c2
+MARIMEL DISTRIBUIDORA DE PRODUTOS ALIMENTICIOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22569:P:c1,23315:P:c2,23901:P:c2;515@22569:cancelado:bonificacao;-
+MESTRE DO SABOR LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22592:P:c1,23238:P:c2,23559:P:c2;353@22592:cancelado:bonificacao;-
+OESTEPAN DISTRIBUIDORA DE ALIMENTOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22262:P:c1,23260:P:c2,23893:P:c2;424@22262:cancelado:bonificacao;-
+P E M - INDUSTRIA E COMERCIO DE PRODUTOS ALIMENTICIOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22681:P:c1,23907:P:c2;410@22681:cancelado:bonificacao;-
+PERGELATI COMERCIO DE ALIMENTOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22593:P:c1,23254:P:c2,23598:P:c2;402@22593:cancelado:bonificacao;-
+PRODUPAN - PRODUTOS PARA PANIFICACAO LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22269:P:c1,23247:P:c2,23898:P:c2;387@22269:cancelado:bonificacao;-
+ROSANGELA MARTINS DA SILVA ALVES LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;18670:P:c1,23268:P:c2,23723:P:c2;454@18670:cancelado:bonificacao;-
+SABV COMERCIO E INDUSTRIA ALIMENTICIA LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;23354:P:c1,24055:P:c2;546@23354:cancelado:bonificacao;18369:prospecção:c1
+SORVDOCE COMERCIAL DE ALIMENTOS LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;23235:N:c2,23608:P:c2,23676:N:c3;381@23235:cancelado:venda;22355:prospecção:c1,23643:prospecção:c2,23675:follow_up:c2
+T T F ALIMENTOS SOROCABA LTDA;C;validar_cancelamentos_e_escolher_um_ciclo_comercial_sem_excluir_historico;22671:P:c1,23904:P:c2;338@22671:cancelado:bonificacao;-
+ALLPAN - COMERCIO DE PRODUTOS ALIMENTICIOS LTDA;I;nao_consolidar_antes_de_validar_documentos_e_codigos_omie;18779:P:c1,22853:P:c2,23884:P:c2;319@18779:confirmado:bonificacao;22634:prospecção:c1
+CASA DA PANIFICACAO COMERCIO DE PRODUTOS PARA PANIFICACAO LTDA;I;nao_consolidar_antes_de_validar_documentos_e_codigos_omie;22267:P:c1,23250:P:c2,23897:P:c2;390@22267:cancelado:bonificacao;22266:prospecção:c1,22268:prospecção:c1
+COMERCIAL DE PRODUTOS NATURAIS LAZAROTO LTDA;I;nao_consolidar_antes_de_validar_documentos_e_codigos_omie;22596:P:c1,23255:P:c2,23599:P:c2;404@22596:cancelado:bonificacao;-
+MIRA DISTRIBUIDORA DE PRODUTOS ALIMENTICIOS LTDA;I;nao_consolidar_antes_de_validar_documentos_e_codigos_omie;22659:P:c1,23902:P:c2;318@22659:cancelado:bonificacao;22350:prospecção:c1
+44.852.892 JOARLEY SOARES FERREIRA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22424:N:c1,22856:P:c2;196@22424:confirmado:venda,317@22424:cancelado:venda,322@22424:cancelado:venda;-
+ACAI BH DISTRIBUIDORA E COMERCIO LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22616:P:c1,23245:P:c2,23589:P:c2;385@22616:enviado:bonificacao;-
+ACAIZINHO INDUSTRIA E COMERCIO LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18339:N:c1,18596:P:c2;163@18339:confirmado:bonificacao,959@18339:cancelado:venda;-
+ALESSANDRA & RICHARDE SORVETERIA LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23360:P:c1,24061:P:c2;552@23360:enviado:bonificacao;-
+AMERIPAN PRODUTOS PARA PANIFICACAO LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18785:P:c1,22862:P:c2,23886:P:c2;325@18785:confirmado:bonificacao;-
+C G SANTANA DE OLIVEIRA FILHO;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23977:N:c3,24008:N:c2,24010:N:c2;953@24008:cancelado:venda,954@24010:confirmado:venda;22694:follow_up:c1,23976:follow_up:c2
+CANADENSE INDUSTRIA DE ALIMENTOS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22672:P:c1,23905:P:c2;495@22672:enviado:bonificacao;-
+CASA DOCE E DISTRIBUIDORA LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22549:P:c1,23251:P:c2,23595:P:c2;393@22549:confirmado:bonificacao;-
+Cliente CPF Teste 1792162667016;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23648:P:c1,23649:P:c1,23651:P:c1,23654:P:c1,23655:P:c1,23656:P:c1;805@23649:cancelado:venda,807@23651:cancelado:venda,809@23654:enviado:venda,810@23655:cancelado:venda,811@23656:cancelado:venda;23645:prospecção:c1
+CRIARPAN INDUSTRIA E COMERCIO DE PRODUTOS PARA PANIFICADORA LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18789:P:c1,23887:P:c2;348@18789:confirmado:bonificacao;-
+DAIANE CAMPOS RODRIGUES LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23358:P:c1,24059:P:c2;550@23358:enviado:bonificacao;-
+DISTRIBUIDORA ACAI BRASIL LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22573:P:c1,23258:P:c2,23596:P:c2;407@22573:confirmado:bonificacao;-
+DNA AÇAÍ;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22498:P:c1,23246:P:c2,23590:P:c2;386@22498:enviado:bonificacao;-
+DORIVALI COMERCIO E DISTRIBUIDORA DE PRODUTOS ALIMENTICIOS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22531:P:c1,22871:P:c2,23900:P:c2;333@22531:confirmado:bonificacao;-
+DOVO PICOLES E SORVETES LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23356:P:c1,24057:P:c2;548@23356:enviado:bonificacao;-
+FARIA INDUSTRIA DE ACAI LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22630:P:c1,23244:P:c2,23591:P:c2;384@22630:confirmado:bonificacao;-
+FERPEREZ COMERCIO DE ALIMENTOS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18780:P:c1,22874:P:c2,23885:P:c2;336@18780:confirmado:bonificacao;-
+GAPAN DISTRIBUIDORA DE PRODUTOS PARA PANIFICACAO LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18791:P:c1,22863:P:c2,23888:P:c2;326@18791:confirmado:bonificacao;-
+Gelando A Serra Industria de Cremes e Acai LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22589:P:c1,23253:P:c2,23597:P:c2;401@22589:confirmado:bonificacao;-
+GRUPO THE BEST FRANCHISING LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22383:P:c1,22696:P:c2;200@22383:enviado:bonificacao;-
+IRMAOS HENDGES COMERCIO DE ALIMENTOS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23285:P:c1,23910:P:c2;482@23285:enviado:bonificacao;-
+JAPAN REPRESENTACOES COMERCIAIS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23314:P:c1,23911:P:c2;514@23314:enviado:bonificacao;-
+JULIA & VITORIA ACAI, SORVETERIA E LANCHES LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22623:P:c1,23256:P:c2,23601:P:c2;405@22623:enviado:bonificacao;-
+LIMA & BULLA LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23316:P:c1,23912:P:c2;516@23316:enviado:bonificacao;-
+LUNAR DISTRIBUIDORA LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18813:P:c1,23891:P:c2;307@18813:enviado:bonificacao,408@18813:cancelado:bonificacao;-
+MACPAN - COMERCIO DE PRODUTOS ALIMENTICIOS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18772:P:c1,23883:P:c2;343@18772:confirmado:bonificacao;-
+S A V FRATELLI DISTRIBUIDORA DE PRODUTOS ALIMENTICIOS LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22666:P:c1,22880:P:c2,23903:P:c2;342@22666:confirmado:bonificacao;-
+SANTINA MARIA PELICER MOREIRA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;18701:P:c1,23292:P:c2,23724:P:c2;493@18701:confirmado:bonificacao;-
+SIRLEI PINHEIRO JACOMEL VAZ;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23355:P:c1,24056:P:c2;547@23355:enviado:bonificacao;-
+SORVETERIA GELLIN LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23359:P:c1,24060:P:c2;551@23359:enviado:bonificacao;-
+SORVETES GLORIA LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;23357:P:c1,24058:P:c2;549@23357:enviado:bonificacao;-
+SUMMER SHAKE ACAI LTDA;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22611:P:c1,23257:P:c2,23600:P:c2;406@22611:confirmado:bonificacao;-
+Svp Comercio de Alimentos Ltda;P;preservar_card_do_pedido_e_validar_etapa_amostra_negociacao_ou_followup;22504:P:c1,22872:P:c2,23899:P:c2;334@22504:confirmado:bonificacao;-
+47.746.304 BERNARDO NERY BATISTA DA SILVA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;24046:P:c5,24048:N:c5;-;24044:perdido:c3,24045:perdido:c4,24047:follow_up:c4
+54.625.527 LUAN VIEIRA MOREIRA DOS SANTOS;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23605:N:c2,23614:N:c2;-;22296:follow_up:c1
+60.842.398 DARLAN HUMBERTO GONCALVES SOUSA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23495:N:c2,23609:N:c2;-;22291:follow_up:c1
+65.645.982 ROGERIO REIS CASSIANO NETO;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22745:P:c4,23299:P:c4,23323:P:c2,23324:P:c2,23325:N:c2;-;18756:perdido:c1,22737:perdido:c2,22744:prospecção:c3
+ACAI D' PARA COMERCIO VAREJISTA DE ACAI LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23430:P:c2,23531:N:c2,23567:P:c2;-;18657:perdido:c1
+AÇAI DIVINO SABOR  EIRELLI;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23478:N:c4,23480:N:c2,23610:N:c2;-;18716:follow_up:c1,22855:follow_up:c2,22857:follow_up:c3
+ARTPAN COMERCIO DE ALIMENTOS LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22747:P:c2,23913:P:c2;-;18758:perdido:c1
+ATLANTICA ACAI LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22760:N:c2,23320:N:c2,23627:N:c2,23843:N:c3;-;18634:follow_up:c1,23841:follow_up:c2
+BERRYS INDUSTRIA DE SORVETES LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23564:N:c3,23566:P:c3,23568:P:c2,23569:N:c2;-;18554:follow_up:c1,23340:perdido:c2
+BIG DELICIA LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22810:P:c2,22811:P:c2,22812:P:c2;-;18731:perdido:c1
+CAMILA RODRIGUES DA SILVA 11509889671;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23331:N:c2,23862:N:c3;-;22304:follow_up:c1,23858:follow_up:c2
+CAZARINE & BELLUZZO INDUSTRIA E COMERCIO DE DOCES LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22762:P:c2,22791:P:c4,22792:P:c3,23554:P:c4,23557:N:c2;-;18713:follow_up:c1,22765:follow_up:c2,22788:perdido:c3,22789:perdido:c3
+CCM INDUSTRIA E COMERCIO DE ALIMENTOS LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23440:N:c2,23442:N:c2,23738:N:c3;-;18383:follow_up:c1,23733:follow_up:c2
+DISTRIPANI COMERCIO DE ALIMENTOS LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23493:N:c3,23949:N:c4;-;18479:perdido:c1,23490:follow_up:c2,23940:follow_up:c3
+DMS INDUSTRIA DE ALIMENTOS LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23563:P:c5,24016:P:c7;-;18594:perdido:c3,18764:follow_up:c4,18765:amostra_perdida:c5,18766:perdido:c6
+DU CASTRO SORVETES LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23370:N:c2,23630:N:c2;-;18347:follow_up:c1
+FLORENCO AMORIM COSTA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23653:P:c3,23667:N:c2;-;22299:follow_up:c1,23652:amostra:c2
+GENIVAL BATISTA DA SILVA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23551:N:c2,23782:N:c3,23876:N:c3,23965:P:c3;-;18729:follow_up:c1,23780:follow_up:c2,23873:perdido:c2
+INDUSTRIA E COMERCIO DE SORVETES E PICOLES LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23864:N:c2,23865:N:c2,23880:N:c3;-;23504:follow_up:c1,23871:follow_up:c2
+ITAVALE DISTRIBUIDORA LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23361:N:c2,23742:N:c3,23745:N:c4,23762:N:c4;-;22471:perdido:c1,23740:follow_up:c2,23744:follow_up:c3,23756:follow_up:c3
+KAIQUE MARTINS MARQUES 02085279660;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23473:N:c2,23861:N:c2;-;22312:follow_up:c1
+L. A. DE A. SOUZA - COMERCIO DE ACAI;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23919:N:c3,24011:N:c3;-;23431:follow_up:c1,23875:follow_up:c2
+M R R SORVETERIA LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22802:P:c2,22803:P:c2;-;18671:perdido:c1
+MAX COMERCIO E DISTRIBUIDORA DE ACAI LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23958:P:c2,23963:P:c2;-;23957:amostra:c1
+PATRICIA MARTINS DE MELO VIEIRA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23312:N:c2,23603:N:c2;-;22532:follow_up:c1
+PAULO HENRIQUE ALVES TOLEDO 07649111636;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23496:N:c2,23576:N:c2;-;22605:follow_up:c1
+R S TOLEDO - MIX;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23975:N:c2,23986:N:c3;-;22507:follow_up:c1,23981:follow_up:c2
+SCHIMINI IND E COMERCIO DE PRODUTOS ALIMENTICIOS LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23400:N:c2,23594:N:c2,23631:N:c2,23954:N:c3;-;18608:follow_up:c1,23944:follow_up:c2
+SILVANIA SILVEIRA SOARES 97999679615;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22851:N:c3,23732:N:c4;-;22435:perdido:c1,22849:follow_up:c2,23725:follow_up:c3
+SORVETERIA BOLLA BOLA LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23278:P:c2,23722:P:c2,23775:P:c2;-;18669:perdido:c1
+SUMMERLAND INDUSTRIA E COMERCIO LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;23503:N:c2,23635:N:c2,23736:N:c3,23917:N:c3,23924:N:c3;-;22423:follow_up:c1,23730:follow_up:c2,23914:follow_up:c2
+XODO DE MINAS INDUSTRIA E COMERCIO DE ALIMENTOS LTDA;S;escolher_um_ciclo_comercial_real_e_propor_arquivamento_dos_demais_sem_excluir_historico;22746:P:c2,23746:N:c3;-;18517:perdido:c1,22738:follow_up:c2

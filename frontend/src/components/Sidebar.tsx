@@ -92,7 +92,7 @@ export default function Sidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+      <nav className="flex-1 min-h-0 px-4 py-6 space-y-1 overflow-y-auto">
         {navItems
           .filter(item => viewsPermitidas[loggedUser.cargo].includes(item.id))
           .map(item => (

@@ -94,6 +94,12 @@ export function clienteFromDb(row: any): Cliente {
     whatsappValidadoEm: row.whatsapp_validado_em || '',
     novoCiclo: row.novo_ciclo ?? undefined,
     cicloNumero: row.ciclo_numero ?? undefined,
+    empresaFunilId: row.empresa_funil_id ?? undefined,
+    origemCicloId: row.origem_ciclo_id ?? undefined,
+    arquivadoDuplicata: row.arquivado_duplicata ?? false,
+    cardPrincipalId: row.card_principal_id ?? undefined,
+    motivoArquivamento: row.motivo_arquivamento ?? undefined,
+    regularizacaoHistorico: row.regularizacao_historico ?? [],
     googlePlaceId: row.google_place_id ?? undefined,
     googleRating: row.google_rating != null ? Number(row.google_rating) : undefined,
     googleReviews: row.google_reviews ?? undefined,
@@ -207,6 +213,8 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.whatsappValidadoEm !== undefined) row.whatsapp_validado_em = c.whatsappValidadoEm
   if (c.novoCiclo !== undefined) row.novo_ciclo = c.novoCiclo
   if (c.cicloNumero !== undefined) row.ciclo_numero = c.cicloNumero
+  if (c.empresaFunilId !== undefined) row.empresa_funil_id = c.empresaFunilId
+  if (c.origemCicloId !== undefined) row.origem_ciclo_id = c.origemCicloId
   if (c.googlePlaceId !== undefined) row.google_place_id = c.googlePlaceId
   if (c.googleRating !== undefined) row.google_rating = c.googleRating
   if (c.googleReviews !== undefined) row.google_reviews = c.googleReviews
@@ -674,6 +682,7 @@ export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Prom
 }
 
 export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
+  if (c.novoCiclo && !c.origemCicloId) throw new Error('Novo ciclo exige referência ao card de origem.')
   const row = clienteToDb(c)
   // Retry: se o banco rejeitar por coluna desconhecida (PGRST204 — migration
   // ainda não aplicada em produção), remove a coluna e tenta novamente.
@@ -762,6 +771,24 @@ export async function deleteCliente(id: number): Promise<void> {
   if (error) throw error
 }
 
+// Regularização do funil: arquiva cards duplicados sem apagar pedidos/histórico.
+// Só gerente consegue executar (a validação também acontece no banco).
+export async function arquivarDuplicatasFunil(principalId: number, excedentes: number[], motivo: string): Promise<Cliente[]> {
+  const { data, error } = await supabase.rpc('arquivar_duplicatas_funil', {
+    p_principal: principalId,
+    p_excedentes: excedentes,
+    p_motivo: motivo,
+  })
+  if (error) throw error
+  return (data || []).map(clienteFromDb)
+}
+
+export async function restaurarDuplicataFunil(cardId: number): Promise<Cliente[]> {
+  const { data, error } = await supabase.rpc('restaurar_duplicata_funil', { p_card_id: cardId })
+  if (error) throw error
+  return (data || []).map(clienteFromDb)
+}
+
 export async function insertHistoricoEtapa(clienteId: number, h: HistoricoEtapa): Promise<void> {
   const { error } = await supabase.from('historico_etapas').insert({
     cliente_id: clienteId,
@@ -793,6 +820,14 @@ export async function moverClienteAtomico(
   if (extras.statusFaturamento !== undefined) extrasDb.status_faturamento = extras.statusFaturamento
   if (extras.statusFollowUp !== undefined) extrasDb.status_follow_up = extras.statusFollowUp
   if (extras.statusSatisfacao !== undefined) extrasDb.status_satisfacao = extras.statusSatisfacao
+  if (extras.notaSatisfacao !== undefined) extrasDb.nota_satisfacao = extras.notaSatisfacao
+  if (extras.feedbackSatisfacao !== undefined) extrasDb.feedback_satisfacao = extras.feedbackSatisfacao
+  if (extras.resultadoAmostra !== undefined) extrasDb.resultado_amostra = extras.resultadoAmostra
+  if (extras.dataResultadoAmostra !== undefined) extrasDb.data_resultado_amostra = extras.dataResultadoAmostra
+  if (extras.motivoReprovacao !== undefined) extrasDb.motivo_reprovacao = extras.motivoReprovacao
+  if (extras.tentativaAmostra !== undefined) extrasDb.tentativa_amostra = extras.tentativaAmostra
+  if (extras.totalCompras !== undefined) extrasDb.total_compras = extras.totalCompras
+  if (extras.dataProximaRecompra !== undefined) extrasDb.data_proxima_recompra = extras.dataProximaRecompra
   if (extras.ultimaInteracao !== undefined) extrasDb.ultima_interacao = extras.ultimaInteracao
   if (extras.vendedorId !== undefined) extrasDb.vendedor_id = extras.vendedorId
 

@@ -1,4 +1,5 @@
 import React from 'react'
+import { vi, type MockedFunction } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { CriarAutomacaoView } from '../components/views/CriarAutomacaoView'
@@ -6,14 +7,14 @@ import * as database from '../lib/database'
 import * as gemini from '../lib/gemini'
 
 // Mock das dependências
-jest.mock('../lib/database')
-jest.mock('../lib/gemini')
+vi.mock('../lib/database')
+vi.mock('../lib/gemini')
 
-const mockGetAutomacoes = database.getAutomacoes as jest.MockedFunction<typeof database.getAutomacoes>
-const mockCreateAutomacao = database.createAutomacao as jest.MockedFunction<typeof database.createAutomacao>
-const mockUpdateAutomacao = database.updateAutomacao as jest.MockedFunction<typeof database.updateAutomacao>
-const mockDeleteAutomacao = database.deleteAutomacao as jest.MockedFunction<typeof database.deleteAutomacao>
-const mockCallAI = gemini.callAI as jest.MockedFunction<typeof gemini.callAI>
+const mockGetAutomacoes = database.getAutomacoes as MockedFunction<typeof database.getAutomacoes>
+const mockCreateAutomacao = database.createAutomacao as MockedFunction<typeof database.createAutomacao>
+const mockUpdateAutomacao = database.updateAutomacao as MockedFunction<typeof database.updateAutomacao>
+const mockDeleteAutomacao = database.deleteAutomacao as MockedFunction<typeof database.deleteAutomacao>
+const mockCallAI = gemini.callAI as MockedFunction<typeof gemini.callAI>
 
 // Mock de automação de teste
 const mockAutomacao: database.Automacao = {
@@ -47,7 +48,7 @@ describe('CriarAutomacaoView', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockGetAutomacoes.mockResolvedValue([mockAutomacao])
     mockCallAI.mockResolvedValue('Resposta da IA')
   })
@@ -176,7 +177,7 @@ describe('CriarAutomacaoView', () => {
       fireEvent.click(salvarBtn)
       
       // Mock de alert
-      const mockAlert = jest.spyOn(window, 'alert').mockImplementation()
+      const mockAlert = vi.spyOn(window, 'alert').mockImplementation()
       
       expect(mockAlert).toHaveBeenCalledWith('Preencha o nome da automação')
       
@@ -252,8 +253,8 @@ describe('CriarAutomacaoView', () => {
       })
       
       // Mock de confirm
-      const mockConfirm = jest.spyOn(window, 'confirm').mockReturnValue(true)
-      const mockAlert = jest.spyOn(window, 'alert').mockImplementation()
+      const mockConfirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const mockAlert = vi.spyOn(window, 'alert').mockImplementation()
       
       // Clicar no botão de excluir
       const excluirBtn = screen.getByTitle('Excluir')
@@ -500,7 +501,7 @@ describe('CriarAutomacaoView', () => {
       // Adicionar ação
       fireEvent.click(screen.getByText('Adicionar Ação'))
       
-      const mockAlert = jest.spyOn(window, 'alert').mockImplementation()
+      const mockAlert = vi.spyOn(window, 'alert').mockImplementation()
       
       // Salvar
       const salvarBtn = screen.getByText('Criar Automação')

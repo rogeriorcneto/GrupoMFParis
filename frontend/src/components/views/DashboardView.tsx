@@ -96,7 +96,9 @@ interface DashboardViewFullProps {
   onRefresh?: () => void
 }
 
-const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes, vendedores, interacoes, produtos, tarefas, loggedUser, pedidos = [], atividades, onRefresh }) => {
+const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesProp, vendedores, interacoes, produtos, tarefas, loggedUser, pedidos = [], atividades, onRefresh }) => {
+  // Cards arquivados como duplicata não entram em nenhum indicador
+  const clientes = useMemo(() => clientesProp.filter(c => !c.arquivadoDuplicata), [clientesProp])
   const now = new Date()
   const monthOpts = useMemo(() => buildMonthOptions(), [])
   const [periodoTipo, setPeriodoTipo] = useState<PeriodoTipo>('mes')

@@ -22,6 +22,7 @@ import {
   ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
 import { stageLabels } from '../../utils/constants'
+import { calcularIndicadoresOperacionais } from '../../utils/indicadores-comerciais'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
 import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao } from '../../types'
@@ -210,7 +211,7 @@ export default function DashboardVendedorView({
   }, [isGerente, periodoInicio, periodoFim, vendedores])
 
   // ─── Data derivada ────────────────────────────────────────────────────────────
-  const meusClientes = useMemo(() => isGerente ? clientes : clientes.filter(c => c.vendedorId === userId), [clientes, userId, isGerente])
+  const meusClientes = useMemo(() => clientes.filter(c => !c.arquivadoDuplicata && (isGerente || c.vendedorId === userId)), [clientes, userId, isGerente])
   const meusPedidos = useMemo(() => isGerente ? pedidos : pedidos.filter(p => p.vendedorId === userId), [pedidos, userId, isGerente])
 
   const metaVendas = isGerente
@@ -319,6 +320,17 @@ export default function DashboardVendedorView({
   const comissaoRate = isGerente ? 0.005 : 0.01
   const comissao = fatMes * comissaoRate
   const metaComissao = metaVendas * comissaoRate
+
+  // Indicadores operacionais (spec PDF vendedor): sem-compra, pipeline ponderado, ticket médio
+  const indOps = useMemo(() => calcularIndicadoresOperacionais(
+    clientes, pedidos,
+    { inicio: periodoInicio || '0001-01-01', fim: periodoFim || hojeISO },
+    hojeISO,
+    isGerente ? {} : { vendedorId: userId },
+  ), [clientes, pedidos, periodoInicio, periodoFim, hojeISO, isGerente, userId])
+  const pedidosMes = meusPedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).length
+  const ticketMedio = pedidosMes > 0 ? fatMes / pedidosMes : 0
+  const topProdutosVendedor = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 5)
 
   const [missoesAtivas, setMissoesAtivas] = useState<Missao[]>([])
 
@@ -659,6 +671,30 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             onClick={isGerente ? () => setDetailOpen('conversao') : undefined}
           />
           <MetricCard
+            label="Ticket médio"
+            value={fmtBRL(ticketMedio)}
+            meta={0}
+            total={ticketMedio}
+            color="#0EA5E9"
+            icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#0EA5E9' }} />}
+          />
+          <MetricCard
+            label="Pipeline ponderado"
+            value={fmtBRL(indOps.pipelinePonderado)}
+            meta={0}
+            total={indOps.pipelinePonderado}
+            color="#14B8A6"
+            icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
+          />
+          <MetricCard
+            label="Sem compra 30d"
+            value={String(indOps.semCompra.d30)}
+            meta={0}
+            total={indOps.semCompra.d30}
+            color="#F97316"
+            icon={<UsersIcon className="h-5 w-5" style={{ color: '#F97316' }} />}
+          />
+          <MetricCard
             label="Próximas visitas hoje"
             value={String(visitasHoje.length)}
             meta={Math.max(visitasHoje.length, 1)}
@@ -685,6 +721,22 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
           />
         </div>
+
+        {/* Volume por produto (spec vendedor: volume vendido por produto) */}
+        {topProdutosVendedor.length > 0 && (
+          <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">Top produtos no período</h2>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              {topProdutosVendedor.map(([nome, v]) => (
+                <div key={nome} className="border border-gray-100 rounded-lg p-3">
+                  <p className="text-xs font-medium text-gray-500 truncate" title={nome}>{nome}</p>
+                  <p className="text-sm font-bold text-gray-900 mt-1">{v.quantidade} un</p>
+                  <p className="text-xs text-green-700 font-medium">{fmtBRL(v.receita)} · {v.participacao}%</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Gerente: Tempo de Tela + Academia de Vendas */}
         {isGerente && (

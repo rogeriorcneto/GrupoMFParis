@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // ============================================
@@ -219,7 +219,7 @@ describe('App — Login Flow', () => {
   it('login com sucesso navega para o app', async () => {
     await loginAs('gerente')
     // Gerente sees dashboard as first view
-    expect(screen.getByTestId('view-dashboard')).toBeInTheDocument()
+    expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument()
   })
 
   it('login chama signIn com email e senha', async () => {
@@ -288,7 +288,7 @@ describe('App — Navegação por cargo', () => {
     await loginAs('gerente')
 
     // Use getByRole to target nav buttons specifically
-    expect(screen.getByRole('button', { name: /Visão Geral/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Dashboard$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Funil Comercial/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Clientes$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Pedidos$/i })).toBeInTheDocument()
@@ -301,17 +301,17 @@ describe('App — Navegação por cargo', () => {
 
   it('gerente vê botão Assistente IA', async () => {
     await loginAs('gerente')
-    expect(screen.getByRole('button', { name: /Assistente IA/i })).toBeInTheDocument()
+    expect(within(document.querySelector('nav')!).getByRole('button', { name: /Assistente IA/i })).toBeInTheDocument()
   })
 
-  it('vendedor NÃO vê dashboard, automações, prospecção, equipe, relatórios', async () => {
+  it('vendedor vê seu dashboard, sem automações, prospecção, equipe ou relatórios', async () => {
     await loginAs('vendedor')
 
     // Vendedor's first view is 'ia' (first in viewsPermitidas)
-    expect(screen.getByTestId('view-ia')).toBeInTheDocument()
+    expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument()
 
     // Should NOT see these nav items
-    expect(screen.queryByRole('button', { name: /Visão Geral/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Dashboard$/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Automações/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Prospecção/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Equipe$/i })).not.toBeInTheDocument()
@@ -321,7 +321,7 @@ describe('App — Navegação por cargo', () => {
   it('sdr NÃO vê dashboard, automações, equipe, relatórios', async () => {
     await loginAs('sdr')
 
-    expect(screen.queryByRole('button', { name: /Visão Geral/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Dashboard$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Automações/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Equipe$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Relatórios/i })).not.toBeInTheDocument()
@@ -402,7 +402,7 @@ describe('App — Restaura sessão existente', () => {
 
     // Should skip login screen and go straight to app
     await waitFor(() => {
-      expect(screen.getByTestId('view-dashboard')).toBeInTheDocument()
+      expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument()
     })
 
     // Should load all data

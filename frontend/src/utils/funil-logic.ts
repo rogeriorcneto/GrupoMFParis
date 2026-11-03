@@ -75,6 +75,8 @@ export function buildNovoCicloCliente(
     etapaAnterior: cliente.etapa,
     novoCiclo: true,
     cicloNumero: (cliente.cicloNumero || 1) + 1,
+    empresaFunilId: cliente.empresaFunilId || cliente.id,
+    origemCicloId: cliente.id,
     dataEntradaEtapa: now,
     historicoEtapas: [],
 
@@ -282,7 +284,18 @@ export function sortCards(
  * (índice único), então a chave é a razão social normalizada.
  */
 export function chaveClienteFunil(c: Pick<Cliente, 'razaoSocial' | 'cnpj'>): string {
-  return c.razaoSocial.trim().toLowerCase() || (c.cnpj || '').replace(/\D/g, '')
+  return c.razaoSocial.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/\s+/g, ' ') || (c.cnpj || '').replace(/\D/g, '')
+}
+
+export function mesmaEmpresaNoFunil(a: Cliente, b: Cliente): boolean {
+  if (a.id === b.id) return true
+  if ((a.empresaFunilId || a.id) === (b.empresaFunilId || b.id)) return true
+  const documentoA = (a.cnpj || a.cpf || '').replace(/\D/g, '')
+  const documentoB = (b.cnpj || b.cpf || '').replace(/\D/g, '')
+  if (documentoA && documentoB) return documentoA === documentoB
+  if (a.omieCodigo && b.omieCodigo) return String(a.omieCodigo) === String(b.omieCodigo)
+  const chave = chaveClienteFunil(a)
+  return Boolean(chave) && chave === chaveClienteFunil(b)
 }
 
 /**
@@ -290,5 +303,5 @@ export function chaveClienteFunil(c: Pick<Cliente, 'razaoSocial' | 'cnpj'>): str
  * Usado como guard antes de qualquer criação de novo ciclo.
  */
 export function existeCardAtivoNoFunil(lista: Cliente[], cliente: Cliente, etapas = ['proposta', 'negociacao']): boolean {
-  return lista.some(c => c.id !== cliente.id && etapas.includes(c.etapa) && chaveClienteFunil(c) === chaveClienteFunil(cliente))
+  return lista.some(c => !c.arquivadoDuplicata && c.id !== cliente.id && etapas.includes(c.etapa) && mesmaEmpresaNoFunil(c, cliente))
 }

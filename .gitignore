@@ -19,3 +19,4 @@ backend/*.png
 backend/*.csv
 backend/scripts/_*
 frontend/test-results/
+*.sqlite

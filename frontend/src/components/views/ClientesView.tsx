@@ -31,7 +31,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   // Cards de novo ciclo (novas oportunidades) ficam no funil, não na lista de cadastros.
   const scopedClientes = React.useMemo(() => {
     const base = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
-    return base.filter(c => !c.novoCiclo)
+    return base.filter(c => !c.novoCiclo && !c.arquivadoDuplicata)
   }, [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
   // Filtros aplicados (efetivos) vs rascunho (no painel)

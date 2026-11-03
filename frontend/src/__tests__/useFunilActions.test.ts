@@ -49,9 +49,9 @@ import * as db from '../lib/database'
 
 const defaultParams = () => {
   const clientes = [
-    sampleCliente({ id: 1, etapa: 'prospecção', razaoSocial: 'Empresa A' }),
-    sampleCliente({ id: 2, etapa: 'amostra', razaoSocial: 'Empresa B' }),
-    sampleCliente({ id: 3, etapa: 'proposta', razaoSocial: 'Empresa C' }),
+    sampleCliente({ id: 1, etapa: 'prospecção', razaoSocial: 'Empresa A', cnpj: '' }),
+    sampleCliente({ id: 2, etapa: 'amostra', razaoSocial: 'Empresa B', cnpj: '' }),
+    sampleCliente({ id: 3, etapa: 'proposta', razaoSocial: 'Empresa C', cnpj: '' }),
   ]
   return {
     clientes,
@@ -289,21 +289,19 @@ describe('useFunilActions', () => {
       const params = defaultParams()
       const { result } = renderHook(() => useFunilActions(params))
 
-      // First move (will hang)
-      const move1 = act(async () => {
-        await result.current.moverCliente(1, 'amostra')
-      })
-
-      // Second move while first is pending — should be no-op
       await act(async () => {
+        // First move (will hang)
+        const move1 = result.current.moverCliente(1, 'amostra')
+
+        // Second move while first is pending — should be no-op
         await result.current.moverCliente(2, 'proposta')
+
+        // Only 1 moverClienteAtomico call
+        expect(db.moverClienteAtomico).toHaveBeenCalledTimes(1)
+
+        resolveFirst(undefined)
+        await move1
       })
-
-      // Only 1 moverClienteAtomico call
-      expect(db.moverClienteAtomico).toHaveBeenCalledTimes(1)
-
-      resolveFirst(undefined)
-      await move1
     })
 
     it('não faz nada para clienteId inexistente', async () => {
@@ -535,9 +533,9 @@ describe('useFunilActions', () => {
       )
     })
 
-    it('NÃO cria novo ciclo ao mover para follow_up sem statusFollowUp/statusEntrega especial', async () => {
+    it('NÃO cria outro ciclo ao atualizar follow_up em andamento sem conclusão ou entrega', async () => {
       const params = defaultParams()
-      params.clientes.push(sampleCliente({ id: 7, etapa: 'negociacao' }))
+      params.clientes.push(sampleCliente({ id: 7, etapa: 'follow_up' }))
       const { result } = renderHook(() => useFunilActions(params))
 
       await act(async () => {
@@ -611,7 +609,7 @@ describe('useFunilActions', () => {
       expect(novoCardArg.novoCiclo).toBe(true)
     })
 
-    it('novo ciclo a partir de amostra aprovada NÃO puxa status anterior', async () => {
+    it('amostra aprovada usa o card movido para proposta sem criar ciclo duplicado', async () => {
       const params = defaultParams()
       params.clientes.push(sampleCliente({
         id: 11,
@@ -631,16 +629,8 @@ describe('useFunilActions', () => {
         await result.current.moverCliente(11, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: '2025-01-15' })
       })
 
-      const novoCardArg = vi.mocked(db.insertCliente).mock.calls[0][0] as any
-      expect(novoCardArg.etapa).toBe('proposta')
-      expect(novoCardArg.statusAmostra).toBeUndefined()
-      expect(novoCardArg.dataEnvioAmostra).toBeUndefined()
-      expect(novoCardArg.resultadoAmostra).toBeUndefined()
-      expect(novoCardArg.dataResultadoAmostra).toBeUndefined()
-      expect(novoCardArg.statusFollowUp).toBeUndefined()
-      expect(novoCardArg.statusEntrega).toBeUndefined()
-      expect(novoCardArg.valorProposta).toBeUndefined()
-      expect(novoCardArg.cicloNumero).toBe(2)
+      expect(db.insertCliente).not.toHaveBeenCalled()
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(11, 'proposta', 'amostra', expect.any(String), expect.objectContaining({ resultadoAmostra: 'aprovada' }))
     })
 
     it('cards de novo ciclo aparecem como cards normais na coluna (UI do FunilView)', () => {
@@ -723,6 +713,97 @@ describe('useFunilActions', () => {
       )
       expect(db.moverClienteAtomico).not.toHaveBeenCalledWith(10, expect.anything(), expect.anything(), expect.anything(), expect.anything())
       expect(db.updateCliente).not.toHaveBeenCalledWith(10, expect.anything())
+    })
+  })
+
+  describe('regressão de duplicatas do Kanban', () => {
+    it('gera próximo ciclo em proposta ao ganhar a negociação, sem reabrir o original', async () => {
+      const params = defaultParams()
+      params.clientes[2].etapa = 'negociacao'
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => { await result.current.moverCliente(3, 'follow_up', { statusFollowUp: 'pedido_aprovado' }) })
+      expect(db.insertCliente).toHaveBeenCalledTimes(1)
+      expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({ etapa: 'proposta', cicloNumero: 2, statusFollowUp: undefined }))
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(3, 'follow_up', 'negociacao', expect.any(String), { statusFollowUp: 'pedido_aprovado' })
+    })
+
+    it('calcula o próximo número usando todos os ciclos conhecidos da empresa', async () => {
+      const params = defaultParams()
+      const origem = sampleCliente({ id: 80, etapa: 'follow_up', razaoSocial: 'Empresa Histórico', cnpj: '', cicloNumero: 1 })
+      params.clientes.push(origem, sampleCliente({ id: 81, etapa: 'perdido', razaoSocial: 'Empresa Histórico', cnpj: '', cicloNumero: 5 }))
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => { await result.current.criarNovoCiclo(origem, {}, 'proposta') })
+      expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({ cicloNumero: 6 }))
+    })
+
+    it('confirmação dupla de amostra persiste uma vez e gera só uma proposta', async () => {
+      const params = defaultParams()
+      const { result } = renderHook(() => useFunilActions(params))
+      act(() => result.current.setDraggedItem({ cliente: params.clientes[0], fromStage: 'prospecção' }))
+      await act(async () => { await Promise.all([result.current.confirmAmostra(), result.current.confirmAmostra()]) })
+      expect(db.moverClienteAtomico).toHaveBeenCalledTimes(1)
+      expect(db.insertCliente).toHaveBeenCalledTimes(1)
+    })
+
+    it('não clona o card que já foi movido de amostra para proposta', async () => {
+      const params = defaultParams()
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => {
+        await result.current.moverCliente(2, 'proposta', { resultadoAmostra: 'aprovada' })
+      })
+      expect(db.moverClienteAtomico).toHaveBeenCalledTimes(1)
+      expect(db.insertCliente).not.toHaveBeenCalled()
+    })
+
+    it('não cria proposta quando o movimento para amostra falha', async () => {
+      const params = defaultParams()
+      vi.mocked(db.moverClienteAtomico).mockRejectedValueOnce(new Error('falha de persistência'))
+      const { result } = renderHook(() => useFunilActions(params))
+      act(() => result.current.setDraggedItem({ cliente: params.clientes[0], fromStage: 'prospecção' }))
+      await act(async () => { await result.current.confirmAmostra() })
+      expect(db.insertCliente).not.toHaveBeenCalled()
+    })
+
+    it('recusa novo ciclo manual se existe proposta da mesma empresa', async () => {
+      const params = defaultParams()
+      const origem = sampleCliente({ id: 80, etapa: 'follow_up', razaoSocial: 'Empresa C' })
+      params.clientes.push(origem)
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => {
+        await expect(result.current.criarNovoCiclo(origem)).rejects.toThrow(/card ativo/i)
+      })
+      expect(db.insertCliente).not.toHaveBeenCalled()
+    })
+
+    it('recusa entrada em negociação se outra proposta da empresa permanece ativa', async () => {
+      const params = defaultParams()
+      params.clientes.push(sampleCliente({ id: 80, etapa: 'follow_up', razaoSocial: 'Empresa C' }))
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => { await result.current.moverCliente(80, 'negociacao') })
+      expect(db.moverClienteAtomico).not.toHaveBeenCalled()
+    })
+
+    it('bloqueia retorno direto de negociação para proposta, inclusive fora do drag', async () => {
+      const params = defaultParams()
+      params.clientes[2].etapa = 'negociacao'
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => { await result.current.moverCliente(3, 'proposta') })
+      expect(db.moverClienteAtomico).not.toHaveBeenCalled()
+    })
+
+    it('não insere dois ciclos em chamadas simultâneas nem após repetir a ação', async () => {
+      const params = defaultParams()
+      const origem = sampleCliente({ id: 80, etapa: 'follow_up', razaoSocial: 'Empresa Concorrente' })
+      params.clientes.push(origem)
+      const { result } = renderHook(() => useFunilActions(params))
+      await act(async () => {
+        await Promise.allSettled([result.current.criarNovoCiclo(origem), result.current.criarNovoCiclo(origem)])
+      })
+      expect(db.insertCliente).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        await expect(result.current.criarNovoCiclo(origem)).rejects.toThrow(/card ativo/i)
+      })
+      expect(db.insertCliente).toHaveBeenCalledTimes(1)
     })
   })
 

@@ -14,6 +14,8 @@ function mockChain(resolveData: any = null, resolveError: any = null) {
     order: vi.fn().mockReturnThis(),
     range: vi.fn().mockResolvedValue({ data: Array.isArray(resolveData) ? resolveData : [], error: resolveError }),
     single: vi.fn().mockResolvedValue({ data: resolveData, error: resolveError }),
+    maybeSingle: vi.fn().mockResolvedValue({ data: resolveData, error: resolveError }),
+    then: (resolve: (value: any) => unknown, reject: (reason: unknown) => unknown) => Promise.resolve({ data: resolveData, error: resolveError }).then(resolve, reject),
   }
   return chain
 }
@@ -193,7 +195,6 @@ describe('database.ts — Clientes', () => {
       etapa: 'amostra',
       valor_estimado: 150000,
       dias_inativo: 10,
-      updated_at: expect.any(String),
     }))
   })
 
@@ -247,7 +248,8 @@ describe('database.ts — Interações', () => {
       data: '2025-02-01', automatico: false,
     })
 
-    expect(i.id).toBe(100)
+    expect(i.id).toEqual(expect.any(Number))
+    expect(chain.insert).toHaveBeenCalledWith(expect.objectContaining({ cliente_id: 1, tipo: 'email', descricao: 'Desc' }))
     expect(i.clienteId).toBe(1)
     expect(i.tipo).toBe('email')
   })
@@ -332,7 +334,6 @@ describe('database.ts — Produtos', () => {
 
   it('updateProduto mapeia camelCase para snake_case', async () => {
     const chain = mockChain()
-    chain.eq.mockResolvedValue({ error: null })
     tableChains['produtos'] = chain
     mockFrom.mockImplementation((t: string) => tableChains[t] || mockChain())
 

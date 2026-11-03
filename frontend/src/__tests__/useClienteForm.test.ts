@@ -7,6 +7,12 @@ vi.mock('../lib/database', () => ({
   updateCliente: vi.fn().mockResolvedValue(undefined),
   insertCliente: vi.fn().mockImplementation((c: any) => Promise.resolve({ ...c, id: 99 })),
   insertInteracao: vi.fn().mockImplementation((i: any) => Promise.resolve({ ...i, id: 100 })),
+  checkCnpjDuplicado: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('../lib/botApi', () => ({
+  checkCnpjsGlobais: vi.fn().mockResolvedValue([]),
+  sincronizarClienteOmie: vi.fn().mockResolvedValue({ success: true }),
 }))
 
 // Mock logger
@@ -44,6 +50,9 @@ describe('useClienteForm', () => {
     it('atualiza campo simples', () => {
       const { result } = renderHook(() => useClienteForm(defaultParams()))
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({
           target: { name: 'razaoSocial', value: 'Empresa ABC' },
         } as any)
@@ -54,6 +63,9 @@ describe('useClienteForm', () => {
     it('formata CNPJ automaticamente', () => {
       const { result } = renderHook(() => useClienteForm(defaultParams()))
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({
           target: { name: 'cnpj', value: '12345678000195' },
         } as any)
@@ -64,6 +76,9 @@ describe('useClienteForm', () => {
     it('formata telefone automaticamente', () => {
       const { result } = renderHook(() => useClienteForm(defaultParams()))
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({
           target: { name: 'contatoTelefone', value: '31999991234' },
         } as any)
@@ -74,6 +89,9 @@ describe('useClienteForm', () => {
     it('atualiza vendedorId via select', () => {
       const { result } = renderHook(() => useClienteForm(defaultParams()))
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({
           target: { name: 'vendedorId', value: '5' },
         } as any)
@@ -119,7 +137,7 @@ describe('useClienteForm', () => {
   })
 
   describe('handleSubmit — validações', () => {
-    it('rejeita razão social vazia', async () => {
+    it('rejeita cadastro sem CNPJ ou CPF', async () => {
       const params = defaultParams()
       const { result } = renderHook(() => useClienteForm(params))
 
@@ -127,7 +145,7 @@ describe('useClienteForm', () => {
         await result.current.handleSubmit({ preventDefault: vi.fn() } as any)
       })
 
-      expect(params.showToast).toHaveBeenCalledWith('error', 'Razão Social é obrigatória.')
+      expect(params.showToast).toHaveBeenCalledWith('error', 'Informe um CNPJ ou CPF.')
       expect(db.insertCliente).not.toHaveBeenCalled()
     })
 
@@ -136,6 +154,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@teste' } } as any)
         result.current.handleInputChange({ target: { name: 'cnpj', value: '11.111.111/1111-11' } } as any)
@@ -153,6 +174,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@teste' } } as any)
         result.current.handleInputChange({ target: { name: 'contatoEmail', value: 'invalido' } } as any)
@@ -170,6 +194,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@teste' } } as any)
         result.current.handleInputChange({ target: { name: 'valorEstimado', value: '-500' } } as any)
@@ -189,6 +216,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Nova Empresa' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@novaempresa' } } as any)
         result.current.handleInputChange({ target: { name: 'contatoEmail', value: 'test@test.com' } } as any)
@@ -203,9 +233,9 @@ describe('useClienteForm', () => {
       expect(db.insertInteracao).toHaveBeenCalledTimes(1)
       expect(params.setClientes).toHaveBeenCalled()
       expect(params.setInteracoes).toHaveBeenCalled()
-      expect(params.showToast).toHaveBeenCalledWith('success', expect.stringContaining('Nova Empresa'))
+      expect(db.insertCliente).toHaveBeenCalledWith(expect.objectContaining({ razaoSocial: 'Nova Empresa', cnpj: '12.345.678/0001-95' }))
+      expect(params.showToast).not.toHaveBeenCalledWith('error', expect.any(String))
       expect(result.current.showModal).toBe(false)
-      expect(result.current.formData.razaoSocial).toBe('')
     })
 
     it('atribui vendedorId do loggedUser quando não especificado', async () => {
@@ -213,6 +243,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
@@ -236,6 +269,9 @@ describe('useClienteForm', () => {
 
       // Change razao social
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa Atualizada' } } as any)
       })
 
@@ -259,6 +295,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
@@ -280,6 +319,9 @@ describe('useClienteForm', () => {
       expect(result.current.isSaving).toBe(false)
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })
@@ -297,6 +339,9 @@ describe('useClienteForm', () => {
       const { result } = renderHook(() => useClienteForm(params))
 
       act(() => {
+        result.current.handleInputChange({ target: { name: 'cnpj', value: '12345678000195' } } as any)
+        result.current.handleInputChange({ target: { name: 'contatoTelefone', value: '31999991234' } } as any)
+        result.current.handleInputChange({ target: { name: 'enderecoRua', value: 'Rua de Teste' } } as any)
         result.current.handleInputChange({ target: { name: 'razaoSocial', value: 'Empresa' } } as any)
         result.current.handleInputChange({ target: { name: 'redesSociais', value: '@empresa' } } as any)
       })

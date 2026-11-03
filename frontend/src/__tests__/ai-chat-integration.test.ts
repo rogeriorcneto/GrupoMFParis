@@ -1,4 +1,5 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals'
+import { createElement } from 'react'
+import { describe, test, expect, vi, beforeEach, type MockedFunction } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { CriarAutomacaoView } from '../components/views/CriarAutomacaoView'
@@ -6,11 +7,11 @@ import * as gemini from '../lib/gemini'
 import * as database from '../lib/database'
 
 // Mock das dependências
-jest.mock('../lib/database')
-jest.mock('../lib/gemini')
+vi.mock('../lib/database')
+vi.mock('../lib/gemini')
 
-const mockCallAI = gemini.callAI as jest.MockedFunction<typeof gemini.callAI>
-const mockGetAutomacoes = database.getAutomacoes as jest.MockedFunction<typeof database.getAutomacoes>
+const mockCallAI = gemini.callAI as MockedFunction<typeof gemini.callAI>
+const mockGetAutomacoes = database.getAutomacoes as MockedFunction<typeof database.getAutomacoes>
 
 // Mock de automação para testes
 const mockAutomacoes = [
@@ -58,14 +59,14 @@ describe('Chat com IA - Integração Gemini', () => {
   }
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockGetAutomacoes.mockResolvedValue(mockAutomacoes)
     mockCallAI.mockResolvedValue('Resposta padrão da IA')
   })
 
   describe('Funcionalidades Básicas do Chat', () => {
     test('deve abrir chat ao clicar no botão Assistente IA', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       const assistenteBtn = screen.getByText('Assistente IA')
       fireEvent.click(assistenteBtn)
@@ -75,7 +76,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve mostrar mensagem de boas-vindas ao abrir chat', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -84,7 +85,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve fechar chat ao clicar no botão fechar', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       expect(screen.getByText('Assistente de Automações')).toBeInTheDocument()
@@ -94,7 +95,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve limpar conversa ao clicar no botão limpar', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -112,7 +113,7 @@ describe('Chat com IA - Integração Gemini', () => {
 
   describe('Integração com Gemini API', () => {
     test('deve enviar mensagem para a IA corretamente', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -133,7 +134,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve incluir contexto das automações na chamada da IA', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -155,7 +156,7 @@ describe('Chat com IA - Integração Gemini', () => {
     test('deve mostrar indicador de carregamento enquanto processa', async () => {
       mockCallAI.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve('Resposta'), 100)))
       
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -173,7 +174,7 @@ describe('Chat com IA - Integração Gemini', () => {
     test('deve lidar com erro na API da IA', async () => {
       mockCallAI.mockRejectedValue(new Error('Erro de conexão com Gemini'))
       
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -189,7 +190,7 @@ describe('Chat com IA - Integração Gemini', () => {
     test('deve desabilitar input durante carregamento', async () => {
       mockCallAI.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve('Resposta'), 100)))
       
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -211,7 +212,7 @@ describe('Chat com IA - Integração Gemini', () => {
 
   describe('Sugestões Rápidas', () => {
     test('deve mostrar sugestões rápidas', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -228,7 +229,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve preencher input ao clicar em sugestão', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -240,7 +241,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve esconder sugestões após enviar mensagem', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -258,7 +259,7 @@ describe('Chat com IA - Integração Gemini', () => {
 
   describe('Chat Contextual', () => {
     test('deve abrir chat com contexto ao clicar em ajuda de automação específica', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       // Mudar para aba gerenciar
       fireEvent.click(screen.getByText('Gerenciar (2)'))
@@ -285,7 +286,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve personalizar contexto baseado na automação selecionada', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Gerenciar (2)'))
       
@@ -311,7 +312,7 @@ describe('Chat com IA - Integração Gemini', () => {
 
   describe('Histórico de Conversa', () => {
     test('deve manter histórico durante a sessão', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -340,7 +341,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve limpar histórico ao clicar em limpar conversa', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -361,7 +362,7 @@ describe('Chat com IA - Integração Gemini', () => {
 
   describe('Interface do Chat', () => {
     test('deve enviar mensagem ao pressionar Enter', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -375,7 +376,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('não deve enviar mensagem ao pressionar Shift+Enter', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -387,7 +388,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve impedir envio de mensagem vazia', () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -400,7 +401,7 @@ describe('Chat com IA - Integração Gemini', () => {
     test('deve impedir envio durante carregamento', async () => {
       mockCallAI.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve('Resposta'), 100)))
       
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -432,7 +433,7 @@ describe('Chat com IA - Integração Gemini', () => {
       for (const resposta of respostas) {
         mockCallAI.mockResolvedValue(resposta)
         
-        const { unmount } = render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+        const { unmount } = render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
         
         fireEvent.click(screen.getByText('Assistente IA'))
         
@@ -452,7 +453,7 @@ describe('Chat com IA - Integração Gemini', () => {
       const respostaLonga = 'A'.repeat(1000)
       mockCallAI.mockResolvedValue(respostaLonga)
       
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -468,7 +469,7 @@ describe('Chat com IA - Integração Gemini', () => {
 
   describe('Contexto Dinâmico', () => {
     test('deve atualizar contexto quando automações mudam', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -517,7 +518,7 @@ describe('Chat com IA - Integração Gemini', () => {
     test('deve lidar com lista vazia de automações', async () => {
       mockGetAutomacoes.mockResolvedValue([])
       
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -536,7 +537,7 @@ describe('Chat com IA - Integração Gemini', () => {
     test('deve abrir chat rapidamente', () => {
       const startTime = performance.now()
       
-      const { unmount } = render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      const { unmount } = render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       
@@ -549,7 +550,7 @@ describe('Chat com IA - Integração Gemini', () => {
     })
 
     test('deve lidar com múltiplas mensagens consecutivas', async () => {
-      render(<CriarAutomacaoView loggedUser={mockLoggedUser} />)
+      render(createElement(CriarAutomacaoView, { loggedUser: mockLoggedUser }))
       
       fireEvent.click(screen.getByText('Assistente IA'))
       

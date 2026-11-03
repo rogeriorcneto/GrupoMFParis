@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import type { Cliente, Interacao, Atividade, Vendedor, Tarefa, JobAutomacao, Campanha, Cadencia, HistoricoEtapa } from '../types'
 import * as db from '../lib/database'
 import { stageLabels, transicoesPermitidas } from '../utils/constants'
-import { buildNovoCicloCliente, existeCardAtivoNoFunil } from '../utils/funil-logic'
+import { buildNovoCicloCliente, existeCardAtivoNoFunil, mesmaEmpresaNoFunil } from '../utils/funil-logic'
 import { logger } from '../utils/logger'
 
 interface DragItem { cliente: Cliente; fromStage: string }
@@ -58,8 +58,29 @@ export function useFunilActions({
   cadencias, tarefas, setTarefas, loadAllData
 }: UseFunilActionsParams) {
   // Regra anti-duplicata: só pode existir 1 card em proposta/negociacao por cliente.
+  const clientesRef = useRef({ origem: clientes, atuais: clientes })
+  if (clientesRef.current.origem !== clientes) clientesRef.current = { origem: clientes, atuais: clientes }
+  const ciclosPendentes = useRef<Cliente[]>([])
   const existeCardAtivo = (cliente: Cliente, etapas: string[], lista?: Cliente[]) =>
-    existeCardAtivoNoFunil(lista || clientes, cliente, etapas)
+    existeCardAtivoNoFunil(lista || clientesRef.current.atuais, cliente, etapas)
+  const inserirNovoCiclo = async (cliente: Cliente, novoCard: Omit<Cliente, 'id'>) => {
+    const atuais = clientesRef.current.atuais
+    if (atuais.some(c => ['proposta', 'negociacao'].includes(c.etapa) && mesmaEmpresaNoFunil(c, cliente))) {
+      throw new Error('Já existe um card ativo em Proposta ou Negociação para este cliente.')
+    }
+    if (ciclosPendentes.current.some(c => mesmaEmpresaNoFunil(c, cliente))) {
+      throw new Error('A criação de um card ativo deste cliente já está em andamento.')
+    }
+    ciclosPendentes.current.push(cliente)
+    try {
+      const cicloNumero = Math.max(cliente.cicloNumero || 1, ...atuais.filter(c => mesmaEmpresaNoFunil(c, cliente)).map(c => c.cicloNumero || 1)) + 1
+      const novo = await db.insertCliente({ ...novoCard, cicloNumero })
+      clientesRef.current.atuais = [...clientesRef.current.atuais, novo]
+      return novo
+    } finally {
+      ciclosPendentes.current = ciclosPendentes.current.filter(c => c !== cliente)
+    }
+  }
 
   const draggedItemRef = useRef<DragItem | null>(null)
   const [draggedItem, setDraggedItemState] = useState<DragItem | null>(null)
@@ -206,10 +227,31 @@ export function useFunilActions({
     movingRef.current = true
     try {
     const now = new Date().toISOString()
-    const cliente = clientes.find(c => c.id === clienteId)
-    if (!cliente) return
+    const cliente = clientesRef.current.atuais.find(c => c.id === clienteId)
+    if (!cliente) return false
 
     const fromStage = cliente.etapa || ''
+    if (fromStage === 'negociacao' && toStage === 'proposta') {
+      addNotificacao('warning', 'Transição bloqueada', 'Negociação não pode voltar para Proposta. Use Ganhou, Perdido ou ajuste a proposta.')
+      return false
+    }
+    // Amostra aprovada com ciclo comercial já ativo (o card de Proposta criado
+    // ao entrar em amostra): o card da amostra é encerrado em "Amostra
+    // Finalizada" em vez de virar um segundo card comercial — a negociação
+    // continua no card que já existe.
+    if (toStage === 'proposta' && fromStage === 'amostra' && existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+      toStage = 'amostra_perdida'
+      extras = { ...extras, resultadoAmostra: 'aprovada', dataResultadoAmostra: extras.dataResultadoAmostra || now.split('T')[0] }
+      addNotificacao('info', 'Amostra aprovada', `${cliente.razaoSocial}: card de amostra finalizado — a negociação continua no card de Proposta existente.`, cliente.id)
+    }
+    if (['proposta', 'negociacao'].includes(toStage) && existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+      addNotificacao('warning', 'Card ativo existente', 'Este cliente já possui um card em Proposta ou Negociação.')
+      return false
+    }
+    if (toStage === 'amostra' && fromStage !== 'amostra' && !['prospecção', 'proposta', 'amostra_perdida'].includes(fromStage)) {
+      addNotificacao('warning', 'Transição bloqueada', 'Amostra só pode partir de Prospecção ou Proposta, exceto uma nova tentativa de amostra.')
+      return false
+    }
     const previousSnapshot: Cliente = {
       ...cliente,
       historicoEtapas: [...(cliente.historicoEtapas || [])],
@@ -225,6 +267,7 @@ export function useFunilActions({
     // Persist to Supabase atomicamente (se falhar, faz rollback para evitar inconsistência de funil)
     try {
       await db.moverClienteAtomico(clienteId, toStage, fromStage, now, extras)
+      clientesRef.current.atuais = clientesRef.current.atuais.map(c => c.id === clienteId ? { ...c, ...extras, etapa: toStage } : c)
     } catch (err) {
       logger.error('Erro ao persistir movimento de cliente:', err)
       setClientes(prev => prev.map(c => c.id === clienteId ? previousSnapshot : c))
@@ -234,7 +277,7 @@ export function useFunilActions({
         logger.error('Erro ao recarregar dados após rollback:', reloadErr)
       }
       addNotificacao('error', 'Falha ao mover cliente', `Não foi possível mover ${previousSnapshot.razaoSocial}. O funil foi restaurado.`)
-      return
+      return false
     }
 
     // Atividade é importante, mas não deve invalidar a transição já persistida
@@ -272,7 +315,7 @@ export function useFunilActions({
     if (toStage === 'perdido' && ETAPAS_PERDA_COM_CICLO.includes(fromStage) && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
       try {
-        const cardCriado = await db.insertCliente(novoCard)
+        const cardCriado = await inserirNovoCiclo(cliente, novoCard)
         setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
         addNotificacao('info', '🔄 Novo ciclo criado', `${cliente.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, cardCriado.id)
         await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
@@ -281,24 +324,11 @@ export function useFunilActions({
       }
     }
 
-    // Novo ciclo automático: ao aprovar amostra (mover para proposta com resultado aprovada)
-    if (toStage === 'proposta' && extras.resultadoAmostra === 'aprovada' && fromStage === 'amostra' && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
-      const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
-      try {
-        const cardCriado = await db.insertCliente(novoCard)
-        setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
-        addNotificacao('info', '🔄 Novo ciclo criado', `Amostra aprovada — card de ${cliente.razaoSocial} criado em Proposta para novo ciclo.`, cardCriado.id)
-        await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
-      } catch (e) {
-        logger.error('Erro ao criar novo ciclo após aprovação de amostra:', e)
-      }
-    }
-
     // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue
-    if ((extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue') && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+    if ((toStage === 'follow_up' && (fromStage !== 'follow_up' || extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue')) && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
-        const cardCriado = await db.insertCliente(novoCard)
+        const cardCriado = await inserirNovoCiclo(cliente, novoCard)
         setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
         addNotificacao('info', '🔄 Novo ciclo criado', `Card de ${cliente.razaoSocial} criado em Proposta para o próximo ciclo de vendas.`, cardCriado.id)
         await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
@@ -306,6 +336,7 @@ export function useFunilActions({
         logger.error('Erro ao criar novo ciclo automático:', e)
       }
     }
+    return true
     } finally { movingRef.current = false }
   }
 
@@ -410,6 +441,9 @@ export function useFunilActions({
   const confirmPerda = async () => {
     const item = draggedItemRef.current
     if (item) {
+      if (movingRef.current) return
+      movingRef.current = true
+      try {
       const clienteOriginal = item.cliente
       const fromStage = item.fromStage
       const now = new Date().toISOString()
@@ -425,6 +459,7 @@ export function useFunilActions({
       // Mover para perdido direto via db (sem movingRef lock)
       try {
         await db.moverClienteAtomico(clienteOriginal.id, 'perdido', fromStage, now, extras)
+        clientesRef.current.atuais = clientesRef.current.atuais.map(c => c.id === clienteOriginal.id ? { ...c, ...extras, etapa: 'perdido' } : c)
         setClientes(prev => prev.map(c => c.id === clienteOriginal.id
           ? { ...c, etapa: 'perdido', etapaAnterior: fromStage, ...extras, dataEntradaEtapa: now }
           : c
@@ -441,7 +476,7 @@ export function useFunilActions({
       if (etapasComNovoCiclo.includes(fromStage) && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
         const novoCliente = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
         try {
-          const clienteCriado = await db.insertCliente(novoCliente)
+          const clienteCriado = await inserirNovoCiclo(clienteOriginal, novoCliente)
           setClientes(prev => [...prev, { ...clienteCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
           addNotificacao('info', '🔄 Novo ciclo criado', `${clienteOriginal.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, clienteCriado.id)
           await copiarHistoricoETarefas(clienteOriginal.id, clienteCriado.id, clienteOriginal.historicoEtapas || [], tarefas, setTarefas)
@@ -449,16 +484,19 @@ export function useFunilActions({
           logger.error('Erro ao criar novo ciclo:', e)
         }
       }
+      } finally { movingRef.current = false }
     }
     draggedItemRef.current = null; setDraggedItemState(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
   }
 
-  const confirmAmostra = () => {
-    if (draggedItem) {
-      const isRetry = draggedItem.fromStage === 'amostra_perdida'
-      const tentativa = isRetry ? (draggedItem.cliente.tentativaAmostra || 0) + 1 : (draggedItem.cliente.tentativaAmostra || 0)
-      const clienteOriginal = draggedItem.cliente
-      moverCliente(clienteOriginal.id, 'amostra', {
+  const confirmAmostra = async () => {
+    const item = draggedItemRef.current
+    if (item) {
+      draggedItemRef.current = null
+      const isRetry = item.fromStage === 'amostra_perdida'
+      const tentativa = isRetry ? (item.cliente.tentativaAmostra || 0) + 1 : (item.cliente.tentativaAmostra || 0)
+      const clienteOriginal = item.cliente
+      const movido = await moverCliente(clienteOriginal.id, 'amostra', {
         dataEnvioAmostra: modalAmostraData,
         statusAmostra: 'solicitada',
         tentativaAmostra: tentativa,
@@ -469,9 +507,9 @@ export function useFunilActions({
 
       // Ao entrar em amostra (1ª tentativa), gera um novo card em Proposta
       // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up e perdido).
-      if (!isRetry && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
+      if (movido && !isRetry && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
         const novoCard = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'amostra' })
-        db.insertCliente(novoCard).then(async cardCriado => {
+        await inserirNovoCiclo(clienteOriginal, novoCard).then(async cardCriado => {
           setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
           addNotificacao('info', '🔄 Novo card em Proposta', `${clienteOriginal.razaoSocial}: amostra iniciada em card próprio, novo card criado em Proposta.`, cardCriado.id)
           await copiarHistoricoETarefas(clienteOriginal.id, cardCriado.id, clienteOriginal.historicoEtapas || [], tarefas, setTarefas)
@@ -520,7 +558,7 @@ export function useFunilActions({
     const novoCard = buildNovoCicloCliente(cliente, etapa, loggedUser?.id, extras)
     let cardCriado: Cliente
     try {
-      cardCriado = await db.insertCliente(novoCard)
+      cardCriado = await inserirNovoCiclo(cliente, novoCard)
     } catch (e: any) {
       logger.error('Falha ao inserir card de novo ciclo:', e)
       const msg = e?.message || e?.details || e?.hint || 'Erro desconhecido ao criar card no banco'

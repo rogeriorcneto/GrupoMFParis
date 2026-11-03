@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals'
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest'
+
+vi.mock('../lib/supabase', async () => {
+  const { createClient } = await import('@supabase/supabase-js')
+  const url = process.env.TEST_SUPABASE_URL || 'http://127.0.0.1:54321'
+  if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(url)) throw new Error('Testes exigem Supabase local isolado')
+  return { supabase: createClient(url, process.env.TEST_SUPABASE_ANON_KEY || 'local-test-only') }
+})
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import {
   getAutomacoes,
@@ -10,13 +17,14 @@ import {
 } from '../lib/database'
 
 // Configurações de teste
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://zeaeppmnetdhzwwdydmq.supabase.co'
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_kAIiWbgHs30d5AnAxcse3g_TFCoDF_d'
+const supabaseUrl = process.env.TEST_SUPABASE_URL || ''
+const supabaseKey = process.env.TEST_SUPABASE_ANON_KEY || ''
+const executarIntegracao = process.env.RUN_LOCAL_SUPABASE_TESTS === '1' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(supabaseUrl) && !!supabaseKey
 
 let supabase: SupabaseClient
 let testAutomacaoId: string
 
-describe('Integração de Automações com Supabase', () => {
+describe.skipIf(!executarIntegracao)('Integração de Automações com Supabase', () => {
   beforeAll(async () => {
     // Criar cliente Supabase para testes
     supabase = createClient(supabaseUrl, supabaseKey)

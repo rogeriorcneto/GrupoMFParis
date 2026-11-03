@@ -886,7 +886,7 @@ describe('G — moverCliente (via App)', () => {
     })
   })
 
-  it('moverCliente: amostra entregue → aprovar → move para proposta e cria novo ciclo', async () => {
+  it('moverCliente: amostra entregue → aprovar → move para proposta sem criar card duplicado', async () => {
     const cliente = makeCliente({ id: 5, etapa: 'amostra', statusAmostra: 'entregue', vendedorId: 1 })
     await loginAs('gerente', [cliente])
 
@@ -898,10 +898,26 @@ describe('G — moverCliente (via App)', () => {
         expect.any(String),
         expect.objectContaining({ resultadoAmostra: 'aprovada' })
       )
-      // Aprovação de amostra também cria um novo card limpo em proposta
-      expect(db.insertCliente).toHaveBeenCalledWith(
-        expect.objectContaining({ etapa: 'proposta', novoCiclo: true, cicloNumero: 2 })
+      // O próprio card movido já é o card comercial — nenhum clone deve nascer
+      // (regra: 1 card em proposta/negociacao por empresa).
+      expect(db.insertCliente).not.toHaveBeenCalled()
+    })
+  })
+
+  it('moverCliente: amostra aprovada com card comercial já ativo → finaliza em Amostra Finalizada', async () => {
+    const amostra = makeCliente({ id: 5, etapa: 'amostra', statusAmostra: 'entregue', vendedorId: 1, razaoSocial: 'Empresa Amostra' })
+    const proposta = makeCliente({ id: 9, etapa: 'proposta', vendedorId: 1, razaoSocial: 'Empresa Amostra' })
+    await loginAs('gerente', [amostra, proposta])
+
+    await userEvent.click(screen.getByTestId('aprovar-amostra-5'))
+
+    await waitFor(() => {
+      expect(db.moverClienteAtomico).toHaveBeenCalledWith(
+        5, 'amostra_perdida', 'amostra',
+        expect.any(String),
+        expect.objectContaining({ resultadoAmostra: 'aprovada' })
       )
+      expect(db.insertCliente).not.toHaveBeenCalled()
     })
   })
 

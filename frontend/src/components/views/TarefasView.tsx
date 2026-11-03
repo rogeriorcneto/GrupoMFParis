@@ -1111,7 +1111,7 @@ const TarefasView: React.FC<{
   }, [loggedUser, showToast])
 
   const meusClientes = useMemo(() =>
-    isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
+    clientes.filter(c => !c.arquivadoDuplicata && (isGerente || c.vendedorId === loggedUser?.id))
   , [clientes, isGerente, loggedUser?.id])
 
   const minhasTarefas = useMemo(() =>

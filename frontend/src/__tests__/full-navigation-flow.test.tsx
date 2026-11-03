@@ -209,7 +209,7 @@ describe('Login', () => {
 
   it('login bem-sucedido carrega dados e mostra dashboard (gerente)', async () => {
     await loginAs('gerente')
-    expect(screen.getByTestId('view-dashboard')).toBeInTheDocument()
+    expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument()
     expect(db.fetchClientes).toHaveBeenCalled()
     expect(db.fetchTarefas).toHaveBeenCalled()
     expect(db.fetchVendedores).toHaveBeenCalled()
@@ -219,7 +219,7 @@ describe('Login', () => {
     const vendedor = makeVendedor('gerente')
     vi.mocked(db.getLoggedVendedor).mockResolvedValue(vendedor)
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('view-dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument())
     expect(screen.queryByText('Entrar no sistema')).not.toBeInTheDocument()
   })
 })
@@ -236,7 +236,7 @@ describe('Sidebar por cargo', () => {
 
   it('gerente vê todos os itens de navegação', async () => {
     await loginAs('gerente')
-    expect(screen.getByRole('button', { name: /Visão Geral/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Dashboard$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Funil Comercial/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Clientes$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Pedidos$/i })).toBeInTheDocument()
@@ -249,7 +249,7 @@ describe('Sidebar por cargo', () => {
 
   it('vendedor NÃO vê: dashboard, automações, prospecção, equipe, relatórios', async () => {
     await loginAs('vendedor')
-    expect(screen.queryByRole('button', { name: /Visão Geral/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Dashboard$/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Automações/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Prospecção/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Equipe$/i })).not.toBeInTheDocument()
@@ -313,8 +313,8 @@ describe('Navegação entre views — gerente', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Tarefas$/i }))
     expect(screen.getByTestId('view-tarefas')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /Visão Geral/i }))
-    expect(screen.getByTestId('view-dashboard')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^Dashboard$/i }))
+    expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument()
   })
 })
 
@@ -330,12 +330,12 @@ describe('Assistente IA', () => {
 
   it('gerente vê botão Assistente IA na sidebar', async () => {
     await loginAs('gerente')
-    expect(screen.getByRole('button', { name: /Assistente IA/i })).toBeInTheDocument()
+    expect(within(document.querySelector('nav')!).getByRole('button', { name: /Assistente IA/i })).toBeInTheDocument()
   })
 
   it('clicar em Assistente IA mostra view-ia', async () => {
     await loginAs('gerente')
-    await userEvent.click(screen.getByRole('button', { name: /Assistente IA/i }))
+    await userEvent.click(within(document.querySelector('nav')!).getByRole('button', { name: /Assistente IA/i }))
     expect(screen.getByTestId('view-ia')).toBeInTheDocument()
   })
 })
@@ -358,7 +358,7 @@ describe('ClientePanel — atalhos de navegação', () => {
     ])
 
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('view-dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument())
 
     // O mock do ClientePanel precisa ser renderizado diretamente — simulamos via state
     // A função onVerNoFunil é injetada em App.tsx: setActiveView('funil') + setSelectedClientePanel(cli)
@@ -372,7 +372,7 @@ describe('ClientePanel — atalhos de navegação', () => {
     const vendedor = makeVendedor('gerente')
     vi.mocked(db.getLoggedVendedor).mockResolvedValue(vendedor)
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('view-dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument())
     // Valida que fetchTarefas foi chamado na inicialização
     expect(db.fetchTarefas).toHaveBeenCalled()
   })
@@ -466,7 +466,7 @@ describe('Navegação rápida — múltiplos cliques', () => {
       { btn: /^Clientes$/i,      id: 'view-clientes' },
       { btn: /^Pedidos$/i,       id: 'view-pedidos' },
       { btn: /Relatórios/i,      id: 'view-relatorios' },
-      { btn: /Visão Geral/i,     id: 'view-dashboard' },
+      { btn: /^Dashboard$/i,     id: 'view-dashboard' },
     ]
 
     for (const { btn, id } of sequencia) {

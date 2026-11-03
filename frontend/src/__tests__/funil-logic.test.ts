@@ -534,6 +534,30 @@ describe('buildNovoCicloCliente', () => {
 })
 
 describe('existeCardAtivoNoFunil (anti-duplicata de ciclo)', () => {
+  it('não une empresas homônimas com documentos diferentes', () => {
+    const origem = makeCliente({ cnpj: '11111111000111' })
+    const outra = makeCliente({ id: 2, cnpj: '22222222000122', etapa: 'proposta' })
+    expect(existeCardAtivoNoFunil([outra], origem)).toBe(false)
+  })
+
+  it('reconhece o mesmo documento mesmo que o nome tenha mudado', () => {
+    const origem = makeCliente({ cnpj: '11.111.111/0001-11' })
+    const outra = makeCliente({ id: 2, cnpj: '11111111000111', razaoSocial: 'Outro Nome', etapa: 'negociacao' })
+    expect(existeCardAtivoNoFunil([outra], origem)).toBe(true)
+  })
+
+  it('normaliza acentos e espaços nos ciclos sem documento', () => {
+    const origem = makeCliente({ razaoSocial: ' COMÉRCIO  PARIS ' })
+    const outra = makeCliente({ id: 2, razaoSocial: 'comercio paris', etapa: 'proposta' })
+    expect(existeCardAtivoNoFunil([outra], origem)).toBe(true)
+  })
+
+  it('não trata duas identidades vazias como a mesma empresa', () => {
+    const origem = makeCliente({ razaoSocial: '' })
+    const outra = makeCliente({ id: 2, razaoSocial: '', etapa: 'proposta' })
+    expect(existeCardAtivoNoFunil([outra], origem)).toBe(false)
+  })
+
   const base = { id: 1, razaoSocial: 'ACME LTDA', etapa: 'amostra', cnpj: '111' } as Cliente
   const clone = { id: 2, razaoSocial: 'ACME LTDA', etapa: 'amostra', cnpj: '' } as Cliente
 
@@ -552,5 +576,19 @@ describe('existeCardAtivoNoFunil (anti-duplicata de ciclo)', () => {
   it('ignora o próprio card e empresas diferentes', () => {
     const lista = [clone, { id: 3, razaoSocial: 'OUTRA EMPRESA', etapa: 'proposta', cnpj: '' } as Cliente]
     expect(existeCardAtivoNoFunil(lista, clone)).toBe(false)
+  })
+  it('ignora card arquivado como duplicata na regularização', () => {
+    const lista = [base, { id: 3, razaoSocial: 'ACME LTDA', etapa: 'proposta', cnpj: '', arquivadoDuplicata: true } as Cliente]
+    expect(existeCardAtivoNoFunil(lista, clone)).toBe(false)
+  })
+  it('reconhece mesma empresa pelo empresaFunilId mesmo sem nome/documento iguais', () => {
+    const origem = { id: 1, razaoSocial: 'Nome Antigo', etapa: 'perdido', empresaFunilId: 10, cnpj: '' } as Cliente
+    const ativo = { id: 2, razaoSocial: 'Nome Novo', etapa: 'proposta', empresaFunilId: 10, cnpj: '' } as Cliente
+    expect(existeCardAtivoNoFunil([ativo], origem)).toBe(true)
+  })
+  it('card raiz usa o próprio id como empresaFunilId', () => {
+    const origem = { id: 10, razaoSocial: 'X', etapa: 'perdido', cnpj: '' } as Cliente
+    const ativo = { id: 2, razaoSocial: 'Y', etapa: 'proposta', empresaFunilId: 10, cnpj: '' } as Cliente
+    expect(existeCardAtivoNoFunil([ativo], origem)).toBe(true)
   })
 })

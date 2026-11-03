@@ -14,7 +14,7 @@ import {
 } from './views'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { buildNovoCicloCliente, existeCardAtivoNoFunil } from '../utils/funil-logic'
+import { existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
 import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
 
@@ -56,7 +56,8 @@ interface AppRouterProps {
   requestStageMove: (cliente: Cliente, fromStage: string, toStage: string) => void
   handleQuickAction: (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => void
   setSelectedClientePanel: (c: Cliente | null) => void
-  moverCliente: (clienteId: number, toStage: string, extras?: Partial<Cliente>) => void
+  moverCliente: (clienteId: number, toStage: string, extras?: Partial<Cliente>) => Promise<boolean | undefined>
+  criarNovoCiclo: (cliente: Cliente, extras?: Partial<Cliente>, etapa?: string) => Promise<Cliente>
   startCampanha: (id: number) => void
   runJobNow: (id: number) => void
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
@@ -82,7 +83,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, requestStageMove, handleQuickAction,
-  setSelectedClientePanel, moverCliente, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId
+  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -155,25 +156,13 @@ export default function AppRouter({
             }
             if (shouldMoveToFollowUpOnApproval(pedido, cliAprov)) {
               try { 
-                await moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
+                const movido = await moverCliente(pedido.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
+                if (!movido) return
               } catch (err) { 
                 logger.error('Erro ao mover cliente para follow_up:', err)
               }
               // Criar card clone em negociacao para o próximo ciclo
-              if (cliAprov) {
-                try {
-                  const clienteOriginal = clientes.find(c => c.id === pedido.clienteId) || cliAprov
-                  const jaTemCard = existeCardAtivoNoFunil(clientes, cliAprov)
-                  if (!jaTemCard) {
-                  const novoCliente = buildNovoCicloCliente(clienteOriginal, 'negociacao', loggedUser?.id)
-                  const saved = await db.insertCliente(novoCliente)
-                  setClientes(prev => [saved, ...prev])
-                  addNotificacao('info', 'Novo ciclo criado', `Card de ${clienteOriginal.razaoSocial} criado em Negociação para o próximo ciclo.`, saved.id)
-                  }
-                } catch (cicloErr) {
-                  logger.error('Erro ao criar novo ciclo em negociacao:', cicloErr)
-                }
-              }
+
             }
           } catch (err) { logger.error('Erro ao aprovar pedido:', err); throw err }
         }}
@@ -261,20 +250,12 @@ export default function AppRouter({
                 } else {
                   // Venda cancelada → perdido + novo ciclo em Proposta
                   if (cli.etapa !== 'perdido') {
-                    await db.moverClienteAtomico(
-                      pedido.clienteId, 'perdido', cli.etapa, now,
-                      { motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
-                    )
-                    setClientes(prev => prev.map(c => c.id === pedido.clienteId
-                      ? { ...c, etapa: 'perdido', etapaAnterior: c.etapa, motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today }
-                      : c
-                    ))
+                    await moverCliente(pedido.clienteId, 'perdido', {
+                      motivoPerda: `Pedido ${pedido.numero} cancelado`, categoriaPerda: 'outro', dataPerda: today,
+                    })
+                  } else if (!existeCardAtivoNoFunil(clientes, cli)) {
+                    await criarNovoCiclo(cli, {}, 'proposta')
                   }
-                  if (existeCardAtivoNoFunil(clientes, cli)) throw new Error('ja_existe')
-                  const novoCard = buildNovoCicloCliente(cli, 'proposta', cli.vendedorId)
-                  const cardCriado = await db.insertCliente(novoCard)
-                  setClientes(prev => [...prev, cardCriado])
-                  addNotificacao('info', '🔄 Novo ciclo criado', `Pedido cancelado — card de ${cli.razaoSocial} criado em Proposta para novo ciclo.`, cardCriado.id)
                 }
               } catch (moveErr) {
                 logger.error('Erro ao processar cancelamento no funil:', moveErr)
@@ -724,9 +705,7 @@ export default function AppRouter({
                 if (cli) {
                   try {
                     if (cli.etapa === 'perdido') {
-                      const novoCard = buildNovoCicloCliente(cli, 'proposta', loggedUser?.id)
-                      const cardCriado = await db.insertCliente(novoCard)
-                      setClientes(prev => [...prev, cardCriado])
+                      await criarNovoCiclo(cli, {}, 'proposta')
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cli.etapa !== targetStage) {
@@ -748,9 +727,7 @@ export default function AppRouter({
                 if (cli2) {
                   try {
                     if (cli2.etapa === 'perdido') {
-                      const novoCard = buildNovoCicloCliente(cli2, 'proposta', loggedUser?.id)
-                      const cardCriado = await db.insertCliente(novoCard)
-                      setClientes(prev => [...prev, cardCriado])
+                      await criarNovoCiclo(cli2, {}, 'proposta')
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cli2.etapa !== targetStage) {
@@ -792,9 +769,7 @@ export default function AppRouter({
                 if (cliApproved) {
                   try {
                     if (cliApproved.etapa === 'perdido') {
-                      const novoCard = buildNovoCicloCliente(cliApproved, 'proposta', loggedUser?.id)
-                      const cardCriado = await db.insertCliente(novoCard)
-                      setClientes(prev => [...prev, cardCriado])
+                      await criarNovoCiclo(cliApproved, {}, 'proposta')
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cliApproved.etapa !== targetStage) {
@@ -816,9 +791,7 @@ export default function AppRouter({
                 if (cliApproved2) {
                   try {
                     if (cliApproved2.etapa === 'perdido') {
-                      const novoCard = buildNovoCicloCliente(cliApproved2, 'proposta', loggedUser?.id)
-                      const cardCriado = await db.insertCliente(novoCard)
-                      setClientes(prev => [...prev, cardCriado])
+                      await criarNovoCiclo(cliApproved2, {}, 'proposta')
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cliApproved2.etapa !== targetStage) {

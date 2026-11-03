@@ -12,7 +12,7 @@
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Cliente, Tarefa, Pedido, Vendedor, Interacao, Produto } from '../types'
 
@@ -313,7 +313,7 @@ describe('1 — Autenticação', () => {
 
   it('login bem-sucedido como gerente abre dashboard', async () => {
     await loginAs('gerente')
-    expect(screen.getByTestId('view-dashboard')).toBeInTheDocument()
+    expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument()
   })
 
   it('login chama signIn com credenciais corretas', async () => {
@@ -334,14 +334,14 @@ describe('1 — Autenticação', () => {
   it('sessão existente faz auto-login direto ao dashboard', async () => {
     vi.mocked(db.getLoggedVendedor).mockResolvedValue(makeVendedor('gerente'))
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('view-dashboard')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('view-dashboard-vendedor')).toBeInTheDocument())
   })
 
   it('vendedor auto-logado não vê dashboard na sidebar', async () => {
     vi.mocked(db.getLoggedVendedor).mockResolvedValue(makeVendedor('vendedor'))
     render(<App />)
     await waitFor(() => expect(screen.queryByText('Entrar no sistema')).not.toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /Visão Geral/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Dashboard$/i })).not.toBeInTheDocument()
   })
 })
 
@@ -699,7 +699,7 @@ describe('7 — Permissões por Cargo', () => {
   it('gerente acessa todas as views de navegação', async () => {
     await loginAs('gerente')
     const navItems = [
-      /Visão Geral/i, /Funil Comercial/i, /^Clientes$/i, /^Pedidos$/i,
+      /^Dashboard$/i, /Funil Comercial/i, /^Clientes$/i, /^Pedidos$/i,
       /^Tarefas$/i, /Automações/i, /Prospecção/i, /^Equipe$/i, /Relatórios/i,
     ]
     navItems.forEach(label => {
@@ -709,7 +709,7 @@ describe('7 — Permissões por Cargo', () => {
 
   it('vendedor NÃO acessa: dashboard, automações, equipe, relatórios, prospecção', async () => {
     await loginAs('vendedor')
-    ;[/Visão Geral/i, /Automações/i, /^Equipe$/i, /Relatórios/i, /Prospecção/i].forEach(label => {
+    ;[/^Dashboard$/i, /Automações/i, /^Equipe$/i, /Relatórios/i, /Prospecção/i].forEach(label => {
       expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
     })
   })

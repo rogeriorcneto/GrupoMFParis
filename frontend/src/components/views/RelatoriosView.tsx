@@ -4,12 +4,15 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, R
 import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade, Missao } from '../../types'
 import { fetchTempoTelaRelatorio, type TempoTelaRelatorioItem, authFetch, BOT_URL } from '../../lib/botApi'
 import { stageLabels } from '../../utils/constants'
+import { calcularIndicadoresOperacionais } from '../../utils/indicadores-comerciais'
 import { calcularDuracoesEtapas, diasEtapaAtual, EtapaDuracao } from '../../utils/etapas'
 
 type Periodo = '7d' | '30d' | '90d' | 'total'
 const periodoLabels: Record<Periodo, string> = { '7d': '7 dias', '30d': '30 dias', '90d': '90 dias', 'total': 'Todo período' }
 
-const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], interacoes: Interacao[], produtos?: Produto[], pedidos?: Pedido[], tarefas?: Tarefa[], atividades?: Atividade[] }> = ({ clientes, vendedores, interacoes, produtos = [], pedidos = [], tarefas = [], atividades = [] }) => {
+const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], interacoes: Interacao[], produtos?: Produto[], pedidos?: Pedido[], tarefas?: Tarefa[], atividades?: Atividade[] }> = ({ clientes: clientesProp, vendedores, interacoes, produtos = [], pedidos = [], tarefas = [], atividades = [] }) => {
+  // Cards arquivados como duplicata não entram em nenhum agregado do relatório
+  const clientes = React.useMemo(() => clientesProp.filter(c => !c.arquivadoDuplicata), [clientesProp])
   const [periodo, setPeriodo] = React.useState<Periodo>('total')
 
   const hoje = new Date().toISOString().slice(0, 10)
@@ -518,6 +521,13 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
         const perdasCat = Object.entries(perdasList.reduce((acc, c) => { const k = c.categoriaPerda || 'outro'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).map(([k, v]) => ({ name: catLabels[k] || k, value: v, fill: catColors[k] || '#6B7280' }))
         const motivosFreq = Object.entries(perdasList.reduce((acc, c) => { if (c.motivoPerda) acc[c.motivoPerda] = (acc[c.motivoPerda] || 0) + 1; return acc }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5)
 
+        // Indicadores operacionais (spec PDFs): sem-compra, pipeline ponderado, mix produto, UF
+        const hojeIso = new Date().toISOString().slice(0, 10)
+        const inicioIso = threshold ? threshold.toISOString().slice(0, 10) : '0001-01-01'
+        const indOps = calcularIndicadoresOperacionais(clientes, pedidos, { inicio: inicioIso, fim: hojeIso }, hojeIso)
+        const topProdutos = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 10)
+        const vendasUF = [...indOps.porEstado.entries()].sort((a, b) => b[1].receita - a[1].receita)
+
         const KPICard: React.FC<{ label: string; value: string | number; sub?: string; color?: string }> = ({ label, value, sub, color }) => (
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4"><p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p><p className={`text-xl font-bold mt-1 ${color || 'text-gray-900'}`}>{value}</p>{sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}</div>
         )
@@ -537,6 +547,10 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
                 <KPICard label="Receita Média / Cliente" value={fmtCurrency(receitaMedia)} sub="valor da carteira" color="text-amber-700" />
                 <KPICard label="Clientes Classe A" value={classeA} sub="80% da receita" color="text-emerald-700" />
                 <KPICard label="Concentração Top 10" value={`${concentracaoTop10.toFixed(1)}%`} sub="do faturamento" color="text-rose-700" />
+                <KPICard label="Sem Compra 30d" value={indOps.semCompra.d30} sub="última compra >30d" color="text-yellow-600" />
+                <KPICard label="Sem Compra 60d" value={indOps.semCompra.d60} sub="última compra >60d" color="text-orange-600" />
+                <KPICard label="Sem Compra 90d" value={indOps.semCompra.d90} sub="última compra >90d" color="text-red-600" />
+                <KPICard label="Nunca Comprou" value={indOps.semCompra.nunca} sub="sem pedido confirmado" color="text-gray-500" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
@@ -562,10 +576,41 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
                 <KPICard label="Pedidos Fechados" value={pedidosFech} sub="confirmados" color="text-green-700" />
                 <KPICard label="Conversão Funil" value={`${taxaConversaoFunil.toFixed(1)}%`} sub="pedidos / leads" color="text-emerald-700" />
                 <KPICard label="Tempo Médio Fechamento" value={tempoMedioFech > 0 ? `${tempoMedioFech} dias` : '—'} sub="ciclo médio" color="text-pink-700" />
+                <KPICard label="Pipeline Aberto" value={fmtCurrency(indOps.pipelineAberto)} sub="propostas + negociações" color="text-sky-700" />
+                <KPICard label="Pipeline Ponderado" value={fmtCurrency(indOps.pipelinePonderado)} sub="conversão histórica" color="text-teal-700" />
+                <KPICard label="Enviados" value={indOps.enviadosCount} sub={`${fmtCurrency(indOps.enviadosValor)} em trânsito`} color="text-blue-600" />
+                <KPICard label="Previsão Faturamento" value={fmtCurrency(indOps.previsaoFaturamento)} sub="confirmado + enviado + pipeline" color="text-emerald-800" />
+                <KPICard label="Preço Médio Negociação" value={indOps.precoMedioNegociacao != null ? fmtCurrency(indOps.precoMedioNegociacao) : '—'} sub="valor médio em negociação" color="text-cyan-800" />
+                <KPICard label="Prazo Médio Negociação" value={indOps.prazoMedioNegociacao != null ? `${indOps.prazoMedioNegociacao} dias` : '—'} sub="tempo em negociação" color="text-fuchsia-700" />
+                <KPICard label="Mix Médio / Pedido" value={indOps.mixMedioItensPedido ?? '—'} sub="itens por pedido" color="text-violet-700" />
               </div>
               <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Volume por Etapa do Funil</h3>
                 <ResponsiveContainer width="100%" height={240}><BarChart data={[{ name: 'Leads', valor: leadsGerados }, { name: 'Prospecções', valor: prospeccoes }, { name: 'Diagnósticos', valor: diagnosticos }, { name: 'Propostas', valor: propostasEnviadas }, { name: 'Testes', valor: testesRealizados }, { name: 'Negociações', valor: negociacoes }, { name: 'Pedidos', valor: pedidosFech }]}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="valor" fill="#6366F1" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">7. Mix e Geografia</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 10 Produtos (receita no período)</h3>
+                  {topProdutos.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem vendas no período</p> : (
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b border-gray-200"><th className="text-left py-2 text-gray-500 font-medium">Produto</th><th className="text-right py-2 text-gray-500 font-medium">Qtd</th><th className="text-right py-2 text-gray-500 font-medium">Receita</th><th className="text-right py-2 text-gray-500 font-medium">%</th></tr></thead>
+                      <tbody>{topProdutos.map(([nome, v]) => (<tr key={nome} className="border-b border-gray-100"><td className="py-2 text-gray-900">{nome}</td><td className="py-2 text-right text-gray-600">{v.quantidade}</td><td className="py-2 text-right font-medium text-green-700">{fmtCurrency(v.receita)}</td><td className="py-2 text-right text-gray-600">{v.participacao}%</td></tr>))}</tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Vendas por UF (receita no período)</h3>
+                  {vendasUF.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem vendas no período</p> : (
+                    <table className="w-full text-sm">
+                      <thead><tr className="border-b border-gray-200"><th className="text-left py-2 text-gray-500 font-medium">UF</th><th className="text-right py-2 text-gray-500 font-medium">Pedidos</th><th className="text-right py-2 text-gray-500 font-medium">Receita</th></tr></thead>
+                      <tbody>{vendasUF.map(([uf, v]) => (<tr key={uf} className="border-b border-gray-100"><td className="py-2 text-gray-900">{uf}</td><td className="py-2 text-right text-gray-600">{v.pedidos}</td><td className="py-2 text-right font-medium text-green-700">{fmtCurrency(v.receita)}</td></tr>))}</tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             </div>
 

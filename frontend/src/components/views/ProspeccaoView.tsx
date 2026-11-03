@@ -306,7 +306,7 @@ const ProspeccaoView: React.FC<{
         </div>
         <button
           onClick={() => {
-            const sugestoes = clientes.map(cliente => {
+            const sugestoes = clientes.filter(c => !c.arquivadoDuplicata).map(cliente => {
               let acao = ''; let prioridade = 'media'
               if ((cliente.diasInativo || 0) > 30) { acao = `Urgente: Reativar ${cliente.razaoSocial} - ${cliente.diasInativo} dias inativo`; prioridade = 'alta' }
               else if (cliente.etapa === 'negociacao' && (cliente.score || 0) > 70) { acao = `Enviar proposta para ${cliente.razaoSocial} - Alta chance de conversão`; prioridade = 'alta' }

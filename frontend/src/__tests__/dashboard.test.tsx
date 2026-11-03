@@ -232,7 +232,7 @@ describe('DashboardView', () => {
     // Activity ranking sections
     expect(screen.getByText(/Liga/)).toBeTruthy()
     expect(screen.getByText(/Emails/)).toBeTruthy()
-    expect(screen.getByText(/WhatsApp/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /WhatsApp/ })).toBeTruthy()
     expect(screen.getByText(/Reuni/)).toBeTruthy()
   })
 
@@ -297,6 +297,8 @@ describe('DashboardView', () => {
     expect(screen.getByTestId('panel-equipe')).toBeTruthy()
     act(() => { vi.advanceTimersByTime(15000) })
     expect(screen.getByTestId('panel-competitiva')).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(15000) })
+    expect(screen.getByTestId('panel-comercial')).toBeTruthy()
     act(() => { vi.advanceTimersByTime(15000) })
     // Should wrap to saude
     expect(screen.getByTestId('panel-saude')).toBeTruthy()

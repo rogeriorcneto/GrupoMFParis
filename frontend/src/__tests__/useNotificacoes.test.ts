@@ -41,7 +41,7 @@ describe('useNotificacoes', () => {
       const initial = [
         { id: 1, tipo: 'info' as const, titulo: 'Teste', mensagem: 'Msg', lida: false, timestamp: '2025-01-01' },
       ]
-      const { result } = renderHook(() => useNotificacoes([], [], [], initial))
+      const { result } = renderHook(() => useNotificacoes([], [], [], null, initial))
       expect(result.current.notificacoes.length).toBeGreaterThanOrEqual(1)
       expect(result.current.notificacoes.find(n => n.id === 1)).toBeTruthy()
     })
@@ -50,7 +50,7 @@ describe('useNotificacoes', () => {
   describe('auto-geração de notificações', () => {
     it('gera notificação para cliente inativo > 10 dias', () => {
       const clientes = [sampleCliente({ diasInativo: 15, razaoSocial: 'Empresa Inativa' })]
-      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores))
+      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores, sampleVendedor({ cargo: 'gerente' })))
 
       const inativoNotif = result.current.notificacoes.find(n =>
         n.titulo === 'Cliente inativo' && n.mensagem.includes('Empresa Inativa')
@@ -67,7 +67,7 @@ describe('useNotificacoes', () => {
         razaoSocial: 'Empresa Amostra',
         diasInativo: 5,
       })]
-      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores))
+      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores, sampleVendedor({ cargo: 'gerente' })))
 
       const prazoNotif = result.current.notificacoes.find(n =>
         n.titulo.includes('Prazo vencido') && n.mensagem.includes('Empresa Amostra')
@@ -84,7 +84,7 @@ describe('useNotificacoes', () => {
         razaoSocial: 'Empresa Quase',
         diasInativo: 3,
       })]
-      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores))
+      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores, sampleVendedor({ cargo: 'gerente' })))
 
       const prazoNotif = result.current.notificacoes.find(n =>
         n.titulo.includes('Prazo vencendo') && n.mensagem.includes('Empresa Quase')
@@ -97,7 +97,7 @@ describe('useNotificacoes', () => {
       const vendedor = sampleVendedor({ metaVendas: 1000000, nome: 'Vendedor Fraco' })
       // Cliente com valor baixo = pipeline abaixo de 50% da meta
       const clientes = [sampleCliente({ vendedorId: vendedor.id, valorEstimado: 100000, diasInativo: 0 })]
-      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, [vendedor]))
+      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, [vendedor], sampleVendedor({ cargo: 'gerente' })))
 
       const metaNotif = result.current.notificacoes.find(n =>
         n.titulo === 'Meta em risco' && n.mensagem.includes('Vendedor Fraco')
@@ -111,7 +111,7 @@ describe('useNotificacoes', () => {
       const clientes = Array.from({ length: 60 }, (_, i) =>
         sampleCliente({ id: i + 1, diasInativo: 15 + i, razaoSocial: `Empresa ${i}` })
       )
-      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores))
+      const { result } = renderHook(() => useNotificacoes(clientes, tarefas, vendedores, sampleVendedor({ cargo: 'gerente' })))
       expect(result.current.notificacoes.length).toBeLessThanOrEqual(50)
     })
   })
@@ -170,7 +170,7 @@ describe('useNotificacoes', () => {
       const initial = [
         { id: 10, tipo: 'info' as const, titulo: 'Não lida', mensagem: 'msg', lida: false, timestamp: '2025-01-01' },
       ]
-      const { result } = renderHook(() => useNotificacoes([], [], [], initial))
+      const { result } = renderHook(() => useNotificacoes([], [], [], null, initial))
 
       await act(async () => {
         await result.current.markRead(10)
@@ -183,7 +183,7 @@ describe('useNotificacoes', () => {
 
     it('não chama DB para IDs negativos (auto-gerados)', async () => {
       const { result } = renderHook(() =>
-        useNotificacoes([sampleCliente({ diasInativo: 20 })], [], [sampleVendedor()])
+        useNotificacoes([sampleCliente({ diasInativo: 20 })], [], [sampleVendedor()], sampleVendedor())
       )
 
       const autoNotif = result.current.notificacoes.find(n => n.id < 0)
@@ -202,7 +202,7 @@ describe('useNotificacoes', () => {
         { id: 1, tipo: 'info' as const, titulo: 'A', mensagem: 'a', lida: false, timestamp: '2025-01-01' },
         { id: 2, tipo: 'warning' as const, titulo: 'B', mensagem: 'b', lida: false, timestamp: '2025-01-01' },
       ]
-      const { result } = renderHook(() => useNotificacoes([], [], [], initial))
+      const { result } = renderHook(() => useNotificacoes([], [], [], null, initial))
 
       await act(async () => {
         await result.current.markAllRead()

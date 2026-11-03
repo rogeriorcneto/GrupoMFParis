@@ -133,6 +133,8 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   const { newVersionAvailable, reloadApp } = useVersionCheck()
   const { dark, toggleDark } = useDarkMode()
   const [loggedUser, setLoggedUser] = useState<Vendedor | null>(hasPreloaded ? preloadedUser! : null)
+  const loggedUserRef = useRef(loggedUser)
+  loggedUserRef.current = loggedUser
   const [loginUsuario, setLoginUsuario] = useState('')
   const [loginSenha, setLoginSenha] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -181,7 +183,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
 
   // Carregar dados essenciais do Supabase após autenticação (core)
   // Não bloqueia UI: cada fetch atualiza seu próprio estado conforme chega.
-  const loadAllData = useCallback(async () => {
+  const loadAllData = useCallback(async (usuario: Vendedor | null = loggedUserRef.current) => {
     setIsLoading(false) // garante que a tela esteja liberada
     // Disparar em paralelo, sem await sequencial — cada um atualiza sua slice ao retornar
     db.fetchClientes().then(setClientes).catch(err => logger.error('clientes:', err))
@@ -190,8 +192,8 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     db.fetchProdutos().then(setProdutos).catch(err => logger.error('produtos:', err))
     db.fetchPedidos().then(setPedidos).catch(err => logger.error('pedidos:', err))
     db.fetchVendedores().then(setVendedores).catch(err => logger.error('vendedores:', err))
-    db.fetchNotificacoes(loggedUser?.cargo === 'gerente' ? undefined : loggedUser?.id).then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
-  }, [loggedUser])
+    db.fetchNotificacoes(usuario?.cargo === 'gerente' ? undefined : usuario?.id).then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
+  }, [])
 
   // Lazy load de datasets secundários (carregados quando a view é acessada)
   const secondaryLoaded = useRef<Set<string>>(new Set())
@@ -231,7 +233,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   useEffect(() => {
     if (hasPreloaded) {
       // Sessão já verificada pelo Shell — carregar dados diretamente
-      loadAllData().catch(err => logger.error('Erro loadAllData:', err))
+      loadAllData(loggedUserRef.current).catch(err => logger.error('Erro loadAllData:', err))
       startActiveTimer(preloadedUser!.id)
       return
     }
@@ -250,7 +252,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           setAuthChecked(true)
           setIsLoading(false)
           clearTimeout(safetyTimeout)
-          loadAllData().catch(err => logger.error('Erro loadAllData:', err))
+          loadAllData(vendedor).catch(err => logger.error('Erro loadAllData:', err))
           startActiveTimer(vendedor.id)
         }
       } catch {
@@ -485,7 +487,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
       const vendedor = await db.getLoggedVendedor()
       if (vendedor) {
         setLoggedUser(vendedor)
-        await loadAllData()
+        await loadAllData(vendedor)
         setActiveView(viewsPermitidas[vendedor.cargo][0])
         setLoginUsuario('')
         setLoginSenha('')
@@ -607,7 +609,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
                 handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDrop={handleDrop}
                 requestStageMove={requestStageMove}
                 handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
-                moverCliente={moverCliente}
+                moverCliente={moverCliente} criarNovoCiclo={criarNovoCiclo}
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
                 onNovoCiclo={handleNovoCiclo}
                 onVerNoFunil={(c) => { setActiveView('funil'); setSelectedClientePanel(c) }}
