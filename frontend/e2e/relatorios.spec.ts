@@ -4,14 +4,18 @@ import { loginAs, credentials } from './fixtures/auth.fixture'
 test.describe('Relatórios e Gráficos', () => {
   test('view renderiza sem erros para gerente', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Relatórios/i }).click()
-    await expect(page.locator('h2', { hasText: 'Relatórios e Gráficos' })).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Relatórios/i }).dispatchEvent('click')
+    await expect(page.getByRole('heading', { name: /Relatórios e Gráficos/ }).first()).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=Cannot read properties')).not.toBeVisible()
   })
 
   test('relatórios mostram gráficos ou dados', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Relatórios/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Relatórios/i }).dispatchEvent('click')
     await page.waitForTimeout(3_000)
 
     // Deve ter algum conteúdo visual (gráficos, tabelas, cards)
@@ -32,7 +36,9 @@ test.describe('Relatórios e Gráficos', () => {
 
   test('filtro de período funciona nos relatórios', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Relatórios/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Relatórios/i }).dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     // Procura botões de período ou select

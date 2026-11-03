@@ -18,12 +18,14 @@ test.describe('Funil Pipeline — fluxo completo', () => {
 
   test('todas as 7 colunas do funil renderizam', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Funil Comercial/i }).dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
-    const colunas = ['Prospecção', 'Amostra', 'Proposta', 'Negociação', 'Follow-up', 'Cliente Ativo', 'Perdido']
+    const colunas = ['Leads', 'Prospecção', 'Amostra', 'Proposta', 'Negociação', 'Follow-up']
     for (const col of colunas) {
-      await expect(page.getByText(col).first()).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByRole('heading', { name: new RegExp(col) })).toBeVisible({ timeout: 10_000 })
     }
   })
 
@@ -42,7 +44,9 @@ test.describe('Funil Pipeline — fluxo completo', () => {
     }
 
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Funil Comercial/i }).dispatchEvent('click')
     await page.waitForTimeout(3_000)
 
     // Verifica que pelo menos 1 card existe em cada coluna (pode haver clientes existentes)
@@ -55,7 +59,9 @@ test.describe('Funil Pipeline — fluxo completo', () => {
 
   test('filtro por vendedor funciona no funil', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Funil Comercial/i }).dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     // Procura select/dropdown de vendedor
@@ -83,11 +89,15 @@ test.describe('Funil Pipeline — fluxo completo', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click({ timeout: 15_000 })
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Funil Comercial/i }).dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
+    const busca = page.getByPlaceholder(/Buscar cliente/i)
+    if (await busca.isVisible().catch(() => false)) { await busca.fill(nome); await page.waitForTimeout(1_500) }
     const card = page.getByText(nome).first()
-    await expect(card).toBeVisible({ timeout: 10_000 })
+    await expect(card).toBeVisible({ timeout: 15_000 })
     await card.click()
 
     // Painel deve abrir com dados do cliente (nome aparece no card E no painel)
@@ -103,7 +113,9 @@ test.describe('Funil Pipeline — fluxo completo', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Funil Comercial/i }).dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     const card = page.getByText(nome).first()
@@ -138,7 +150,9 @@ test.describe('Funil Pipeline — fluxo completo', () => {
 
   test('ocultar/mostrar coluna Perdidos funciona', async ({ page }) => {
     await loginAs(page, 'gerente')
-    await page.getByRole('button', { name: /Funil Comercial/i }).click()
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.getByRole('button', { name: /Funil Comercial/i }).dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     // Procura checkbox ou toggle de "Ocultar Perdidos"

@@ -21,7 +21,9 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil Comercial")')
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.locator('button:has-text("Funil Comercial")').first().dispatchEvent('click')
 
     // Espera o funil renderizar
     await page.waitForTimeout(2_000)
@@ -39,7 +41,9 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil Comercial")')
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.locator('button:has-text("Funil Comercial")').first().dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     // Localiza o card do cliente
@@ -78,7 +82,9 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil Comercial")')
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.locator('button:has-text("Funil Comercial")').first().dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     // Clica no card
@@ -102,7 +108,9 @@ test.describe('Funil de Vendas', () => {
     const nome = data!.razao_social
 
     await loginAs(page, 'gerente')
-    await page.click('button:has-text("Funil Comercial")')
+    await page.getByRole('button', { name: /CRM MF Paris/i }).click()
+    await page.waitForTimeout(2_000)
+    await page.locator('button:has-text("Funil Comercial")').first().dispatchEvent('click')
     await page.waitForTimeout(2_000)
 
     // O cliente deve estar visível (na coluna Amostra)
