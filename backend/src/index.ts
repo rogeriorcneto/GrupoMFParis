@@ -1948,19 +1948,17 @@ async function start() {
   log.info('🚀 Iniciando CRM MF Paris Bot...')
   log.info(`📡 Servidor na porta ${CONFIG.port}`)
 
-  // Init email (loads config from Supabase)
-  await initEmail()
-
-  // Hidratar sessões do bot (vendedor logado + SAC) do KV — sem isso,
-  // todo deploy zera o Map em memória e o vendedor precisa mandar "login".
-  const { hydrateSessions } = await import('./session.js')
-  await hydrateSessions()
-
-  // Start Express
+  // Start Express PRIMEIRO — o healthcheck precisa passar mesmo se o Supabase
+  // estiver degradado (initEmail/hydrateSessions leem do banco e podem travar)
   app.listen(CONFIG.port, () => {
     log.info(`✅ API disponível em http://localhost:${CONFIG.port}`)
     log.info('Endpoints: GET /api/health, /api/whatsapp/status, /api/whatsapp/qr | POST /api/whatsapp/connect, /api/whatsapp/disconnect, /api/whatsapp/send | GET /api/email/status | POST /api/email/test, /api/email/send, /api/email/send-template | GET /api/config | POST /api/config')
   })
+
+  // Inits dependentes do Supabase — em background, nunca bloqueiam o boot
+  initEmail().catch(err => log.warn({ err }, 'Erro ao inicializar email no boot'))
+  import('./session.js').then(({ hydrateSessions }) => hydrateSessions())
+    .catch(err => log.warn({ err }, 'Erro ao hidratar sessões no boot'))
 
   // Auto-connect WhatsApp (se já tiver sessão salva)
   try {
