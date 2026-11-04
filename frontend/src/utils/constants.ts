@@ -57,13 +57,13 @@ export const subStatusFollowUpLabels: Record<string, string> = {
 
 /** Status do kanban de pedidos no Omie: etapa crua (10-80) ou canônica → label */
 export const omieEtapaLabels: Record<string, string> = {
-  '10': 'Análise Financeiro',
-  '20': 'Faturar',
-  '30': 'Separado no Estoque',
+  '10': 'Pedido Aprovado',
+  '20': 'Em Produção',
+  '30': 'Em Produção',
   '40': 'Faturado',
-  '50': 'Coletado',
-  '60': 'Entregue',
-  '70': 'Entregue',
+  '50': 'Faturado',
+  '60': 'Faturado',
+  '70': 'Expedido',
   '80': 'Entregue',
   analise_financeiro: 'Análise Financeiro',
   faturar: 'Faturar',
