@@ -502,7 +502,16 @@ export interface Missao {
   dataRetorno: string
   veiculo?: string
   hotel?: string
-  status: 'planejada' | 'em_andamento' | 'concluida' | 'cancelada'
+  status: 'planejada' | 'rascunho' | 'aguardando_aprovacao' | 'aprovada' | 'reprovada' | 'em_andamento' | 'concluida' | 'cancelada'
+  orcamentoPrevisto?: any
+  meta?: any
+  resultadoEsperado?: string
+  aprovadoPor?: number
+  aprovadoEm?: string
+  motivoReprovacao?: string
+  solicitanteId?: number
+  resumoIa?: string
+  iem?: number | null
   metas?: {
     visitas?: number
     amostras?: number

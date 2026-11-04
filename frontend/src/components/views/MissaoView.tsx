@@ -72,8 +72,14 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
     else showToast?.('error', r.error || 'Erro')
   }
 
+  const acao = async (m: Missao, rota: string, body?: any, msg?: string) => {
+    const r = await api(`/api/missoes/${m.id}/${rota}`, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
+    if (r.success) { showToast?.('success', msg || 'Feito'); load(); if (detalhe && detalhe.missao.id === m.id) abrir(m) }
+    else showToast?.('error', r.error || 'Erro')
+  }
+
   const concluir = async (m: Missao) => {
-    const r = await api(`/api/missoes/${m.id}/concluir`, { method: 'POST' })
+    const r = await api(`/api/missoes/${m.id}/encerrar`, { method: 'POST' })
     if (r.success) { showToast?.('success', 'Missão concluída'); load(); if (detalhe && detalhe.missao.id === m.id) abrir(m) }
     else showToast?.('error', r.error || 'Erro')
   }
@@ -130,7 +136,7 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
   const clientesOptions = useMemo(() => clientes.filter(c => loggedUser?.cargo === 'gerente' || c.vendedorId === loggedUser?.id), [clientes, loggedUser])
 
   const badge = (s: string) => {
-    const map: Record<string, string> = { planejada: 'bg-gray-100 text-gray-700', em_andamento: 'bg-blue-100 text-blue-700', concluida: 'bg-green-100 text-green-700', cancelada: 'bg-red-100 text-red-700' }
+    const map: Record<string, string> = { planejada: 'bg-gray-100 text-gray-700', rascunho: 'bg-gray-100 text-gray-700', aguardando_aprovacao: 'bg-amber-100 text-amber-700', aprovada: 'bg-sky-100 text-sky-700', reprovada: 'bg-red-100 text-red-700', em_andamento: 'bg-blue-100 text-blue-700', concluida: 'bg-green-100 text-green-700', cancelada: 'bg-red-100 text-red-700' }
     return <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${map[s] || map.planejada}`}>{s.replace('_', ' ')}</span>
   }
 
@@ -150,14 +156,33 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
             <div className="bg-gray-50 rounded-lg p-3"><MapPinIcon className="h-4 w-4 mb-1 text-gray-500" /><p className="font-medium">Cidades</p><p>{detalhe.missao.cidades?.join(', ') || '-'}</p></div>
             <div className="bg-gray-50 rounded-lg p-3"><CurrencyDollarIcon className="h-4 w-4 mb-1 text-gray-500" /><p className="font-medium">Custo estimado</p><p>R$ {detalhe.missao.custoEstimado?.toLocaleString('pt-BR') || 0}</p></div>
           </div>
-          {detalhe.missao.status === 'planejada' && (
+          {(detalhe.missao.status === 'planejada' || detalhe.missao.status === 'rascunho') && (
+            <div className="mt-4 flex gap-2 flex-wrap">
+              <button onClick={() => acao(detalhe.missao, 'solicitar-aprovacao', undefined, 'Enviado para aprovação')} className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm">Solicitar aprovação</button>
+              <button onClick={() => iniciar(detalhe.missao)} className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">Iniciar sem aprovação</button>
+            </div>
+          )}
+          {detalhe.missao.status === 'aguardando_aprovacao' && isGerente && (
+            <div className="mt-4 flex gap-2 flex-wrap">
+              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'aprovar' }, 'Missão aprovada')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">✅ Aprovar</button>
+              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'alteracao', motivo: 'Solicito ajustes' }, 'Alteração solicitada')} className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">✏️ Solicitar alteração</button>
+              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'reprovar', motivo: 'Reprovada' }, 'Missão reprovada')} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">❌ Reprovar</button>
+            </div>
+          )}
+          {detalhe.missao.status === 'aprovada' && (
             <div className="mt-4 flex gap-2">
               <button onClick={() => iniciar(detalhe.missao)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">Iniciar missão</button>
             </div>
           )}
           {detalhe.missao.status === 'em_andamento' && (
             <div className="mt-4 flex gap-2">
-              <button onClick={() => concluir(detalhe.missao)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">Concluir missão</button>
+              <button onClick={() => concluir(detalhe.missao)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">Finalizar missão (calcula IEM)</button>
+            </div>
+          )}
+          {detalhe.missao.iem !== null && detalhe.missao.iem !== undefined && (
+            <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <p className="text-sm font-bold text-purple-800">IEM — Índice de Eficiência da Missão: {detalhe.missao.iem}/100</p>
+              {detalhe.missao.resumoIa && <p className="text-xs text-purple-700 mt-1">{detalhe.missao.resumoIa}</p>}
             </div>
           )}
         </div>

@@ -24,6 +24,15 @@ function missaoFromDb(row: any) {
     status: row.status,
     metas: row.metas || {},
     custoEstimado: Number(row.custo_estimado) || 0,
+    orcamentoPrevisto: row.orcamento_previsto || null,
+    meta: row.meta || null,
+    resultadoEsperado: row.resultado_esperado || '',
+    aprovadoPor: row.aprovado_por,
+    aprovadoEm: row.aprovado_em,
+    motivoReprovacao: row.motivo_reprovacao || '',
+    solicitanteId: row.solicitante_id,
+    resumoIa: row.resumo_ia || '',
+    iem: row.iem != null ? Number(row.iem) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -422,4 +431,145 @@ missoesRouter.get('/dashboard', requireGerente, async (req: any, res: any) => {
     log.error({ err }, 'Erro no dashboard')
     res.status(500).json({ success: false, error: err.message || 'Erro interno' })
   }
+})
+
+// ─── v2: Workflow de aprovação ────────────────────────────────────────────────
+
+// Gerente solicita aprovação (rascunho → aguardando_aprovacao)
+missoesRouter.post('/:id/solicitar-aprovacao', async (req: any, res: any) => {
+  try {
+    const vendedor = await currentVendedor(req)
+    if (!vendedor) { res.status(401).json({ success: false, error: 'Não autenticado' }); return }
+    const id = Number(req.params.id)
+    const { data: m } = await supabase.from('missoes').select('*').eq('id', id).single()
+    if (!m) { res.status(404).json({ success: false, error: 'Missão não encontrada' }); return }
+    if (!(await canAccessMission(vendedor, m))) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const { error } = await supabase.from('missoes').update({ status: 'aguardando_aprovacao', solicitante_id: vendedor.id, updated_at: new Date().toISOString() }).eq('id', id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+// Aprovar / reprovar / solicitar alteração (gerente ou diretor = cargo gerente+)
+missoesRouter.post('/:id/aprovar', requireGerente, async (req: any, res: any) => {
+  try {
+    const vendedor = await currentVendedor(req)
+    if (!vendedor) { res.status(401).json({ success: false, error: 'Não autenticado' }); return }
+    const id = Number(req.params.id)
+    const { acao, motivo } = req.body as { acao: 'aprovar' | 'reprovar' | 'alteracao'; motivo?: string }
+    const status = acao === 'aprovar' ? 'aprovada' : acao === 'reprovar' ? 'reprovada' : 'rascunho'
+    const { data, error } = await supabase.from('missoes').update({
+      status,
+      aprovado_por: vendedor.id,
+      aprovado_em: acao === 'aprovar' ? new Date().toISOString() : null,
+      motivo_reprovacao: motivo || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', id).select().single()
+    if (error) throw error
+    res.json({ success: true, data: missaoFromDb(data) })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+// ─── v2: Participantes, clientes, visitas, avaliações ─────────────────────────
+
+missoesRouter.post('/:id/vendedores', async (req: any, res: any) => {
+  try {
+    const id = Number(req.params.id)
+    const { vendedorIds, liderId } = req.body as { vendedorIds: number[]; liderId?: number }
+    if (!Array.isArray(vendedorIds)) { res.status(400).json({ success: false, error: 'vendedorIds obrigatório' }); return }
+    await supabase.from('missao_vendedores').delete().eq('missao_id', id)
+    const rows = vendedorIds.map(vid => ({ missao_id: id, vendedor_id: vid, papel: vid === liderId ? 'lider' : 'acompanhado' }))
+    const { error } = await supabase.from('missao_vendedores').insert(rows)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+missoesRouter.post('/:id/clientes', async (req: any, res: any) => {
+  try {
+    const id = Number(req.params.id)
+    const { clienteIds } = req.body as { clienteIds: { id: number; dia?: string; ordem?: number }[] }
+    if (!Array.isArray(clienteIds)) { res.status(400).json({ success: false, error: 'clienteIds obrigatório' }); return }
+    const rows = clienteIds.map(c => ({ missao_id: id, cliente_id: c.id, planejado: true, dia: c.dia || null, ordem: c.ordem || null }))
+    const { error } = await supabase.from('missao_clientes').upsert(rows, { onConflict: 'missao_id,cliente_id' })
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+// Execução: registrar visita (check-in da missão)
+missoesRouter.post('/:id/visitas', async (req: any, res: any) => {
+  try {
+    const id = Number(req.params.id)
+    const b = req.body
+    // cliente avulso (não planejado) → marca em missao_clientes
+    if (b.clienteId && b.planejado === false) {
+      await supabase.from('missao_clientes').upsert({ missao_id: id, cliente_id: b.clienteId, planejado: false }, { onConflict: 'missao_id,cliente_id' })
+    }
+    const { data, error } = await supabase.from('missao_visitas').insert({
+      missao_id: id, cliente_id: b.clienteId || null, tarefa_id: b.tarefaId || null,
+      vendedor_acompanhado_id: b.vendedorAcompanhadoId || null,
+      chegada_em: b.chegadaEm || null, saida_em: b.saidaEm || null,
+      localizacao: b.localizacao || null, resultado: b.resultado || null,
+      concorrentes: b.concorrentes || null, objecoes: b.objecoes || null,
+      potencial: b.potencial || null, proxima_acao: b.proximaAcao || null,
+      anexos: b.anexos || [],
+    }).select().single()
+    if (error) throw error
+    res.json({ success: true, data })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+// Avaliação do vendedor acompanhado
+missoesRouter.post('/:id/avaliacoes', async (req: any, res: any) => {
+  try {
+    const id = Number(req.params.id)
+    const b = req.body
+    const { data, error } = await supabase.from('missao_avaliacoes').insert({
+      missao_id: id, visita_id: b.visitaId || null, vendedor_id: b.vendedorId,
+      conhecimento: b.conhecimento, negociacao: b.negociacao, postura: b.postura,
+      crm: b.crm, planejamento: b.planejamento, observacao: b.observacao || null,
+    }).select().single()
+    if (error) throw error
+    res.json({ success: true, data })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+// Encerrar missão: calcula IEM + gera resumo (IA best-effort)
+missoesRouter.post('/:id/encerrar', async (req: any, res: any) => {
+  try {
+    const id = Number(req.params.id)
+    const { data: iem } = await supabase.rpc('calcular_iem', { p_missao_id: id })
+    const [{ data: visitas }, { data: despesas }, { data: avaliacoes }, { data: missao }] = await Promise.all([
+      supabase.from('missao_visitas').select('*').eq('missao_id', id),
+      supabase.from('missao_despesas').select('*').eq('missao_id', id),
+      supabase.from('missao_avaliacoes').select('*').eq('missao_id', id),
+      supabase.from('missoes').select('*').eq('id', id).single(),
+    ])
+    const v = visitas || []
+    const custo = (despesas || []).reduce((s: number, d: any) => s + Number(d.valor || 0), 0)
+    const resumo = `${missao?.nome || 'Missão'}: ${v.length} visitas (${v.filter(x => x.resultado === 'visitado').length} realizadas), ${(avaliacoes || []).length} avaliações de equipe, custo R$ ${custo.toFixed(2)}, IEM ${iem ?? '—'}/100`
+    const { error } = await supabase.from('missoes').update({
+      status: 'concluida', iem, resumo_ia: resumo, updated_at: new Date().toISOString(),
+    }).eq('id', id)
+    if (error) throw error
+    res.json({ success: true, data: { iem, resumo } })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
+
+// Detalhe completo v2 (missão + tudo)
+missoesRouter.get('/:id/detalhe', async (req: any, res: any) => {
+  try {
+    const id = Number(req.params.id)
+    const [m, vend, cli, vis, ava, desp] = await Promise.all([
+      supabase.from('missoes').select('*').eq('id', id).single(),
+      supabase.from('missao_vendedores').select('*').eq('missao_id', id),
+      supabase.from('missao_clientes').select('*, clientes(id, razao_social)').eq('missao_id', id),
+      supabase.from('missao_visitas').select('*').eq('missao_id', id),
+      supabase.from('missao_avaliacoes').select('*').eq('missao_id', id),
+      supabase.from('missao_despesas').select('*').eq('missao_id', id),
+    ])
+    if (!m.data) { res.status(404).json({ success: false, error: 'Missão não encontrada' }); return }
+    res.json({ success: true, data: { missao: m.data, vendedores: vend.data || [], clientes: cli.data || [], visitas: vis.data || [], avaliacoes: ava.data || [], despesas: desp.data || [] } })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
 })
