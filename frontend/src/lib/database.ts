@@ -1322,7 +1322,7 @@ export async function rejeitarCancelamentoPedido(id: number): Promise<void> {
 export async function updatePedido(id: number, fields: {
   observacoes?: string
   formaPagamento?: string
-  tipoFrete?: 'CIF' | 'FOB' | null
+  tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | null
   itens?: ItemPedido[]
   totalValor?: number
 }): Promise<Pedido> {

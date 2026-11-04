@@ -438,7 +438,7 @@ export interface Pedido {
   omieErro?: string
   tipo?: 'venda' | 'bonificacao'
   formaPagamento?: string
-  tipoFrete?: 'CIF' | 'FOB'
+  tipoFrete?: 'CIF' | 'FOB' | 'VISITA'
   enderecoDiferente?: boolean
   enderecoEntregaRua?: string
   enderecoEntregaNumero?: string

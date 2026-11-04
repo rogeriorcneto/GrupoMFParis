@@ -120,7 +120,7 @@ export interface Pedido {
   totalValor: number
   tipo?: 'venda' | 'bonificacao'
   formaPagamento?: string
-  tipoFrete?: 'CIF' | 'FOB' | ''
+  tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | ''
 }
 
 export interface ItemPedido {

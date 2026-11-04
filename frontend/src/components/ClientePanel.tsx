@@ -72,7 +72,7 @@ interface ClientePanelProps {
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
   onSolicitarCancelamentoPedido?: (pedidoId: number, motivo: string) => Promise<void>
   /** Edita conteúdo de pedido ainda não integrado ao Omie (rascunho/enviado). */
-  onEditarPedido?: (pedidoId: number, fields: { observacoes?: string; formaPagamento?: string; tipoFrete?: 'CIF' | 'FOB' | null; itens?: ItemPedido[]; totalValor?: number }) => Promise<void>
+  onEditarPedido?: (pedidoId: number, fields: { observacoes?: string; formaPagamento?: string; tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | null; itens?: ItemPedido[]; totalValor?: number }) => Promise<void>
   /** Redireciona para o Funil já posicionado no card deste cliente. */
   onVerNoFunil?: (c: Cliente) => void
   /** Redireciona para a página de Tarefas. */
@@ -262,7 +262,7 @@ export default function ClientePanel({
   // Pedido rápido state
   const [showPedido, setShowPedido] = useState(false)
   const [pedidoTipo, setPedidoTipo] = useState<'venda' | 'bonificacao'>('venda')
-  const [pedidoFrete, setPedidoFrete] = useState<'CIF' | 'FOB' | ''>('')
+  const [pedidoFrete, setPedidoFrete] = useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
   const [pedidoItens, setPedidoItens] = useState<ItemPedido[]>([])
   const [pedidoObs, setPedidoObs] = useState('')
   const [pedidoSaving, setPedidoSaving] = useState(false)
@@ -279,7 +279,7 @@ export default function ClientePanel({
   const [showEditProposta, setShowEditProposta] = useState(false)
   const [ultimaProposta, setUltimaProposta] = useState<PropostaHistorico | null>(null)
   const [editPropostaItens, setEditPropostaItens] = useState<ItemPedido[]>([])
-  const [editPropostaFrete, setEditPropostaFrete] = useState<'CIF' | 'FOB' | ''>('')
+  const [editPropostaFrete, setEditPropostaFrete] = useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
   const [editPropostaPagamento, setEditPropostaPagamento] = useState(DEFAULT_PAYMENT_TERM)
   const [editPropostaObs, setEditPropostaObs] = useState('')
   const [editPropostaSaving, setEditPropostaSaving] = useState(false)
@@ -296,7 +296,7 @@ export default function ClientePanel({
   const [editPedidoItens, setEditPedidoItens] = useState<ItemPedido[]>([])
   const [editPedidoObs, setEditPedidoObs] = useState('')
   const [editPedidoPagamento, setEditPedidoPagamento] = useState(DEFAULT_PAYMENT_TERM)
-  const [editPedidoFrete, setEditPedidoFrete] = useState<'CIF' | 'FOB' | ''>('')
+  const [editPedidoFrete, setEditPedidoFrete] = useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
   const [editPedidoProdutoSel, setEditPedidoProdutoSel] = useState<number | ''>('')
   const [editPedidoSaving, setEditPedidoSaving] = useState(false)
   const [ganhouLoading, setGanhouLoading] = useState(false)
@@ -671,7 +671,7 @@ export default function ClientePanel({
   const handleEnviarPedido = async () => {
     if (!onAddPedido) return
     if (pedidoItens.length === 0) { addNotificacao('warning', 'Sem itens', 'Adicione pelo menos um produto.', c.id); return }
-    if (!pedidoFrete) { addNotificacao('warning', 'Frete obrigatório', 'Selecione o frete (CIF ou FOB).', c.id); return }
+    if (!pedidoFrete) { addNotificacao('warning', 'Frete obrigatório', 'Selecione o tipo de frete.', c.id); return }
     if (!pedidoFormaPagamento.trim()) { addNotificacao('warning', 'Pagamento obrigatório', 'Selecione a forma de pagamento.', c.id); return }
     if (!pedidoObs.trim()) { addNotificacao('warning', 'Observações obrigatórias', 'Informe as observações do pedido.', c.id); return }
     if (pedidoItens.some(i => !i.sku?.trim())) { addNotificacao('warning', 'SKU obrigatório', 'Todos os produtos devem ter SKU preenchido.', c.id); return }
@@ -3087,7 +3087,7 @@ export default function ClientePanel({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Frete</label>
-                  <select value={editPedidoFrete} onChange={e => setEditPedidoFrete(e.target.value as 'CIF' | 'FOB')}
+                  <select value={editPedidoFrete} onChange={e => setEditPedidoFrete(e.target.value as 'CIF' | 'FOB' | 'VISITA')}
                     className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-apple">
                     <option value="">Selecione…</option>
                     <option value="CIF">CIF (emitente paga)</option>

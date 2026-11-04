@@ -1544,6 +1544,12 @@ export async function onPedidoAprovado(
   tabelaPreco?: 'A' | 'B',
 ): Promise<{ success: boolean; error?: string; omie_codigo?: string }> {
   try {
+    // Frete "Entregue em Visita" (VISITA) não vai ao Omie — apenas aprovação + CRM
+    const { data: p } = await supabase.from('pedidos').select('tipo_frete').eq('id', pedidoId).single()
+    if ((p?.tipo_frete || '').toUpperCase() === 'VISITA') {
+      log.info({ pedidoId }, '🚗 Frete "Entregue em Visita" — pedido aprovado sem envio ao Omie')
+      return { success: true, omie_codigo: '' }
+    }
     log.info({ pedidoId, tabelaPreco }, '🚀 Pedido aprovado — enviando automaticamente ao Omie...')
     const response = await criarPedidoOmie(pedidoId, tabelaPreco)
     return {

@@ -66,7 +66,7 @@ export default function FunilModals({
 }: FunilModalsProps) {
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-  const [pedidoFrete, setPedidoFrete] = React.useState<'CIF' | 'FOB' | ''>('')
+  const [pedidoFrete, setPedidoFrete] = React.useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
   const [pedidoItens, setPedidoItens] = React.useState<ItemPedido[]>([])
   const [pedidoObs, setPedidoObs] = React.useState('')
   const [pedidoSaving, setPedidoSaving] = React.useState(false)
@@ -81,7 +81,7 @@ export default function FunilModals({
   }, [showModalAmostra])
 
   // ── Proposta / Negociação state ──
-  const [propostaFrete, setPropostaFrete] = React.useState<'CIF' | 'FOB' | ''>('')
+  const [propostaFrete, setPropostaFrete] = React.useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
   const [propostaPagamento, setPropostaPagamento] = React.useState(DEFAULT_PAYMENT_TERM)
   const [propostaItens, setPropostaItens] = React.useState<ItemPedido[]>([])
   const [propostaObs, setPropostaObs] = React.useState('')
@@ -370,6 +370,7 @@ export default function FunilModals({
                     <div className="flex gap-2">
                       <button onClick={() => setPedidoFrete('CIF')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>📦 CIF (Entrega)</button>
                       <button onClick={() => setPedidoFrete('FOB')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🏭 FOB (Retirada)</button>
+                      <button onClick={() => setPedidoFrete('VISITA')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'VISITA' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🚗 Entregue em Visita</button>
                     </div>
                   </div>
                   <input type="text" placeholder="🔍 Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />

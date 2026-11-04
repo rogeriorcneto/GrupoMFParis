@@ -12,7 +12,7 @@ interface PropostaItem {
 
 interface PropostaPdfOptions {
   formaPagamento?: string
-  tipoFrete?: 'CIF' | 'FOB' | ''
+  tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | ''
   dataLancamento?: string
 }
 
@@ -274,7 +274,8 @@ export async function gerarPropostaPDF(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8.2)
   doc.setTextColor(75, 85, 99)
-  doc.text(`Condição de entrega: ${options.tipoFrete || 'A combinar'}`, margin, y)
+  const freteLabel = options.tipoFrete === 'VISITA' ? 'Entregue em Visita' : options.tipoFrete || 'A combinar'
+  doc.text(`Condição de entrega: ${freteLabel}`, margin, y)
   y += 4.8
   doc.text(`Forma de pagamento: ${options.formaPagamento || 'A combinar'}`, margin, y)
 
