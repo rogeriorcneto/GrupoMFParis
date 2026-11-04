@@ -1008,7 +1008,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           </div>
                         )}
                         {cliente.redesSociais && (() => {
-                          const entries = cliente.redesSociais!.split(/[,;\s]+/).filter(Boolean)
+                          const rs: any = cliente.redesSociais
+                          const entries = (Array.isArray(rs) ? rs : String(rs).split(/[,;\s]+/)).filter(Boolean)
                           const socials: { icon: string; url: string; title: string }[] = []
                           for (const entry of entries) {
                             const e = entry.toLowerCase().trim()
