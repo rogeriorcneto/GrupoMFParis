@@ -774,7 +774,8 @@ export async function criarPedidoOmie(
 
   // 5. Cabeçalho do pedido
   const cabecalho: any = {
-    codigo_pedido_integracao: `CRM-${tipoPedido === 'bonificacao' ? 'AMT' : 'PED'}-${pedidoId}`,
+    // Sufixo '-N2': banco novo reiniciou IDs, Omie ainda tem CRM-PED-{id} antigos
+    codigo_pedido_integracao: `CRM-${tipoPedido === 'bonificacao' ? 'AMT' : 'PED'}-${pedidoId}-N2`,
     codigo_cliente: codigoClienteOmie,
     data_previsao: dataPrevisao,
     etapa: '10',
@@ -1025,7 +1026,7 @@ export async function alterarPedidoOmie(pedidoId: number, estrutura: any): Promi
   body.cabecalho = {
     ...(estrutura?.cabecalho || {}),
     codigo_pedido: omieCodigo,
-    codigo_pedido_integracao: estrutura?.cabecalho?.codigo_pedido_integracao || `CRM-PED-${pedidoId}`,
+    codigo_pedido_integracao: estrutura?.cabecalho?.codigo_pedido_integracao || `CRM-PED-${pedidoId}-N2`,
   }
   // Campos de cabeçalho que o Omie recusa na alteração
   delete body.cabecalho.numero_pedido
