@@ -1079,6 +1079,7 @@ interface JobPendente {
   canal: string
   templateId: number | null
   assunto: string | null
+  mensagem: string | null
 }
 
 export async function claimJobsPendentes(): Promise<JobPendente[]> {
@@ -1090,6 +1091,7 @@ export async function claimJobsPendentes(): Promise<JobPendente[]> {
     canal: r.canal,
     templateId: r.template_id,
     assunto: r.assunto,
+    mensagem: r.mensagem,
   }))
 }
 
@@ -1407,4 +1409,70 @@ export async function fetchAcademiaSessionCounts(): Promise<Map<number, { total:
     }
   }
   return map
+}
+
+// ============================================
+// PONTE AUTOMAÇÕES (UI → worker)
+// ============================================
+
+export async function insertJobAutomacao(j: {
+  clienteId: number; canal: string; tipo: string; mensagem?: string | null
+  assunto?: string | null; templateId?: number | null; agendadoPara: string; automacaoId?: string
+}): Promise<void> {
+  const { error } = await supabase.from('jobs_automacao').insert({
+    cliente_id: j.clienteId, canal: j.canal, tipo: j.tipo,
+    mensagem: j.mensagem || null, assunto: j.assunto || null,
+    template_id: j.templateId || null, automacao_id: j.automacaoId || null,
+    agendado_para: j.agendadoPara, status: 'pendente',
+  })
+  if (error) log.error({ error }, 'Erro insertJobAutomacao')
+}
+
+export async function fetchAutomacoesAtivas(): Promise<any[]> {
+  const { data, error } = await supabase.from('automacoes').select('*').eq('ativo', true)
+  if (error) { log.error({ error }, 'Erro fetchAutomacoesAtivas'); return [] }
+  return data || []
+}
+
+export async function fetchAutomacaoById(id: string): Promise<any | null> {
+  const { data, error } = await supabase.from('automacoes').select('*').eq('id', id).single()
+  if (error) return null
+  return data
+}
+
+export async function fetchAutomacaoEventosPendentes(limit = 100): Promise<any[]> {
+  const { data, error } = await supabase.from('automacao_eventos')
+    .select('*').eq('processado', false).order('criado_em', { ascending: true }).limit(limit)
+  if (error) { log.error({ error }, 'Erro fetchAutomacaoEventos'); return [] }
+  return data || []
+}
+
+export async function marcarEventoProcessado(id: number): Promise<void> {
+  await supabase.from('automacao_eventos').update({ processado: true }).eq('id', id)
+}
+
+export async function updateAutomacaoExecucao(id: string, execucoes: number): Promise<void> {
+  await supabase.from('automacoes').update({
+    execucoes, ultima_execucao: new Date().toISOString(), atualizado_em: new Date().toISOString(),
+  }).eq('id', id)
+}
+
+export async function updateClienteEtapa(clienteId: number, etapa: string): Promise<void> {
+  const { error } = await supabase.from('clientes').update({ etapa }).eq('id', clienteId)
+  if (error) log.error({ error }, 'Erro updateClienteEtapa')
+}
+
+export async function updateClienteScore(clienteId: number, score: number): Promise<void> {
+  const { error } = await supabase.from('clientes').update({ score }).eq('id', clienteId)
+  if (error) log.error({ error }, 'Erro updateClienteScore')
+}
+
+export async function insertNotificacao(n: {
+  titulo: string; mensagem: string; tipo: string; clienteId?: number | null; vendedorId?: number | null
+}): Promise<void> {
+  const { error } = await supabase.from('notificacoes').insert({
+    titulo: n.titulo, mensagem: n.mensagem, tipo: n.tipo,
+    cliente_id: n.clienteId || null, vendedor_id: n.vendedorId || null,
+  })
+  if (error) log.error({ error }, 'Erro insertNotificacao')
 }

@@ -18,7 +18,7 @@ import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
-import { processarJobsPendentes } from './cron.js'
+import { processarJobsPendentes, avaliarAutomacoes, executarAutomacaoManual } from './cron.js'
 import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter, omieDocsRouter } from './routes/omie.js'
 import { placesRouter } from './routes/places.js'
@@ -1359,6 +1359,14 @@ app.use('/api/trafico', requireAuth, requireGerente, traficoRouter)
 app.use('/api/leads-rf', requireAuth, leadsRfRouter)
 app.use('/api/vendedores', requireAuth, requireGerente, vendedoresRouter)
 app.use('/api/missoes', missoesRouter)
+
+// Execução manual de automação (botão 'Executar agora')
+app.post('/api/automacoes/:id/executar', requireAuth, async (req, res) => {
+  try {
+    const r = await executarAutomacaoManual(String(req.params.id), req.body?.clienteId ? Number(req.body.clienteId) : null)
+    res.json({ success: r.ok, error: r.erro })
+  } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
+})
 app.use('/api/maps', requireAuth, mapsRouter)
 
 // ─── Academia de Candidatos (links temporários, sem login no CRM) ───
@@ -1997,7 +2005,7 @@ async function start() {
   setInterval(async () => {
     if (cronRunning) return
     cronRunning = true
-    try { await processarJobsPendentes() } finally { cronRunning = false }
+    try { await avaliarAutomacoes(); await processarJobsPendentes() } finally { cronRunning = false }
   }, 5 * 60 * 1000)
   log.info('⏰ Scheduler de jobs: a cada 5 minutos')
 
