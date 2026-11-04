@@ -598,6 +598,11 @@ export async function criarPedidoOmie(
 
   if (pedError || !pedido) throw new Error(`Pedido ${pedidoId} não encontrado no CRM`)
 
+  // Frete "Entregue em Visita" não vai ao Omie — fluxo só no CRM
+  if ((pedido.tipo_frete || '').toUpperCase() === 'VISITA') {
+    throw new Error(`Pedido ${pedidoId} tem frete "Entregue em Visita" e não deve ser enviado ao Omie.`)
+  }
+
   // Pedido precisa estar confirmado (aprovado pelo gerente)
   if (pedido.status !== 'confirmado') {
     throw new Error(`Pedido ${pedidoId} não está aprovado. Status atual: "${pedido.status}". Somente pedidos confirmados podem ser enviados ao Omie.`)
