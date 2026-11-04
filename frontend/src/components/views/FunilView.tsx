@@ -3,7 +3,7 @@ import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHist
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
-import { fetchPropostasByCliente } from '../../lib/database'
+import { fetchAllPropostas } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
 
@@ -102,20 +102,11 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   const hasLock = amostraLockedClients.length > 0 || followUpLockedClients.length > 0
 
-  // Carregar propostas de todos os clientes
+  // Carregar propostas — 1 query só (antes era 1 request por cliente: ~1.600 requests)
   useEffect(() => {
-    const loadAll = async () => {
-      const all: PropostaHistorico[] = []
-      for (const c of clientes) {
-        try {
-          const list = await fetchPropostasByCliente(c.id)
-          all.push(...list)
-        } catch { /* ignore */ }
-      }
-      setPropostasLoaded(all)
-    }
-    loadAll()
-  }, [clientes])
+    if (propostas.length > 0) return
+    fetchAllPropostas().then(setPropostasLoaded).catch(() => {})
+  }, [propostas.length])
 
   // Agrupar propostas por cliente (use prop se fornecida, senão loaded)
   const propostasPorCliente = useMemo(() => {

@@ -1552,6 +1552,16 @@ export async function savePropostaHistorico(
   return propostaFromDb(data)
 }
 
+export async function fetchAllPropostas(): Promise<PropostaHistorico[]> {
+  const { data, error } = await supabase
+    .from('propostas')
+    .select('*')
+    .order('criado_em', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+  return (data || []).map(propostaFromDb)
+}
+
 export async function fetchPropostasByCliente(clienteId: number): Promise<PropostaHistorico[]> {
   const { data, error } = await supabase
     .from('propostas')
