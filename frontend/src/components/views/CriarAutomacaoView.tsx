@@ -19,7 +19,8 @@ import {
   CalendarIcon,
   TagIcon,
   XMarkIcon,
-  PaperAirplaneIcon
+  PaperAirplaneIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline'
 import { 
   getAutomacoes, 
@@ -29,6 +30,9 @@ import {
   type Automacao 
 } from '../../lib/database'
 import { callAI, buildCRMContext } from '../../lib/gemini'
+import { authFetch } from '../../lib/botApi'
+
+const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
 
 interface CriarAutomacaoViewProps {
   loggedUser: any
@@ -211,6 +215,20 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
         i === index ? { ...acao, [campo]: valor } : acao
       )
     }))
+  }
+
+  const executarAgora = async (automacao: Automacao) => {
+    const cid = prompt('ID do cliente para executar (deixe vazio para ações sem cliente):', '')
+    try {
+      const resp = await authFetch(`${BOT_URL}/api/automacoes/${automacao.id}/executar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clienteId: cid ? Number(cid) : null })
+      })
+      const r = await resp.json()
+      if (r.success) { alert('✅ Automação executada!'); carregarAutomacoes() }
+      else alert('❌ ' + (r.error || 'Erro ao executar'))
+    } catch (e: any) { alert('❌ ' + (e.message || 'Erro')) }
   }
 
   const salvarAutomacao = async () => {
@@ -855,6 +873,13 @@ Como posso ajudar você hoje?`
                           </div>
                         </div>
                         <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => executarAgora(automacao)}
+                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                            title="Executar agora"
+                          >
+                            <BoltIcon className="h-4 w-4" />
+                          </button>
                           <button
                             onClick={() => abrirChatComContexto(automacao)}
                             className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
