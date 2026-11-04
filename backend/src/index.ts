@@ -1303,15 +1303,20 @@ app.post('/api/bulk/cancel/:batchId', requireAuth, (req, res) => {
 
 // ─── Twilio VOIP Routes ───
 // Config routes require gerente auth; token requires any auth; voice/callbacks are public (Twilio calls them)
-app.get('/api/twilio/config', requireAuth, requireGerente, (req, res, next) => twilioRouter(req, res, next))
-app.post('/api/twilio/config', requireAuth, requireGerente, (req, res, next) => twilioRouter(req, res, next))
-app.post('/api/twilio/auto-setup', requireAuth, requireGerente, (req, res, next) => twilioRouter(req, res, next))
-app.post('/api/twilio/token', requireAuth, (req, res, next) => twilioRouter(req, res, next))
-app.get('/api/twilio/recording/:callSid', requireAuth, (req, res, next) => twilioRouter(req, res, next))
+// twilioRouter espera path relativo (/config, /token...): reescreve req.url antes de delegar
+const twilioForward = (req: any, res: any, next: any) => {
+  req.url = (req.originalUrl || req.url).replace(/^\/api\/twilio/, '') || '/'
+  twilioRouter(req, res, next)
+}
+app.get('/api/twilio/config', requireAuth, requireGerente, twilioForward)
+app.post('/api/twilio/config', requireAuth, requireGerente, twilioForward)
+app.post('/api/twilio/auto-setup', requireAuth, requireGerente, twilioForward)
+app.post('/api/twilio/token', requireAuth, twilioForward)
+app.get('/api/twilio/recording/:callSid', requireAuth, twilioForward)
 // Public endpoints (Twilio webhooks)
-app.post('/api/twilio/voice', (req, res, next) => twilioRouter(req, res, next))
-app.post('/api/twilio/recording-callback', (req, res, next) => twilioRouter(req, res, next))
-app.post('/api/twilio/status-callback', (req, res, next) => twilioRouter(req, res, next))
+app.post('/api/twilio/voice', twilioForward)
+app.post('/api/twilio/recording-callback', twilioForward)
+app.post('/api/twilio/status-callback', twilioForward)
 // Voice AI — Twilio posts here when someone calls the number
 app.use('/api/twilio/voice-ai', twilioVoiceAiRouter)
 
