@@ -271,7 +271,7 @@ missoesRouter.post('/:id/roteiro', async (req: any, res: any) => {
       titulo: v.titulo || 'Visita',
       descricao: v.descricao || '',
       data: v.data,
-      hora: v.hora || '',
+      hora: v.hora || null,
       tipo: 'visita',
       status: 'pendente',
       prioridade: 'alta',
@@ -286,7 +286,7 @@ missoesRouter.post('/:id/roteiro', async (req: any, res: any) => {
     const { data: tarefas, error: insertError } = await supabase.from('tarefas').insert(inserts).select()
     if (insertError) { res.status(400).json({ success: false, error: insertError.message }); return }
 
-    await supabase.from('missoes').update({ status: 'em_andamento', updated_at: new Date().toISOString() }).eq('id', id)
+    await supabase.from('missoes').update({ updated_at: new Date().toISOString() }).eq('id', id)
     res.json({ success: true, data: (tarefas || []).map(tarefaFromDb) })
   } catch (err: any) {
     log.error({ err }, 'Erro ao criar roteiro')
