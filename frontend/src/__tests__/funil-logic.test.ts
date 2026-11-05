@@ -429,11 +429,11 @@ describe('buildNovoCicloCliente', () => {
     expect(novo.vendedorId).toBe(7)
   })
 
-  it('não copia CNPJ/CPF para evitar duplicata', () => {
+  it('copia CNPJ/CPF para o novo ciclo (pedido precisa do doc no Omie)', () => {
     const base = makeCliente({ id: 1, cnpj: '11.111.111/0001-11', cpf: '12345678901' })
     const novo = buildNovoCicloCliente(base, 'negociacao')
-    expect(novo.cnpj).toBeUndefined()
-    expect(novo.cpf).toBeUndefined()
+    expect(novo.cnpj).toBe('11.111.111/0001-11')
+    expect(novo.cpf).toBe('12345678901')
   })
 
   it('reseta todos os status de ciclo anterior', () => {

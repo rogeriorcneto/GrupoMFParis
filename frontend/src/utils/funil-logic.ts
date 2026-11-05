@@ -17,9 +17,10 @@ export function buildNovoCicloCliente(
     // Dados base (identidade do cliente)
     razaoSocial: cliente.razaoSocial,
     nomeFantasia: cliente.nomeFantasia,
-    // CNPJ/CPF não são copiados para evitar violação de índices únicos em novos ciclos
-    cnpj: undefined as any,
-    cpf: undefined,
+    // CNPJ/CPF copiados: índice único agora é só para cards de origem
+    // (origem_ciclo_id IS NULL) — ciclo novo precisa do doc para o Omie
+    cnpj: cliente.cnpj,
+    cpf: cliente.cpf,
     inscricaoEstadual: cliente.inscricaoEstadual,
     contatoNome: cliente.contatoNome,
     contatoTelefone: cliente.contatoTelefone,
@@ -34,8 +35,7 @@ export function buildNovoCicloCliente(
     enderecoCidade: cliente.enderecoCidade,
     enderecoEstado: cliente.enderecoEstado,
     enderecoCep: cliente.enderecoCep,
-    // cnpj2 não é copiado: identificador externo que pode ter índice único no banco
-    cnpj2: undefined,
+    cnpj2: cliente.cnpj2,
     enderecoRua2: cliente.enderecoRua2,
     enderecoNumero2: cliente.enderecoNumero2,
     enderecoComplemento2: cliente.enderecoComplemento2,
