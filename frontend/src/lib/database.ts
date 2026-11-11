@@ -683,6 +683,24 @@ export async function checkCnpjDuplicado(cnpj: string, excludeId?: number): Prom
 
 export async function insertCliente(c: Omit<Cliente, 'id'>): Promise<Cliente> {
   if (c.novoCiclo && !c.origemCicloId) throw new Error('Novo ciclo exige referência ao card de origem.')
+  // Anti-duplicata: cadastro novo (não ciclo) não pode repetir CNPJ nem razão social
+  if (!c.novoCiclo) {
+    const doc = (c.cnpj || c.cpf || '').replace(/\D/g, '')
+    const orParts: string[] = []
+    if (doc.length === 14) orParts.push(`cnpj.in.("${c.cnpj}","${doc}")`)
+    if (doc.length === 11) orParts.push(`cpf.in.("${c.cpf}","${doc}")`, `cnpj.in.("${c.cnpj}","${doc}")`)
+    const nome = (c.razaoSocial || '').trim()
+    if (nome) orParts.push(`razao_social.eq.${nome}`)
+    if (orParts.length) {
+      const { data: existentes } = await supabase.from('clientes')
+        .select('id, razao_social, etapa')
+        .or(orParts.join(',')).limit(1)
+      if (existentes && existentes.length > 0) {
+        const x = existentes[0] as any
+        throw new Error(`Cliente já cadastrado: ${x.razao_social} (card ${x.id}, etapa ${x.etapa}). Edite o cadastro existente em vez de criar um novo.`)
+      }
+    }
+  }
   const row = clienteToDb(c)
   // Retry: se o banco rejeitar por coluna desconhecida (PGRST204 — migration
   // ainda não aplicada em produção), remove a coluna e tenta novamente.
