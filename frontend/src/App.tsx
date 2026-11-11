@@ -446,12 +446,16 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
 
   const [isNovoCiclo, setIsNovoCiclo] = React.useState(false)
 
+  // Clicar num card de novo ciclo abre o modal de proposta em modo NORMAL:
+  // o próprio card anda de proposta → negociação (confirmProposta → moverCliente).
+  // Não cria um card novo — card novo só nasce no fim do ciclo (perdido/follow-up)
+  // ou ao entrar em amostra.
   const handleNovoCiclo = React.useCallback((cliente: Cliente) => {
     const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any
-    setDraggedItem({ cliente, fromStage: 'follow_up' })
+    setDraggedItem({ cliente, fromStage: cliente.etapa || 'proposta' })
     setPendingDrop({ e: fakeE, toStage: 'negociacao' })
     setModalPropostaValor('')
-    setIsNovoCiclo(true)
+    setIsNovoCiclo(false)
     setShowModalProposta(true)
   }, [setDraggedItem, setPendingDrop, setModalPropostaValor, setShowModalProposta])
 
