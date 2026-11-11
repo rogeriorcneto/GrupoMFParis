@@ -754,11 +754,28 @@ export async function updateClientesBatch(updates: { id: number; changes: Partia
 }
 
 export async function deleteCliente(id: number): Promise<void> {
+  // Cards de ciclo que apontam para este cliente como origem/empresa: desvincular
+  await Promise.all([
+    supabase.from('clientes').update({ origem_ciclo_id: null }).eq('origem_ciclo_id', id),
+    supabase.from('clientes').update({ empresa_funil_id: null }).eq('empresa_funil_id', id),
+  ])
   // Deletar dados sem FK entre si em paralelo
   await Promise.all([
     supabase.from('historico_etapas').delete().eq('cliente_id', id),
     supabase.from('interacoes').delete().eq('cliente_id', id),
     supabase.from('tarefas').delete().eq('cliente_id', id),
+    supabase.from('propostas').delete().eq('cliente_id', id),
+    supabase.from('notificacoes').delete().eq('cliente_id', id),
+    supabase.from('documentos').delete().eq('cliente_id', id),
+    supabase.from('fretes').delete().eq('cliente_id', id),
+    supabase.from('gravacoes_chamada').delete().eq('cliente_id', id),
+    supabase.from('lancamentos_financeiros').delete().eq('cliente_id', id),
+    supabase.from('log_vendedor_cliente').delete().eq('cliente_id', id),
+    supabase.from('missao_clientes').delete().eq('cliente_id', id),
+    supabase.from('missao_visitas').delete().eq('cliente_id', id),
+    supabase.from('jobs_automacao').delete().eq('cliente_id', id),
+    supabase.from('automacao_eventos').delete().eq('cliente_id', id),
+    supabase.from('whatsapp_messages').delete().eq('cliente_id', id),
   ])
   // Pedidos precisam de delete sequencial (itens dependem do pedido)
   const { data: pedidosDoCliente } = await supabase.from('pedidos').select('id').eq('cliente_id', id)

@@ -687,7 +687,7 @@ export default function ClientePanel({
     try {
       const numero = `PED-${Date.now().toString().slice(-6)}`
       await onAddPedido({
-        numero, clienteId: c.id, vendedorId: loggedUser?.id || 0,
+        numero, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id || 0,
         itens: pedidoItens, observacoes: pedidoObs.trim(), status: 'enviado',
         dataCriacao: new Date().toISOString(), dataEnvio: new Date().toISOString(),
         totalValor: pedidoTotal, tipo: pedidoTipo, formaPagamento: pedidoFormaPagamento, tipoFrete: pedidoFrete || undefined,
@@ -1120,7 +1120,7 @@ export default function ClientePanel({
                         await onAddPedido({
                           numero,
                           clienteId: c.id,
-                          vendedorId: loggedUser?.id || 0,
+                          vendedorId: c.vendedorId || loggedUser?.id || 0,
                           itens: propostaItens,
                           observacoes: proposta.observacoes || '',
                           status: 'enviado',

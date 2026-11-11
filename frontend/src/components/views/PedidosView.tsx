@@ -142,7 +142,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
     setIsSaving(true)
     const numero = `PED-${Date.now().toString().slice(-6)}`
     const novoPedido: Omit<Pedido, 'id'> = {
-      numero, clienteId: Number(selectedClienteId), vendedorId: loggedUser.id,
+      numero, clienteId: Number(selectedClienteId), vendedorId: clienteAlvo?.vendedorId || loggedUser.id,
       itens: itensPedido, observacoes: observacoes.trim(), status,
       dataCriacao: new Date().toISOString(),
       dataEnvio: status === 'enviado' ? new Date().toISOString() : undefined,
