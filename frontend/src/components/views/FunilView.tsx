@@ -67,7 +67,7 @@ function abreviarProduto(nome: string): string {
   return partes.join(' ')
 }
 
-function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo, onMoveCliente }: FunilViewProps & { onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[]; onMoveCliente?: (cliente: Cliente, fromStage: string, toStage: string) => void }) {
+function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas = [], loggedUser, onDragStart, onDragOver, onDrop, onQuickAction, onClickCliente, isGerente = false, onImportNegocios, moverCliente, onNovoCiclo, onMoveCliente, onColetarSatisfacao }: FunilViewProps & { onColetarSatisfacao?: (cliente: Cliente) => Promise<void>; onClickCliente?: (c: Cliente) => void; isGerente?: boolean; propostas?: PropostaHistorico[]; onMoveCliente?: (cliente: Cliente, fromStage: string, toStage: string) => void }) {
   // ─── Mobile kanban: chips de etapa + scroll por coluna ───
   const kanbanScrollRef = useRef<HTMLDivElement>(null)
   const colRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -1216,14 +1216,16 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     </div>
                     <div className="flex gap-2 mt-3">
                       <button
-                        onClick={() => {
-                          if (!moverCliente) return
+                        onClick={async () => {
+                          if (!onColetarSatisfacao || lockProcessing) return
                           setLockProcessing(true)
-                          moverCliente(c.id, 'follow_up', {
-                            statusFollowUp: 'satisfacao_pendente',
-                            ultimaInteracao: new Date().toISOString().split('T')[0],
-                          })
-                          setTimeout(() => setLockProcessing(false), 500)
+                          try {
+                            await onColetarSatisfacao(c)
+                          } catch {
+                            window.alert('Não foi possível abrir a tarefa de satisfação. Tente novamente.')
+                          } finally {
+                            setLockProcessing(false)
+                          }
                         }}
                         className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
                       >

@@ -64,6 +64,7 @@ interface AppRouterProps {
   onNovoCiclo?: (cliente: Cliente) => void
   onVerNoFunil?: (cliente: Cliente) => void
   highlightTarefaId?: number
+  onColetarSatisfacao: (cliente: Cliente) => Promise<void>
 }
 
 export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
@@ -83,7 +84,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, requestStageMove, handleQuickAction,
-  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId
+  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId, onColetarSatisfacao
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -340,6 +341,7 @@ export default function AppRouter({
         isGerente={loggedUser?.cargo === 'gerente'}
         moverCliente={moverCliente}
         onNovoCiclo={onNovoCiclo}
+        onColetarSatisfacao={onColetarSatisfacao}
         onImportNegocios={async (updates, novos) => {
           try {
             if (updates.length > 0) {
@@ -541,10 +543,22 @@ export default function AppRouter({
             // Detectar se a tarefa está sendo marcada como concluída agora
             const tarefaAnterior = tarefas.find(x => x.id === t.id)
             const foiConcluidaAgora = tarefaAnterior?.status !== 'concluida' && t.status === 'concluida'
+            if (foiConcluidaAgora && t.titulo.startsWith('Coletar satisfação — ') && !t.conclusao?.trim()) {
+              showToast('error', 'Informe a satisfação coletada no resultado da tarefa antes de concluir.')
+              return
+            }
             
             // Atualização otimista: atualiza UI imediatamente antes da resposta do banco
             setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
             await db.updateTarefa(t.id, t)
+            if (foiConcluidaAgora && t.clienteId && t.titulo.startsWith('Coletar satisfação — ')) {
+              const atualizacao = {
+                ultimaInteracao: new Date().toISOString().split('T')[0],
+                feedbackSatisfacao: t.conclusao || t.descricao || '',
+              }
+              await db.updateCliente(t.clienteId, atualizacao)
+              setClientes(prev => prev.map(c => c.id === t.clienteId ? { ...c, ...atualizacao } : c))
+            }
             
             // Disparar regras de automação ao concluir tarefa
             if (foiConcluidaAgora && t.clienteId) {

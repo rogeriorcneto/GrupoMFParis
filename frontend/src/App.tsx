@@ -616,6 +616,20 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
                 moverCliente={moverCliente} criarNovoCiclo={criarNovoCiclo}
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
                 onNovoCiclo={handleNovoCiclo}
+                onColetarSatisfacao={async (cliente) => {
+                  const titulo = `Coletar satisfação — ${cliente.razaoSocial}`
+                  let tarefa = tarefas.find(t => t.clienteId === cliente.id && t.titulo === titulo && t.status === 'pendente')
+                  if (!tarefa) {
+                    tarefa = await db.insertTarefa({
+                      titulo, clienteId: cliente.id, vendedorId: cliente.vendedorId || loggedUser?.id,
+                      descricao: 'Registre a satisfação coletada com o cliente nas anotações e informe o resultado ao concluir a tarefa.',
+                      data: new Date().toISOString().split('T')[0], tipo: 'follow-up', status: 'pendente', prioridade: 'alta',
+                    })
+                    setTarefas(prev => [tarefa!, ...prev])
+                  }
+                  setHighlightTarefaId(tarefa.id)
+                  setActiveView('tarefas')
+                }}
                 onVerNoFunil={(c) => { setActiveView('funil'); setSelectedClientePanel(c) }}
                 highlightTarefaId={highlightTarefaId}
               />
