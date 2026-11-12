@@ -124,7 +124,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
     <div
       ref={cardRef}
       className={`
-        group relative rounded-2xl border transition-all duration-300 overflow-hidden
+        group relative rounded-2xl border transition-all duration-300 overflow-hidden dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100
         ${done
           ? cfg.color + ' shadow-sm'
           : isOverdue
@@ -132,7 +132,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
             : cfg.color + ' shadow-sm hover:shadow-md'
         }
         ${completing ? 'scale-95 opacity-50' : 'scale-100 opacity-100'}
-        ${isHighlighted ? 'ring-2 ring-primary-500 ring-offset-2' : ''}
+        ${isHighlighted ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-sky-400 dark:ring-offset-slate-950' : ''}
       `}
     >
       {/* Barra lateral de prioridade */}
@@ -145,7 +145,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
       <div className="pl-4 pr-4 pt-3 pb-3">
         {/* LINHA 1 (topo): meta info à esquerda + data/badge à direita */}
         <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-          <div className="flex items-center gap-3 flex-wrap text-xs text-gray-400">
+          <div className="flex items-center gap-3 flex-wrap text-xs text-gray-500 dark:text-slate-300">
             {vendedor && (
               <span className="flex items-center gap-1">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
