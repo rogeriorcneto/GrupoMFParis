@@ -552,12 +552,17 @@ export default function AppRouter({
             setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
             await db.updateTarefa(t.id, t)
             if (foiConcluidaAgora && t.clienteId && t.titulo.startsWith('Coletar satisfação — ')) {
-              const atualizacao = {
-                ultimaInteracao: new Date().toISOString().split('T')[0],
-                feedbackSatisfacao: t.conclusao || t.descricao || '',
+              const cliAlvo = clientes.find(c => c.id === t.clienteId)
+              const targetId = cliAlvo?.arquivadoDuplicata ? cliAlvo.cardPrincipalId : t.clienteId
+              const targetCli = targetId ? clientes.find(c => c.id === targetId && !c.arquivadoDuplicata) : undefined
+              if (targetCli) {
+                const atualizacao = {
+                  ultimaInteracao: new Date().toISOString().split('T')[0],
+                  feedbackSatisfacao: t.conclusao || t.descricao || '',
+                }
+                await db.updateCliente(targetCli.id, atualizacao)
+                setClientes(prev => prev.map(c => c.id === targetCli.id ? { ...c, ...atualizacao } : c))
               }
-              await db.updateCliente(t.clienteId, atualizacao)
-              setClientes(prev => prev.map(c => c.id === t.clienteId ? { ...c, ...atualizacao } : c))
             }
             
             // Disparar regras de automação ao concluir tarefa
@@ -582,6 +587,8 @@ export default function AppRouter({
               }
             }
           } catch (err: any) {
+            const anterior = tarefas.find(x => x.id === t.id)
+            if (anterior) setTarefas(prev => prev.map(x => x.id === t.id ? anterior : x))
             logger.error('Erro ao atualizar tarefa:', err)
             showToast('error', `Erro ao salvar tarefa: ${err?.message || err?.code || 'desconhecido'}`)
           }

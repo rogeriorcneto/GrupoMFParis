@@ -39,4 +39,12 @@ describe('Coletar satisfação no bloqueio do funil', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Coletar Satisfação/ })).toBeVisible())
     alerta.mockRestore()
   })
+
+  it('ignora cards arquivados como duplicata no bloqueio de follow-up', () => {
+    const abrir = vi.fn().mockResolvedValue(undefined)
+    const p = props(abrir)
+    p.clientes = [{ ...cliente, arquivadoDuplicata: true }]
+    render(<FunilView {...p} />)
+    expect(screen.queryByRole('button', { name: /Coletar Satisfação/ })).toBeNull()
+  })
 })

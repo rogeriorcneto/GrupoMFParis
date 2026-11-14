@@ -1005,7 +1005,7 @@ export async function fetchTarefas(): Promise<Tarefa[]> {
 
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
   const { data, error } = await supabase.from('tarefas').insert({
-    titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora,
+    titulo: t.titulo, descricao: t.descricao || null, data: t.data, hora: t.hora || null,
     tipo: t.tipo, status: t.status, prioridade: t.prioridade,
     cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
   }).select().single()
@@ -1054,7 +1054,7 @@ export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void
     row.descricao = t.descricao
   }
   if (t.data !== undefined) row.data = t.data
-  if (t.hora !== undefined) row.hora = t.hora
+  if (t.hora !== undefined) row.hora = t.hora || null
   if (t.tipo !== undefined) row.tipo = t.tipo
   if (t.status !== undefined) row.status = t.status
   if (t.prioridade !== undefined) row.prioridade = t.prioridade

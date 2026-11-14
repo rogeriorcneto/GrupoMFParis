@@ -34,6 +34,7 @@ export function getClientsToAutoMove(
   const now = Date.now()
   const result: { id: number; dias: number; etapa: string; destino: string }[] = []
   for (const c of clientes) {
+    if (c.arquivadoDuplicata) continue
     if (!c.dataEntradaEtapa || alreadyMovedIds.has(c.id)) continue
     if (c.etapa === 'perdido' || c.etapa === 'inativo' || c.etapa === 'lead') continue
     const prazo = autoMovePrazos[c.etapa]
@@ -55,6 +56,7 @@ export function getClientsToAutoInativo(
   const result: { id: number; dias: number; etapa: string }[] = []
   const skipEtapas = new Set(['perdido', 'inativo', 'lead', 'follow_up', 'negociacao'])
   for (const c of clientes) {
+    if (c.arquivadoDuplicata) continue
     if (alreadyMovedIds.has(c.id)) continue
     if (skipEtapas.has(c.etapa)) continue
     const dias = c.diasInativo || 0
@@ -82,6 +84,7 @@ export function getProspeccaoToReturn(
   const now = Date.now()
   const result: { id: number; motivo: 'sem_contato_5d' | 'sem_amostra_60d'; dias: number }[] = []
   for (const c of clientes) {
+    if (c.arquivadoDuplicata) continue
     if (c.etapa !== 'prospecção' || alreadyReturnedIds.has(c.id)) continue
     // Skip if already assigned to gerente (already returned)
     if (c.vendedorId === gerenteId) continue
@@ -112,6 +115,7 @@ export function getLeadsNeedingAssignment(
   const now = Date.now()
   const result: { id: number; dias: number; razaoSocial: string }[] = []
   for (const c of clientes) {
+    if (c.arquivadoDuplicata) continue
     if (c.etapa !== 'lead') continue
     if (c.vendedorId !== gerenteId) continue
     if (!c.dataEntradaEtapa) continue
@@ -152,6 +156,7 @@ export function getAmostraLocked(
 ): Cliente[] {
   const now = Date.now()
   return clientes.filter(c => {
+    if (c.arquivadoDuplicata) return false
     if (c.etapa !== 'amostra') return false
     if (c.vendedorId !== loggedUserId) return false
     if (c.resultadoAmostra) return false // already marked
@@ -170,6 +175,7 @@ export function getFollowUpLocked(
 ): Cliente[] {
   const now = Date.now()
   return clientes.filter(c => {
+    if (c.arquivadoDuplicata) return false
     if (c.etapa !== 'follow_up') return false
     if (c.vendedorId !== loggedUserId) return false
     if (c.statusFollowUp !== 'entregue') return false

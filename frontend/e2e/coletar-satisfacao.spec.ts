@@ -22,11 +22,23 @@ test('coletar satisfação abre tarefa e salva o resultado sem duplicar card', a
       if (metodo === 'PATCH') Object.assign(cliente, req.postDataJSON())
       dados = [cliente]
     } else if (tabela === 'tarefas') {
-      if (metodo === 'POST') {
-        insercoes++
-        tarefa = { ...req.postDataJSON(), id: 987655 }
+      if (metodo === 'POST' || metodo === 'PATCH') {
+        const payload = req.postDataJSON()
+        if (payload?.hora === '') {
+          await route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ code: '22007', message: 'invalid input syntax for type time: ""' }),
+          })
+          return
+        }
+        if (metodo === 'POST') {
+          insercoes++
+          tarefa = { hora: null, ...payload, id: 987655 }
+        } else {
+          Object.assign(tarefa!, payload)
+        }
       }
-      if (metodo === 'PATCH') Object.assign(tarefa!, req.postDataJSON())
       dados = tarefa ? [tarefa] : []
     }
     if (req.headers().accept?.includes('application/vnd.pgrst.object+json')) dados = dados[0] || null
