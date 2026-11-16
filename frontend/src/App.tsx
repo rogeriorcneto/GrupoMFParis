@@ -15,6 +15,7 @@ import { useAutoRules } from './hooks/useAutoRules'
 import { useDarkMode } from './hooks/useDarkMode'
 import { useClienteForm } from './hooks/useClienteForm'
 import { useFunilActions } from './hooks/useFunilActions'
+import { mesmaEmpresaNoFunil } from './utils/funil-logic'
 import { logger } from './utils/logger'
 import { disconnectUserWhatsApp, sendTempoTelaBeat } from './lib/botApi'
 import LoginScreen from './components/LoginScreen'
@@ -446,18 +447,24 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
 
   const [isNovoCiclo, setIsNovoCiclo] = React.useState(false)
 
-  // Clicar num card de novo ciclo abre o modal de proposta em modo NORMAL:
-  // o próprio card anda de proposta → negociação (confirmProposta → moverCliente).
-  // Não cria um card novo — card novo só nasce no fim do ciclo (perdido/follow-up)
-  // ou ao entrar em amostra.
   const handleNovoCiclo = React.useCallback((cliente: Cliente) => {
     const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any
-    setDraggedItem({ cliente, fromStage: cliente.etapa || 'proposta' })
+    // Se já existe um card ativo desta empresa em proposta ou negociação, reutiliza-o sem duplicar
+    const cardComercialAtivo = clientes.find(
+      c => !c.arquivadoDuplicata && ['proposta', 'negociacao'].includes(c.etapa) && mesmaEmpresaNoFunil(c, cliente)
+    )
+    if (cardComercialAtivo?.etapa === 'negociacao') {
+      setSelectedClientePanel(cardComercialAtivo)
+      return
+    }
+    const alvo = cardComercialAtivo || cliente
+    const precisaCriarCardCiclo = alvo.etapa !== 'proposta'
+    setDraggedItem({ cliente: alvo, fromStage: alvo.etapa || 'proposta' })
     setPendingDrop({ e: fakeE, toStage: 'negociacao' })
     setModalPropostaValor('')
-    setIsNovoCiclo(false)
+    setIsNovoCiclo(precisaCriarCardCiclo)
     setShowModalProposta(true)
-  }, [setDraggedItem, setPendingDrop, setModalPropostaValor, setShowModalProposta])
+  }, [clientes, setDraggedItem, setPendingDrop, setModalPropostaValor, setShowModalProposta, setSelectedClientePanel])
 
   // Dashboard Metrics Calculation (memoized)
   const dashboardMetrics = useMemo((): DashboardMetrics => {
@@ -709,7 +716,8 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
             onEditCliente={handleEditCliente}
             onMoverCliente={moverCliente}
             onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}
-            onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
+            onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setIsNovoCiclo(false); setDraggedItem({ cliente: c, fromStage: c.etapa || 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
+            onNovoCiclo={handleNovoCiclo}
             onTriggerPerda={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'perdido' }); setShowMotivoPerda(true) }}
             onDeleteTarefa={async (tarefaId) => { try { await db.deleteTarefa(tarefaId); setTarefas(prev => prev.filter(t => t.id !== tarefaId)); addNotificacao('success', 'Tarefa excluída', 'Tarefa excluída com sucesso.', selectedClientePanel?.id) } catch (err) { logger.error('Erro ao excluir tarefa:', err); addNotificacao('error', 'Erro', 'Erro ao excluir tarefa') } }}
             setInteracoes={setInteracoes}

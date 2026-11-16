@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
-import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
+import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa, existeCardAtivoNoFunil } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { fetchAllPropostas } from '../../lib/database'
@@ -386,6 +386,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const clientesNovoCiclo = useMemo(() => {
     const base = clientesFiltradosVendedor.filter(c => {
       if (c.arquivadoDuplicata) return false
+      if (existeCardAtivoNoFunil(clientesFiltradosVendedor, c, ['proposta', 'negociacao'])) return false
       // Clientes em follow-up normais (não aguardando aprovação e sem ciclo já iniciado)
       if (c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente' && c.statusFollowUp !== 'novo_ciclo_iniciado') return true
       // Clientes perdidos que vieram de negociação (podem ser revividos)

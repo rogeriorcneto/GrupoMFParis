@@ -59,6 +59,7 @@ interface ClientePanelProps {
   onMoverCliente: (id: number, toStage: string, extras?: Partial<Cliente>) => void
   onTriggerAmostra: (cliente: Cliente) => void
   onTriggerNegociacao: (cliente: Cliente) => void
+  onNovoCiclo?: (cliente: Cliente) => void
   onTriggerPerda: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefaId: number) => void
   setInteracoes: React.Dispatch<React.SetStateAction<Interacao[]>>
@@ -148,7 +149,7 @@ function composeNotasEmpresa(setor: string, info: string): string {
 export default function ClientePanel({
   cliente: c, interacoes, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
-  onTriggerAmostra, onTriggerNegociacao, onTriggerPerda, onDeleteTarefa,
+  onTriggerAmostra, onTriggerNegociacao, onNovoCiclo, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
   produtos, pedidos: todosPedidos, onAddPedido, onSolicitarCancelamentoPedido, onEditarPedido,
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
@@ -978,11 +979,23 @@ export default function ClientePanel({
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
               <button
-                onClick={abrirEdicaoProposta}
+                onClick={() => {
+                  if (['follow_up', 'perdido', 'inativo'].includes(c.etapa) && onNovoCiclo) {
+                    onNovoCiclo(c)
+                    onClose()
+                    return
+                  }
+                  if (['proposta', 'prospecção', 'lead'].includes(c.etapa)) {
+                    onTriggerNegociacao(c)
+                    onClose()
+                    return
+                  }
+                  abrirEdicaoProposta()
+                }}
                 className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100"
-                title={ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Criar proposta para este cliente'}
+                title={c.etapa === 'negociacao' && ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Criar proposta e iniciar negociação'}
               >
-                📝 {ultimaProposta ? 'Editar Proposta' : 'Criar Proposta'}
+                📝 {c.etapa === 'negociacao' && ultimaProposta ? 'Editar Proposta' : 'Criar Proposta'}
               </button>
               {ultimaProposta && isGerente && (
                 <button

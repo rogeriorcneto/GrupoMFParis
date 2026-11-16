@@ -30,8 +30,18 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   // Vendedor só vê seus clientes; gerente vê todos.
   // Cards de novo ciclo (novas oportunidades) ficam no funil, não na lista de cadastros.
   const scopedClientes = React.useMemo(() => {
-    const base = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id)
-    return base.filter(c => !c.novoCiclo && !c.arquivadoDuplicata)
+    const base = (isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id))
+      .filter(c => !c.arquivadoDuplicata)
+    const porEmpresa = new Map<string, Cliente>()
+    for (const c of base) {
+      const doc = (c.cnpj || c.cpf || '').replace(/\D/g, '')
+      const chave = c.empresaFunilId ? `ef:${c.empresaFunilId}` : doc ? `doc:${doc}` : `nome:${(c.razaoSocial || '').trim().toUpperCase()}`
+      const atual = porEmpresa.get(chave)
+      if (!atual || (atual.novoCiclo && !c.novoCiclo) || (Boolean(atual.novoCiclo) === Boolean(c.novoCiclo) && c.id > atual.id)) {
+        porEmpresa.set(chave, c)
+      }
+    }
+    return Array.from(porEmpresa.values())
   }, [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
   // Filtros aplicados (efetivos) vs rascunho (no painel)
@@ -154,8 +164,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       const matchCidade = !filterCidade || (cliente.enderecoCidade || '').toLowerCase().includes(filterCidade.toLowerCase())
       const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
       const matchValor = !filterValorMin || (cliente.valorEstimado || 0) >= Number(filterValorMin)
-      const matchNovoCiclo = cliente.novoCiclo !== true
-      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchEstado && matchCidade && matchScore && matchValor && matchNovoCiclo
+      return matchSearch && matchEtapa && matchVendedor && matchStatus && matchEstado && matchCidade && matchScore && matchValor
     })
     // Sort
     const dir = sortDir === 'asc' ? 1 : -1

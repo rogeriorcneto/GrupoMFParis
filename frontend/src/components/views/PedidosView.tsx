@@ -24,7 +24,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   console.log('[Pedidos] Total clientes:', clientes.length)
   console.log('[Pedidos] isGerente:', isGerente)
   // Mostrar todos clientes para gerente (incluir perdido/inativo na busca, mas indicar visualmente)
-  const clientesDisponiveis = isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser.id).filter(c => c.etapa !== 'perdido' && c.etapa !== 'inativo')
+  const clientesDisponiveis = (isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser.id).filter(c => c.etapa !== 'perdido' && c.etapa !== 'inativo')).filter(c => !c.arquivadoDuplicata)
   console.log('[Pedidos] Clientes disponíveis:', clientesDisponiveis.length, clientesDisponiveis.slice(0, 3).map(c => c.razaoSocial))
   const produtosAtivos = produtos.filter(p => p.ativo)
   const [selectedClienteId, setSelectedClienteId] = React.useState<number | ''>(clientesDisponiveis[0]?.id ?? '')
