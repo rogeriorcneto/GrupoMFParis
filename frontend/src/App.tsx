@@ -126,7 +126,7 @@ function stopActiveTimer() {
 
 let _appExplicitSignOut = false
 
-function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
+function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | null; onVoltarPortal?: () => void } = {}) {
   // preloadedUser === undefined: não fornecido, verificar sessão normalmente
   // preloadedUser === Vendedor: sessão já verificada pelo Shell, pular checkSession
   // preloadedUser === null: Shell tentou mas não achou, verificar sessão normalmente
@@ -149,6 +149,8 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
   }
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showFloatingDockMobile, setShowFloatingDockMobile] = useState(false)
+  const [floatingAiOpen, setFloatingAiOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showGlobalSearch, setShowGlobalSearch] = useState(false)
   const [highlightTarefaId, setHighlightTarefaId] = useState<number | undefined>(undefined)
@@ -565,6 +567,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           }, 0)
         }}
         pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado' || p.status === 'cancelamento_solicitado').length : 0}
+        onVoltarPortal={onVoltarPortal}
       />
 
       {/* Main Content */}
@@ -844,14 +847,22 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           />
         )}
 
-        {/* Assistente IA Flutuante */}
-        {loggedUser && <FloatingAIAssistant vendedor={loggedUser} produtos={produtos} />}
+        {/* Assistente IA Flutuante (desktop sempre visível com z-30; mobile recolhido no dock) */}
+        {loggedUser && (
+          <FloatingAIAssistant
+            vendedor={loggedUser}
+            produtos={produtos}
+            externalOpen={floatingAiOpen}
+            onExternalChange={setFloatingAiOpen}
+            hideTriggerOnMobile
+          />
+        )}
 
-        {/* Chat Interno — Botão flutuante */}
+        {/* Chat Interno — Botão flutuante (desktop) */}
         {loggedUser && (
           <button
             onClick={() => setShowChat(v => !v)}
-            className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary-600 hover:bg-primary-700 text-white shadow-2xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
+            className="hidden md:flex fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-primary-600 hover:bg-primary-700 text-white shadow-2xl items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
             title="Chat interno da equipe"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
@@ -863,6 +874,51 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
               </span>
             )}
           </button>
+        )}
+
+        {/* Item 12: Dock compacto recolhível no celular — oculta-se automaticamente quando qualquer modal/painel está aberto */}
+        {loggedUser && !selectedClientePanel && !showModal && !showModalProposta && !showModalAmostra && !showMotivoPerda && !showModalSatisfacao && !showAIModal && !showChat && !floatingAiOpen && (
+          <div className="md:hidden fixed bottom-3 right-3 z-30 flex flex-col items-end gap-2">
+            {showFloatingDockMobile && (
+              <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur border border-gray-200 dark:border-gray-700 rounded-2xl shadow-xl p-1.5 flex flex-col gap-1 min-w-[155px]">
+                <button
+                  onClick={() => { setShowFloatingDockMobile(false); setFloatingAiOpen(true) }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 text-left"
+                >
+                  <span>✨</span><span>Assistente IA</span>
+                </button>
+                <button
+                  onClick={() => { setShowFloatingDockMobile(false); setShowChat(true) }}
+                  className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs font-medium text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 text-left"
+                >
+                  <span className="flex items-center gap-2"><span>💬</span><span>Chat da Equipe</span></span>
+                  {chatUnreadTotal > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">{chatUnreadTotal}</span>
+                  )}
+                </button>
+                {onVoltarPortal && (
+                  <button
+                    onClick={() => { setShowFloatingDockMobile(false); onVoltarPortal() }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-left border-t border-gray-100 dark:border-gray-800"
+                  >
+                    <span>←</span><span>Portal Grupo</span>
+                  </button>
+                )}
+              </div>
+            )}
+            <button
+              onClick={() => setShowFloatingDockMobile(v => !v)}
+              aria-label="Atalhos rápidos"
+              className="w-9 h-9 rounded-full bg-gray-900/80 dark:bg-gray-700/85 text-white shadow-lg flex items-center justify-center text-sm font-bold active:scale-95 relative"
+            >
+              {showFloatingDockMobile ? '✕' : '⚡'}
+              {chatUnreadTotal > 0 && !showFloatingDockMobile && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {chatUnreadTotal > 9 ? '9+' : chatUnreadTotal}
+                </span>
+              )}
+            </button>
+          </div>
         )}
 
         {/* Toast global de feedback */}

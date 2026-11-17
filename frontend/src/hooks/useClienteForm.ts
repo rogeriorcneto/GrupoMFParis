@@ -198,8 +198,16 @@ export function useClienteForm({ loggedUser, clientes = [], setClientes, setInte
       ? (vIdStr ? Number(vIdStr) : undefined)
       : loggedUser?.id
 
+    // Item 9: em cadastro por CPF (ou geral), usar o nome da pessoa como título do card — nenhum card pode ficar sem título
+    const tituloCard = (formData.razaoSocial || '').trim() || (formData.nomeFantasia || '').trim() || (formData.contatoNome || '').trim()
+    if (!tituloCard) {
+      showToast('error', 'Informe o nome completo (CPF) ou a Razão Social do cliente.')
+      return
+    }
+
     const clienteFields: Partial<Cliente> = {
       ...restForm,
+      razaoSocial: tituloCard,
       endereco: enderecoCompleto,
       vendedorId: vendedorResponsavelId,
       produtosInteresse: produtosArray,

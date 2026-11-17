@@ -22,10 +22,11 @@ import {
   ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
 import { stageLabels } from '../../utils/constants'
-import { calcularIndicadoresOperacionais } from '../../utils/indicadores-comerciais'
+import { calcularIndicadoresOperacionais, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
+import { fetchAllPropostas } from '../../lib/database'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
-import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao } from '../../types'
+import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao, PropostaHistorico } from '../../types'
 
 interface Props {
   clientes: Cliente[]
@@ -180,14 +181,24 @@ export default function DashboardVendedorView({
     return ds >= periodoInicio && ds <= periodoFim
   }
 
-  // ─── Tempo de tela + academia (gerente) ───────────────────────────────────────
+  // ─── Tempo de tela + academia (gerente) + propostas ativas ──────────────────
   const [tempoTelaData, setTempoTelaData] = useState<{ nome: string; totalSegundos: number }[]>([])
   const [academiaData, setAcademiaData] = useState<{ nome: string; treinos: number; minutos: number; notaMedia: number }[]>([])
+  const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
+
+  useEffect(() => {
+    fetchAllPropostas().then(setPropostasLoaded).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!isGerente) return
+    const idsAtivos = new Set(vendedores.filter(v => v.ativo).map(v => v.id))
     fetchTempoTelaRelatorio(periodoInicio, periodoFim).then(r => {
-      setTempoTelaData((r.relatorio || []).map(x => ({ nome: x.nome, totalSegundos: x.totalSegundos })))
+      setTempoTelaData(
+        (r.relatorio || [])
+          .filter((x: any) => !x.vendedorId || idsAtivos.size === 0 || idsAtivos.has(Number(x.vendedorId)))
+          .map(x => ({ nome: x.nome, totalSegundos: x.totalSegundos }))
+      )
     }).catch(() => {})
     fetchRoleplayHistoryGerente().then((r: any) => {
       const sessoes: any[] = r.sessoes || []
@@ -252,22 +263,41 @@ export default function DashboardVendedorView({
   const convertidos = ativos.filter(c => c.etapa === 'follow_up').length
   const taxaConversao = ativos.length > 0 ? (convertidos / ativos.length) * 100 : 0
 
+  const mapaUltimaProposta = useMemo(() => criarMapaUltimaProposta(propostasLoaded), [propostasLoaded])
+
   const funil = useMemo(() => {
     const max = Math.max(...stageOrder.map(s => meusClientes.filter(c => c.etapa === s).length), 1)
     return stageOrder.map(s => {
       const qtd = meusClientes.filter(c => c.etapa === s).length
-      const valor = meusClientes.filter(c => c.etapa === s).reduce((s, c) => s + (c.valorEstimado || 0), 0)
+      const valor = meusClientes.filter(c => c.etapa === s).reduce((acc, c) => acc + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
       return { stage: s, label: stageLabels[s] || s, qtd, valor, pct: Math.max((qtd / max) * 100, 8) }
     })
-  }, [meusClientes])
+  }, [meusClientes, mapaUltimaProposta])
 
-  const tarefasHoje = useMemo(
-    () => (isGerente
+  const formatHoraAgenda = (hora?: string | null): string => {
+    const raw = (hora || '').trim()
+    const m = raw.match(/^(\d{1,2}):(\d{2})/)
+    if (m) return `${m[1].padStart(2, '0')}:${m[2]}`
+    return '09:00'
+  }
+
+  const tarefasHoje = useMemo(() => {
+    const base = (isGerente
       ? tarefas.filter(t => isHoje(t.data))
       : tarefas.filter(t => t.vendedorId === userId && isHoje(t.data))
-    ).sort((a, b) => (a.hora || '').localeCompare(b.hora || '')),
-    [tarefas, userId, isGerente]
-  )
+    ).sort((a, b) => formatHoraAgenda(a.hora).localeCompare(formatHoraAgenda(b.hora)))
+    // Deduplicação defensiva por empresa + título normalizado
+    const vistas = new Set<string>()
+    return base.filter(t => {
+      const cli = clientes.find(c => c.id === t.clienteId)
+      const emp = (cli?.razaoSocial || String(t.clienteId || '')).trim().toUpperCase()
+      const tit = (t.titulo || '').trim().toUpperCase()
+      const chave = `${emp}::${tit}`
+      if (vistas.has(chave)) return false
+      vistas.add(chave)
+      return true
+    })
+  }, [tarefas, clientes, userId, isGerente])
   const tarefasPendentes = useMemo(
     () => (isGerente
       ? tarefas.filter(t => t.status !== 'concluida')
@@ -326,8 +356,8 @@ export default function DashboardVendedorView({
     clientes, pedidos,
     { inicio: periodoInicio || '0001-01-01', fim: periodoFim || hojeISO },
     hojeISO,
-    isGerente ? {} : { vendedorId: userId },
-  ), [clientes, pedidos, periodoInicio, periodoFim, hojeISO, isGerente, userId])
+    { ...(isGerente ? {} : { vendedorId: userId }), propostas: propostasLoaded },
+  ), [clientes, pedidos, periodoInicio, periodoFim, hojeISO, isGerente, userId, propostasLoaded])
   const pedidosMes = meusPedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).length
   const ticketMedio = pedidosMes > 0 ? fatMes / pedidosMes : 0
   const topProdutosVendedor = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 5)
@@ -838,8 +868,8 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                 ))}
               </div>
               <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-sm">
-                <span className="text-gray-500">Total em negociação</span>
-                <span className="font-bold text-gray-900">{fmtBRL(meusClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0))}</span>
+                <span className="text-gray-500">Total em pipeline (Proposta + Negociação)</span>
+                <span className="font-bold text-gray-900">{fmtBRL(indOps.pipelineAberto)}</span>
               </div>
             </div>
 
@@ -907,7 +937,10 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><CalendarIcon className="h-5 w-5 text-primary-600" /> Agenda de hoje</h2>
-                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">{visitasHoje.length} visitas</span>
+                <span className="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">
+                  {tarefasHoje.length} {tarefasHoje.length === 1 ? 'atividade' : 'atividades'}
+                  {visitasHoje.length > 0 ? ` · ${visitasHoje.length} ${visitasHoje.length === 1 ? 'visita' : 'visitas'}` : ''}
+                </span>
               </div>
               {tarefasHoje.length === 0 ? (
                 <p className="text-sm text-gray-400">Nenhuma atividade agendada para hoje.</p>
@@ -918,7 +951,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                     return (
                       <div key={t.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                         <div className="text-center min-w-[3.5rem]">
-                          <p className="text-sm font-bold text-gray-900">{t.hora || '--:--'}</p>
+                          <p className="text-sm font-bold text-gray-900">{formatHoraAgenda(t.hora)}</p>
                           <p className="text-[10px] text-gray-400">{cli?.enderecoCidade || ''}</p>
                         </div>
                         <div className="flex-1 min-w-0">

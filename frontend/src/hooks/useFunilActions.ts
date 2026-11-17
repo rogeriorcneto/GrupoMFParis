@@ -18,18 +18,17 @@ async function copiarHistoricoETarefas(
   for (const h of historicoOriginal) {
     try { await db.insertHistoricoEtapa(novoClienteId, h) } catch { /* non-critical */ }
   }
-  // 2. Copiar tarefas pendentes
+  // 2. Migrar tarefas pendentes para o card do novo ciclo (sem criar cópias duplicadas na agenda!)
   const tarefasPendentes = tarefasAll.filter(t => t.clienteId === clienteOriginalId && t.status === 'pendente')
   if (tarefasPendentes.length > 0) {
-    const novas: Omit<Tarefa, 'id'>[] = tarefasPendentes.map(t => ({
-      ...t,
-      clienteId: novoClienteId,
-    }))
     try {
-      const salvas = await db.insertTarefasBatch(novas)
-      setTarefas(prev => [...salvas, ...prev])
+      for (const t of tarefasPendentes) {
+        await db.updateTarefa(t.id, { clienteId: novoClienteId })
+      }
+      const idsMigrados = new Set(tarefasPendentes.map(t => t.id))
+      setTarefas(prev => prev.map(t => idsMigrados.has(t.id) ? { ...t, clienteId: novoClienteId } : t))
     } catch (e) {
-      logger.error('Erro ao copiar tarefas para novo ciclo:', e)
+      logger.error('Erro ao migrar tarefas para novo ciclo:', e)
     }
   }
 }

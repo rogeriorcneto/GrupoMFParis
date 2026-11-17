@@ -32,6 +32,7 @@ interface SidebarProps {
   setSidebarOpen: (v: boolean) => void
   onOpenAI: () => void
   onSignOut: () => void
+  onVoltarPortal?: () => void
   pendingAprovacoes?: number
 }
 
@@ -76,7 +77,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
 export { viewsPermitidas }
 
 export default function Sidebar({
-  activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, pendingAprovacoes = 0
+  activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, onVoltarPortal, pendingAprovacoes = 0
 }: SidebarProps) {
   return (
     <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-r flex flex-col shadow-xl`}>
@@ -122,7 +123,15 @@ export default function Sidebar({
       </nav>
 
       {/* Bottom section */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-gray-200 space-y-2">
+        {onVoltarPortal && (
+          <button
+            onClick={() => { setSidebarOpen(false); onVoltarPortal() }}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-apple text-xs font-semibold transition-colors"
+          >
+            ← Portal Grupo Paris
+          </button>
+        )}
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">

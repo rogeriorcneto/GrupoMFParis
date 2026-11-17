@@ -272,10 +272,14 @@ export default function ClienteFormModal({
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Razão Social</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {formData.cpf?.replace(/\D/g, '').length === 11 && !formData.cnpj?.replace(/\D/g, '')
+                        ? 'Nome Completo (Pessoa Física / CPF) *'
+                        : 'Razão Social *'}
+                    </label>
                     <input type="text" name="razaoSocial" value={formData.razaoSocial} onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                      placeholder="Ex: Supermercado BH Ltda" />
+                      placeholder={formData.cpf?.replace(/\D/g, '').length === 11 && !formData.cnpj?.replace(/\D/g, '') ? 'Ex: Maria da Silva' : 'Ex: Supermercado BH Ltda'} />
                   </div>
 
                   {/* ── Google Places Enrichment ── */}

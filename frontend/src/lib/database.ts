@@ -12,9 +12,14 @@ import type {
 // ============================================
 
 export function clienteFromDb(row: any): Cliente {
+  const tituloResolvido =
+    (row.razao_social || '').trim() ||
+    (row.nome_fantasia || '').trim() ||
+    (row.contato_nome || '').trim() ||
+    (row.cpf ? `CPF ${row.cpf}` : `Cliente #${row.id ?? ''}`)
   return {
     id: row.id,
-    razaoSocial: row.razao_social ?? '',
+    razaoSocial: tituloResolvido,
     nomeFantasia: row.nome_fantasia ?? undefined,
     cnpj: row.cnpj ?? '',
     cpf: row.cpf ?? undefined,
@@ -311,7 +316,7 @@ export function tarefaFromDb(row: any): Tarefa {
     descricao: descricao || '',
     conclusao: conclusao || undefined,
     data: row.data,
-    hora: row.hora || '',
+    hora: row.hora ? String(row.hora).slice(0, 5) : '',
     tipo: row.tipo,
     status: row.status,
     prioridade: row.prioridade,
@@ -1949,20 +1954,33 @@ export async function deleteMensagemAutomacao(id: number): Promise<void> {
 // FUNÇÃO PARA PROCESSAR REGRAS E CRIAR TAREFAS
 // ============================================
 
+function normalizarTituloTarefa(s?: string): string {
+  return (s || '').trim().toUpperCase().replace(/\s+/g, ' ')
+}
+
 function tarefaPendenteEquivalenteExiste(
   tarefas: Tarefa[],
-  clienteId: number,
+  clienteId: number | undefined,
   titulo: string,
-  data: string,
-  tipo: string
 ): boolean {
+  const titNorm = normalizarTituloTarefa(titulo)
+  if (!titNorm) return false
   return tarefas.some(t =>
     t.status === 'pendente' &&
-    t.clienteId === clienteId &&
-    t.titulo === titulo &&
-    t.data === data &&
-    t.tipo === tipo
+    normalizarTituloTarefa(t.titulo) === titNorm &&
+    (clienteId === undefined || t.clienteId === clienteId || titNorm.includes('—') || titNorm.includes(' - '))
   )
+}
+
+async function existeTarefaPendenteNoBanco(clienteId: number | undefined, titulo: string): Promise<boolean> {
+  try {
+    let q = supabase.from('tarefas').select('id').eq('status', 'pendente').eq('titulo', titulo).limit(1)
+    if (clienteId && !titulo.includes('—') && !titulo.includes(' - ')) q = q.eq('cliente_id', clienteId)
+    const { data } = await q
+    return Array.isArray(data) && data.length > 0
+  } catch {
+    return false
+  }
 }
 
 export async function processarRegrasAutomacao(
@@ -2004,9 +2022,11 @@ export async function processarRegrasAutomacao(
       const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
       const tipoTarefa = regra.acao?.tipo || 'outro'
 
-      // Evitar duplicatas: mesma tarefa pendente já existe?
-      if (tarefasExistentes?.length &&
-          tarefaPendenteEquivalenteExiste(tarefasExistentes, clienteId, titulo, dataTarefa, tipoTarefa)) {
+      // Evitar duplicatas: mesma tarefa pendente já existe em memória ou no banco?
+      if (
+        (tarefasExistentes?.length && tarefaPendenteEquivalenteExiste(tarefasExistentes, clienteId, titulo)) ||
+        (await existeTarefaPendenteNoBanco(clienteId, titulo))
+      ) {
         console.log(`[Automação] Pulando tarefa duplicada: "${titulo}" para cliente ${clienteId}`)
         continue
       }
@@ -2016,7 +2036,7 @@ export async function processarRegrasAutomacao(
         titulo,
         descricao,
         data: dataTarefa,
-        hora: regra.acao?.horaPadrao || '10:00',
+        hora: (regra.acao?.horaPadrao || '10:00').slice(0, 5),
         tipo: tipoTarefa,
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
@@ -2098,8 +2118,10 @@ export async function processarRegrasTarefaConcluida(
       const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
       const tipoTarefa = regra.acao?.tipo || 'outro'
 
-      if (tarefasExistentes?.length &&
-          tarefaPendenteEquivalenteExiste(tarefasExistentes, tarefaConcluida.clienteId, titulo, dataTarefa, tipoTarefa)) {
+      if (
+        (tarefasExistentes?.length && tarefaPendenteEquivalenteExiste(tarefasExistentes, tarefaConcluida.clienteId, titulo)) ||
+        (await existeTarefaPendenteNoBanco(tarefaConcluida.clienteId, titulo))
+      ) {
         console.log(`[Automação] Pulando tarefa duplicada: "${titulo}" para cliente ${tarefaConcluida.clienteId}`)
         continue
       }
@@ -2108,7 +2130,7 @@ export async function processarRegrasTarefaConcluida(
         titulo,
         descricao,
         data: dataTarefa,
-        hora: regra.acao?.horaPadrao || undefined,
+        hora: (regra.acao?.horaPadrao || '09:00').slice(0, 5),
         tipo: tipoTarefa,
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',

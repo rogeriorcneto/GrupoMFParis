@@ -1,4 +1,4 @@
-import type { Cliente, Pedido } from '../types'
+import type { Cliente, Pedido, PropostaHistorico } from '../types'
 
 export interface PeriodoIndicadores {
   inicio: string
@@ -100,12 +100,33 @@ export interface IndicadoresOperacionais {
  */
 export const PESO_PIPELINE: Record<string, number> = { proposta: 0.8, negociacao: 0.95 }
 
+/** Mapa clienteId -> maior/última proposta ativa (propostas vêm ordenadas da mais recente p/ mais antiga) */
+export function criarMapaUltimaProposta(propostas?: readonly PropostaHistorico[]): Map<number, number> {
+  const m = new Map<number, number>()
+  if (!propostas) return m
+  for (const p of propostas) {
+    if (!m.has(p.clienteId) && Number.isFinite(p.totalValor) && p.totalValor > 0) {
+      m.set(p.clienteId, p.totalValor)
+    }
+  }
+  return m
+}
+
+/** Valor comercial unificado do card (usa proposta ativa lançada -> valorProposta -> valorEstimado) */
+export function valorPropostaAtivaCard(c: Cliente, mapaPropostas?: ReadonlyMap<number, number>): number {
+  const daProposta = mapaPropostas?.get(c.id)
+  if (daProposta !== undefined && daProposta > 0) return daProposta
+  if (c.valorProposta && c.valorProposta > 0) return c.valorProposta
+  if (c.valorEstimado && c.valorEstimado > 0) return c.valorEstimado
+  return 0
+}
+
 export function calcularIndicadoresOperacionais(
   clientes: readonly Cliente[],
   pedidos: readonly Pedido[],
   periodo: PeriodoIndicadores,
   hoje: string,
-  opcoes: { vendedorId?: number } = {},
+  opcoes: { vendedorId?: number; propostas?: readonly PropostaHistorico[] } = {},
 ): IndicadoresOperacionais {
   const ativos = clientes.filter(c => !c.arquivadoDuplicata && (opcoes.vendedorId === undefined || c.vendedorId === opcoes.vendedorId))
   const empresas = criarIndiceEmpresas(clientes)
@@ -134,12 +155,13 @@ export function calcularIndicadoresOperacionais(
   const enviadosCount = enviados.length
   const enviadosValor = Math.round(enviados.reduce((s, p) => s + p.totalValor, 0) * 100) / 100
 
-  // Pipeline: cards comerciais abertos (não arquivados)
+  // Pipeline: cards comerciais abertos (não arquivados) — cálculo unificado com o Funil
+  const mapaProp = criarMapaUltimaProposta(opcoes.propostas)
   const comerciais = ativos.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao')
-  const pipelineAberto = Math.round(comerciais.reduce((s, c) => s + (c.valorProposta || 0), 0) * 100) / 100
-  const pipelinePonderado = Math.round(comerciais.reduce((s, c) => s + (c.valorProposta || 0) * (PESO_PIPELINE[c.etapa] || 0), 0) * 100) / 100
+  const pipelineAberto = Math.round(comerciais.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaProp), 0) * 100) / 100
+  const pipelinePonderado = Math.round(comerciais.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaProp) * (PESO_PIPELINE[c.etapa] || 0), 0) * 100) / 100
   const emNegociacao = comerciais.filter(c => c.etapa === 'negociacao')
-  const precoMedioNegociacao = emNegociacao.length ? Math.round(emNegociacao.reduce((s, c) => s + (c.valorProposta || 0), 0) / emNegociacao.length * 100) / 100 : null
+  const precoMedioNegociacao = emNegociacao.length ? Math.round(emNegociacao.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaProp), 0) / emNegociacao.length * 100) / 100 : null
   const prazos = emNegociacao.map(c => c.dataEntradaEtapa ? dias(c.dataEntradaEtapa.slice(0, 10)) : null).filter((d): d is number => d !== null && d >= 0)
   const prazoMedioNegociacao = prazos.length ? Math.round(prazos.reduce((a, b) => a + b, 0) / prazos.length) : null
   const negociacoesAbertas = comerciais.filter(c => c.etapa === 'negociacao').length

@@ -1049,11 +1049,14 @@ app.get('/api/tempo-tela/relatorio', requireAuth, requireGerente, async (req, re
       const total = map.get(b.vendedor_id) || 0
       map.set(b.vendedor_id, total + b.duracao_segundos)
     }
-    const relatorio = vendedores.map(v => ({
-      vendedorId: v.id,
-      nome: v.nome,
-      totalSegundos: map.get(v.id) || 0,
-    })).sort((a, b) => b.totalSegundos - a.totalSegundos)
+    const relatorio = vendedores
+      .filter(v => v.ativo !== false)
+      .map(v => ({
+        vendedorId: v.id,
+        nome: v.nome,
+        totalSegundos: map.get(v.id) || 0,
+      }))
+      .sort((a, b) => b.totalSegundos - a.totalSegundos)
     res.json({ periodo: { dataInicio, dataFim }, relatorio })
   } catch (err: any) {
     log.error({ err }, 'Erro ao buscar relatório de tempo de tela')

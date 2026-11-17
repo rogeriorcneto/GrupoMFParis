@@ -9,6 +9,7 @@ import { logger } from '../utils/logger'
 import { formatCNPJ, formatBrazilianPhone } from '../utils/validators'
 import { isMobileDevice } from '../utils/device'
 import { mesmaEmpresaNoFunil, existeCardAtivoNoFunil } from '../utils/funil-logic'
+import { parseRedesSociaisMap } from '../utils/socialLinks'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
@@ -225,21 +226,11 @@ export default function ClientePanel({
   }, [c.notas])
   const [editingInter, setEditingInter] = useState<{ id: number; tipo: Interacao['tipo']; descricao: string; prazo: string; hora: string; responsavelId: number | '' } | null>(null)
   const [editingInterSaving, setEditingInterSaving] = useState(false)
-  // Redes sociais estruturadas
+  // Redes sociais estruturadas (suporta JSON e formato importado "Instagram: url | Facebook: url")
   type RedesSociaisMap = Record<string, string>
-  const parseRedesSociais = (raw: string): RedesSociaisMap => {
-    if (!raw) return {}
-    try { const p = JSON.parse(raw); if (typeof p === 'object' && !Array.isArray(p)) return p } catch {}
-    return {}
-  }
-  const [redesSociaisMap, setRedesSociaisMap] = useState<RedesSociaisMap>(() => {
-    const base = parseRedesSociais(c.redesSociais || '')
-    // Merge campos individuais (importados do Agendor/CSV) no mapa JSON
-    if (c.instagram && !base.instagram) base.instagram = c.instagram
-    if (c.facebook  && !base.facebook)  base.facebook  = c.facebook
-    if (c.linkedin  && !base.linkedin)  base.linkedin  = c.linkedin
-    return base
-  })
+  const [redesSociaisMap, setRedesSociaisMap] = useState<RedesSociaisMap>(() =>
+    parseRedesSociaisMap(c.redesSociais, c)
+  )
   const [socialModalOpen, setSocialModalOpen] = useState<string | null>(null)
   const [socialModalValue, setSocialModalValue] = useState('')
   // keep legacy string in sync for other parts that use panelRedesSociais

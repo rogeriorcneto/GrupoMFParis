@@ -3,6 +3,8 @@ import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHist
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa, existeCardAtivoNoFunil } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa, transicoesPermitidas } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
+import { PESO_PIPELINE, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
+import { extractValidSocialLinks } from '../../utils/socialLinks'
 import { fetchAllPropostas } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import CallRecorder from '../CallRecorder'
@@ -319,8 +321,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Amostra', key: 'amostra', badge: 'bg-amber-100 text-amber-800', icon: '🧪', prob: 0.25, gerenteOnly: false },
     { title: 'Amostra Finalizada', key: 'amostra_perdida', badge: 'bg-orange-100 text-orange-800', icon: '🚫', prob: 0.05, gerenteOnly: false },
     { title: 'Inativos', key: 'inativo', badge: 'bg-gray-200 text-gray-700', icon: '💤', prob: 0.10, gerenteOnly: false },
-    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
-    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: 0.60, gerenteOnly: false },
+    { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: PESO_PIPELINE.proposta, gerenteOnly: false },
+    { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: PESO_PIPELINE.negociacao, gerenteOnly: false },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
     { title: 'Arquivados', key: 'arquivado', badge: 'bg-slate-200 text-slate-700', icon: '🗄️', prob: 0, gerenteOnly: false },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: false }
@@ -407,18 +409,24 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     return base
   }, [clientesFiltradosVendedor, search])
 
-  // Memoized metrics using stageMap (no re-filtering)
+  const mapaUltimaProposta = useMemo(
+    () => criarMapaUltimaProposta(propostas.length > 0 ? propostas : propostasLoaded),
+    [propostas, propostasLoaded]
+  )
+
+  // Memoized metrics unificados com o Dashboard (valor das propostas ativas em Proposta + Negociação)
   const { totalPipeline, receitaPonderada, taxaConversao, tempoMedio, activeCount } = useMemo(() => {
     let pipeline = 0, weighted = 0, followUpCount = 0, nonPerdidoCount = 0
     let totalDias = 0, histCount = 0
-    const probMap = new Map(displayedStages.map(s => [s.key, s.prob]))
 
     clientesFiltrados.forEach(c => {
-      const prob = probMap.get(c.etapa) || 0
-      const val = c.valorEstimado || 0
-      if (c.etapa !== 'perdido' && c.etapa !== 'inativo' && c.etapa !== 'arquivado') { pipeline += val; nonPerdidoCount++ }
+      const val = valorPropostaAtivaCard(c, mapaUltimaProposta)
+      if (c.etapa !== 'perdido' && c.etapa !== 'inativo' && c.etapa !== 'arquivado') nonPerdidoCount++
+      if (c.etapa === 'proposta' || c.etapa === 'negociacao') {
+        pipeline += val
+        weighted += val * (PESO_PIPELINE[c.etapa] || 0)
+      }
       if (c.etapa === 'follow_up') followUpCount++
-      weighted += val * prob
       if (c.historicoEtapas && c.historicoEtapas.length > 1) {
         const h = c.historicoEtapas
         const first = new Date(h[0].data).getTime()
@@ -429,13 +437,13 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     })
 
     return {
-      totalPipeline: pipeline,
-      receitaPonderada: weighted,
+      totalPipeline: Math.round(pipeline * 100) / 100,
+      receitaPonderada: Math.round(weighted * 100) / 100,
       taxaConversao: nonPerdidoCount > 0 ? Math.round((followUpCount / nonPerdidoCount) * 100) : 0,
       tempoMedio: histCount > 0 ? Math.round(totalDias / histCount) : 0,
       activeCount: nonPerdidoCount,
     }
-  }, [clientesFiltrados, displayedStages])
+  }, [clientesFiltrados, mapaUltimaProposta])
 
   // Map pedidos by clienteId for logistics info on cards
   const pedidosByCliente = useMemo(() => {
@@ -814,7 +822,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 300}px` }}>
           {displayedStages.map((stage) => {
             const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
-            const stageValor = stageClientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+            const stageValor = stageClientes.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             const isProposta = stage.key === 'proposta'
             const novoCicloCount = isProposta ? clientesNovoCiclo.length : 0
@@ -1037,33 +1045,12 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             {cliente.produtosInteresse.length > 3 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 3}</span>}
                           </div>
                         )}
-                        {cliente.redesSociais && (() => {
-                          const rs: any = cliente.redesSociais
-                          const entries = (Array.isArray(rs) ? rs : String(rs).split(/[,;\s]+/)).filter(Boolean)
-                          const socials: { icon: string; url: string; title: string }[] = []
-                          for (const entry of entries) {
-                            const e = entry.toLowerCase().trim()
-                            if (e.includes('instagram') || e.includes('insta')) {
-                              const url = e.startsWith('http') ? entry.trim() : e.startsWith('@') ? `https://instagram.com/${e.slice(1)}` : `https://instagram.com/${e.replace(/.*instagram\.com\/?/,'')}`
-                              socials.push({ icon: '📸', url, title: 'Instagram' })
-                            } else if (e.includes('linkedin')) {
-                              socials.push({ icon: '💼', url: e.startsWith('http') ? entry.trim() : `https://linkedin.com/in/${e}`, title: 'LinkedIn' })
-                            } else if (e.includes('facebook') || e.includes('fb.com')) {
-                              socials.push({ icon: '👤', url: e.startsWith('http') ? entry.trim() : `https://facebook.com/${e}`, title: 'Facebook' })
-                            } else if (e.includes('twitter') || e.includes('x.com')) {
-                              socials.push({ icon: '🐦', url: e.startsWith('http') ? entry.trim() : `https://x.com/${e}`, title: 'X / Twitter' })
-                            } else if (e.includes('tiktok')) {
-                              socials.push({ icon: '🎵', url: e.startsWith('http') ? entry.trim() : `https://tiktok.com/@${e}`, title: 'TikTok' })
-                            } else if (e.includes('youtube') || e.includes('youtu.be')) {
-                              socials.push({ icon: '▶️', url: e.startsWith('http') ? entry.trim() : `https://youtube.com/${e}`, title: 'YouTube' })
-                            } else if (e.startsWith('http') || e.includes('.com') || e.includes('.br')) {
-                              socials.push({ icon: '🌐', url: e.startsWith('http') ? entry.trim() : `https://${entry.trim()}`, title: 'Site' })
-                            }
-                          }
+                        {(() => {
+                          const socials = extractValidSocialLinks(cliente)
                           return socials.length > 0 ? (
                             <div className="flex gap-1 mt-1">
-                              {socials.map((s, i) => (
-                                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="w-5 h-5 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 transition-colors text-[10px]" title={s.title}>{s.icon}</a>
+                              {socials.map((s) => (
+                                <a key={s.key} href={s.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="w-5 h-5 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 transition-colors text-[10px]" title={s.title}>{s.icon}</a>
                               ))}
                             </div>
                           ) : null

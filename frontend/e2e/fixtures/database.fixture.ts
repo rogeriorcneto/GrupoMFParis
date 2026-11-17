@@ -49,6 +49,9 @@ export function gerarCnpjTeste(): string {
  * Cria um cliente de teste e retorna o id para cleanup posterior.
  */
 export async function criarClienteTeste(overrides: Record<string, any> = {}) {
+  if (supabaseUrl.includes('lstmymjftgjtogbyxoyn') && process.env.ALLOW_PROD_E2E_WRITES !== 'true') {
+    throw new Error('BLOQUEADO (Item 8): proibido criar clientes de teste direto no banco de produção. Use ambiente separado ou mocks isolados.')
+  }
   const client = await getAuthenticatedClient()
   const cnpj = gerarCnpjTeste()
 
