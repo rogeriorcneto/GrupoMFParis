@@ -423,7 +423,14 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     showModal, setShowModal, handleInputChange, handleSubmit,
     handleEditCliente, openModal,
     isLoadingCep, isLoadingCnpj, buscarCep, buscarCnpj,
-  } = useClienteForm({ loggedUser, setClientes, setInteracoes, showToast })
+  } = useClienteForm({
+    loggedUser,
+    clientes,
+    setClientes,
+    setInteracoes,
+    showToast,
+    onOpenExistingCliente: (card) => { setActiveView('funil'); setSelectedClientePanel(card) },
+  })
 
   // Funnel actions: drag/drop, mover, modals, quick actions, campaigns
   const {
@@ -434,6 +441,7 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
     categoriaPerdaSel, setCategoriaPerdaSel, confirmPerda,
     showModalAmostra, setShowModalAmostra, modalAmostraData, setModalAmostraData, confirmAmostra,
     showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
+    showModalSatisfacao, setShowModalSatisfacao, modalSatisfacaoNota, setModalSatisfacaoNota, modalSatisfacaoFeedback, setModalSatisfacaoFeedback, confirmSatisfacao,
     criarNovoCiclo,
     selectedClientePanel, setSelectedClientePanel,
 
@@ -442,7 +450,8 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
 
     clientes, setClientes, interacoes, setInteracoes, loggedUser,
     setAtividades, addNotificacao, jobs, setJobs, campanhas, setCampanhas,
-    cadencias, tarefas, setTarefas, loadAllData
+    cadencias, tarefas, setTarefas, loadAllData,
+    onConflictCard: (card) => { setActiveView('funil'); setSelectedClientePanel(card) }
   })
 
   const [isNovoCiclo, setIsNovoCiclo] = React.useState(false)
@@ -708,6 +717,9 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
         {selectedClientePanel && (
           <ClientePanel
             cliente={clientes.find(x => x.id === selectedClientePanel.id) || selectedClientePanel}
+            todosClientes={clientes}
+            onCriarNovoCiclo={criarNovoCiclo}
+            onTriggerSatisfacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'arquivado' }); setShowModalSatisfacao(true) }}
             interacoes={interacoes}
             tarefas={tarefas}
             vendedores={vendedores}
@@ -792,6 +804,10 @@ function App({ preloadedUser }: { preloadedUser?: Vendedor | null } = {}) {
           showModalProposta={showModalProposta} setShowModalProposta={setShowModalProposta}
           modalPropostaValor={modalPropostaValor} setModalPropostaValor={setModalPropostaValor}
           confirmProposta={confirmProposta}
+          showModalSatisfacao={showModalSatisfacao} setShowModalSatisfacao={setShowModalSatisfacao}
+          modalSatisfacaoNota={modalSatisfacaoNota} setModalSatisfacaoNota={setModalSatisfacaoNota}
+          modalSatisfacaoFeedback={modalSatisfacaoFeedback} setModalSatisfacaoFeedback={setModalSatisfacaoFeedback}
+          confirmSatisfacao={confirmSatisfacao}
           draggedItem={draggedItem} setDraggedItem={setDraggedItem} setPendingDrop={setPendingDrop}
           loggedUser={loggedUser}
           produtos={produtos}

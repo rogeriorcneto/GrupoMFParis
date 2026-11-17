@@ -1367,6 +1367,66 @@ app.post('/api/automacoes/:id/executar', requireAuth, async (req, res) => {
     res.json({ success: r.ok, error: r.erro })
   } catch (err: any) { res.status(500).json({ success: false, error: err.message }) }
 })
+
+// Item 5: Criação de proposta com proteção contra duplo clique / envio duplicado no servidor
+const propostaLocks = new Map<number, Promise<any>>()
+app.post('/api/propostas', requireAuth, async (req, res) => {
+  const b = req.body || {}
+  const clienteId = Number(b.clienteId)
+  if (!Number.isFinite(clienteId) || clienteId <= 0) {
+    res.status(400).json({ success: false, error: 'clienteId inválido' })
+    return
+  }
+  const anterior = propostaLocks.get(clienteId) || Promise.resolve()
+  const tarefa = anterior.catch(() => {}).then(async () => {
+    const totalValor = Number(b.totalValor || 0)
+    const itens = Array.isArray(b.itens) ? b.itens : []
+    const assinaturaItens = JSON.stringify(itens.map((i: any) => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
+    const limiteIso = new Date(Date.now() - 120_000).toISOString()
+
+    const { data: recentes } = await supabase
+      .from('propostas')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .gte('criado_em', limiteIso)
+      .order('criado_em', { ascending: false })
+      .limit(5)
+
+    const duplicada = (recentes || []).find((r: any) => {
+      if (Number(r.total_valor || 0) !== totalValor) return false
+      const rAssinatura = JSON.stringify((r.itens || []).map((i: any) => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
+      return rAssinatura === assinaturaItens
+    })
+    if (duplicada) return { row: duplicada, deduplicated: true }
+
+    const { data, error } = await supabase
+      .from('propostas')
+      .insert({
+        numero: String(b.numero || `PROP-${Date.now().toString().slice(-6)}`),
+        cliente_id: clienteId,
+        vendedor_nome: String(b.vendedorNome || 'Vendedor'),
+        itens,
+        observacoes: b.observacoes || '',
+        frete: b.frete || null,
+        pagamento: b.pagamento || null,
+        total_valor: totalValor,
+        criado_em: b.criadoEm || new Date().toISOString(),
+      })
+      .select()
+      .single()
+    if (error) throw error
+    return { row: data, deduplicated: false }
+  })
+  propostaLocks.set(clienteId, tarefa)
+  try {
+    const out = await tarefa
+    res.json({ success: true, data: out.row, deduplicated: out.deduplicated })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao salvar proposta' })
+  } finally {
+    if (propostaLocks.get(clienteId) === tarefa) propostaLocks.delete(clienteId)
+  }
+})
 app.use('/api/maps', requireAuth, mapsRouter)
 
 // ─── Academia de Candidatos (links temporários, sem login no CRM) ───

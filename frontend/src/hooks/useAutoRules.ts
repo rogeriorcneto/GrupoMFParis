@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { Cliente, Interacao, Atividade, Vendedor, HistoricoEtapa, Pedido } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo, getProspeccaoToReturn, getLeadsNeedingAssignment, getPedidosPendingApproval } from '../utils/business-rules'
+import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo, getProspeccaoToReturn, getLeadsNeedingAssignment, getPedidosPendingApproval, getNegociacaoStaleAlert } from '../utils/business-rules'
 
 interface UseAutoRulesParams {
   clientes: Cliente[]
@@ -313,4 +313,23 @@ export function useAutoRules({
       addNotificacao('error', 'Pedido aguardando aprovação', `Pedido ${p.numero}${cl ? ` (${cl.razaoSocial})` : ''} está há ${p.dias}d pendente!`, p.clienteId)
     }
   }, [addNotificacao]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Item 6: Vendedor — alertar quando card passar de 3 dias em Negociação ───
+  const negAlertedIdsRef = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    const loggedUser = loggedUserRef.current
+    const lista = clientesRef.current
+    if (!loggedUser || lista.length === 0) return
+    const vencidos = getNegociacaoStaleAlert(lista, loggedUser.id)
+    for (const item of vencidos) {
+      if (negAlertedIdsRef.current.has(item.id)) continue
+      negAlertedIdsRef.current.add(item.id)
+      addNotificacao(
+        'warning',
+        '⚠️ Encerrar Negociação (> 3 dias)',
+        `${item.razaoSocial} está há ${item.dias} dias em Negociação. Encerre como Ganho ou Perdido registrando o motivo real.`,
+        item.id
+      )
+    }
+  }, [addNotificacao, clientes.length, loggedUser?.id])
 }

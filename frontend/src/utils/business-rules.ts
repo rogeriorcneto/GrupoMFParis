@@ -186,3 +186,24 @@ export function getFollowUpLocked(
     return dias >= 45
   })
 }
+
+/** Item 6: Cards em Negociação há mais de 3 dias — alertar vendedor responsável para encerrar (Ganho ou Perdido) */
+export function getNegociacaoStaleAlert(
+  clientes: Cliente[],
+  vendedorId: number
+): { id: number; dias: number; razaoSocial: string }[] {
+  const now = Date.now()
+  const result: { id: number; dias: number; razaoSocial: string }[] = []
+  for (const c of clientes) {
+    if (c.arquivadoDuplicata) continue
+    if (c.etapa !== 'negociacao') continue
+    if (c.vendedorId !== vendedorId) continue
+    const ref = c.dataEntradaEtapa || c.dataProposta
+    if (!ref) continue
+    const dias = Math.floor((now - new Date(ref).getTime()) / 86400000)
+    if (dias > 3) {
+      result.push({ id: c.id, dias, razaoSocial: c.razaoSocial })
+    }
+  }
+  return result
+}

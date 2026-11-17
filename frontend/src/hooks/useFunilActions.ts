@@ -50,23 +50,28 @@ interface UseFunilActionsParams {
   tarefas: Tarefa[]
   setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>
   loadAllData: () => Promise<void>
+  onConflictCard?: (cardExistente: Cliente) => void
 }
 
 export function useFunilActions({
   clientes, setClientes, interacoes, setInteracoes, loggedUser,
   setAtividades, addNotificacao, jobs, setJobs, campanhas, setCampanhas,
-  cadencias, tarefas, setTarefas, loadAllData
+  cadencias, tarefas, setTarefas, loadAllData, onConflictCard
 }: UseFunilActionsParams) {
   // Regra anti-duplicata: só pode existir 1 card em proposta/negociacao por cliente.
   const clientesRef = useRef({ origem: clientes, atuais: clientes })
   if (clientesRef.current.origem !== clientes) clientesRef.current = { origem: clientes, atuais: clientes }
   const ciclosPendentes = useRef<Cliente[]>([])
+  const buscarCardAtivo = (cliente: Cliente, etapas: string[], lista?: Cliente[]) =>
+    (lista || clientesRef.current.atuais).find(c => !c.arquivadoDuplicata && c.id !== cliente.id && etapas.includes(c.etapa) && mesmaEmpresaNoFunil(c, cliente))
   const existeCardAtivo = (cliente: Cliente, etapas: string[], lista?: Cliente[]) =>
     existeCardAtivoNoFunil(lista || clientesRef.current.atuais, cliente, etapas)
   const inserirNovoCiclo = async (cliente: Cliente, novoCard: Omit<Cliente, 'id'>) => {
     const atuais = clientesRef.current.atuais
-    if (atuais.some(c => ['proposta', 'negociacao'].includes(c.etapa) && mesmaEmpresaNoFunil(c, cliente))) {
-      throw new Error('Já existe um card ativo em Proposta ou Negociação para este cliente.')
+    const conflito = buscarCardAtivo(cliente, ['proposta', 'negociacao'], atuais)
+    if (conflito) {
+      onConflictCard?.(conflito)
+      throw new Error(`Já existe um card ativo em ${stageLabels[conflito.etapa] || conflito.etapa} para este cliente. Abrindo o card existente.`)
     }
     if (ciclosPendentes.current.some(c => mesmaEmpresaNoFunil(c, cliente))) {
       throw new Error('A criação de um card ativo deste cliente já está em andamento.')
@@ -231,25 +236,42 @@ export function useFunilActions({
     if (!cliente) return false
 
     const fromStage = cliente.etapa || ''
+    const isGerente = loggedUser?.cargo === 'gerente'
     if (fromStage === 'negociacao' && toStage === 'proposta') {
-      addNotificacao('warning', 'Transição bloqueada', 'Negociação não pode voltar para Proposta. Use Ganhou, Perdido ou ajuste a proposta.')
+      const msg = 'Negociação não pode voltar para Proposta. Use Ganhou ou Perdido.'
+      addNotificacao('warning', 'Transição bloqueada', msg, cliente.id)
+      setTransicaoInvalida(msg)
+      setTimeout(() => setTransicaoInvalida(''), 5000)
       return false
     }
-    // Amostra aprovada com ciclo comercial já ativo (o card de Proposta criado
-    // ao entrar em amostra): o card da amostra é encerrado em "Amostra
-    // Finalizada" em vez de virar um segundo card comercial — a negociação
-    // continua no card que já existe.
+    // Se algum fluxo legado tentar mover amostra -> proposta com card comercial já ativo, encerra em amostra_perdida
     if (toStage === 'proposta' && fromStage === 'amostra' && existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       toStage = 'amostra_perdida'
-      extras = { ...extras, resultadoAmostra: 'aprovada', dataResultadoAmostra: extras.dataResultadoAmostra || now.split('T')[0] }
-      addNotificacao('info', 'Amostra aprovada', `${cliente.razaoSocial}: card de amostra finalizado — a negociação continua no card de Proposta existente.`, cliente.id)
+      extras = { ...extras, resultadoAmostra: extras.resultadoAmostra || 'aprovada', dataResultadoAmostra: extras.dataResultadoAmostra || now.split('T')[0] }
     }
-    if (['proposta', 'negociacao'].includes(toStage) && existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
-      addNotificacao('warning', 'Card ativo existente', 'Este cliente já possui um card em Proposta ou Negociação.')
-      return false
+    if (fromStage !== toStage && !isGerente) {
+      const permitidas = transicoesPermitidas[fromStage] || []
+      if (!permitidas.includes(toStage)) {
+        const msg = `Movimentação bloqueada: "${stageLabels[fromStage] || fromStage}" só pode ir para ${permitidas.length ? permitidas.map(s => stageLabels[s] || s).join(' ou ') : 'nenhuma etapa'}.`
+        addNotificacao('warning', 'Transição bloqueada', msg, cliente.id)
+        setTransicaoInvalida(msg)
+        setTimeout(() => setTransicaoInvalida(''), 5000)
+        return false
+      }
+    }
+    if (fromStage !== toStage && ['proposta', 'negociacao'].includes(toStage)) {
+      const conflito = buscarCardAtivo(cliente, ['proposta', 'negociacao'])
+      if (conflito) {
+        const msg = `Este cliente já possui um card aberto em ${stageLabels[conflito.etapa] || conflito.etapa}. Redirecionando para o card existente.`
+        addNotificacao('warning', 'Card ativo existente', msg, conflito.id)
+        setTransicaoInvalida(msg)
+        setTimeout(() => setTransicaoInvalida(''), 5000)
+        onConflictCard?.(conflito)
+        return false
+      }
     }
     if (toStage === 'amostra' && fromStage !== 'amostra' && !['prospecção', 'proposta', 'amostra_perdida'].includes(fromStage)) {
-      addNotificacao('warning', 'Transição bloqueada', 'Amostra só pode partir de Prospecção ou Proposta, exceto uma nova tentativa de amostra.')
+      addNotificacao('warning', 'Transição bloqueada', 'Amostra só pode partir de Prospecção ou Proposta, exceto o 2º envio de amostra.')
       return false
     }
     const previousSnapshot: Cliente = {
@@ -308,24 +330,34 @@ export function useFunilActions({
       logger.error('Erro ao processar regras de automação:', err)
     }
 
-    // Novo ciclo automático: perda em etapa avançada → card novo em Proposta.
-    // Mesma regra do confirmPerda (drag + modal de motivo): qualquer caminho
-    // que mova para 'perdido' via moverCliente precisa gerar o próximo ciclo.
-    const ETAPAS_PERDA_COM_CICLO = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up']
-    if (toStage === 'perdido' && ETAPAS_PERDA_COM_CICLO.includes(fromStage) && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+    // Matriz oficial: ao ir para Amostra (de Prospecção ou de Proposta), gera automaticamente card em Proposta
+    if (toStage === 'amostra' && ['prospecção', 'proposta'].includes(fromStage) && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+      const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id, { etapaAnterior: 'amostra' })
+      try {
+        const cardCriado = await inserirNovoCiclo(cliente, novoCard)
+        setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
+        addNotificacao('info', '🔄 Card criado em Proposta', `${cliente.razaoSocial}: amostra iniciada em card próprio e card criado em Proposta.`, cardCriado.id)
+        await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
+      } catch (e) {
+        logger.error('Erro ao criar card automático em Proposta ao enviar amostra:', e)
+      }
+    }
+
+    // Matriz oficial: perder em Negociação abre automaticamente um novo ciclo em Proposta
+    if (toStage === 'perdido' && fromStage === 'negociacao' && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
       try {
         const cardCriado = await inserirNovoCiclo(cliente, novoCard)
         setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: cliente.historicoEtapas || [] }])
-        addNotificacao('info', '🔄 Novo ciclo criado', `${cliente.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, cardCriado.id)
+        addNotificacao('info', '🔄 Novo ciclo criado', `${cliente.razaoSocial} foi aberto em Proposta para novo ciclo de vendas.`, cardCriado.id)
         await copiarHistoricoETarefas(clienteId, cardCriado.id, cliente.historicoEtapas || [], tarefas, setTarefas)
       } catch (e) {
         logger.error('Erro ao criar novo ciclo após perda:', e)
       }
     }
 
-    // Novo ciclo automático: ao concluir follow-up OU ao marcar entrega como entregue
-    if ((toStage === 'follow_up' && (fromStage !== 'follow_up' || extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue')) && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+    // Matriz oficial: ganhar em Negociação (ir para Follow-up) abre automaticamente um novo ciclo em Proposta
+    if (toStage === 'follow_up' && fromStage === 'negociacao' && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await inserirNovoCiclo(cliente, novoCard)
@@ -387,6 +419,15 @@ export function useFunilActions({
       return
     }
     if (toStage === 'amostra') {
+      if (fromStage === 'amostra_perdida') {
+        const tentativa = cliente.tentativaAmostra || 1
+        if (tentativa >= 2) {
+          setTransicaoInvalida(`${cliente.razaoSocial} já usou as 2 tentativas de amostra. Mova para Perdido.`)
+          setTimeout(() => setTransicaoInvalida(''), 5000)
+          setDraggedItem(null)
+          return
+        }
+      }
       setPendingDrop({ e: null, toStage })
       setModalAmostraData(new Date().toISOString().split('T')[0])
       setShowModalAmostra(true)
@@ -398,24 +439,13 @@ export function useFunilActions({
       setShowModalProposta(true)
       return
     }
-
-    // 2ª tentativa de amostra: de amostra_perdida → amostra
-    if (toStage === 'amostra' && fromStage === 'amostra_perdida') {
-      const tentativa = cliente.tentativaAmostra || 0
-      if (tentativa >= 2) {
-        setTransicaoInvalida(`${cliente.razaoSocial} já usou as 2 tentativas de amostra. Mova para Perdido.`)
-        setTimeout(() => setTransicaoInvalida(''), 5000)
-        setDraggedItem(null)
-        return
-      }
+    if (toStage === 'arquivado' && fromStage === 'follow_up') {
       setPendingDrop({ e: null, toStage })
-      setModalAmostraData(new Date().toISOString().split('T')[0])
-      setShowModalAmostra(true)
+      setShowModalSatisfacao(true)
       return
     }
 
     const extras: Partial<Cliente> = {}
-    if (toStage === 'proposta') { extras.resultadoAmostra = 'aprovada'; extras.dataResultadoAmostra = new Date().toISOString().split('T')[0] }
     if (toStage === 'prospecção') { extras.motivoPerda = undefined; extras.categoriaPerda = undefined; extras.dataPerda = undefined }
     // Lead → Prospecção: notify vendedor
     if (toStage === 'prospecção' && fromStage === 'lead') {
@@ -470,15 +500,13 @@ export function useFunilActions({
         return
       }
 
-      // Sempre cria novo ciclo em Proposta ao perder de etapas avançadas do funil
-      // (prospecção perdida não gera novo ciclo automaticamente)
-      const etapasComNovoCiclo = ['proposta', 'negociacao', 'amostra', 'amostra_perdida', 'follow_up']
-      if (etapasComNovoCiclo.includes(fromStage) && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
+      // Matriz oficial: perder em Negociação abre automaticamente um novo ciclo em Proposta
+      if (fromStage === 'negociacao' && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
         const novoCliente = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
         try {
           const clienteCriado = await inserirNovoCiclo(clienteOriginal, novoCliente)
           setClientes(prev => [...prev, { ...clienteCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
-          addNotificacao('info', '🔄 Novo ciclo criado', `${clienteOriginal.razaoSocial} foi duplicado em Proposta para novo ciclo de vendas.`, clienteCriado.id)
+          addNotificacao('info', '🔄 Novo ciclo criado', `${clienteOriginal.razaoSocial} foi aberto em Proposta para novo ciclo de vendas.`, clienteCriado.id)
           await copiarHistoricoETarefas(clienteOriginal.id, clienteCriado.id, clienteOriginal.historicoEtapas || [], tarefas, setTarefas)
         } catch (e) {
           logger.error('Erro ao criar novo ciclo:', e)
@@ -494,9 +522,10 @@ export function useFunilActions({
     if (item) {
       draggedItemRef.current = null
       const isRetry = item.fromStage === 'amostra_perdida'
-      const tentativa = isRetry ? (item.cliente.tentativaAmostra || 0) + 1 : (item.cliente.tentativaAmostra || 0)
+      const tentativa = isRetry ? Math.max((item.cliente.tentativaAmostra || 1) + 1, 2) : Math.max(item.cliente.tentativaAmostra || 0, 1)
       const clienteOriginal = item.cliente
-      const movido = await moverCliente(clienteOriginal.id, 'amostra', {
+      // moverCliente já cria automaticamente o card em Proposta quando parte de prospecção/proposta
+      await moverCliente(clienteOriginal.id, 'amostra', {
         dataEnvioAmostra: modalAmostraData,
         statusAmostra: 'solicitada',
         tentativaAmostra: tentativa,
@@ -504,24 +533,14 @@ export function useFunilActions({
         dataResultadoAmostra: undefined,
         motivoReprovacao: undefined,
       })
-
-      // Ao entrar em amostra (1ª tentativa), gera um novo card em Proposta
-      // para o próximo ciclo, já que amostra e proposta são processos independentes (mesmo padrão do follow_up e perdido).
-      if (movido && !isRetry && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
-        const novoCard = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'amostra' })
-        await inserirNovoCiclo(clienteOriginal, novoCard).then(async cardCriado => {
-          setClientes(prev => [...prev, { ...cardCriado, historicoEtapas: clienteOriginal.historicoEtapas || [] }])
-          addNotificacao('info', '🔄 Novo card em Proposta', `${clienteOriginal.razaoSocial}: amostra iniciada em card próprio, novo card criado em Proposta.`, cardCriado.id)
-          await copiarHistoricoETarefas(clienteOriginal.id, cardCriado.id, clienteOriginal.historicoEtapas || [], tarefas, setTarefas)
-        }).catch(e => logger.error('Erro ao criar novo card em proposta:', e))
-      }
     }
     setDraggedItem(null); setPendingDrop(null); setShowModalAmostra(false)
   }
 
   const confirmSatisfacao = () => {
     if (draggedItem) {
-      moverCliente(draggedItem.cliente.id, 'follow_up', {
+      // Matriz oficial: após a coleta de satisfação, o card de Follow-up é encerrado e vai para Arquivados
+      moverCliente(draggedItem.cliente.id, 'arquivado', {
         statusSatisfacao: modalSatisfacaoNota >= 4 ? 'satisfeito' : 'insatisfeito',
         notaSatisfacao: modalSatisfacaoNota,
         feedbackSatisfacao: modalSatisfacaoFeedback.trim() || undefined,

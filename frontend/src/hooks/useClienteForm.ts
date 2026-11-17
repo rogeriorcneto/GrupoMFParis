@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Cliente, Interacao, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
 import { formatCNPJ, formatCPF, formatTelefone, validarCNPJ, validarCPF } from '../utils/validators'
+import { mesmaEmpresaNoFunil } from '../utils/funil-logic'
 import { logger } from '../utils/logger'
 import { fetchCnpjViaBackend, sincronizarClienteOmie, checkCnpjsGlobais } from '../lib/botApi'
 
@@ -26,12 +27,14 @@ const emptyForm: FormData = {
 
 interface UseClienteFormParams {
   loggedUser: Vendedor | null
+  clientes?: Cliente[]
   setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
   setInteracoes: React.Dispatch<React.SetStateAction<Interacao[]>>
   showToast: (tipo: 'success' | 'error', texto: string) => void
+  onOpenExistingCliente?: (card: Cliente) => void
 }
 
-export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToast }: UseClienteFormParams) {
+export function useClienteForm({ loggedUser, clientes = [], setClientes, setInteracoes, showToast, onOpenExistingCliente }: UseClienteFormParams) {
   const [formData, setFormData] = useState<FormData>({ ...emptyForm })
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -246,6 +249,19 @@ export function useClienteForm({ loggedUser, setClientes, setInteracoes, showToa
           sincronizarClienteOmie(editingCliente.id).catch(err => logger.warn('Sync Omie falhou (edição):', err))
         }
       } else {
+        // Item 4: se já existir card aberto em Proposta/Negociação (ou cadastro ativo) para este cliente, bloqueia e leva ao card existente
+        const candidato = { ...clienteFields, id: -1, razaoSocial: formData.razaoSocial || '', etapa: 'prospecção' } as Cliente
+        const cardComercialExistente = clientes.find(
+          c => !c.arquivadoDuplicata && ['proposta', 'negociacao'].includes(c.etapa) && mesmaEmpresaNoFunil(c, candidato)
+        ) || clientes.find(
+          c => !c.arquivadoDuplicata && mesmaEmpresaNoFunil(c, candidato)
+        )
+        if (cardComercialExistente) {
+          showToast('error', `Este cliente já possui card aberto (${cardComercialExistente.razaoSocial} — etapa ${cardComercialExistente.etapa}). Abrindo o card existente.`)
+          setShowModal(false)
+          onOpenExistingCliente?.(cardComercialExistente)
+          return
+        }
         const savedC = await db.insertCliente({
           ...clienteFields,
           etapa: 'prospecção',

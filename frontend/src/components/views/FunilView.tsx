@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa, existeCardAtivoNoFunil } from '../../utils/funil-logic'
-import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa } from '../../utils/constants'
+import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa, transicoesPermitidas } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { fetchAllPropostas } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
@@ -81,6 +81,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [hidePerdidos, setHidePerdidos] = React.useState(true)
   const [hideInativos, setHideInativos] = React.useState(true)
   const [hideAmostraPerdida, setHideAmostraPerdida] = React.useState(true)
+  const [hideArquivados, setHideArquivados] = React.useState(true)
   const [filterSegmento, setFilterSegmento] = React.useState('')
   const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
   const [callRecordingCliente, setCallRecordingCliente] = useState<Cliente | null>(null)
@@ -308,8 +309,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   // Vendedor vê: Prospecção, Amostra, Proposta, Negociação, Follow-up, Inativos, Perdido
   // Gerente vê todas: Leads, Prospecção, Amostra, Amostra Perdida, Proposta, Negociação, Follow-up, Inativos, Perdido
-  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
-  const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
+  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo'])
+  const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo'])
   const FUNIL_ETAPAS = isGerente ? GERENTE_ETAPAS : VENDEDOR_ETAPAS
 
   const allStages = [
@@ -321,6 +322,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: 0.40, gerenteOnly: false },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: 0.60, gerenteOnly: false },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
+    { title: 'Arquivados', key: 'arquivado', badge: 'bg-slate-200 text-slate-700', icon: '🗄️', prob: 0, gerenteOnly: false },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: false }
   ]
 
@@ -331,9 +333,10 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       if (hidePerdidos && stage.key === 'perdido') return false
       if (hideInativos && stage.key === 'inativo') return false
       if (hideAmostraPerdida && stage.key === 'amostra_perdida') return false
+      if (hideArquivados && stage.key === 'arquivado') return false
       return true
     })
-  }, [hideAmostraPerdida, hideInativos, hidePerdidos, isGerente])
+  }, [hideAmostraPerdida, hideArquivados, hideInativos, hidePerdidos, isGerente])
 
   // P1-2: O(1) vendedor lookup instead of O(m) find per card
   const vendedorMap = useMemo(() => {
@@ -413,7 +416,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     clientesFiltrados.forEach(c => {
       const prob = probMap.get(c.etapa) || 0
       const val = c.valorEstimado || 0
-      if (c.etapa !== 'perdido' && c.etapa !== 'inativo') { pipeline += val; nonPerdidoCount++ }
+      if (c.etapa !== 'perdido' && c.etapa !== 'inativo' && c.etapa !== 'arquivado') { pipeline += val; nonPerdidoCount++ }
       if (c.etapa === 'follow_up') followUpCount++
       weighted += val * prob
       if (c.historicoEtapas && c.historicoEtapas.length > 1) {
@@ -480,6 +483,10 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         const pctEtapa60 = Math.min((diasEtapaProsp / 60) * 100, 100)
         return (
           <div className="mt-1.5 space-y-1">
+            <div className="flex items-center justify-between text-[9px] text-gray-500 dark:text-gray-400">
+              <span className="font-semibold">⏱ Na etapa: {diasEtapaProsp}d</span>
+              <span>Prazo: {Math.max(60 - diasEtapaProsp, 0)}d rest.</span>
+            </div>
             {diasInativoProsp >= 3 && (
               <div className="flex items-center gap-1">
                 <span className={`text-[9px] font-bold ${diasInativoProsp >= 5 ? 'text-red-600' : 'text-orange-600'}`}>
@@ -495,7 +502,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             {diasEtapaProsp >= 30 && (
               <div className="flex items-center gap-1">
                 <div className="flex-1 bg-gray-200 rounded-full h-1"><div className={`h-1 rounded-full transition-all ${pctEtapa60 >= 100 ? 'bg-red-500' : 'bg-yellow-400'}`} style={{ width: `${pctEtapa60}%` }} /></div>
-                <span className={`text-[9px] font-bold ${diasEtapaProsp >= 60 ? 'text-red-600' : 'text-yellow-600'}`}>{Math.max(60 - diasEtapaProsp, 0)}d</span>
               </div>
             )}
             {cliente.origemLead && <span className="inline-block px-1.5 py-0.5 text-[9px] bg-sky-100 text-sky-700 rounded-full">{cliente.origemLead}</span>}
@@ -514,9 +520,12 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className="h-1.5 rounded-full transition-all bg-amber-500" style={{ width: `${pctSub}%` }} /></div>
             </div>
+            <div className="flex items-center justify-between text-[9px]">
+              <span className="font-semibold text-gray-600 dark:text-gray-300">⏱ Na etapa: {dias}d</span>
+              <span className={`font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `Prazo: ${diasRestam}d rest.` : 'Prazo vencido!'}</span>
+            </div>
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1"><div className={`h-1 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 80 ? 'bg-yellow-500' : 'bg-gray-400'}`} style={{ width: `${pctPrazo}%` }} /></div>
-              <span className={`text-[9px] font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `${diasRestam}d` : 'Vencido!'}</span>
             </div>
           </div>
         )
@@ -527,24 +536,35 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         return (
           <div className="mt-1.5 space-y-1">
             {cliente.valorEstimado && <p className="text-[10px] font-bold text-indigo-700">� R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p>}
+            <div className="flex items-center justify-between text-[9px]">
+              <span className="font-semibold text-gray-600 dark:text-gray-300">⏱ Na etapa: {dias}d</span>
+              <span className={`font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `Prazo: ${diasRestam}d rest.` : 'Prazo vencido!'}</span>
+            </div>
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 80 ? 'bg-yellow-500' : 'bg-indigo-500'}`} style={{ width: `${pctPrazo}%` }} /></div>
-              <span className={`text-[9px] font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 7 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `${diasRestam}d` : 'Vencido!'}</span>
             </div>
           </div>
         )
       }
       case 'negociacao': {
-        const diasNeg = diasDesde(cliente.dataProposta || cliente.dataEntradaEtapa)
+        const diasNeg = diasDesde(cliente.dataEntradaEtapa || cliente.dataProposta)
         const pctPrazo = Math.min((diasNeg / 45) * 100, 100)
         const diasRestam = Math.max(45 - diasNeg, 0)
         return (
           <div className="mt-1.5 space-y-1">
             {cliente.valorProposta && <p className="text-[10px] font-bold text-purple-700">💰 R$ {cliente.valorProposta.toLocaleString('pt-BR')}</p>}
+            <div className="flex items-center justify-between text-[9px]">
+              <span className={`font-semibold ${diasNeg > 3 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>⏱ Na etapa: {diasNeg}d</span>
+              <span className={`font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 10 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `Prazo: ${diasRestam}d rest.` : 'Prazo vencido!'}</span>
+            </div>
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 78 ? 'bg-yellow-500' : 'bg-purple-500'}`} style={{ width: `${pctPrazo}%` }} /></div>
-              <span className={`text-[9px] font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 10 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `${diasRestam}d` : 'Vencido!'}</span>
             </div>
+            {diasNeg > 3 && (
+              <p className="text-[9px] font-semibold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded px-1.5 py-0.5 leading-tight">
+                ⚠️ +3d em Negociação — encerrar (Ganho ou Perdido)
+              </p>
+            )}
           </div>
         )
       }
@@ -561,6 +581,10 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
           'bg-blue-100 text-blue-700'
         return (
           <div className="mt-1.5 space-y-1">
+            <div className="flex items-center justify-between text-[9px] text-gray-500 dark:text-gray-400">
+              <span className="font-semibold">⏱ Na etapa: {dias}d</span>
+              <span>Prazo: {Math.max(60 - dias, 0)}d rest.</span>
+            </div>
             <div className="flex items-center gap-1 flex-wrap">
               <span className={`inline-block px-1.5 py-0.5 text-[9px] font-bold rounded-full ${subBadgeColor}`}>{subLabel}</span>
               {cliente.omieStatusLogistico && (
@@ -725,6 +749,9 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
           💤
         </button>
+        <button onClick={() => setHideArquivados(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideArquivados ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-slate-100 text-slate-700 border-slate-300'}`} title={hideArquivados ? 'Mostrar Arquivados' : 'Ocultar Arquivados'}>
+          🗄️
+        </button>
         <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
           ❌
         </button>
@@ -855,7 +882,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         <div className="flex items-start justify-between gap-1.5">
                           <h4 className="font-bold text-sm text-gray-900 dark:text-gray-100 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
                           <div className="flex items-center gap-1 flex-shrink-0">
-                            {isGerente && onMoveCliente && (
+                            {onMoveCliente && (isGerente || (transicoesPermitidas[stage.key] || []).length > 0) && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setMoveMenuCliente(moveMenuCliente === cliente.id ? null : cliente.id) }}
                                 className="md:hidden px-1.5 py-0.5 text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded"
@@ -866,10 +893,15 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             {cliente.score !== undefined && <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 rounded-full">{cliente.score}</span>}
                           </div>
                         </div>
-                        {moveMenuCliente === cliente.id && isGerente && onMoveCliente && (
+                        {moveMenuCliente === cliente.id && onMoveCliente && (
                           <div className="absolute right-2 top-9 z-30 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl py-1 max-h-64 overflow-y-auto" onClick={e => e.stopPropagation()}>
                             <p className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wide">Mover para</p>
-                            {displayedStages.filter(s => s.key !== stage.key).map(s => (
+                            {allStages.filter(s => {
+                              if (s.key === stage.key) return false
+                              if (stage.key === 'negociacao' && s.key === 'proposta') return false
+                              if (!isGerente) return (transicoesPermitidas[stage.key] || []).includes(s.key)
+                              return true
+                            }).map(s => (
                               <button
                                 key={s.key}
                                 onClick={() => { setMoveMenuCliente(null); onMoveCliente(cliente, stage.key, s.key) }}
@@ -886,11 +918,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         </div>
                         {/* Ações rápidas — sempre visíveis no topo */}
                         <div className="flex gap-1 mt-2 flex-wrap">
-                          {cliente.etapa === 'amostra' && moverCliente && cliente.statusAmostra === 'entregue' && (
-                            <>
-                              <button onClick={(e) => { e.stopPropagation(); moverCliente(cliente.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Aprovar amostra → Proposta">✅ Aprovar</button>
-                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Reprovar amostra de ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }) }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Reprovar amostra → Amostra Perdida">🚫 Reprovar</button>
-                            </>
+                          {cliente.etapa === 'amostra' && (
+                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Registrar resultado da amostra por item">🧪 Resultado</button>
                           )}
                           {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(cliente.statusAmostra || '') && (
                             <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-0.5 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium border border-red-100" title="Cancelar amostra e voltar para Prospecção">❌ Cancelar</button>
@@ -1145,40 +1174,26 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     <div className="flex gap-2 mt-3">
                       <button
                         onClick={() => {
-                          if (!moverCliente) return
-                          setLockProcessing(true)
-                          moverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] })
-                          setTimeout(() => setLockProcessing(false), 500)
+                          onClickCliente?.(c)
                         }}
                         className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
                       >
-                        ✅ Aprovada → Proposta
+                        🧪 Registrar Resultado (por item)
                       </button>
                       <button
                         onClick={() => {
                           if (!moverCliente) return
                           setLockProcessing(true)
-                          const tentativa = (c.tentativaAmostra || 0)
-                          if (tentativa >= 2) {
-                            moverCliente(c.id, 'perdido', {
-                              resultadoAmostra: 'reprovada',
-                              dataResultadoAmostra: new Date().toISOString().split('T')[0],
-                              categoriaPerda: 'qualidade',
-                              motivoPerda: 'Amostra reprovada (sem mais tentativas)',
-                              dataPerda: new Date().toISOString().split('T')[0],
-                            })
-                          } else {
-                            moverCliente(c.id, 'amostra_perdida', {
-                              resultadoAmostra: 'reprovada',
-                              dataResultadoAmostra: new Date().toISOString().split('T')[0],
-                              motivoReprovacao: 'Prazo de 45 dias vencido',
-                            })
-                          }
+                          moverCliente(c.id, 'amostra_perdida', {
+                            resultadoAmostra: undefined,
+                            dataResultadoAmostra: new Date().toISOString().split('T')[0],
+                            motivoReprovacao: 'Amostra perdida / não recebida pelo cliente',
+                          })
                           setTimeout(() => setLockProcessing(false), 500)
                         }}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
+                        className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
                       >
-                        ❌ Reprovada{(c.tentativaAmostra || 0) >= 2 ? ' → Perdido' : ' → Amostra Perdida'}
+                        📦 Amostra Perdida
                       </button>
                     </div>
                   </div>

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { stageLabels, transicoesPermitidas, subStatusAmostraLabels, subStatusFollowUpLabels } from '../utils/constants'
 
 describe('stageLabels', () => {
-  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo', 'perdido']
+  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo', 'perdido']
 
   it('deve ter label para cada etapa do funil', () => {
     for (const stage of ALL_STAGES) {
@@ -20,7 +20,7 @@ describe('stageLabels', () => {
 })
 
 describe('transicoesPermitidas', () => {
-  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo', 'perdido']
+  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo', 'perdido']
 
   it('deve definir transições para cada etapa', () => {
     for (const stage of ALL_STAGES) {
@@ -33,20 +33,20 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['lead']).toEqual(['prospecção'])
   })
 
-  it('prospecção pode ir para lead (retrocesso), amostra ou perdido', () => {
-    expect(transicoesPermitidas['prospecção']).toEqual(['lead', 'amostra', 'perdido'])
+  it('prospecção só pode ir para amostra ou proposta', () => {
+    expect(transicoesPermitidas['prospecção']).toEqual(['amostra', 'proposta'])
   })
 
-  it('amostra pode ir para proposta ou amostra_perdida', () => {
-    expect(transicoesPermitidas['amostra']).toEqual(['proposta', 'amostra_perdida'])
+  it('amostra encerra em amostra_perdida (venda segue pelo card de proposta)', () => {
+    expect(transicoesPermitidas['amostra']).toEqual(['amostra_perdida'])
   })
 
-  it('amostra_perdida pode voltar para amostra ou ir para perdido', () => {
+  it('amostra_perdida pode voltar para amostra (2º envio) ou ir para perdido', () => {
     expect(transicoesPermitidas['amostra_perdida']).toEqual(['amostra', 'perdido'])
   })
 
-  it('proposta pode ir para negociacao, amostra, inativo ou perdido', () => {
-    expect(transicoesPermitidas['proposta']).toEqual(['negociacao', 'amostra', 'inativo', 'perdido'])
+  it('proposta só pode ir para amostra ou negociacao', () => {
+    expect(transicoesPermitidas['proposta']).toEqual(['amostra', 'negociacao'])
   })
 
   it('negociacao pode ir para follow_up ou perdido, nunca proposta', () => {
@@ -54,12 +54,12 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['negociacao']).not.toContain('proposta')
   })
 
-  it('follow_up pode ir para proposta, negociacao ou perdido', () => {
-    expect(transicoesPermitidas['follow_up']).toEqual(['proposta', 'negociacao', 'perdido'])
+  it('follow_up encerra em arquivado após coleta de satisfação', () => {
+    expect(transicoesPermitidas['follow_up']).toEqual(['arquivado'])
   })
 
-  it('inativo pode ir para prospecção, proposta ou perdido', () => {
-    expect(transicoesPermitidas['inativo']).toEqual(['prospecção', 'proposta', 'perdido'])
+  it('inativo pode ir para prospecção ou proposta', () => {
+    expect(transicoesPermitidas['inativo']).toEqual(['prospecção', 'proposta'])
   })
 
   it('perdido pode voltar para prospecção ou proposta', () => {

@@ -8,6 +8,7 @@ import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { formatCNPJ, formatBrazilianPhone } from '../utils/validators'
 import { isMobileDevice } from '../utils/device'
+import { mesmaEmpresaNoFunil, existeCardAtivoNoFunil } from '../utils/funil-logic'
 import WhatsAppUserPanel from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
@@ -50,6 +51,9 @@ function tarefaPertenceCliente(tarefa: Tarefa, cliente: Cliente) {
 
 interface ClientePanelProps {
   cliente: Cliente
+  todosClientes?: Cliente[]
+  onCriarNovoCiclo?: (cliente: Cliente, extras?: Partial<Cliente>, etapa?: string) => Promise<Cliente>
+  onTriggerSatisfacao?: (cliente: Cliente) => void
   interacoes: Interacao[]
   tarefas: Tarefa[]
   vendedores: Vendedor[]
@@ -108,8 +112,8 @@ function calcStatusAutomatico(c: { statusCliente?: string; etapa?: string; dataU
   return c.statusCliente || 'prospecto'
 }
 
-const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
-const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
+const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Finalizada', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'arquivado': 'Arquivados', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
+const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'arquivado': 'bg-slate-200 text-slate-700', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
 const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
 const tipoInteracaoIcon: Record<string, string> = { email: '📧', whatsapp: '💬', ligacao: '📞', reuniao: '🤝', instagram: '📸', linkedin: '💼', nota: '📝' }
 const tipoInteracaoLabel: Record<string, string> = { email: 'Email', whatsapp: 'WhatsApp', ligacao: 'Ligação', reuniao: 'Reunião', instagram: 'Instagram', linkedin: 'LinkedIn', nota: 'Nota', proposta: 'Proposta', visita: 'Visita' }
@@ -147,7 +151,7 @@ function composeNotasEmpresa(setor: string, info: string): string {
 }
 
 export default function ClientePanel({
-  cliente: c, interacoes, tarefas, vendedores, loggedUser,
+  cliente: c, todosClientes, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onNovoCiclo, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
@@ -278,6 +282,7 @@ export default function ClientePanel({
 
   // Editar Proposta
   const [showEditProposta, setShowEditProposta] = useState(false)
+  const editPropostaLockRef = useRef(false)
   const [ultimaProposta, setUltimaProposta] = useState<PropostaHistorico | null>(null)
   const [editPropostaItens, setEditPropostaItens] = useState<ItemPedido[]>([])
   const [editPropostaFrete, setEditPropostaFrete] = useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
@@ -978,25 +983,27 @@ export default function ClientePanel({
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => {
-                  if (['follow_up', 'perdido', 'inativo'].includes(c.etapa) && onNovoCiclo) {
-                    onNovoCiclo(c)
-                    onClose()
-                    return
-                  }
-                  if (['proposta', 'prospecção', 'lead'].includes(c.etapa)) {
-                    onTriggerNegociacao(c)
-                    onClose()
-                    return
-                  }
-                  abrirEdicaoProposta()
-                }}
-                className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100"
-                title={c.etapa === 'negociacao' && ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Criar proposta e iniciar negociação'}
-              >
-                📝 {c.etapa === 'negociacao' && ultimaProposta ? 'Editar Proposta' : 'Criar Proposta'}
-              </button>
+              {c.etapa !== 'proposta' && (
+                <button
+                  onClick={() => {
+                    if (['follow_up', 'perdido', 'inativo', 'arquivado'].includes(c.etapa) && onNovoCiclo) {
+                      onNovoCiclo(c)
+                      onClose()
+                      return
+                    }
+                    if (['prospecção', 'lead'].includes(c.etapa)) {
+                      onTriggerNegociacao(c)
+                      onClose()
+                      return
+                    }
+                    abrirEdicaoProposta()
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100"
+                  title={c.etapa === 'negociacao' && ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Criar proposta e iniciar negociação'}
+                >
+                  📝 {c.etapa === 'negociacao' && ultimaProposta ? 'Editar Proposta' : 'Criar Proposta'}
+                </button>
+              )}
               {ultimaProposta && isGerente && (
                 <button
                   onClick={() => gerarPropostaPDF(c, ultimaProposta.itens, ultimaProposta.observacoes, ultimaProposta.vendedorNome, ultimaProposta.numero, { tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: ultimaProposta.pagamento, dataLancamento: ultimaProposta.criadoEm })}
@@ -1048,7 +1055,7 @@ export default function ClientePanel({
               )}
               {c.etapa === 'amostra' && (
                 <>
-                  {c.statusAmostra === 'entregue' && (
+                  {c.statusAmostra !== 'cancelamento_pendente' && (
                     <>
                       <button
                         onClick={() => {
@@ -1060,6 +1067,18 @@ export default function ClientePanel({
                         }}
                         className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
                       >🧪 Resultado da Amostra</button>
+                      <button
+                        onClick={() => {
+                          onMoverCliente(c.id, 'amostra_perdida', {
+                            resultadoAmostra: undefined,
+                            dataResultadoAmostra: new Date().toISOString().split('T')[0],
+                            motivoReprovacao: 'Amostra perdida / não recebida pelo cliente',
+                          })
+                          onClose()
+                        }}
+                        className="px-3 py-1.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-apple hover:bg-orange-100"
+                        title="Cliente não recebeu, esqueceu ou perdeu a amostra (permite 2º envio)"
+                      >📦 Amostra Perdida</button>
                     </>
                   )}
                   {c.statusAmostra === 'cancelamento_pendente' && (
@@ -1077,6 +1096,12 @@ export default function ClientePanel({
               )}
               {c.etapa === 'amostra_perdida' && (
                 <>
+                  {(c.tentativaAmostra || 1) < 2 && !c.resultadoAmostra && (
+                    <button
+                      onClick={() => { onTriggerAmostra(c); onClose() }}
+                      className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700"
+                    >🔄 Reenviar Amostra (2º envio)</button>
+                  )}
                   {c.statusAmostra === 'cancelamento_pendente' && (
                     <div className="bg-amber-50 border border-amber-200 rounded-apple p-2.5 space-y-2">
                       <p className="text-xs text-amber-800 font-medium">⏳ Cancelamento aguardando aprovação do gerente.</p>
@@ -1165,8 +1190,16 @@ export default function ClientePanel({
                   >
                     {pedidoAguardandoAprovacao ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
                   </button>
-                  <button onClick={() => { onMoverCliente(c.id, 'proposta', {}); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-gray-200 text-gray-700 rounded-apple hover:bg-gray-300">↩ Voltou p/ Proposta</button>
                 </>
+              )}
+              {c.etapa === 'follow_up' && onTriggerSatisfacao && (
+                <button
+                  onClick={() => { onTriggerSatisfacao(c); onClose() }}
+                  className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700"
+                  title="Registrar satisfação do cliente e encerrar card em Arquivados"
+                >
+                  ⭐ Coletar Satisfação
+                </button>
               )}
               {c.etapa === 'follow_up' && (() => {
                 const pedidoCancelavel = (todosPedidos || []).find(p => p.clienteId === c.id && (p.status === 'confirmado' || p.status === 'enviado' || p.status === 'cancelamento_solicitado') && !['faturado', 'expedido', 'entregue'].includes(p.omieStatus || ''))
@@ -1192,13 +1225,12 @@ export default function ClientePanel({
                   </button>
                 )
               })()}
-              {['prospecção', 'proposta', 'amostra', 'amostra_perdida', 'negociacao', 'follow_up', 'inativo'].includes(c.etapa) && (
+              {(isGerente
+                ? ['prospecção', 'proposta', 'amostra_perdida', 'negociacao', 'follow_up', 'inativo'].includes(c.etapa)
+                : ['negociacao', 'amostra_perdida'].includes(c.etapa)
+              ) && (
                 <button onClick={() => {
-                  if (c.etapa === 'amostra') {
-                    onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] })
-                  } else {
-                    onTriggerPerda(c)
-                  }
+                  onTriggerPerda(c)
                   onClose()
                 }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
               )}
@@ -1459,15 +1491,20 @@ export default function ClientePanel({
 
           {/* === PRODUTOS HOMOLOGADOS === */}
           {(() => {
-            const pedidosCliente = (todosPedidos || []).filter(p => p.clienteId === c.id)
+            const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
+            const familiaIds = new Set(familia.map(cl => cl.id))
+            const denegadosUnificados = new Set<string>(c.produtosDenegados || [])
+            familia.forEach(cl => (cl.produtosDenegados || []).forEach(nome => denegadosUnificados.add(nome)))
+            const pedidosCliente = (todosPedidos || []).filter(p => familiaIds.has(p.clienteId))
             const statusAprovados = new Set(['confirmado', 'faturado', 'expedido', 'entregue'])
             const nomesHomologados = new Set<string>()
             for (const p of pedidosCliente) {
-              const isAmostraAvaliada = p.tipo === 'bonificacao' && !!c.resultadoAmostra
+              const donoPed = familia.find(cl => cl.id === p.clienteId)
+              const isAmostraAvaliada = p.tipo === 'bonificacao' && !!(donoPed?.resultadoAmostra || c.resultadoAmostra)
               const isVendaConfirmada = p.tipo !== 'bonificacao' && statusAprovados.has(p.status)
               if (isAmostraAvaliada || isVendaConfirmada) {
                 for (const item of (p.itens || [])) {
-                  if (item.nomeProduto && !c.produtosDenegados?.includes(item.nomeProduto)) nomesHomologados.add(item.nomeProduto)
+                  if (item.nomeProduto && !denegadosUnificados.has(item.nomeProduto)) nomesHomologados.add(item.nomeProduto)
                 }
               }
             }
@@ -1490,15 +1527,21 @@ export default function ClientePanel({
 
           {/* === PRODUTOS REPROVADOS === */}
           {(() => {
-            const lista = c.produtosDenegados || []
+            const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
+            const denegadosSet = new Set<string>(c.produtosDenegados || [])
             const motivoMap: Record<string, string> = {}
-            if (c.motivoReprovacao) {
-              c.motivoReprovacao.split(';').forEach(part => {
-                const [nome, ...rest] = part.split(':')
-                const key = nome.trim()
-                if (key) motivoMap[key] = rest.join(':').trim()
-              })
-            }
+            familia.forEach(cl => {
+              ;(cl.produtosDenegados || []).forEach(nome => denegadosSet.add(nome))
+              if (cl.motivoReprovacao) {
+                cl.motivoReprovacao.split(';').forEach(part => {
+                  const [nome, ...rest] = part.split(':')
+                  const key = nome.trim()
+                  const txt = rest.join(':').trim()
+                  if (key && txt) motivoMap[key] = txt
+                })
+              }
+            })
+            const lista = Array.from(denegadosSet)
             return (
               <div className="bg-red-50 rounded-apple border border-red-200 p-4 space-y-2">
                 <h3 className="text-sm font-semibold text-red-900">🚫 Produtos Reprovados</h3>
@@ -2951,6 +2994,8 @@ export default function ClientePanel({
               <button
                 disabled={editPropostaSaving || editPropostaItens.length === 0}
                 onClick={async () => {
+                  if (editPropostaLockRef.current || editPropostaSaving) return
+                  editPropostaLockRef.current = true
                   setEditPropostaSaving(true)
                   try {
                     const total = editPropostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
@@ -2963,12 +3008,13 @@ export default function ClientePanel({
                       totalValor: total, criadoEm: new Date().toISOString(),
                     })
                     setUltimaProposta(saved)
-                    setTodasPropostas(prev => [saved, ...prev])
+                    setTodasPropostas(prev => prev.some(x => x.id === saved.id) ? prev : [saved, ...prev])
                     setShowEditProposta(false)
                     setEditPropostaProdSearch('')
                   } catch {
                     alert('Erro ao gerar proposta.')
                   } finally {
+                    editPropostaLockRef.current = false
                     setEditPropostaSaving(false)
                   }
                 }}
@@ -3169,8 +3215,9 @@ export default function ClientePanel({
 
         const handleConfirmar = async () => {
           const hoje = new Date().toISOString().split('T')[0]
+          const nomesAprovados = new Set(itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === true).map(i => i.nomeProduto))
           const nomesReprovados = itens.filter((_, idx) => avaliacaoItens[idx]?.aprovado === false).map(i => i.nomeProduto)
-          const denegadosAtuais = c.produtosDenegados ? [...c.produtosDenegados] : []
+          const denegadosAtuais = (c.produtosDenegados || []).filter(n => !nomesAprovados.has(n))
           const novosDenegados = Array.from(new Set([...denegadosAtuais, ...nomesReprovados]))
           const novosMotivos = itens
             .map((item, idx) => avaliacaoItens[idx]?.aprovado === false
@@ -3182,20 +3229,31 @@ export default function ClientePanel({
           const motivosReprovados = motivoReprovacaoAnterior
             ? [motivoReprovacaoAnterior, ...novosMotivos].filter(Boolean).join('; ')
             : novosMotivos.join('; ')
-          const extras: Partial<Cliente> = { resultadoAmostra: todosAprovados ? 'aprovada' : 'reprovada', dataResultadoAmostra: hoje }
-          if (!todosAprovados) {
-            extras.motivoReprovacao = motivosReprovados
-            extras.produtosDenegados = novosDenegados
+          const algumAprovado = nomesAprovados.size > 0
+          const extras: Partial<Cliente> = {
+            resultadoAmostra: algumAprovado ? 'aprovada' : 'reprovada',
+            dataResultadoAmostra: hoje,
+            produtosDenegados: novosDenegados,
+            ...(novosMotivos.length > 0 ? { motivoReprovacao: motivosReprovados } : {}),
           }
           try {
-            if (todosAprovados) {
-              await onMoverCliente(c.id, 'proposta', extras)
-              await criarNovoCicloEmProposta()
-            } else {
-              await onMoverCliente(c.id, 'amostra_perdida', extras)
-            }
+            // Matriz oficial: após registrar o resultado por item, o card de Amostra é ENCERRADO
+            // (a venda segue pelo card de Proposta existente; se não existir, abre um em Proposta).
+            await onMoverCliente(c.id, 'amostra_perdida', extras)
             await db.updateCliente(c.id, extras)
             setClientes(prev => prev.map(cli => cli.id === c.id ? { ...cli, ...extras } : cli))
+            const listaAtual = todosClientes || []
+            const cardComercial = listaAtual.find(cl => !cl.arquivadoDuplicata && cl.id !== c.id && ['proposta', 'negociacao'].includes(cl.etapa) && mesmaEmpresaNoFunil(cl, c))
+            if (cardComercial) {
+              const syncExtras: Partial<Cliente> = {
+                produtosDenegados: novosDenegados,
+                ...(novosMotivos.length > 0 ? { motivoReprovacao: motivosReprovados } : {}),
+              }
+              await db.updateCliente(cardComercial.id, syncExtras)
+              setClientes(prev => prev.map(cli => cli.id === cardComercial.id ? { ...cli, ...syncExtras } : cli))
+            } else if (onCriarNovoCiclo && !existeCardAtivoNoFunil(listaAtual, c, ['proposta', 'negociacao'])) {
+              await onCriarNovoCiclo({ ...c, etapa: 'amostra_perdida' }, { produtosDenegados: novosDenegados }, 'proposta')
+            }
           } catch (err) {
             logger.error('Erro ao salvar avaliação da amostra:', err)
           }
@@ -3214,10 +3272,10 @@ export default function ClientePanel({
               {itens.length === 0 ? (
                 <div className="text-center py-6 text-gray-400 text-sm">
                   <p>Nenhum item encontrado no pedido de amostra.</p>
-                  <p className="text-xs mt-1">Use os botões gerais de Homologado / Denegado.</p>
+                  <p className="text-xs mt-1">Registre o resultado geral para encerrar o card de Amostra (a venda segue em Proposta).</p>
                   <div className="flex gap-3 justify-center mt-4">
-                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; onMoverCliente(c.id, 'proposta', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); await criarNovoCicloEmProposta(); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Aprovado</button>
-                    <button onClick={() => { onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">🚫 Reprovado</button>
+                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; await onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Homologado</button>
+                    <button onClick={async () => { await onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">🚫 Reprovado</button>
                   </div>
                 </div>
               ) : (
@@ -3263,12 +3321,10 @@ export default function ClientePanel({
                   {todosAvaliados && (
                     <p className="text-xs text-gray-500 mb-3">
                       {todosAprovados
-                        ? c.etapaAnterior === 'proposta'
-                          ? '✅ Todos homologados — cliente volta para Proposta e novo card será criado'
-                          : '✅ Todos homologados — cliente será movido para Proposta'
+                        ? '✅ Todos os itens homologados — card de Amostra será encerrado e a venda segue pelo card de Proposta.'
                         : algumReprovado && !todosAprovados
-                          ? '⚠️ Resultado parcial — cliente será movido para Amostra Perdida, denegados registrados'
-                          : '🚫 Todos denegados — cliente será movido para Amostra Perdida'}
+                          ? '⚠️ Resultado misto registrado por item (homologados + reprovados) — card de Amostra será encerrado e a venda segue em Proposta.'
+                          : '🚫 Todos os itens reprovados — registrados no cadastro e card de Amostra encerrado.'}
                     </p>
                   )}
                   <div className="flex justify-end gap-3">

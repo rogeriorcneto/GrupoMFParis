@@ -1565,26 +1565,80 @@ export async function markAllNotificacoesLidas(vendedorId?: number): Promise<voi
 // PROPOSTAS (histórico de propostas geradas)
 // ============================================
 
+const propostaSaveLocks = new Map<number, Promise<PropostaHistorico>>()
+
 export async function savePropostaHistorico(
   p: Omit<PropostaHistorico, 'id'>
 ): Promise<PropostaHistorico> {
-  const { data, error } = await supabase
-    .from('propostas')
-    .insert({
-      numero: p.numero,
-      cliente_id: p.clienteId,
-      vendedor_nome: p.vendedorNome,
-      itens: p.itens,
-      observacoes: p.observacoes,
-      frete: p.frete || null,
-      pagamento: p.pagamento || null,
-      total_valor: p.totalValor,
-      criado_em: p.criadoEm,
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return propostaFromDb(data)
+  const prev = propostaSaveLocks.get(p.clienteId) || Promise.resolve(null as any)
+  const run = prev.catch(() => null).then(async (): Promise<PropostaHistorico> => {
+    const totalValor = Number(p.totalValor || 0)
+    const itens = Array.isArray(p.itens) ? p.itens : []
+    const assinatura = JSON.stringify(itens.map(i => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
+
+    // 1) Tenta salvar validando no servidor (/api/propostas) quando autenticado
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      const botUrl = (import.meta as any).env?.VITE_BOT_URL
+      if (token && botUrl) {
+        const res = await fetch(`${botUrl}/api/propostas`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(p),
+          signal: AbortSignal.timeout(15_000),
+        })
+        if (res.ok) {
+          const json = await res.json()
+          if (json?.success && json?.data) return propostaFromDb(json.data)
+        }
+      }
+    } catch {
+      // Fallback para validação + insert direto no Supabase
+    }
+
+    // 2) Fallback: valida anti-duplicata recente no banco antes de inserir
+    try {
+      const limiteIso = new Date(Date.now() - 120_000).toISOString()
+      const { data: recentes } = await supabase
+        .from('propostas')
+        .select('*')
+        .eq('cliente_id', p.clienteId)
+        .gte('criado_em', limiteIso)
+        .order('criado_em', { ascending: false })
+        .limit(5)
+      const duplicada = (recentes || []).find((r: any) => {
+        if (Number(r.total_valor || 0) !== totalValor) return false
+        const rAssin = JSON.stringify((r.itens || []).map((i: any) => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
+        return rAssin === assinatura
+      })
+      if (duplicada) return propostaFromDb(duplicada)
+    } catch { /* segue para insert */ }
+
+    const { data, error } = await supabase
+      .from('propostas')
+      .insert({
+        numero: p.numero,
+        cliente_id: p.clienteId,
+        vendedor_nome: p.vendedorNome,
+        itens,
+        observacoes: p.observacoes,
+        frete: p.frete || null,
+        pagamento: p.pagamento || null,
+        total_valor: totalValor,
+        criado_em: p.criadoEm,
+      })
+      .select()
+      .single()
+    if (error) throw error
+    return propostaFromDb(data)
+  })
+  propostaSaveLocks.set(p.clienteId, run)
+  try {
+    return await run
+  } finally {
+    if (propostaSaveLocks.get(p.clienteId) === run) propostaSaveLocks.delete(p.clienteId)
+  }
 }
 
 export async function fetchAllPropostas(): Promise<PropostaHistorico[]> {

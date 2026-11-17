@@ -681,20 +681,14 @@ describe('D — transicoesPermitidas', () => {
     expect(transicoesPermitidas['lead']).not.toContain('amostra')
   })
 
-  it('prospecção → amostra é válida', () => {
+  it('prospecção → amostra ou proposta são válidas, perdido direto NÃO', () => {
     expect(transicoesPermitidas['prospecção']).toContain('amostra')
+    expect(transicoesPermitidas['prospecção']).toContain('proposta')
+    expect(transicoesPermitidas['prospecção']).not.toContain('perdido')
   })
 
-  it('prospecção → perdido é válida', () => {
-    expect(transicoesPermitidas['prospecção']).toContain('perdido')
-  })
-
-  it('amostra → proposta é válida (aprovada)', () => {
-    expect(transicoesPermitidas['amostra']).toContain('proposta')
-  })
-
-  it('amostra → amostra_perdida é válida (reprovada)', () => {
-    expect(transicoesPermitidas['amostra']).toContain('amostra_perdida')
+  it('amostra → amostra_perdida é válida (encerra amostra)', () => {
+    expect(transicoesPermitidas['amostra']).toEqual(['amostra_perdida'])
   })
 
   it('amostra → negociacao NÃO é válida (pula etapa)', () => {
@@ -721,8 +715,8 @@ describe('D — transicoesPermitidas', () => {
     expect(transicoesPermitidas['negociacao']).toContain('perdido')
   })
 
-  it('follow_up → proposta é válida (novo ciclo manual)', () => {
-    expect(transicoesPermitidas['follow_up']).toContain('proposta')
+  it('follow_up → arquivado é válida (pós-satisfação)', () => {
+    expect(transicoesPermitidas['follow_up']).toContain('arquivado')
   })
 
   it('perdido → prospecção é válida (reconquista)', () => {

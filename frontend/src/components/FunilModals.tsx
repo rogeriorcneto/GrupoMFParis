@@ -44,6 +44,13 @@ interface FunilModalsProps {
   onCloseNovoCiclo?: () => void
   onClickCliente?: (c: Cliente) => void
   onCriarNovoCiclo?: (cliente: Cliente, extras: Partial<Cliente>) => Promise<Cliente>
+  showModalSatisfacao?: boolean
+  setShowModalSatisfacao?: (v: boolean) => void
+  modalSatisfacaoNota?: number
+  setModalSatisfacaoNota?: (v: number) => void
+  modalSatisfacaoFeedback?: string
+  setModalSatisfacaoFeedback?: (v: string) => void
+  confirmSatisfacao?: () => void
 }
 
 const perdaCategorias: { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[] = [
@@ -62,7 +69,8 @@ export default function FunilModals({
   showModalProposta, setShowModalProposta, modalPropostaValor, setModalPropostaValor, confirmProposta,
   draggedItem, setDraggedItem, setPendingDrop,
   produtos = [], clientes = [], onAddPedido, showToast,
-  isNovoCiclo = false, onCloseNovoCiclo, onClickCliente, onCriarNovoCiclo
+  isNovoCiclo = false, onCloseNovoCiclo, onClickCliente, onCriarNovoCiclo,
+  showModalSatisfacao = false, setShowModalSatisfacao, modalSatisfacaoNota = 5, setModalSatisfacaoNota, modalSatisfacaoFeedback = '', setModalSatisfacaoFeedback, confirmSatisfacao
 }: FunilModalsProps) {
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
@@ -87,6 +95,7 @@ export default function FunilModals({
   const [propostaObs, setPropostaObs] = React.useState('')
   const [propostaSearch, setPropostaSearch] = React.useState('')
   const [propostaSaving, setPropostaSaving] = React.useState(false)
+  const propostaLockRef = React.useRef(false)
   const [propostaTab, setPropostaTab] = React.useState<'itens' | 'historico' | 'simulador'>('itens')
   const [propostaHistorico, setPropostaHistorico] = React.useState<PropostaHistorico[]>([])
   const [propostaHistoricoLoading, setPropostaHistoricoLoading] = React.useState(false)
@@ -127,7 +136,8 @@ export default function FunilModals({
   }
 
   const handleConfirmNegociacao = async () => {
-    if (!draggedItem || propostaSaving) return
+    if (!draggedItem || propostaSaving || propostaLockRef.current) return
+    propostaLockRef.current = true
     setPropostaSaving(true)
     try {
       const totalFromProducts = propostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
@@ -192,7 +202,7 @@ export default function FunilModals({
           totalValor: valorFinal,
           criadoEm: new Date().toISOString(),
         })
-        setPropostaHistorico(prev => [saved, ...prev])
+        setPropostaHistorico(prev => prev.some(x => x.id === saved.id) ? prev : [saved, ...prev])
       } catch {
         // histórico falhou: sem proposta salva, o botão "Ganhou" não funciona depois
         showToast?.('error', 'A proposta não foi salva no histórico. Gere-a novamente antes de usar "Ganhou".')
@@ -220,6 +230,7 @@ export default function FunilModals({
         showToast?.('success', `Proposta ${numero} gerada e salva!`)
       }
     } finally {
+      propostaLockRef.current = false
       setPropostaSaving(false)
     }
   }
@@ -624,6 +635,52 @@ export default function FunilModals({
               <button onClick={cancelProposta} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
               <button onClick={handleConfirmNegociacao} disabled={propostaSaving} className="px-5 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2">
                 {propostaSaving ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Gerando PDF...</> : '📄 Gerar Proposta PDF'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModalSatisfacao && setShowModalSatisfacao && confirmSatisfacao && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => { setShowModalSatisfacao(false); setDraggedItem(null); setPendingDrop(null) }}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">⭐ Coleta de Satisfação</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Registre a satisfação de {draggedItem?.cliente.razaoSocial} para encerrar o card em Arquivados.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">Nota (1 a 5)</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setModalSatisfacaoNota?.(n)}
+                    className={`flex-1 py-2 rounded-apple text-sm font-bold border-2 transition-colors ${modalSatisfacaoNota === n ? 'border-purple-600 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                  >
+                    {n} ⭐
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Observações / Feedback do cliente <span className="text-red-500">*</span></label>
+              <textarea
+                rows={3}
+                value={modalSatisfacaoFeedback}
+                onChange={e => setModalSatisfacaoFeedback?.(e.target.value)}
+                placeholder="Descreva o retorno do cliente sobre a entrega e qualidade..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => { setShowModalSatisfacao(false); setDraggedItem(null); setPendingDrop(null) }} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
+              <button
+                disabled={!modalSatisfacaoFeedback.trim()}
+                onClick={confirmSatisfacao}
+                className="px-4 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Salvar e Arquivar
               </button>
             </div>
           </div>

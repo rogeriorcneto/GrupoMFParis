@@ -344,8 +344,17 @@ export default function AppRouter({
         onColetarSatisfacao={onColetarSatisfacao}
         onImportNegocios={async (updates, novos) => {
           try {
-            if (updates.length > 0) {
-              const mapped = updates.map(u => ({ id: u.clienteId, changes: u.changes }))
+            // Item 4: respeitar 1 único card em Proposta/Negociação por empresa também na importação
+            const updatesSeguros = updates.filter(u => {
+              const etapaNova = u.changes?.etapa
+              if (etapaNova && ['proposta', 'negociacao'].includes(etapaNova)) {
+                const cli = clientes.find(c => c.id === u.clienteId)
+                if (cli && existeCardAtivoNoFunil(clientes, cli, ['proposta', 'negociacao'])) return false
+              }
+              return true
+            })
+            if (updatesSeguros.length > 0) {
+              const mapped = updatesSeguros.map(u => ({ id: u.clienteId, changes: u.changes }))
               await db.updateClientesBatch(mapped)
               setClientes(prev => {
                 const updMap = new Map(mapped.map(u => [u.id, u.changes]))
@@ -355,12 +364,18 @@ export default function AppRouter({
                 })
               })
             }
-            if (novos.length > 0) {
-              const comVendedor = novos.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
+            const novosSeguros = novos.filter(n => {
+              if (['proposta', 'negociacao'].includes(n.etapa)) {
+                if (existeCardAtivoNoFunil(clientes, { ...n, id: -1 } as Cliente, ['proposta', 'negociacao'])) return false
+              }
+              return true
+            })
+            if (novosSeguros.length > 0) {
+              const comVendedor = novosSeguros.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
               const { saved: savedNovos } = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
               setClientes(prev => [...prev, ...savedNovos])
             }
-            showToast('success', `Funil atualizado: ${updates.length} atualizados, ${novos.length} novos`)
+            showToast('success', `Funil atualizado: ${updatesSeguros.length} atualizados, ${novosSeguros.length} novos`)
           } catch (err) {
             logger.error('Erro ao importar negócios:', err)
             showToast('error', 'Erro ao importar negócios. Verifique o CSV.')
@@ -556,12 +571,21 @@ export default function AppRouter({
               const targetId = cliAlvo?.arquivadoDuplicata ? cliAlvo.cardPrincipalId : t.clienteId
               const targetCli = targetId ? clientes.find(c => c.id === targetId && !c.arquivadoDuplicata) : undefined
               if (targetCli) {
-                const atualizacao = {
-                  ultimaInteracao: new Date().toISOString().split('T')[0],
-                  feedbackSatisfacao: t.conclusao || t.descricao || '',
+                const hoje = new Date().toISOString().split('T')[0]
+                const feedback = t.conclusao || t.descricao || ''
+                if (targetCli.etapa === 'follow_up') {
+                  // Matriz oficial: após a coleta de satisfação, o card de Follow-up é encerrado e vai para Arquivados
+                  await moverCliente(targetCli.id, 'arquivado', {
+                    ultimaInteracao: hoje,
+                    feedbackSatisfacao: feedback,
+                    statusSatisfacao: 'satisfeito',
+                    statusFollowUp: 'concluido',
+                  })
+                } else {
+                  const atualizacao = { ultimaInteracao: hoje, feedbackSatisfacao: feedback }
+                  await db.updateCliente(targetCli.id, atualizacao)
+                  setClientes(prev => prev.map(c => c.id === targetCli.id ? { ...c, ...atualizacao } : c))
                 }
-                await db.updateCliente(targetCli.id, atualizacao)
-                setClientes(prev => prev.map(c => c.id === targetCli.id ? { ...c, ...atualizacao } : c))
               }
             }
             
@@ -727,10 +751,12 @@ export default function AppRouter({
                   try {
                     if (cli.etapa === 'perdido') {
                       await criarNovoCiclo(cli, {}, 'proposta')
+                    } else if (shouldMoveToFollowUpOnApproval(saved, cli)) {
+                      await moverCliente(p.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cli.etapa !== targetStage) {
-                        moverCliente(p.clienteId, targetStage)
+                        await moverCliente(p.clienteId, targetStage)
                       }
                     }
                   } catch { /* non-critical */ }
@@ -749,10 +775,12 @@ export default function AppRouter({
                   try {
                     if (cli2.etapa === 'perdido') {
                       await criarNovoCiclo(cli2, {}, 'proposta')
+                    } else if (shouldMoveToFollowUpOnApproval(saved, cli2)) {
+                      await moverCliente(p.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cli2.etapa !== targetStage) {
-                        moverCliente(p.clienteId, targetStage)
+                        await moverCliente(p.clienteId, targetStage)
                       }
                     }
                   } catch { /* non-critical */ }
@@ -791,10 +819,12 @@ export default function AppRouter({
                   try {
                     if (cliApproved.etapa === 'perdido') {
                       await criarNovoCiclo(cliApproved, {}, 'proposta')
+                    } else if (shouldMoveToFollowUpOnApproval(p, cliApproved)) {
+                      await moverCliente(p.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cliApproved.etapa !== targetStage) {
-                        moverCliente(p.clienteId, targetStage)
+                        await moverCliente(p.clienteId, targetStage)
                       }
                     }
                   } catch { /* non-critical */ }
@@ -813,10 +843,12 @@ export default function AppRouter({
                   try {
                     if (cliApproved2.etapa === 'perdido') {
                       await criarNovoCiclo(cliApproved2, {}, 'proposta')
+                    } else if (shouldMoveToFollowUpOnApproval(p, cliApproved2)) {
+                      await moverCliente(p.clienteId, 'follow_up', { statusFollowUp: 'pedido_aprovado' })
                     } else {
                       const targetStage = p.tipo === 'bonificacao' ? 'amostra' : 'negociacao'
                       if (cliApproved2.etapa !== targetStage) {
-                        moverCliente(p.clienteId, targetStage)
+                        await moverCliente(p.clienteId, targetStage)
                       }
                     }
                   } catch { /* non-critical */ }
