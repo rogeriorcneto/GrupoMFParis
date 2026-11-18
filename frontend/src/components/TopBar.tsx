@@ -33,6 +33,7 @@ const viewTitles: Record<ViewType, string> = {
   protocolos: '🐛 Protocolos de Erro',
   sac: '💬 SAC',
   'tabela-precos': '💰 Tabela de Preços',
+  parametros: '⚙️ Parâmetros',
 }
 
 interface TopBarProps {

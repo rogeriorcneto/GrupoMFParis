@@ -16,6 +16,7 @@ import { useDarkMode } from './hooks/useDarkMode'
 import { useClienteForm } from './hooks/useClienteForm'
 import { useFunilActions } from './hooks/useFunilActions'
 import { mesmaEmpresaNoFunil } from './utils/funil-logic'
+import { registrarTarefaExcluida } from './utils/exportacaoAuditoria'
 import { logger } from './utils/logger'
 import { disconnectUserWhatsApp, sendTempoTelaBeat } from './lib/botApi'
 import LoginScreen from './components/LoginScreen'
@@ -428,6 +429,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   } = useClienteForm({
     loggedUser,
     clientes,
+    vendedores,
     setClientes,
     setInteracoes,
     showToast,
@@ -721,6 +723,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
           <ClientePanel
             cliente={clientes.find(x => x.id === selectedClientePanel.id) || selectedClientePanel}
             todosClientes={clientes}
+            onSelectCardCiclo={(card) => setSelectedClientePanel(card)}
             onCriarNovoCiclo={criarNovoCiclo}
             onTriggerSatisfacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'arquivado' }); setShowModalSatisfacao(true) }}
             interacoes={interacoes}
@@ -734,7 +737,21 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
             onTriggerNegociacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setIsNovoCiclo(false); setDraggedItem({ cliente: c, fromStage: c.etapa || 'proposta' }); setPendingDrop({ e: fakeE, toStage: 'negociacao' }); setModalPropostaValor(c.valorEstimado?.toString() || ''); setShowModalProposta(true) }}
             onNovoCiclo={handleNovoCiclo}
             onTriggerPerda={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'perdido' }); setShowMotivoPerda(true) }}
-            onDeleteTarefa={async (tarefaId) => { try { await db.deleteTarefa(tarefaId); setTarefas(prev => prev.filter(t => t.id !== tarefaId)); addNotificacao('success', 'Tarefa excluída', 'Tarefa excluída com sucesso.', selectedClientePanel?.id) } catch (err) { logger.error('Erro ao excluir tarefa:', err); addNotificacao('error', 'Erro', 'Erro ao excluir tarefa') } }}
+            onDeleteTarefa={async (tarefaId) => {
+              try {
+                const tAlvo = tarefas.find(t => t.id === tarefaId)
+                if (tAlvo) {
+                  const cliT = tAlvo.clienteId ? clientes.find(c => c.id === tAlvo.clienteId) : undefined
+                  await registrarTarefaExcluida(tAlvo, loggedUser?.nome || 'Gerente', cliT?.etapa)
+                }
+                await db.deleteTarefa(tarefaId)
+                setTarefas(prev => prev.filter(t => t.id !== tarefaId))
+                addNotificacao('success', 'Tarefa excluída', 'Tarefa excluída com sucesso.', selectedClientePanel?.id)
+              } catch (err) {
+                logger.error('Erro ao excluir tarefa:', err)
+                addNotificacao('error', 'Erro', 'Erro ao excluir tarefa')
+              }
+            }}
             setInteracoes={setInteracoes}
             setClientes={setClientes}
             setTarefas={setTarefas}

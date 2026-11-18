@@ -1294,6 +1294,7 @@ const TarefasView: React.FC<{
       horaOriginal: tarefa.hora,
       motivo,
       reagendadoEm: new Date().toISOString(),
+      alteradoPor: loggedUser?.nome || 'Usuário',
     }
     onUpdateTarefa({
       ...tarefa,

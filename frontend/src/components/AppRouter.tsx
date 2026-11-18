@@ -7,7 +7,7 @@ import type {
 import {
   DashboardView, DashboardVendedorView, AprovacaoView, FunilView, ClientesView, TarefasView,
   ProspeccaoView, AutomacoesView, MapaView, SocialSearchView,
-  IntegracoesView, VendedoresView, RelatoriosView, TemplatesView, ProtocolosView, SacView, TabelaPrecosView,
+  IntegracoesView, VendedoresView, RelatoriosView, TemplatesView, ProtocolosView, SacView, TabelaPrecosView, ParametrosView,
   ProdutosView, PedidosView, AssistenteIAView, IAContextoView, CriarAutomacaoView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
   ConfiguracaoTarefasView, ConfiguracaoMensagensView,
   MissaoView
@@ -15,6 +15,7 @@ import {
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { existeCardAtivoNoFunil } from '../utils/funil-logic'
+import { registrarTarefaExcluida } from '../utils/exportacaoAuditoria'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
 import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
 
@@ -387,6 +388,9 @@ export default function AppRouter({
         clientes={clientes} 
         vendedores={vendedores}
         loggedUser={loggedUser}
+        tarefas={tarefas}
+        pedidos={pedidos}
+        interacoes={interacoes}
         onNewCliente={openModal}
         onEditCliente={handleEditCliente}
         onClickCliente={(c) => setSelectedClientePanel(c)}
@@ -548,6 +552,8 @@ export default function AppRouter({
         highlightTarefaId={highlightTarefaId}
         onDeleteTarefa={async (t) => {
           try {
+            const cliT = t.clienteId ? clientes.find(c => c.id === t.clienteId) : undefined
+            await registrarTarefaExcluida(t, loggedUser?.nome || 'Gerente', cliT?.etapa)
             await db.deleteTarefa(t.id)
             setTarefas(prev => prev.filter(x => x.id !== t.id))
             showToast('success', 'Tarefa excluída com sucesso!')
@@ -676,6 +682,8 @@ export default function AppRouter({
       return <SacView loggedUser={loggedUser} showToast={showToast} />
     case 'tabela-precos':
       return <TabelaPrecosView loggedUser={loggedUser} showToast={showToast} />
+    case 'parametros':
+      return loggedUser ? <ParametrosView loggedUser={loggedUser} showToast={showToast} /> : null
     case 'templates':
       return <TemplatesView templates={templates}
         onAdd={async (t) => {

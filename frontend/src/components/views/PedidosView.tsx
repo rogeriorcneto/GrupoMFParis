@@ -4,7 +4,8 @@ import type { Pedido, Cliente, Produto, Vendedor, ItemPedido } from '../../types
 import { enviarPedidoOmie } from '../../lib/botApi'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 import { savePropostaHistorico } from '../../lib/database'
-import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../../constants/paymentTerms'
+import { DEFAULT_PAYMENT_TERM } from '../../constants/paymentTerms'
+import { useParametrosListas } from '../../lib/parametrosListas'
 import SimuladorPrecoPanel from '../SimuladorPrecoPanel'
 
 function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAddPedido, onUpdatePedido, onMoverCliente, showToast }: {
@@ -19,6 +20,9 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
   showToast?: (tipo: 'success' | 'error', texto: string) => void
 }) {
   const isGerente = loggedUser.cargo === 'gerente'
+  const { opcoesAtivas } = useParametrosListas()
+  const prazosAtivos = opcoesAtivas('prazo_pagamento')
+  const fretesAtivos = opcoesAtivas('tipo_frete')
   const [tab, setTab] = React.useState<'novo' | 'historico'>('novo')
   // DEBUG: Log clientes disponíveis
   console.log('[Pedidos] Total clientes:', clientes.length)
@@ -321,19 +325,19 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Frete <span className="text-red-400">*</span></p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    <button onClick={() => setTipoFrete('CIF')} className={`py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${tipoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>CIF (Entrega)</button>
-                    <button onClick={() => setTipoFrete('FOB')} className={`py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${tipoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>FOB (Retirada)</button>
+                    {fretesAtivos.map(frt => (
+                      <button key={frt.id} onClick={() => setTipoFrete(frt.valor as any)} className={`py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${tipoFrete === frt.valor ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>{frt.label}</button>
+                    ))}
                   </div>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Pagamento</p>
                   <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50">
-                    {PAYMENT_TERM_GROUPS.map((group) => (
-                      <optgroup key={group.label} label={group.label}>
-                        {group.options.map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </optgroup>
+                    {formaPagamento && !prazosAtivos.some(p => p.valor === formaPagamento) && (
+                      <option value={formaPagamento}>{formaPagamento} (desativado)</option>
+                    )}
+                    {prazosAtivos.map((option) => (
+                      <option key={option.id} value={option.valor}>{option.label}</option>
                     ))}
                   </select>
                 </div>

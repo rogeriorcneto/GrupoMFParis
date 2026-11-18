@@ -28,13 +28,14 @@ const emptyForm: FormData = {
 interface UseClienteFormParams {
   loggedUser: Vendedor | null
   clientes?: Cliente[]
+  vendedores?: Vendedor[]
   setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
   setInteracoes: React.Dispatch<React.SetStateAction<Interacao[]>>
   showToast: (tipo: 'success' | 'error', texto: string) => void
   onOpenExistingCliente?: (card: Cliente) => void
 }
 
-export function useClienteForm({ loggedUser, clientes = [], setClientes, setInteracoes, showToast, onOpenExistingCliente }: UseClienteFormParams) {
+export function useClienteForm({ loggedUser, clientes = [], vendedores = [], setClientes, setInteracoes, showToast, onOpenExistingCliente }: UseClienteFormParams) {
   const [formData, setFormData] = useState<FormData>({ ...emptyForm })
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -151,38 +152,40 @@ export function useClienteForm({ loggedUser, clientes = [], setClientes, setInte
       return
     }
 
-    // Verificar CNPJ duplicado antes de salvar
-    // Regra: bloquear duplicata EXCETO se o cliente existente estiver em Proposta ou etapa posterior
-    // (proposta, negociacao, follow_up) — nesse caso um novo lead pode entrar em Amostra.
-    const ETAPAS_PROPOSTA_OU_POSTERIOR = ['proposta', 'negociacao', 'follow_up']
-    if (cnpjDigits.length === 14) {
+    // Item 5: se o CNPJ ou CPF já existe, bloquear SEMPRE o cadastro e avisar quem é o vendedor dono (sem transferência automática)
+    const docInputDigits = cnpjDigits.length === 14 ? cnpjDigits : (formData.cpf || '').replace(/\D/g, '')
+    if (!editingCliente && (docInputDigits.length === 14 || docInputDigits.length === 11)) {
+      const localMatch = clientes.find(c => {
+        if (c.arquivadoDuplicata) return false
+        const dCnpj = (c.cnpj || '').replace(/\D/g, '')
+        const dCpf = (c.cpf || '').replace(/\D/g, '')
+        return dCnpj === docInputDigits || dCpf === docInputDigits
+      })
+      if (localMatch) {
+        const donoLocal = vendedores.find(v => v.id === localMatch.vendedorId)?.nome || loggedUser?.nome || 'Vendedor'
+        showToast('error', `Cadastro bloqueado: este ${docInputDigits.length === 14 ? 'CNPJ' : 'CPF'} já pertence a "${localMatch.razaoSocial}" (vendedor dono: ${donoLocal}).`)
+        return
+      }
       try {
-        const duplicado = await db.checkCnpjDuplicado(formData.cnpj, editingCliente?.id)
-        if (duplicado) {
-          if (ETAPAS_PROPOSTA_OU_POSTERIOR.includes(duplicado.etapa)) {
-            showToast('error', `"${duplicado.razaoSocial}" já está em ${duplicado.etapa === 'proposta' ? 'Proposta' : duplicado.etapa === 'negociacao' ? 'Negociação' : 'Follow-up'}. Para duplicar, use a importação de Amostra diretamente no funil.`)
-            return
-          }
-          showToast('error', `CNPJ já cadastrado para "${duplicado.razaoSocial}" (${duplicado.etapa}). Não é possível duplicar.`)
+        const global = await checkCnpjsGlobais([docInputDigits])
+        const hit = global.find(g => g.exists)
+        if (hit) {
+          showToast('error', `Cadastro bloqueado: este ${docInputDigits.length === 14 ? 'CNPJ' : 'CPF'} já está cadastrado${hit.razaoSocial ? ` para "${hit.razaoSocial}"` : ''} (vendedor dono: ${hit.vendedorNome || 'outro vendedor'}).`)
           return
         }
       } catch (err) {
-        logger.error('Erro ao verificar CNPJ duplicado:', err)
+        logger.error('Erro na checagem global de CNPJ/CPF:', err)
       }
-
-      // Checagem global (backend ignora RLS): vendedor não pode cadastrar
-      // CNPJ que já pertence à carteira de outro vendedor. Se chegou aqui,
-      // o CNPJ não é duplicata visível — falta ver os clientes dos outros.
-      if (loggedUser?.cargo !== 'gerente') {
+      if (cnpjDigits.length === 14) {
         try {
-          const global = await checkCnpjsGlobais([formData.cnpj])
-          const hit = global.find(g => g.exists && g.outroVendedor)
-          if (hit) {
-            showToast('error', 'Este CNPJ já está cadastrado na carteira de outro vendedor. Fale com o gerente se precisar assumir o cliente.')
+          const duplicado = await db.checkCnpjDuplicado(formData.cnpj)
+          if (duplicado) {
+            const donoDb = vendedores.find(v => v.id === duplicado.vendedorId)?.nome || 'outro vendedor'
+            showToast('error', `Cadastro bloqueado: CNPJ já cadastrado para "${duplicado.razaoSocial}" (vendedor dono: ${donoDb}).`)
             return
           }
         } catch (err) {
-          logger.error('Erro na checagem global de CNPJ:', err)
+          logger.error('Erro ao verificar CNPJ duplicado:', err)
         }
       }
     }

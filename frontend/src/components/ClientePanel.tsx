@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { XMarkIcon, PencilIcon } from '@heroicons/react/24/outline'
 import WhatsAppIcon from './icons/WhatsAppIcon'
-import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico } from '../types'
+import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico, ConsumoProdutoInfo, ProdutosConsumoMap } from '../types'
 import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
 import { gerarPropostaPDF } from '../utils/pdfGenerator'
 import * as db from '../lib/database'
@@ -14,7 +14,8 @@ import WhatsAppUserPanel from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
-import { DEFAULT_PAYMENT_TERM, PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
+import { DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
+import { useParametrosListas } from '../lib/parametrosListas'
 import { supabase } from '../lib/supabase'
 import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages } from '../lib/botApi'
 
@@ -53,6 +54,7 @@ function tarefaPertenceCliente(tarefa: Tarefa, cliente: Cliente) {
 interface ClientePanelProps {
   cliente: Cliente
   todosClientes?: Cliente[]
+  onSelectCardCiclo?: (card: Cliente) => void
   onCriarNovoCiclo?: (cliente: Cliente, extras?: Partial<Cliente>, etapa?: string) => Promise<Cliente>
   onTriggerSatisfacao?: (cliente: Cliente) => void
   interacoes: Interacao[]
@@ -152,7 +154,7 @@ function composeNotasEmpresa(setor: string, info: string): string {
 }
 
 export default function ClientePanel({
-  cliente: c, todosClientes, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, tarefas, vendedores, loggedUser,
+  cliente: c, todosClientes, onSelectCardCiclo, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onNovoCiclo, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
@@ -160,6 +162,10 @@ export default function ClientePanel({
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
+  const { opcoesAtivas } = useParametrosListas()
+  const prazosAtivos = opcoesAtivas('prazo_pagamento')
+  const setoresAtivos = opcoesAtivas('setor_contato')
+  const fretesAtivos = opcoesAtivas('tipo_frete')
   const [showVendedorPicker, setShowVendedorPicker] = useState(false)
   const [vendedorSearch, setVendedorSearch] = useState('')
   const [showMaisOpcoesHeader, setShowMaisOpcoesHeader] = useState(false)
@@ -444,18 +450,80 @@ export default function ClientePanel({
     ? clienteTarefas.filter(t => `${t.titulo} ${t.descricao || ''}`.toLowerCase().includes(taskHistoryQuery))
     : clienteTarefas
   const visibleTaskHistory = filteredTaskHistory.slice(0, taskHistoryLimit)
-  const atualizarProdutosInteresse = async (produtosInteresse: string[]) => {
+  const extrairKgMes = (val: number | ConsumoProdutoInfo | undefined): number | '' => {
+    if (val === undefined || val === null) return ''
+    if (typeof val === 'number') return Number.isFinite(val) ? val : ''
+    return typeof val.kgMes === 'number' && Number.isFinite(val.kgMes) ? val.kgMes : ''
+  }
+
+  // Consolida produtos de interesse + kg/mês entre todos os cards da empresa para não perder dados de ciclos anteriores
+  const consumoUnificado = React.useMemo(() => {
+    const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
+    const nomes = new Set<string>(c.produtosInteresse || [])
+    const mapa: ProdutosConsumoMap = {}
+    // Ordem crescente de id para que o mais recente / card atual prevaleça
+    ;[...familia].sort((a, b) => a.id - b.id).forEach(cl => {
+      ;(cl.produtosInteresse || []).forEach(n => { if (n) nomes.add(n) })
+      if (cl.produtosQuantidadesMensais) {
+        Object.entries(cl.produtosQuantidadesMensais).forEach(([prodNome, info]) => {
+          nomes.add(prodNome)
+          mapa[prodNome] = info
+        })
+      }
+    })
+    if (c.produtosQuantidadesMensais) {
+      Object.entries(c.produtosQuantidadesMensais).forEach(([prodNome, info]) => {
+        nomes.add(prodNome)
+        mapa[prodNome] = info
+      })
+    }
+    return { lista: Array.from(nomes), mapa }
+  }, [c, todosClientes])
+
+  const salvarProdutosEConsumo = async (novaLista: string[], novoMapa: ProdutosConsumoMap) => {
     if (salvandoProdutosInteresse) return
     setSalvandoProdutosInteresse(true)
     try {
-      await db.updateCliente(c.id, { produtosInteresse })
-      setClientes(prev => prev.map(cliente => cliente.id === c.id ? { ...cliente, produtosInteresse } : cliente))
+      const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => !cl.arquivadoDuplicata && mesmaEmpresaNoFunil(cl, c))
+      const alvosIds = familia.length > 0 ? familia.map(cl => cl.id) : [c.id]
+      await Promise.all(alvosIds.map(id => db.updateCliente(id, {
+        produtosInteresse: novaLista,
+        produtosQuantidadesMensais: novoMapa,
+      })))
+      const setIds = new Set(alvosIds)
+      setClientes(prev => prev.map(cl => setIds.has(cl.id) ? { ...cl, produtosInteresse: novaLista, produtosQuantidadesMensais: novoMapa } : cl))
     } catch (err) {
-      logger.error('Erro ao atualizar produtos de interesse:', err)
+      logger.error('Erro ao atualizar produtos de interesse / consumo:', err)
       addNotificacao('error', 'Erro ao salvar', 'Não foi possível atualizar os produtos de interesse.', c.id)
     } finally {
       setSalvandoProdutosInteresse(false)
     }
+  }
+
+  const atualizarProdutosInteresse = async (produtosInteresse: string[]) => {
+    const novoMapa: ProdutosConsumoMap = { ...consumoUnificado.mapa }
+    Object.keys(novoMapa).forEach(k => {
+      if (!produtosInteresse.includes(k)) delete novoMapa[k]
+    })
+    await salvarProdutosEConsumo(produtosInteresse, novoMapa)
+  }
+
+  const atualizarConsumoKgMes = async (nomeProduto: string, rawDigits: string) => {
+    const limpo = rawDigits.replace(/\D/g, '')
+    const kgMes = limpo === '' ? 0 : Number(limpo)
+    const prodCatalogo = (produtos || []).find(p => p.nome === nomeProduto)
+    const info: ConsumoProdutoInfo = {
+      kgMes,
+      atualizadoEm: new Date().toISOString(),
+      vendedorId: loggedUser?.id || c.vendedorId,
+      vendedorNome: loggedUser?.nome,
+      produtoId: prodCatalogo?.id,
+      clienteId: c.empresaFunilId || c.id,
+      produto: nomeProduto,
+    }
+    const novaLista = consumoUnificado.lista.includes(nomeProduto) ? consumoUnificado.lista : [...consumoUnificado.lista, nomeProduto]
+    const novoMapa: ProdutosConsumoMap = { ...consumoUnificado.mapa, [nomeProduto]: info }
+    await salvarProdutosEConsumo(novaLista, novoMapa)
   }
   const enderecoPrincipal = [
     c.enderecoRua,
@@ -974,28 +1042,16 @@ export default function ClientePanel({
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
-              {c.etapa !== 'proposta' && (
+              {c.etapa === 'negociacao' && ultimaProposta && (
                 <button
-                  onClick={() => {
-                    if (['follow_up', 'perdido', 'inativo', 'arquivado'].includes(c.etapa) && onNovoCiclo) {
-                      onNovoCiclo(c)
-                      onClose()
-                      return
-                    }
-                    if (['prospecção', 'lead'].includes(c.etapa)) {
-                      onTriggerNegociacao(c)
-                      onClose()
-                      return
-                    }
-                    abrirEdicaoProposta()
-                  }}
+                  onClick={abrirEdicaoProposta}
                   className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100"
-                  title={c.etapa === 'negociacao' && ultimaProposta ? `Editar proposta ${ultimaProposta.numero}` : 'Criar proposta e iniciar negociação'}
+                  title={`Editar proposta ${ultimaProposta.numero}`}
                 >
-                  📝 {c.etapa === 'negociacao' && ultimaProposta ? 'Editar Proposta' : 'Criar Proposta'}
+                  📝 Editar Proposta
                 </button>
               )}
-              {ultimaProposta && isGerente && (
+              {ultimaProposta && (isGerente || c.etapa === 'follow_up') && (
                 <button
                   onClick={() => gerarPropostaPDF(c, ultimaProposta.itens, ultimaProposta.observacoes, ultimaProposta.vendedorNome, ultimaProposta.numero, { tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: ultimaProposta.pagamento, dataLancamento: ultimaProposta.criadoEm })}
                   className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white border border-indigo-200 rounded-apple hover:bg-indigo-700"
@@ -1217,7 +1273,7 @@ export default function ClientePanel({
                 )
               })()}
               {(isGerente
-                ? ['prospecção', 'proposta', 'amostra_perdida', 'negociacao', 'follow_up', 'inativo'].includes(c.etapa)
+                ? ['prospecção', 'proposta', 'amostra_perdida', 'negociacao', 'inativo'].includes(c.etapa)
                 : ['negociacao', 'amostra_perdida'].includes(c.etapa)
               ) && (
                 <button onClick={() => {
@@ -1287,7 +1343,7 @@ export default function ClientePanel({
             <h3 className="text-sm font-semibold text-gray-900">🏢 Dados básicos da empresa</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
               <div><p className="text-xs text-gray-500">Razão social</p><p className="font-medium text-gray-900">{c.razaoSocial}</p></div>
-              <div><p className="text-xs text-gray-500">CNPJ</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">{c.cpf && !c.cnpj ? 'CPF' : 'CNPJ'}</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || c.cpf || '-'}</p></div>
               <div><p className="text-xs text-gray-500">Nome fantasia</p><p className="font-medium text-gray-900">{c.nomeFantasia || '-'}</p></div>
               <div><p className="text-xs text-gray-500">Segmento</p><p className="font-medium text-gray-900">{c.segmento || '-'}</p></div>
             </div>
@@ -1297,6 +1353,102 @@ export default function ClientePanel({
                 <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">{c.descricao}</p>
               </div>
             )}
+          </div>
+
+          {/* === ITEM 6: PRODUTOS DE INTERESSE + CONSUMO MENSAL (kg/mês) EM DESTAQUE === */}
+          <div className="bg-indigo-50/50 rounded-apple border border-indigo-200 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-indigo-950">📦 Produtos de interesse</h3>
+              <span className="text-[11px] font-medium text-indigo-700">Consumo mensal (kg)</span>
+            </div>
+            {consumoUnificado.lista.length > 0 ? (
+              <div className="space-y-2">
+                {consumoUnificado.lista.map(nomeProd => {
+                  const infoBruta = consumoUnificado.mapa[nomeProd]
+                  const valorKg = extrairKgMes(infoBruta)
+                  const metaInfo = typeof infoBruta === 'object' && infoBruta !== null ? infoBruta : null
+                  return (
+                    <div key={nomeProd} className="bg-white rounded-apple border border-indigo-100 px-3 py-2 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-gray-900 leading-snug flex-1 min-w-0 truncate" title={nomeProd}>{nomeProd}</span>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            aria-label={`Consumo mensal (kg) — ${nomeProd}`}
+                            defaultValue={valorKg === '' ? '' : String(valorKg)}
+                            key={`${nomeProd}-${valorKg}`}
+                            onChange={e => { e.target.value = e.target.value.replace(/\D/g, '') }}
+                            onBlur={e => {
+                              const novoDig = e.target.value.replace(/\D/g, '')
+                              if (novoDig !== (valorKg === '' ? '' : String(valorKg))) {
+                                atualizarConsumoKgMes(nomeProd, novoDig)
+                              }
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                            }}
+                            placeholder="0"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded-apple text-xs text-right font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <span className="text-xs font-medium text-gray-500 whitespace-nowrap">kg/mês</span>
+                          <button
+                            type="button"
+                            onClick={() => atualizarProdutosInteresse(consumoUnificado.lista.filter(n => n !== nomeProd))}
+                            disabled={salvandoProdutosInteresse}
+                            className="ml-1 text-gray-400 hover:text-red-600 font-bold text-sm disabled:opacity-50"
+                            aria-label={`Remover ${nomeProd}`}
+                            title="Remover produto"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                      {metaInfo?.atualizadoEm && (
+                        <p className="text-[10px] text-gray-400">
+                          Atualizado em {new Date(metaInfo.atualizadoEm).toLocaleDateString('pt-BR')}
+                          {metaInfo.vendedorNome ? ` · ${metaInfo.vendedorNome}` : ''}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-indigo-800/70">Nenhum produto de interesse registrado. Adicione abaixo informando o consumo em kg/mês.</p>
+            )}
+            <div className="relative">
+              <input
+                value={produtoInteresseBusca}
+                onChange={e => setProdutoInteresseBusca(e.target.value)}
+                placeholder="🔍 Buscar e adicionar produto..."
+                className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              {produtoInteresseBusca.trim() && (
+                <div className="absolute z-20 mt-1 w-full max-h-44 overflow-y-auto rounded-apple border border-gray-200 bg-white shadow-lg">
+                  {(produtos || [])
+                    .filter(produto => produto.ativo !== false && produto.nome.toLowerCase().includes(produtoInteresseBusca.trim().toLowerCase()) && !consumoUnificado.lista.includes(produto.nome))
+                    .slice(0, 10)
+                    .map(produto => (
+                      <button
+                        key={produto.id}
+                        type="button"
+                        onClick={() => {
+                          atualizarConsumoKgMes(produto.nome, '0')
+                          setProdutoInteresseBusca('')
+                        }}
+                        disabled={salvandoProdutosInteresse}
+                        className="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-indigo-50 disabled:opacity-50"
+                      >
+                        {produto.nome}
+                      </button>
+                    ))}
+                  {(produtos || []).filter(produto => produto.ativo !== false && produto.nome.toLowerCase().includes(produtoInteresseBusca.trim().toLowerCase()) && !consumoUnificado.lista.includes(produto.nome)).length === 0 && (
+                    <p className="px-3 py-2 text-xs text-gray-500">Nenhum produto disponível.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* === INFORMAÇÕES ADICIONAIS === */}
@@ -1429,12 +1581,12 @@ export default function ClientePanel({
                 <p className="text-xs text-gray-500">Setor</p>
                 <select value={panelContatoSetor} onChange={(e) => setPanelContatoSetor(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
                   <option value="">Selecionar...</option>
-                  <option value="compras">Compras</option>
-                  <option value="financeiro">Financeiro</option>
-                  <option value="diretoria">Diretoria</option>
-                  <option value="marketing">Marketing</option>
-                  <option value="qualidade">Qualidade</option>
-                  <option value="outro">Outro</option>
+                  {panelContatoSetor && !setoresAtivos.some(s => s.valor === panelContatoSetor) && (
+                    <option value={panelContatoSetor}>{panelContatoSetor} (desativado)</option>
+                  )}
+                  {setoresAtivos.map(s => (
+                    <option key={s.id} value={s.valor}>{s.label}</option>
+                  ))}
                 </select>
               </div>
               <div><p className="text-xs text-gray-500">Telefone</p>
@@ -1551,27 +1703,6 @@ export default function ClientePanel({
               </div>
             )
           })()}
-
-          {/* === PRODUTOS DE INTERESSE === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">📦 Produtos de interesse</h3>
-            {c.produtosInteresse && c.produtosInteresse.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {c.produtosInteresse.map(p => <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-primary-50 text-primary-700 rounded-full border border-primary-100">{p}<button type="button" onClick={() => atualizarProdutosInteresse(c.produtosInteresse!.filter(nome => nome !== p))} disabled={salvandoProdutosInteresse} className="font-bold text-primary-500 hover:text-red-600 disabled:opacity-50" aria-label={`Remover ${p}`}>×</button></span>)}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">Nenhum produto de interesse registrado.</p>
-            )}
-            <div className="relative">
-              <input value={produtoInteresseBusca} onChange={e => setProdutoInteresseBusca(e.target.value)} placeholder="Buscar e adicionar produto" className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-              {produtoInteresseBusca.trim() && (
-                <div className="absolute z-10 mt-1 w-full max-h-40 overflow-y-auto rounded-apple border border-gray-200 bg-white shadow-lg">
-                  {(produtos || []).filter(produto => produto.nome.toLowerCase().includes(produtoInteresseBusca.trim().toLowerCase()) && !(c.produtosInteresse || []).includes(produto.nome)).slice(0, 8).map(produto => <button key={produto.id} type="button" onClick={() => { atualizarProdutosInteresse([...(c.produtosInteresse || []), produto.nome]); setProdutoInteresseBusca('') }} disabled={salvandoProdutosInteresse} className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-primary-50 disabled:opacity-50">{produto.nome}</button>)}
-                  {(produtos || []).filter(produto => produto.nome.toLowerCase().includes(produtoInteresseBusca.trim().toLowerCase()) && !(c.produtosInteresse || []).includes(produto.nome)).length === 0 && <p className="px-3 py-2 text-xs text-gray-500">Nenhum produto disponível.</p>}
-                </div>
-              )}
-            </div>
-          </div>
 
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -1758,9 +1889,13 @@ export default function ClientePanel({
 
           {/* ===== ABA NEGÓCIOS ===== */}
           {activeTab === 'negocios' && (() => {
+            const familiaCiclos = (todosClientes && todosClientes.length > 0 ? todosClientes : [c])
+              .filter(cl => !cl.arquivadoDuplicata && mesmaEmpresaNoFunil(cl, c))
+              .sort((a, b) => (b.cicloNumero || 1) - (a.cicloNumero || 1) || b.id - a.id)
+            const familiaIds = new Set(familiaCiclos.map(cl => cl.id))
             const dataMaisRecente = (p: Pedido) => p.dataAprovacao || p.dataEnvio || p.dataCriacao || ''
             const pedidosCli = (todosPedidos || [])
-              .filter(p => p.clienteId === c.id)
+              .filter(p => familiaIds.has(p.clienteId))
               .sort((a, b) => dataMaisRecente(b).localeCompare(dataMaisRecente(a)))
             const total = pedidosCli.filter(p => p.status !== 'cancelado' && p.tipo !== 'bonificacao').reduce((s, p) => s + (p.totalValor || 0), 0)
             // Conta corrente de margem (item 6.1): margem estimada por pedido
@@ -1813,6 +1948,43 @@ export default function ClientePanel({
                     <p className="text-lg font-bold text-indigo-700">{todasPropostas.length}</p>
                   </div>
                 </div>
+
+                {/* Item 5: Ciclos de venda (cards ligados a este cadastro único) */}
+                {familiaCiclos.length > 0 && (
+                  <div className="bg-white rounded-apple border border-gray-200">
+                    <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-900">🔄 Ciclos de venda no funil ({familiaCiclos.length})</p>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {familiaCiclos.map(cardCiclo => {
+                        const isAtual = cardCiclo.id === c.id
+                        return (
+                          <div key={cardCiclo.id} className={`px-4 py-2.5 flex items-center justify-between gap-2 ${isAtual ? 'bg-primary-50/40' : 'hover:bg-gray-50'}`}>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-gray-900">
+                                Ciclo #{cardCiclo.cicloNumero || 1} · Card #{cardCiclo.id}
+                                {isAtual && <span className="ml-1.5 text-[10px] bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">aberto agora</span>}
+                              </p>
+                              <p className="text-[11px] text-gray-500">
+                                Etapa: <span className="font-medium">{etapaLabels[cardCiclo.etapa] || cardCiclo.etapa}</span>
+                                {cardCiclo.dataEntradaEtapa ? ` · desde ${new Date(cardCiclo.dataEntradaEtapa).toLocaleDateString('pt-BR')}` : ''}
+                              </p>
+                            </div>
+                            {!isAtual && onSelectCardCiclo && (
+                              <button
+                                type="button"
+                                onClick={() => onSelectCardCiclo(cardCiclo)}
+                                className="px-2.5 py-1 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-apple border border-primary-200"
+                              >
+                                Abrir card
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Lista de Pedidos */}
                 <div className="bg-white rounded-apple border border-gray-200">
@@ -2849,10 +3021,11 @@ export default function ClientePanel({
               <div>
                 <p className="text-xs font-medium text-gray-700 mb-1">Forma de Pagamento</p>
                 <select value={editPropostaPagamento} onChange={e => setEditPropostaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  {PAYMENT_TERM_GROUPS.map(group => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </optgroup>
+                  {editPropostaPagamento && !prazosAtivos.some(p => p.valor === editPropostaPagamento) && (
+                    <option value={editPropostaPagamento}>{editPropostaPagamento} (desativado)</option>
+                  )}
+                  {prazosAtivos.map(opt => (
+                    <option key={opt.id} value={opt.valor}>{opt.label}</option>
                   ))}
                 </select>
               </div>
@@ -3128,10 +3301,11 @@ export default function ClientePanel({
                   <label className="block text-sm font-medium text-gray-700 mb-1">Forma de pagamento</label>
                   <select value={editPedidoPagamento} onChange={e => setEditPedidoPagamento(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-apple">
-                    {PAYMENT_TERM_GROUPS.map(g => (
-                      <optgroup key={g.label} label={g.label}>
-                        {g.options.map(o => <option key={o} value={o}>{o}</option>)}
-                      </optgroup>
+                    {editPedidoPagamento && !prazosAtivos.some(p => p.valor === editPedidoPagamento) && (
+                      <option value={editPedidoPagamento}>{editPedidoPagamento} (desativado)</option>
+                    )}
+                    {prazosAtivos.map(o => (
+                      <option key={o.id} value={o.valor}>{o.label}</option>
                     ))}
                   </select>
                 </div>

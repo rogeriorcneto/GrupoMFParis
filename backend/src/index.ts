@@ -1385,18 +1385,18 @@ app.post('/api/propostas', requireAuth, async (req, res) => {
     const totalValor = Number(b.totalValor || 0)
     const itens = Array.isArray(b.itens) ? b.itens : []
     const assinaturaItens = JSON.stringify(itens.map((i: any) => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
-    const limiteIso = new Date(Date.now() - 120_000).toISOString()
 
     const { data: recentes } = await supabase
       .from('propostas')
       .select('*')
       .eq('cliente_id', clienteId)
-      .gte('criado_em', limiteIso)
       .order('criado_em', { ascending: false })
-      .limit(5)
+      .limit(3)
 
     const duplicada = (recentes || []).find((r: any) => {
       if (Number(r.total_valor || 0) !== totalValor) return false
+      if ((r.frete || null) !== (b.frete || null)) return false
+      if ((r.pagamento || null) !== (b.pagamento || null)) return false
       const rAssinatura = JSON.stringify((r.itens || []).map((i: any) => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
       return rAssinatura === assinaturaItens
     })
@@ -1867,7 +1867,7 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
 // (migrations pendentes). Persiste o payload JSON em `atividades.descricao`
 // com tipo = 'store:<collection>' — funciona até o schema real existir.
 const STORE_COLLECTIONS = new Set([
-  'automacoes', 'automacoes_execucoes', 'ia_contexto', 'classes_clientes', 'documentos',
+  'automacoes', 'automacoes_execucoes', 'ia_contexto', 'classes_clientes', 'documentos', 'parametros_listas', 'tarefas_excluidas',
 ])
 const storeTipo = (c: string) => `store:${c}`
 const parseStoreRow = (r: any) => { try { return { id: r.id, criadoEm: r.created_at, ...JSON.parse(r.descricao) } } catch { return { id: r.id, criadoEm: r.created_at } } }
@@ -1935,20 +1935,30 @@ app.post('/api/clientes/check-cnpj', requireAuth, rateLimit(60, 60_000), async (
     if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
     const isGerente = me.cargo === 'gerente'
 
-    // Uma única query: clientes com CNPJ, comparação por dígitos em memória
-    const { data: todos, error } = await supabase.from('clientes').select('id, razao_social, cnpj, etapa, vendedor_id').not('cnpj', 'is', null).neq('cnpj', '')
+    // Uma única query: clientes não-arquivados com CNPJ ou CPF + nomes dos vendedores
+    const [{ data: todos, error }, { data: vends }] = await Promise.all([
+      supabase.from('clientes').select('id, razao_social, cnpj, cpf, etapa, vendedor_id, arquivado_duplicata').eq('arquivado_duplicata', false),
+      supabase.from('vendedores').select('id, nome'),
+    ])
     if (error) { res.status(500).json({ success: false, error: error.message }); return }
+    const vendMap = new Map<number, string>((vends || []).map((v: any) => [Number(v.id), String(v.nome || '')]))
 
     const resultado = digitsList.map(digits => {
-      const match = (todos || []).find(c => (c.cnpj || '').replace(/\D/g, '') === digits)
+      const match = (todos || []).find(c => {
+        const dCnpj = (c.cnpj || '').replace(/\D/g, '')
+        const dCpf = (c.cpf || '').replace(/\D/g, '')
+        return dCnpj === digits || dCpf === digits
+      })
       if (!match) return { cnpj: digits, exists: false }
       const outroVendedor = !isGerente && match.vendedor_id !== me.id
+      const vendedorNome = match.vendedor_id ? (vendMap.get(Number(match.vendedor_id)) || 'Vendedor') : 'Sem vendedor'
       return {
         cnpj: digits,
         exists: true,
         outroVendedor,
-        // Só expõe detalhes se o cliente é do próprio vendedor (ou gerente)
-        ...(outroVendedor ? {} : { razaoSocial: match.razao_social, etapa: match.etapa, clienteId: match.id }),
+        vendedorNome,
+        razaoSocial: match.razao_social,
+        ...(outroVendedor ? {} : { etapa: match.etapa, clienteId: match.id }),
       }
     })
     res.json({ success: true, data: resultado })

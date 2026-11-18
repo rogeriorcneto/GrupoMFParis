@@ -1,10 +1,22 @@
-export type ViewType = 'dashboard' | 'funil' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia' | 'ia-contexto' | 'criar-automacao' | 'omie' | 'trafico' | 'baseleads' | 'licitacoes' | 'treinamento' | 'configuracao-tarefas' | 'configuracao-mensagens' | 'missao' | 'protocolos' | 'sac' | 'tabela-precos'
+export type ViewType = 'dashboard' | 'funil' | 'aprovacao' | 'clientes' | 'automacoes' | 'mapa' | 'prospeccao' | 'tarefas' | 'social' | 'integracoes' | 'equipe' | 'relatorios' | 'templates' | 'produtos' | 'pedidos' | 'ia' | 'ia-contexto' | 'criar-automacao' | 'omie' | 'trafico' | 'baseleads' | 'licitacoes' | 'treinamento' | 'configuracao-tarefas' | 'configuracao-mensagens' | 'missao' | 'protocolos' | 'sac' | 'tabela-precos' | 'parametros'
 
 export interface HistoricoEtapa {
   etapa: string
   data: string
   de?: string
 }
+
+export interface ConsumoProdutoInfo {
+  kgMes: number
+  atualizadoEm: string
+  vendedorId?: number
+  vendedorNome?: string
+  produtoId?: number
+  clienteId?: number
+  produto?: string
+}
+
+export type ProdutosConsumoMap = Record<string, number | ConsumoProdutoInfo>
 
 export interface Cliente {
   id: number
@@ -114,8 +126,8 @@ export interface Cliente {
   contatoFinanceiroTelefone?: string
   contatoComprasNome?: string
   contatoComprasTelefone?: string
-  // Produtos de Interesse — quantidade mensal estimada por produto
-  produtosQuantidadesMensais?: Record<string, number>
+  // Produtos de Interesse — consumo mensal estruturado (kg/mês + metadados) ou legado numérico
+  produtosQuantidadesMensais?: ProdutosConsumoMap
   produtosDenegados?: string[]
   // Inativação detalhada
   motivoInativacao?: string
@@ -176,7 +188,7 @@ export interface FormData {
   contatoComprasNome?: string
   contatoComprasTelefone?: string
   // Quantidade mensal estimada por produto
-  produtosQuantidadesMensais?: Record<string, number>
+  produtosQuantidadesMensais?: ProdutosConsumoMap
   descricao?: string
 }
 
@@ -348,6 +360,7 @@ export interface TarefaReagendamento {
   horaOriginal?: string
   motivo: string
   reagendadoEm: string
+  alteradoPor?: string
 }
 
 export interface Tarefa {
@@ -362,7 +375,9 @@ export interface Tarefa {
   clienteId?: number
   vendedorId?: number
   concluidaEm?: string
+  concluidaPor?: string
   criadoEm?: string
+  criadoPor?: string
   reagendamentos?: TarefaReagendamento[]
   origemAutomacaoId?: number // ID da regra de automação que criou esta tarefa
   conclusao?: string
@@ -472,6 +487,9 @@ export interface ClientesViewProps {
   clientes: Cliente[]
   vendedores: Vendedor[]
   loggedUser: Vendedor | null
+  tarefas?: Tarefa[]
+  pedidos?: Pedido[]
+  interacoes?: Interacao[]
   onNewCliente: () => void
   onEditCliente: (cliente: Cliente) => void
   /** Clicar no nome do cliente abre a tela de PERFIL (ClientePanel), não o formulário de edição. */

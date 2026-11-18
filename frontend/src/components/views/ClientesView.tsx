@@ -1,15 +1,20 @@
 import React from 'react'
-import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon, PencilIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon, PencilIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
+import {
+  baixarWorkbookXlsx,
+  carregarTarefasExcluidas,
+  gerarLinhasCadastroCompleto,
+  gerarPlanilhasTarefasCompletas,
+} from '../../utils/exportacaoAuditoria'
 
-// === Colunas configuráveis ===
-type ColumnKey = 'nome' | 'cnpj' | 'etapa' | 'vendedor' | 'email' | 'telefone' | 'valor' | 'score' | 'ultimaCompra'
+// === Colunas configuráveis (Item 5: sem coluna Etapa na tela de cadastro de Clientes) ===
+type ColumnKey = 'nome' | 'cnpj' | 'vendedor' | 'email' | 'telefone' | 'valor' | 'score' | 'ultimaCompra'
 interface ColumnDef { key: ColumnKey; label: string; defaultVisible: boolean }
 const ALL_COLUMNS: ColumnDef[] = [
   { key: 'nome', label: 'Nome', defaultVisible: true },
-  { key: 'cnpj', label: 'CNPJ', defaultVisible: true },
-  { key: 'etapa', label: 'Etapa', defaultVisible: true },
+  { key: 'cnpj', label: 'CNPJ / CPF', defaultVisible: true },
   { key: 'vendedor', label: 'Vendedor', defaultVisible: true },
   { key: 'email', label: 'Email', defaultVisible: false },
   { key: 'telefone', label: 'Telefone', defaultVisible: false },
@@ -23,19 +28,39 @@ const SORT_STORAGE_KEY = 'clientesView.sortBy'
 type SortKey = 'nome' | 'dataCadastro' | 'ultimaCompra' | 'valor' | 'score'
 type SortDir = 'asc' | 'desc'
 
-const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, loggedUser, onNewCliente, onEditCliente, onClickCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
-  // Clicar no nome abre o perfil (ClientePanel). Edição via menu/ação dedicada.
-  const openCliente = (c: Cliente) => onClickCliente ? onClickCliente(c) : onEditCliente(c)
+const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, loggedUser, tarefas = [], pedidos = [], interacoes = [], onNewCliente, onEditCliente, onClickCliente, onUpdateCliente, onImportClientes, onDeleteCliente, onDeleteAll }) => {
+  const [showExportModal, setShowExportModal] = React.useState(false)
+  const [expVendedorIds, setExpVendedorIds] = React.useState<number[]>([])
+  const [expDataInicio, setExpDataInicio] = React.useState('')
+  const [expDataFim, setExpDataFim] = React.useState('')
+  const [expLoading, setExpLoading] = React.useState(false)
   const isGerente = loggedUser?.cargo === 'gerente'
-  // Vendedor só vê seus clientes; gerente vê todos.
-  // Cards de novo ciclo (novas oportunidades) ficam no funil, não na lista de cadastros.
+  const chaveUnicaCliente = (c: Cliente): string => {
+    const doc = (c.cnpj || c.cpf || '').replace(/\D/g, '')
+    if (doc.length === 14 || doc.length === 11) return `doc:${doc}`
+    if (c.empresaFunilId) return `ef:${c.empresaFunilId}`
+    return `nome:${(c.razaoSocial || '').trim().toUpperCase().replace(/\s+/g, ' ')}`
+  }
+  // Item 5: ao clicar no cliente na lista de cadastros, abre o card mais recente dele no funil
+  const openCliente = (c: Cliente) => {
+    const chave = chaveUnicaCliente(c)
+    const todosDoCliente = clientes.filter(x => !x.arquivadoDuplicata && chaveUnicaCliente(x) === chave)
+    const rankEtapa: Record<string, number> = { negociacao: 5, proposta: 4, amostra: 3, follow_up: 2, 'prospecção': 1, lead: 1 }
+    const maisRecente = [...todosDoCliente].sort((a, b) => {
+      const ativoA = rankEtapa[a.etapa] ? 1 : 0
+      const ativoB = rankEtapa[b.etapa] ? 1 : 0
+      if (ativoA !== ativoB) return ativoB - ativoA
+      return b.id - a.id
+    })[0] || c
+    return onClickCliente ? onClickCliente(maisRecente) : onEditCliente(maisRecente)
+  }
+  // Vendedor só vê seus clientes; gerente vê todos. Uma única linha por CNPJ/CPF (cadastro único).
   const scopedClientes = React.useMemo(() => {
     const base = (isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id))
       .filter(c => !c.arquivadoDuplicata)
     const porEmpresa = new Map<string, Cliente>()
     for (const c of base) {
-      const doc = (c.cnpj || c.cpf || '').replace(/\D/g, '')
-      const chave = c.empresaFunilId ? `ef:${c.empresaFunilId}` : doc ? `doc:${doc}` : `nome:${(c.razaoSocial || '').trim().toUpperCase()}`
+      const chave = chaveUnicaCliente(c)
       const atual = porEmpresa.get(chave)
       if (!atual || (atual.novoCiclo && !c.novoCiclo) || (Boolean(atual.novoCiclo) === Boolean(c.novoCiclo) && c.id > atual.id)) {
         porEmpresa.set(chave, c)
@@ -709,29 +734,21 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   const handleExportCSV = () => {
     const exportData = filtersActive || debouncedSearch ? filteredClientes : scopedClientes
     
-    // Header completo com todos os campos
+    // Item 5: uma linha por cliente, SEM colunas de etapa/ciclo (etapa e ciclo saem apenas na exportação do Funil)
     const headers = [
-      'razaoSocial', 'nomeFantasia', 'cnpj', 'cnpj2', 'contatoNome', 'contatoTelefone', 
+      'razaoSocial', 'nomeFantasia', 'cnpj', 'cpf', 'cnpj2', 'contatoNome', 'contatoTelefone',
       'contatoCelular', 'contatoTelefoneFixo', 'contatoEmail', 'enderecoRua', 'enderecoNumero',
       'enderecoComplemento', 'enderecoBairro', 'enderecoCidade', 'enderecoEstado', 'enderecoCep',
-      'enderecoRua2', 'enderecoNumero2', 'enderecoComplemento2', 'enderecoBairro2', 
+      'enderecoRua2', 'enderecoNumero2', 'enderecoComplemento2', 'enderecoBairro2',
       'enderecoCidade2', 'enderecoEstado2', 'enderecoCep2', 'cnaePrimario', 'cnaeSecundario',
-      'whatsapp', 'redesSociais', 'omieCodigo', 'agendorCodigo', 'etapa', 'score', 'ultimaInteracao', 
-      'diasInativo', 'valorEstimado', 'produtosInteresse', 'vendedorId', 'vendedorNome', 'dataEntradaEtapa',
-      'notas', 'origemLead', 'dataEnvioAmostra', 'statusAmostra', 'dataHomologacao',
-      'proximoPedidoPrevisto', 'dataProposta', 'valorProposta', 'resultadoAmostra',
-      'dataResultadoAmostra', 'motivoReprovacao', 'statusFollowUp', 'statusSatisfacao',
-      'notaSatisfacao', 'feedbackSatisfacao', 'cicloRecompra', 'dataProximaRecompra',
-      'totalCompras', 'omieStatusLogistico', 'omieCodigoRastreio', 'omieNotaFiscal',
-      'omieDataFaturamento', 'statusEntrega', 'dataEntregaPrevista', 'dataEntregaRealizada',
-      'statusFaturamento', 'dataUltimoPedido', 'etapaAnterior', 'categoriaPerda',
-      'motivoPerda', 'dataPerda', 'segmento', 'localizacao', 'tentativaAmostra',
-      'whatsappValido', 'whatsappJid', 'whatsappValidadoEm', 'novoCiclo', 'cicloNumero',
-      'googlePlaceId', 'googleRating', 'googleReviews', 'website', 'latitude', 'longitude',
+      'whatsapp', 'redesSociais', 'omieCodigo', 'agendorCodigo', 'score', 'ultimaInteracao',
+      'diasInativo', 'valorEstimado', 'produtosInteresse', 'vendedorId', 'vendedorNome',
+      'notas', 'origemLead', 'cicloRecompra', 'dataProximaRecompra',
+      'totalCompras', 'dataUltimoPedido', 'segmento', 'localizacao',
+      'whatsappValido', 'website', 'latitude', 'longitude',
       'statusCliente', 'grupoEconomicoId', 'instagram', 'facebook', 'linkedin', 'descricao'
     ].join(',')
-    
-    // Função para escapar valores CSV
+
     const escapeCSV = (value: any): string => {
       if (value === null || value === undefined) return ''
       if (Array.isArray(value)) return `"${value.join(';')}"`
@@ -739,16 +756,14 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       if (typeof value === 'number') return value.toString()
       return `"${String(value).replace(/"/g, '""')}"`
     }
-    
-    // Gerar linhas com todos os dados
+
     const rows = exportData.map(c => {
-      // Encontrar nome do vendedor
       const vendedorNome = c.vendedorId ? vendedores.find(v => v.id === c.vendedorId)?.nome || '' : ''
-      
       return [
         escapeCSV(c.razaoSocial),
         escapeCSV(c.nomeFantasia),
         escapeCSV(c.cnpj),
+        escapeCSV(c.cpf),
         escapeCSV(c.cnpj2),
         escapeCSV(c.contatoNome),
         escapeCSV(c.contatoTelefone),
@@ -775,57 +790,22 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         escapeCSV(c.redesSociais),
         escapeCSV(c.omieCodigo),
         escapeCSV(c.agendorCodigo),
-        escapeCSV(c.etapa),
         escapeCSV(c.score),
         escapeCSV(c.ultimaInteracao),
         escapeCSV(c.diasInativo),
         escapeCSV(c.valorEstimado),
         escapeCSV(c.produtosInteresse),
         escapeCSV(c.vendedorId),
-        escapeCSV(vendedorNome), // Adicionar nome do vendedor
-        escapeCSV(c.dataEntradaEtapa),
+        escapeCSV(vendedorNome),
         escapeCSV(c.notas),
         escapeCSV(c.origemLead),
-        escapeCSV(c.dataEnvioAmostra),
-        escapeCSV(c.statusAmostra),
-        escapeCSV(c.dataHomologacao),
-        escapeCSV(c.proximoPedidoPrevisto),
-        escapeCSV(c.dataProposta),
-        escapeCSV(c.valorProposta),
-        escapeCSV(c.resultadoAmostra),
-        escapeCSV(c.dataResultadoAmostra),
-        escapeCSV(c.motivoReprovacao),
-        escapeCSV(c.statusFollowUp),
-        escapeCSV(c.statusSatisfacao),
-        escapeCSV(c.notaSatisfacao),
-        escapeCSV(c.feedbackSatisfacao),
         escapeCSV(c.cicloRecompra),
         escapeCSV(c.dataProximaRecompra),
         escapeCSV(c.totalCompras),
-        escapeCSV(c.omieStatusLogistico),
-        escapeCSV(c.omieCodigoRastreio),
-        escapeCSV(c.omieNotaFiscal),
-        escapeCSV(c.omieDataFaturamento),
-        escapeCSV(c.statusEntrega),
-        escapeCSV(c.dataEntregaPrevista),
-        escapeCSV(c.dataEntregaRealizada),
-        escapeCSV(c.statusFaturamento),
         escapeCSV(c.dataUltimoPedido),
-        escapeCSV(c.etapaAnterior),
-        escapeCSV(c.categoriaPerda),
-        escapeCSV(c.motivoPerda),
-        escapeCSV(c.dataPerda),
         escapeCSV(c.segmento),
         escapeCSV(c.localizacao),
-        escapeCSV(c.tentativaAmostra),
         escapeCSV(c.whatsappValido),
-        escapeCSV(c.whatsappJid),
-        escapeCSV(c.whatsappValidadoEm),
-        escapeCSV(c.novoCiclo),
-        escapeCSV(c.cicloNumero),
-        escapeCSV(c.googlePlaceId),
-        escapeCSV(c.googleRating),
-        escapeCSV(c.googleReviews),
         escapeCSV(c.website),
         escapeCSV(c.latitude),
         escapeCSV(c.longitude),
@@ -927,6 +907,16 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           <span>Colunas</span>
         </button>
 
+        {/* Item 9: Botão direto Exportar (.xlsx Cadastro e Tarefas) */}
+        <button
+          onClick={() => setShowExportModal(true)}
+          className="px-3 py-2 rounded-apple border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors flex-shrink-0 flex items-center gap-1.5 text-sm font-medium"
+          title="Exportar Cadastro Completo ou Tarefas + Auditoria (.xlsx)"
+        >
+          <ArrowDownTrayIcon className="h-4 w-4" />
+          <span>Exportar</span>
+        </button>
+
         <div className="relative flex-shrink-0">
           <button onClick={() => setShowMenu(!showMenu)} className="p-2 rounded-apple border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors" title="Mais opções">
             <EllipsisVerticalIcon className="h-5 w-5" />
@@ -934,12 +924,12 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           {showMenu && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-apple shadow-lg border border-gray-200 z-40 py-1">
+              <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-apple shadow-lg border border-gray-200 z-40 py-1">
                 <button onClick={() => { importRef.current?.click(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
                   <span className="text-base">📥</span> Importar CSV
                 </button>
-                <button onClick={() => { handleExportCSV(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                  <span className="text-base">📤</span> Exportar CSV {filtersActive && <span className="text-xs text-gray-400">(filtros ativos)</span>}
+                <button onClick={() => { setShowExportModal(true); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                  <span className="text-base">📊</span> Exportar (.xlsx)
                 </button>
                 <button onClick={() => { handleDownloadModelo(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
                   <span className="text-base">📋</span> Baixar modelo CSV
@@ -962,21 +952,6 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       {showFilters && (
         <div className="bg-white rounded-apple border border-gray-200 p-4">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Etapa</label>
-              <select value={draftEtapa} onChange={(e) => setDraftEtapa(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">Todas</option>
-                <option value="prospecção">Prospecção</option>
-                <option value="amostra">Amostra</option>
-                <option value="proposta">Proposta</option>
-                <option value="negociacao">Negociação</option>
-                <option value="follow_up">Follow-up</option>
-                <option value="amostra_perdida">Amostra Perdida</option>
-                <option value="inativo">Inativos</option>
-                <option value="lead">Leads</option>
-                <option value="perdido">Perdido</option>
-              </select>
-            </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Vendedor</label>
               <select value={draftVendedor} onChange={(e) => setDraftVendedor(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
@@ -1116,8 +1091,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
-                {visibleCols.cnpj && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">CNPJ</th>}
-                {visibleCols.etapa && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Etapa</th>}
+                {visibleCols.cnpj && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">CNPJ / CPF</th>}
                 {visibleCols.vendedor && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Vendedor</th>}
                 {visibleCols.email && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Email</th>}
                 {visibleCols.telefone && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Telefone</th>}
@@ -1141,15 +1115,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                       </p>
                     </td>
                     {visibleCols.cnpj && (
-                      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">{cliente.cnpj || <span className="text-gray-300">—</span>}</td>
-                    )}
-                    {visibleCols.etapa && (
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${cfg.badge}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                          {cfg.label}
-                        </span>
-                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">{cliente.cnpj || cliente.cpf || <span className="text-gray-300">—</span>}</td>
                     )}
                     {visibleCols.vendedor && (
                       <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
@@ -1288,10 +1254,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full ${cfg.badge}`}>
-                    <span className={`w-1 h-1 rounded-full ${cfg.dot}`} />
-                    {cfg.label}
-                  </span>
+                  {(cliente.cnpj || cliente.cpf) && (
+                    <span className="text-[10px] text-gray-500 font-mono">{cliente.cnpj || cliente.cpf}</span>
+                  )}
                   <span className="text-[10px] text-gray-400" onClick={e => e.stopPropagation()}>
                     {editingVendedor === cliente.id ? (
                       <select
@@ -1412,6 +1377,134 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
             <div className="flex gap-3">
               <button onClick={() => setDeleteClienteModal(null)} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-apple font-medium transition-colors">Cancelar</button>
               <button onClick={() => { onDeleteCliente(deleteClienteModal.id); setDeleteClienteModal(null) }} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-apple font-medium transition-colors">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Item 9: Duas exportações completas em .xlsx (Cadastro completo + Tarefas com Auditoria) */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowExportModal(false)}>
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">📊 Exportação Completa (.xlsx)</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Selecione vendedor(es) e período para exportar Cadastro único ou Tarefas com Auditoria.</p>
+              </div>
+              <button onClick={() => setShowExportModal(false)} className="text-gray-400 hover:text-gray-600 font-bold">✕</button>
+            </div>
+
+            {isGerente && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-gray-700">Vendedor (um, vários ou todos)</label>
+                  <button
+                    type="button"
+                    onClick={() => setExpVendedorIds([])}
+                    className="text-xs text-primary-600 hover:underline"
+                  >
+                    {expVendedorIds.length === 0 ? 'Todos selecionados' : 'Limpar filtro (Todos)'}
+                  </button>
+                </div>
+                <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-apple p-2 grid grid-cols-2 gap-1.5 bg-gray-50/50">
+                  {vendedores.filter(v => v.ativo).map(v => {
+                    const checked = expVendedorIds.includes(v.id)
+                    return (
+                      <label key={v.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer px-2 py-1 rounded hover:bg-white">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setExpVendedorIds(prev => (checked ? prev.filter(id => id !== v.id) : [...prev, v.id]))
+                          }
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="truncate">{v.nome}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Período — Início</label>
+                <input
+                  type="date"
+                  value={expDataInicio}
+                  onChange={e => setExpDataInicio(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-apple text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Período — Fim</label>
+                <input
+                  type="date"
+                  value={expDataFim}
+                  onChange={e => setExpDataFim(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-gray-300 rounded-apple text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                type="button"
+                disabled={expLoading}
+                onClick={() => {
+                  const vIds = isGerente ? expVendedorIds : (loggedUser ? [loggedUser.id] : [])
+                  const linhas = gerarLinhasCadastroCompleto(clientes, vendedores, pedidos, interacoes, {
+                    vendedorIds: vIds,
+                    dataInicio: expDataInicio || undefined,
+                    dataFim: expDataFim || undefined,
+                  })
+                  baixarWorkbookXlsx(
+                    [{ nome: 'Cadastro Clientes', dados: linhas }],
+                    `cadastro_clientes_${new Date().toISOString().slice(0, 10)}.xlsx`
+                  )
+                }}
+                className="w-full py-2.5 px-4 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-sm font-semibold flex items-center justify-between transition-colors disabled:opacity-50"
+              >
+                <span>📋 Exportar Cadastro Completo (.xlsx)</span>
+                <span className="text-xs opacity-85">1 linha por CNPJ/CPF</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={expLoading}
+                onClick={async () => {
+                  setExpLoading(true)
+                  try {
+                    const vIds = isGerente ? expVendedorIds : (loggedUser ? [loggedUser.id] : [])
+                    const excluidas = await carregarTarefasExcluidas()
+                    const { abaTarefas, abaAuditoria } = gerarPlanilhasTarefasCompletas(
+                      tarefas,
+                      excluidas,
+                      clientes,
+                      vendedores,
+                      {
+                        vendedorIds: vIds,
+                        dataInicio: expDataInicio || undefined,
+                        dataFim: expDataFim || undefined,
+                      }
+                    )
+                    baixarWorkbookXlsx(
+                      [
+                        { nome: 'Tarefas', dados: abaTarefas },
+                        { nome: 'Auditoria', dados: abaAuditoria },
+                      ],
+                      `tarefas_auditoria_${new Date().toISOString().slice(0, 10)}.xlsx`
+                    )
+                  } finally {
+                    setExpLoading(false)
+                  }
+                }}
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-apple text-sm font-semibold flex items-center justify-between transition-colors disabled:opacity-50"
+              >
+                <span>✅ {expLoading ? 'Gerando...' : 'Exportar Tarefas + Auditoria (.xlsx)'}</span>
+                <span className="text-xs opacity-85">Tarefas + Excluídas/Reagendadas</span>
+              </button>
             </div>
           </div>
         </div>

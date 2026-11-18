@@ -1,6 +1,7 @@
 import React from 'react'
 import type { Cliente, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico } from '../types'
 import { PAYMENT_TERM_GROUPS, DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
+import { useParametrosListas } from '../lib/parametrosListas'
 import { gerarPropostaPDF } from '../utils/pdfGenerator'
 import { savePropostaHistorico, fetchPropostasByCliente } from '../lib/database'
 import SimuladorPrecoPanel from './SimuladorPrecoPanel'
@@ -72,6 +73,10 @@ export default function FunilModals({
   isNovoCiclo = false, onCloseNovoCiclo, onClickCliente, onCriarNovoCiclo,
   showModalSatisfacao = false, setShowModalSatisfacao, modalSatisfacaoNota = 5, setModalSatisfacaoNota, modalSatisfacaoFeedback = '', setModalSatisfacaoFeedback, confirmSatisfacao
 }: FunilModalsProps) {
+  const { opcoesAtivas } = useParametrosListas()
+  const prazosAtivos = opcoesAtivas('prazo_pagamento')
+  const fretesAtivos = opcoesAtivas('tipo_frete')
+  const categoriasPerdaAtivas = opcoesAtivas('categoria_perda')
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
   const [pedidoFrete, setPedidoFrete] = React.useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
@@ -146,23 +151,8 @@ export default function FunilModals({
       const numero = `PROP-${Date.now().toString().slice(-6)}`
       const vendedorNome = loggedUser?.nome || 'Vendedor'
 
-      // Gerar PDF
-      try {
-        await gerarPropostaPDF(
-          draggedItem.cliente,
-          propostaItens,
-          propostaObs,
-          vendedorNome,
-          numero,
-          { formaPagamento: propostaPagamento, tipoFrete: propostaFrete as 'CIF' | 'FOB' | '' }
-        )
-      } catch {
-        showToast?.('error', 'Erro ao gerar PDF da proposta.')
-      }
-
-      // Novo ciclo: criar um NOVO card em Negociação antes de salvar a proposta,
-      // para que a proposta fique vinculada ao novo card (e não ao card antigo,
-      // que permanece intacto no funil)
+      // 1) Novo ciclo: validar/criar o card em Negociação ANTES de gerar o PDF
+      // (se já existir card ativo, fecha o modal e redireciona sem baixar PDF à toa)
       let clienteIdProposta = draggedItem.cliente.id
       if (isNovoCiclo) {
         if (!onCriarNovoCiclo) {
@@ -185,8 +175,26 @@ export default function FunilModals({
         } catch (err: any) {
           const msg = err?.message || 'Erro desconhecido'
           showToast?.('error', `Falha ao criar o novo ciclo: ${msg}`)
+          setShowModalProposta(false)
+          setDraggedItem(null)
+          setPendingDrop(null)
+          onCloseNovoCiclo?.()
           return
         }
+      }
+
+      // 2) Gerar PDF somente após validar o destino
+      try {
+        await gerarPropostaPDF(
+          draggedItem.cliente,
+          propostaItens,
+          propostaObs,
+          vendedorNome,
+          numero,
+          { formaPagamento: propostaPagamento, tipoFrete: propostaFrete as 'CIF' | 'FOB' | '' }
+        )
+      } catch {
+        showToast?.('error', 'Erro ao gerar PDF da proposta.')
       }
 
       // Salvar no histórico
@@ -333,11 +341,15 @@ export default function FunilModals({
             </div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-              {perdaCategorias.map(cat => (
-                <button key={cat.key} onClick={() => setCategoriaPerdaSel(cat.key)}
-                  className={`px-2 py-2 text-xs font-medium rounded-apple border-2 transition-all ${categoriaPerdaSel === cat.key ? cat.active : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}
-                >{cat.label}</button>
-              ))}
+              {categoriasPerdaAtivas.map(cat => {
+                const preset = perdaCategorias.find(p => p.key === cat.valor)
+                const activeCls = preset?.active || 'border-purple-500 bg-purple-50 text-purple-800'
+                return (
+                  <button key={cat.id} onClick={() => setCategoriaPerdaSel(cat.valor as any)}
+                    className={`px-2 py-2 text-xs font-medium rounded-apple border-2 transition-all ${categoriaPerdaSel === cat.valor ? activeCls : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}`}
+                  >{cat.label}</button>
+                )
+              })}
             </div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Motivo da perda <span className="text-red-500">*</span></label>
             <textarea value={motivoPerdaTexto} onChange={(e) => setMotivoPerdaTexto(e.target.value)} rows={2} placeholder="Descreva o motivo da perda... (obrigatório)" className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 mb-4 text-sm resize-none" />
@@ -473,19 +485,27 @@ export default function FunilModals({
                   {/* Frete */}
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-1">Tipo de Frete</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => setPropostaFrete('CIF')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${propostaFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>📦 CIF (Entrega)</button>
-                      <button onClick={() => setPropostaFrete('FOB')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${propostaFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🏭 FOB (Retirada)</button>
+                    <div className="flex gap-2 flex-wrap">
+                      {fretesAtivos.map(frt => (
+                        <button
+                          key={frt.id}
+                          onClick={() => setPropostaFrete(frt.valor as any)}
+                          className={`flex-1 py-2 px-2 rounded-apple text-sm font-medium border-2 transition-colors ${propostaFrete === frt.valor ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                        >
+                          {frt.valor === 'CIF' ? '📦 ' : frt.valor === 'FOB' ? '🏭 ' : ''}{frt.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   {/* Pagamento */}
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-1">Forma de Pagamento</p>
                     <select value={propostaPagamento} onChange={e => setPropostaPagamento(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                      {PAYMENT_TERM_GROUPS.map(group => (
-                        <optgroup key={group.label} label={group.label}>
-                          {group.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </optgroup>
+                      {propostaPagamento && !prazosAtivos.some(p => p.valor === propostaPagamento) && (
+                        <option value={propostaPagamento}>{propostaPagamento} (desativado)</option>
+                      )}
+                      {prazosAtivos.map(opt => (
+                        <option key={opt.id} value={opt.valor}>{opt.label}</option>
                       ))}
                     </select>
                   </div>

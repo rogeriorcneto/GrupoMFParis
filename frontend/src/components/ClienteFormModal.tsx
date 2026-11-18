@@ -3,6 +3,7 @@ import { XMarkIcon, ChevronDownIcon, ChevronRightIcon, MagnifyingGlassIcon, Plus
 import type { Cliente, Produto, Vendedor, FormData, Pedido } from '../types'
 import { PlacesEnrich } from './PlacesEnrich'
 import { formatTelefone } from '../utils/validators'
+import { useParametrosListas } from '../lib/parametrosListas'
 
 const etapaLabels: Record<string, string> = { 'lead': 'Lead', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Am. Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativo', 'perdido': 'Perdido' }
 const etapaCores: Record<string, string> = { 'lead': 'bg-emerald-100 text-emerald-800', 'prospecção': 'bg-sky-100 text-sky-800', 'amostra': 'bg-amber-100 text-amber-800', 'amostra_perdida': 'bg-orange-100 text-orange-800', 'proposta': 'bg-indigo-100 text-indigo-800', 'negociacao': 'bg-purple-100 text-purple-800', 'follow_up': 'bg-blue-100 text-blue-800', 'inativo': 'bg-gray-200 text-gray-700', 'perdido': 'bg-red-100 text-red-800' }
@@ -49,6 +50,8 @@ export default function ClienteFormModal({
   produtos, vendedores, clientes = [], pedidos = [], loggedUser,
   onClickNegocio, onInativarCliente, onReativarCliente
 }: ClienteFormModalProps) {
+  const { opcoesAtivas } = useParametrosListas()
+  const segmentosAtivos = opcoesAtivas('segmento_cliente')
   const handleTelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     const formatted = formatTelefone(value)
@@ -327,9 +330,12 @@ export default function ClienteFormModal({
                     <select name="segmento" value={formData.segmento} onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-white">
                       <option value="">— Selecionar —</option>
-                      <option value="Indústria">🏭 Indústria</option>
-                      <option value="Distribuição">🚚 Distribuição</option>
-                      <option value="Consumo">🛒 Consumo</option>
+                      {formData.segmento && !segmentosAtivos.some(s => s.valor === formData.segmento) && (
+                        <option value={formData.segmento}>{formData.segmento} (desativado)</option>
+                      )}
+                      {segmentosAtivos.map(seg => (
+                        <option key={seg.id} value={seg.valor}>{seg.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="col-span-2">
@@ -572,110 +578,6 @@ export default function ClienteFormModal({
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* ── Produtos de Interesse (botão expansível + busca + qty mensal) ── */}
-              {!showProdutosInteresse ? (
-                <button
-                  type="button"
-                  onClick={() => setShowProdutosInteresse(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-apple border border-dashed border-primary-300 self-start"
-                >
-                  <PlusIcon className="h-3.5 w-3.5" />
-                  Incluir Produto de Interesse
-                </button>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Produtos de Interesse</p>
-                    <button type="button" onClick={() => setShowProdutosInteresse(false)} className="text-xs text-gray-400 hover:text-gray-600">Recolher</button>
-                  </div>
-                  <p className="text-xs text-gray-400 mb-2">Selecionado(s) pelo vendedor após a prospecção. Representa o que o cliente demonstrou interesse antes de comprar.</p>
-
-                  {/* Selecionados (com Quantidade Mensal) */}
-                  {(() => {
-                    const selected = formData.produtosInteresse.split(',').map(s => s.trim()).filter(Boolean)
-                    if (selected.length === 0) return null
-                    return (
-                      <div className="mb-3 space-y-2">
-                        {selected.map(nome => {
-                          const prod = produtos.find(p => p.nome === nome)
-                          const qtdMensal = formData.produtosQuantidadesMensais?.[nome] || ''
-                          return (
-                            <div key={nome} className="flex items-center gap-2 px-3 py-2 border border-primary-200 bg-primary-50/40 rounded-apple">
-                              <span className="text-sm text-gray-800 flex-1 truncate">{nome}{prod && <span className="text-xs text-gray-400 ml-1">· {prod.unidade}</span>}</span>
-                              <div className="flex items-center gap-1">
-                                <label className="text-xs text-gray-500">Qtd Mensal:</label>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={qtdMensal}
-                                  onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    produtosQuantidadesMensais: {
-                                      ...(prev.produtosQuantidadesMensais || {}),
-                                      [nome]: Math.max(0, parseInt(e.target.value) || 0),
-                                    }
-                                  }))}
-                                  placeholder="0"
-                                  className="w-20 px-2 py-1 border border-gray-300 rounded-apple text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                                {prod && <span className="text-xs text-gray-400">/mês</span>}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = selected.filter(s => s !== nome)
-                                  const qtds = { ...(formData.produtosQuantidadesMensais || {}) }
-                                  delete qtds[nome]
-                                  setFormData(prev => ({ ...prev, produtosInteresse: updated.join(', '), produtosQuantidadesMensais: qtds }))
-                                }}
-                                className="text-gray-400 hover:text-red-500 text-sm font-bold px-1"
-                                title="Remover"
-                              >✕</button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()}
-
-                  {/* Busca por texto */}
-                  <div className="relative">
-                    <MagnifyingGlassIcon className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={produtoSearch}
-                      onChange={(e) => setProdutoSearch(e.target.value)}
-                      placeholder="Buscar produto por nome..."
-                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                    />
-                  </div>
-                  {produtoSearch.trim().length >= 1 && (
-                    <div className="mt-2 max-h-60 overflow-y-auto border border-gray-200 rounded-apple divide-y divide-gray-50">
-                      {(() => {
-                        const selected = formData.produtosInteresse.split(',').map(s => s.trim()).filter(Boolean)
-                        const search = produtoSearch.toLowerCase().trim()
-                        const matches = produtos.filter(p => p.ativo && !selected.includes(p.nome) && p.nome.toLowerCase().includes(search)).slice(0, 20)
-                        if (matches.length === 0) return <p className="text-xs text-gray-400 p-3 text-center">Nenhum produto encontrado.</p>
-                        return matches.map(p => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => {
-                              const updated = [...selected, p.nome]
-                              setFormData(prev => ({ ...prev, produtosInteresse: updated.join(', ') }))
-                              setProdutoSearch('')
-                            }}
-                            className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 text-sm"
-                          >
-                            <span className="text-gray-800">{p.nome}</span>
-                            <span className="text-xs text-gray-400">R$ {p.preco.toFixed(2).replace('.', ',')}/{p.unidade}</span>
-                          </button>
-                        ))
-                      })()}
-                    </div>
-                  )}
                 </div>
               )}
 

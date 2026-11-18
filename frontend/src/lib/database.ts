@@ -1602,18 +1602,18 @@ export async function savePropostaHistorico(
       // Fallback para validação + insert direto no Supabase
     }
 
-    // 2) Fallback: valida anti-duplicata recente no banco antes de inserir
+    // 2) Fallback: valida se já existe proposta idêntica no topo deste card antes de inserir
     try {
-      const limiteIso = new Date(Date.now() - 120_000).toISOString()
       const { data: recentes } = await supabase
         .from('propostas')
         .select('*')
         .eq('cliente_id', p.clienteId)
-        .gte('criado_em', limiteIso)
         .order('criado_em', { ascending: false })
-        .limit(5)
+        .limit(3)
       const duplicada = (recentes || []).find((r: any) => {
         if (Number(r.total_valor || 0) !== totalValor) return false
+        if ((r.frete || null) !== (p.frete || null)) return false
+        if ((r.pagamento || null) !== (p.pagamento || null)) return false
         const rAssin = JSON.stringify((r.itens || []).map((i: any) => ({ p: i.produtoId, q: i.quantidade, v: i.preco })))
         return rAssin === assinatura
       })

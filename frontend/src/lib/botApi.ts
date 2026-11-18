@@ -726,6 +726,7 @@ export interface CnpjCheckResult {
   cnpj: string
   exists: boolean
   outroVendedor?: boolean
+  vendedorNome?: string
   razaoSocial?: string
   etapa?: string
   clienteId?: number
