@@ -773,9 +773,13 @@ export async function criarPedidoOmie(
   const codigoParcela = ehAVista ? '000' : '999'
 
   // 5. Cabeçalho do pedido
+  const ehBonificacaoComercial = tipoPedido === 'bonificacao' && String(pedido.numero || '').toUpperCase().startsWith('BON-')
+  const prefixoIntegracao = tipoPedido === 'bonificacao'
+    ? (ehBonificacaoComercial ? 'BON' : 'AMT')
+    : 'PED'
   const cabecalho: any = {
     // Sufixo '-N2': banco novo reiniciou IDs, Omie ainda tem CRM-PED-{id} antigos
-    codigo_pedido_integracao: `CRM-${tipoPedido === 'bonificacao' ? 'AMT' : 'PED'}-${pedidoId}-N2`,
+    codigo_pedido_integracao: `CRM-${prefixoIntegracao}-${pedidoId}-N2`,
     codigo_cliente: codigoClienteOmie,
     data_previsao: dataPrevisao,
     etapa: '10',

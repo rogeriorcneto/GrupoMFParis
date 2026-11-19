@@ -10,11 +10,12 @@ import { BOT_URL } from '../lib/botApi'
 
 interface SimuladorPrecoPanelProps {
   produtoNome?: string
+  prazoExterno?: string
   onUsarTabelaA?: (preco: number) => void
   onUsarTabelaB?: (preco: number) => void
 }
 
-export default function SimuladorPrecoPanel({ produtoNome, onUsarTabelaA, onUsarTabelaB }: SimuladorPrecoPanelProps) {
+export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarTabelaA, onUsarTabelaB }: SimuladorPrecoPanelProps) {
   const [params, setParams] = useState<SimuladorParams | null>(null)
 
   useEffect(() => {
@@ -43,6 +44,13 @@ export default function SimuladorPrecoPanel({ produtoNome, onUsarTabelaA, onUsar
       if (match) setProduto(match)
     }
   }, [produtoNome, params])
+
+  // Sincroniza o prazo do simulador com o prazo selecionado no pedido (pode ser alterado aqui só para comparar)
+  useEffect(() => {
+    if (prazoExterno && prazoKeys.includes(prazoExterno)) {
+      setPrazo(prazoExterno)
+    }
+  }, [prazoExterno, prazoKeys])
 
   const result = useMemo(
     () => (params ? calcularPrecosTabela(produto, prazo, freteKey, params) : null),

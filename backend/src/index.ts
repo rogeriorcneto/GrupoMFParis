@@ -19,7 +19,7 @@ import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes, avaliarAutomacoes, executarAutomacaoManual } from './cron.js'
-import { startBulkDispatch, getBatchStatus, getAllBatches, cancelBatch } from './bulk-dispatch.js'
+import { startBulkDispatch, getBatchStatus, getAllBatches, getBatchesByVendedor, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter, omieDocsRouter } from './routes/omie.js'
 import { placesRouter } from './routes/places.js'
 import { traficoRouter } from './routes/trafico.js'
@@ -27,6 +27,7 @@ import { leadsRfRouter } from './routes/leads-rf.js'
 import { vendedoresRouter } from './routes/vendedores.js'
 import { missoesRouter } from './routes/missoes.js'
 import { mapsRouter } from './routes/maps.js'
+import twilio from 'twilio'
 import twilioRouter from './routes/twilio.js'
 import { academiaCandidatoRouter, academiaGerenteRouter } from './routes/academia.js'
 import twilioVoiceAiRouter from './routes/twilio-voice-ai.js'
@@ -46,14 +47,20 @@ import { log } from './logger.js'
 const app = express()
 
 // ─── Middleware ───
+// Domínios oficiais do CRM no Netlify (produção + espelho) e seus deploy previews
+const OFFICIAL_NETLIFY_SITES = ['crm-grupomfparis.netlify.app', 'grupopariss.netlify.app']
+const isOfficialNetlifyOrigin = (origin: string) =>
+  OFFICIAL_NETLIFY_SITES.some(site =>
+    origin === `https://${site}` || origin === `http://${site}` || origin.endsWith(`--${site}`))
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true)
     // Allow any localhost or 127.0.0.1 origin (dev)
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true)
-    // Allow Netlify production domain
-    if (origin.endsWith('.netlify.app')) return callback(null, true)
+    // Allow official Netlify domains and their deploy previews only
+    if (isOfficialNetlifyOrigin(origin)) return callback(null, true)
     // Allow configured origins (production)
     if (CONFIG.corsOrigins.includes(origin)) return callback(null, true)
     callback(new Error(`CORS: origin ${origin} not allowed`))
@@ -61,7 +68,44 @@ app.use(cors({
   credentials: true,
 }))
 app.use(express.json({ limit: '10mb' }))
+// Twilio webhooks postam application/x-www-form-urlencoded (necessário p/ assinatura e handlers)
+app.use('/api/twilio', express.urlencoded({ extended: false, limit: '1mb' }))
 app.use(helmet())
+
+// ─── Helpers de escopo por carteira (IDOR) ───
+// Rotas que usam service_role ignoram RLS — a checagem de dono precisa ser feita aqui.
+type ReqVendedor = { id: number; nome: string; email: string; cargo: string; ativo: boolean } | null
+const reqVendedor = (req: any): ReqVendedor => (req.vendedor as ReqVendedor) ?? null
+const reqIsGerente = (req: any) => reqVendedor(req)?.cargo === 'gerente'
+
+async function clientePertenceAoVendedor(clienteId: number, vendedorId: number): Promise<boolean> {
+  const { data } = await supabase.from('clientes').select('id').eq('id', clienteId).eq('vendedor_id', vendedorId).maybeSingle()
+  return !!data
+}
+
+async function donoClientePorTelefone(numero: string): Promise<number | null> {
+  const digits = String(numero).replace(/\D/g, '')
+  if (digits.length < 8) return null
+  const core9 = digits.slice(-9)
+  const core8 = digits.slice(-8)
+  const { data } = await supabase.from('clientes')
+    .select('vendedor_id')
+    .or(`whatsapp.ilike.%${core9}%,contato_telefone.ilike.%${core9}%,whatsapp.ilike.%${core8}%,contato_telefone.ilike.%${core8}%`)
+    .limit(10)
+  const found = (data || []).find((r: any) => r.vendedor_id != null)
+  return found ? Number(found.vendedor_id) : null
+}
+
+async function donoClientePorEmail(email: string): Promise<number | null> {
+  const e = String(email).trim()
+  if (!e) return null
+  const { data } = await supabase.from('clientes')
+    .select('vendedor_id')
+    .ilike('contato_email', e)
+    .limit(10)
+  const found = (data || []).find((r: any) => r.vendedor_id != null)
+  return found ? Number(found.vendedor_id) : null
+}
 
 // ─── Health check ───
 app.get('/api/health', (_req, res) => {
@@ -387,6 +431,17 @@ app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, r
 app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
   const { numero, clienteId, limit } = req.query
   try {
+    // Vendedor só pode ler mensagens de clientes da própria carteira
+    const me = reqVendedor(req)
+    if (!reqIsGerente(req)) {
+      if (clienteId) {
+        const ok = me ? await clientePertenceAoVendedor(Number(clienteId), me.id) : false
+        if (!ok) { res.status(403).json({ error: 'Cliente fora da sua carteira' }); return }
+      } else if (numero) {
+        const dono = await donoClientePorTelefone(String(numero))
+        if (dono != null && dono !== me?.id) { res.status(403).json({ error: 'Cliente fora da sua carteira' }); return }
+      }
+    }
     const db = await import('./database.js')
     let messages
     if (clienteId) {
@@ -1095,6 +1150,11 @@ app.get('/api/roleplay/historico', requireAuth, async (req, res) => {
   try {
     const vendedorId = parseInt(req.query.vendedorId as string, 10)
     if (isNaN(vendedorId)) { res.status(400).json({ error: 'ID inválido' }); return }
+    const me = reqVendedor(req)
+    if (!reqIsGerente(req) && vendedorId !== me?.id) {
+      res.status(403).json({ error: 'Acesso restrito ao próprio histórico' })
+      return
+    }
     const { fetchRoleplaySessionsByVendedor } = await import('./database.js')
     const sessoes = await fetchRoleplaySessionsByVendedor(vendedorId)
     res.json({ sessoes })
@@ -1245,6 +1305,13 @@ app.get('/api/email/inbox', requireAuth, rateLimit(30, 60_000), async (req, res)
     res.status(400).json({ success: false, error: 'Parâmetro obrigatório: clienteEmail' })
     return
   }
+  if (!reqIsGerente(req)) {
+    const dono = await donoClientePorEmail(clienteEmail)
+    if (dono != null && dono !== reqVendedor(req)?.id) {
+      res.status(403).json({ success: false, error: 'Cliente fora da sua carteira' })
+      return
+    }
+  }
   const result = await fetchInboxEmails({ clienteEmail, limit })
   res.json(result)
 })
@@ -1292,14 +1359,25 @@ app.post('/api/bulk/send', requireAuth, rateLimit(5, 60_000), async (req, res) =
 app.get('/api/bulk/status/:batchId', requireAuth, (req, res) => {
   const batch = getBatchStatus(req.params.batchId)
   if (!batch) { res.status(404).json({ error: 'Batch não encontrado' }); return }
+  if (!reqIsGerente(req) && batch.vendedorId !== reqVendedor(req)?.id) {
+    res.status(403).json({ error: 'Acesso restrito ao dono do disparo' })
+    return
+  }
   res.json(batch)
 })
 
-app.get('/api/bulk/batches', requireAuth, (_req, res) => {
-  res.json(getAllBatches())
+app.get('/api/bulk/batches', requireAuth, (req, res) => {
+  if (reqIsGerente(req)) { res.json(getAllBatches()); return }
+  const me = reqVendedor(req)
+  res.json(me ? getBatchesByVendedor(me.id) : [])
 })
 
 app.post('/api/bulk/cancel/:batchId', requireAuth, (req, res) => {
+  const batch = getBatchStatus(req.params.batchId)
+  if (batch && !reqIsGerente(req) && batch.vendedorId !== reqVendedor(req)?.id) {
+    res.status(403).json({ error: 'Acesso restrito ao dono do disparo' })
+    return
+  }
   const ok = cancelBatch(req.params.batchId)
   res.json({ success: ok })
 })
@@ -1316,12 +1394,34 @@ app.post('/api/twilio/config', requireAuth, requireGerente, twilioForward)
 app.post('/api/twilio/auto-setup', requireAuth, requireGerente, twilioForward)
 app.post('/api/twilio/token', requireAuth, twilioForward)
 app.get('/api/twilio/recording/:callSid', requireAuth, twilioForward)
+// Valida a assinatura X-Twilio-Signature quando o Auth Token está configurado.
+// Sem credenciais configuradas, mantém o comportamento anterior (webhook ainda não em uso).
+const validateTwilioWebhook = async (req: any, res: any, next: any) => {
+  try {
+    const cfg = await loadConfig()
+    if (!cfg.twilioAuthToken) return next()
+    const signature = req.headers['x-twilio-signature'] as string | undefined
+    if (!signature) { res.status(403).send('Assinatura Twilio ausente'); return }
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https'
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || ''
+    const url = `${proto}://${host}${req.originalUrl || req.url}`
+    const params = (req.body && typeof req.body === 'object') ? req.body : {}
+    if (!twilio.validateRequest(cfg.twilioAuthToken, signature, url, params)) {
+      res.status(403).send('Assinatura Twilio inválida')
+      return
+    }
+    next()
+  } catch (err) {
+    log.error({ err }, 'Erro ao validar assinatura Twilio')
+    res.status(500).send()
+  }
+}
 // Public endpoints (Twilio webhooks)
-app.post('/api/twilio/voice', twilioForward)
-app.post('/api/twilio/recording-callback', twilioForward)
-app.post('/api/twilio/status-callback', twilioForward)
+app.post('/api/twilio/voice', validateTwilioWebhook, twilioForward)
+app.post('/api/twilio/recording-callback', validateTwilioWebhook, twilioForward)
+app.post('/api/twilio/status-callback', validateTwilioWebhook, twilioForward)
 // Voice AI — Twilio posts here when someone calls the number
-app.use('/api/twilio/voice-ai', twilioVoiceAiRouter)
+app.use('/api/twilio/voice-ai', validateTwilioWebhook, twilioVoiceAiRouter)
 
 // ─── TTS (Text-to-Speech neural) ───
 // GET /api/tts/status é público; POST /api/tts requer auth (verificado internamente)
@@ -1380,6 +1480,12 @@ app.post('/api/propostas', requireAuth, async (req, res) => {
     res.status(400).json({ success: false, error: 'clienteId inválido' })
     return
   }
+  // Vendedor só pode criar proposta para cliente da própria carteira
+  const me = reqVendedor(req)
+  if (!reqIsGerente(req)) {
+    const ok = me ? await clientePertenceAoVendedor(clienteId, me.id) : false
+    if (!ok) { res.status(403).json({ success: false, error: 'Cliente fora da sua carteira' }); return }
+  }
   const anterior = propostaLocks.get(clienteId) || Promise.resolve()
   const tarefa = anterior.catch(() => {}).then(async () => {
     const totalValor = Number(b.totalValor || 0)
@@ -1407,7 +1513,7 @@ app.post('/api/propostas', requireAuth, async (req, res) => {
       .insert({
         numero: String(b.numero || `PROP-${Date.now().toString().slice(-6)}`),
         cliente_id: clienteId,
-        vendedor_nome: String(b.vendedorNome || 'Vendedor'),
+        vendedor_nome: me?.nome || String(b.vendedorNome || 'Vendedor'),
         itens,
         observacoes: b.observacoes || '',
         frete: b.frete || null,
@@ -1869,8 +1975,17 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
 const STORE_COLLECTIONS = new Set([
   'automacoes', 'automacoes_execucoes', 'ia_contexto', 'classes_clientes', 'documentos', 'parametros_listas', 'tarefas_excluidas',
 ])
+// Escrita restrita ao gerente (configurações sensíveis do CRM)
+const STORE_GERENTE_WRITE = new Set(['parametros_listas', 'automacoes', 'ia_contexto', 'classes_clientes'])
+// Auditoria: registros só podem ser criados — nunca editados ou apagados
+const STORE_APPEND_ONLY = new Set(['tarefas_excluidas'])
 const storeTipo = (c: string) => `store:${c}`
 const parseStoreRow = (r: any) => { try { return { id: r.id, criadoEm: r.created_at, ...JSON.parse(r.descricao) } } catch { return { id: r.id, criadoEm: r.created_at } } }
+const storeWriteForbidden = (req: any, res: any, c: string): boolean => {
+  if (STORE_APPEND_ONLY.has(c)) { res.status(403).json({ error: 'Registro de auditoria é imutável' }); return true }
+  if (STORE_GERENTE_WRITE.has(c) && !reqIsGerente(req)) { res.status(403).json({ error: 'Acesso restrito ao gerente' }); return true }
+  return false
+}
 
 app.get('/api/store/:collection', requireAuth, async (req, res) => {
   const c = req.params.collection
@@ -1886,10 +2001,17 @@ app.get('/api/store/:collection', requireAuth, async (req, res) => {
 app.post('/api/store/:collection', requireAuth, async (req, res) => {
   const c = req.params.collection
   if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  if (STORE_GERENTE_WRITE.has(c) && !reqIsGerente(req)) { res.status(403).json({ error: 'Acesso restrito ao gerente' }); return }
   try {
     const payload = req.body || {}
+    // Auditoria: autor real vem do token autenticado, nunca do payload do cliente
+    const autor = reqVendedor(req)?.nome || 'Sistema'
+    if (STORE_APPEND_ONLY.has(c)) {
+      payload.excluidoPor = autor
+      payload.alteradoPor = autor
+    }
     const { data, error } = await supabase.from('atividades')
-      .insert({ tipo: storeTipo(c), descricao: JSON.stringify(payload), vendedor_nome: (req as any).vendedor?.nome || 'Sistema' })
+      .insert({ tipo: storeTipo(c), descricao: JSON.stringify(payload), vendedor_nome: autor })
       .select('id, created_at').single()
     if (error) { res.status(500).json({ error: error.message }); return }
     res.json({ id: data.id, criadoEm: data.created_at, ...payload })
@@ -1899,6 +2021,7 @@ app.post('/api/store/:collection', requireAuth, async (req, res) => {
 app.patch('/api/store/:collection/:id', requireAuth, async (req, res) => {
   const c = req.params.collection
   if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  if (storeWriteForbidden(req, res, c)) return
   try {
     const { data: cur } = await supabase.from('atividades').select('id, descricao').eq('id', req.params.id).eq('tipo', storeTipo(c)).single()
     if (!cur) { res.status(404).json({ error: 'Registro não encontrado' }); return }
@@ -1914,6 +2037,7 @@ app.patch('/api/store/:collection/:id', requireAuth, async (req, res) => {
 app.delete('/api/store/:collection/:id', requireAuth, async (req, res) => {
   const c = req.params.collection
   if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
+  if (storeWriteForbidden(req, res, c)) return
   try {
     const { error } = await supabase.from('atividades').delete().eq('id', req.params.id).eq('tipo', storeTipo(c))
     if (error) { res.status(500).json({ error: error.message }); return }

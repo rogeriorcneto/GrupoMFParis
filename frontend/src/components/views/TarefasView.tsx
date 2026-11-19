@@ -17,6 +17,7 @@ import { insertInteracao, insertAtividade, deleteTarefa } from '../../lib/databa
 import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
+import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from '../TimePicker5Min'
 import * as XLSX from 'xlsx'
 
 // ─── Sub-componente: TarefaCard ───────────────────────────────────────────────
@@ -374,13 +375,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                     onClick={e => (e.target as HTMLInputElement).showPicker?.()}
                     className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer"
                   />
-                  <input
-                    type="time"
-                    value={novaHora}
-                    onChange={e => setNovaHora(e.target.value)}
-                    onClick={e => (e.target as HTMLInputElement).showPicker?.()}
-                    className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer"
-                  />
+                  <TimePicker5Min value={novaHora} onChange={setNovaHora} ariaLabelPrefix="Novo horário" />
                 </div>
               </div>
             )}
@@ -1242,6 +1237,11 @@ const TarefasView: React.FC<{
 
   const handleAddTarefa = async () => {
     if (!newTitulo.trim() || taskCreationRef.current) return
+    const horaNormalizada = newHora.trim() ? arredondarHora5Min(newHora) : ''
+    if (isDataHoraNoPassado(newData, horaNormalizada || undefined)) {
+      showToast?.('error', 'Não é permitido agendar tarefa com data ou horário anterior ao momento atual.')
+      return
+    }
     taskCreationRef.current = true
     try {
       await onAddTarefa({
@@ -1249,7 +1249,7 @@ const TarefasView: React.FC<{
         titulo: newTitulo.trim(),
         descricao: newDescricao.trim() || undefined,
         data: newData,
-        hora: newHora.trim() || undefined,
+        hora: horaNormalizada || undefined,
         tipo: newTipo,
         status: 'pendente',
         prioridade: newPrioridade,
@@ -1289,22 +1289,37 @@ const TarefasView: React.FC<{
   }, [onUpdateTarefa])
 
   const handleReagendar = useCallback((tarefa: Tarefa, motivo: string, novaData: string, novaHora: string) => {
+    const horaNorm = novaHora ? arredondarHora5Min(novaHora) : tarefa.hora
+    if (isDataHoraNoPassado(novaData, horaNorm)) {
+      showToast?.('error', 'Não é permitido reagendar tarefa para data ou horário no passado.')
+      return
+    }
+    // Item 4.6: se a data não mudou, apenas atualiza o horário/nota sem contar como reagendamento
+    if (novaData === tarefa.data) {
+      onUpdateTarefa({
+        ...tarefa,
+        hora: horaNorm,
+        status: 'pendente',
+      })
+      showToast?.('success', 'Horário da tarefa atualizado.')
+      return
+    }
     const reagendamento: TarefaReagendamento = {
       dataOriginal: tarefa.data,
       horaOriginal: tarefa.hora,
       motivo,
       reagendadoEm: new Date().toISOString(),
-      alteradoPor: loggedUser?.nome || 'Usuário',
+      alteradoPor: loggedUser?.nome || 'Vendedor',
     }
     onUpdateTarefa({
       ...tarefa,
       data: novaData,
-      hora: novaHora || tarefa.hora,
+      hora: horaNorm,
       status: 'pendente',
       reagendamentos: [...(tarefa.reagendamentos || []), reagendamento],
     })
     showToast?.('success', `Tarefa reagendada para ${new Date(novaData + 'T00:00:00').toLocaleDateString('pt-BR')}`)
-  }, [onUpdateTarefa, showToast])
+  }, [onUpdateTarefa, showToast, loggedUser])
 
   const renderCard = (tarefa: Tarefa, overdue = false) => {
     const cliente = getClienteDaTarefa(tarefa)
@@ -2068,7 +2083,7 @@ const TarefasView: React.FC<{
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
-                  <input type="time" value={newHora} onChange={(e) => setNewHora(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="w-full px-3 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm cursor-pointer" />
+                  <TimePicker5Min value={newHora} onChange={setNewHora} ariaLabelPrefix="Hora da tarefa" className="w-full" />
                 </div>
               </div>
 

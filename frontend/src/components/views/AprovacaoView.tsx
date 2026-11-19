@@ -252,6 +252,17 @@ export default function AprovacaoView({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-base font-bold text-gray-900">{pedido.numero}</span>
+                {pedido.tipo === 'bonificacao' && (
+                  pedido.numero.toUpperCase().startsWith('BON-') ? (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-pink-100 text-pink-800 rounded-full border border-pink-300">
+                      BONIFICAÇÃO
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full border border-purple-200">
+                      Amostra
+                    </span>
+                  )
+                )}
                 {showActions && diasEspera >= 2 && (
                   <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full border border-amber-200 animate-pulse">
                     ⏰ Aguardando {diasEspera}d

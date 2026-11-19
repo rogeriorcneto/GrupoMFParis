@@ -16,7 +16,7 @@ export const transicoesPermitidas: Record<string, string[]> = {
   'prospecção': ['amostra', 'proposta'],
   'amostra': ['amostra_perdida'],
   'amostra_perdida': ['amostra', 'perdido'],
-  'proposta': ['amostra', 'negociacao'],
+  'proposta': ['amostra', 'negociacao', 'perdido'],
   'negociacao': ['follow_up', 'perdido'],
   'follow_up': ['arquivado'],
   'arquivado': [],

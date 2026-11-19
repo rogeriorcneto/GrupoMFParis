@@ -45,8 +45,8 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['amostra_perdida']).toEqual(['amostra', 'perdido'])
   })
 
-  it('proposta só pode ir para amostra ou negociacao', () => {
-    expect(transicoesPermitidas['proposta']).toEqual(['amostra', 'negociacao'])
+  it('proposta pode ir para amostra, negociacao ou perdido', () => {
+    expect(transicoesPermitidas['proposta']).toEqual(['amostra', 'negociacao', 'perdido'])
   })
 
   it('negociacao pode ir para follow_up ou perdido, nunca proposta', () => {

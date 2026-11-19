@@ -581,6 +581,11 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
               ) : relatorioIA ? (
                 <div className="prose prose-sm max-w-none text-gray-800 [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-bold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:mt-3 [&_h3]:mb-1 [&_p]:text-sm [&_p]:leading-relaxed [&_li]:text-sm [&_strong]:text-gray-900 [&_ul]:space-y-1 [&_ol]:space-y-1"
                   dangerouslySetInnerHTML={{ __html: relatorioIA
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;')
                     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
                     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
                     .replace(/^# (.+)$/gm, '<h1>$1</h1>')

@@ -1285,7 +1285,7 @@ describe('K — Novo ciclo automático', () => {
     })
   })
 
-  it('perda de prospecção → NÃO cria novo ciclo (só de negociacao)', async () => {
+  it('perda em qualquer etapa (ex.: prospecção) → abre novo ciclo em proposta (funil 100% fechado)', async () => {
     const cliente = makeCliente({ id: 71, etapa: 'prospecção' })
     await loginAs('gerente', [cliente])
 
@@ -1297,7 +1297,9 @@ describe('K — Novo ciclo automático', () => {
       expect(db.moverClienteAtomico).toHaveBeenCalledWith(
         71, 'perdido', 'prospecção', expect.any(String), expect.any(Object)
       )
+      expect(db.insertCliente).toHaveBeenCalledWith(
+        expect.objectContaining({ etapa: 'proposta', novoCiclo: true, origemCicloId: 71 })
+      )
     })
-    expect(db.insertCliente).not.toHaveBeenCalled()
   })
 })

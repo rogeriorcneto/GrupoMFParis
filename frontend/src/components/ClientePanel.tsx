@@ -14,6 +14,7 @@ import WhatsAppUserPanel from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
+import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from './TimePicker5Min'
 import { DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 import { useParametrosListas } from '../lib/parametrosListas'
 import { supabase } from '../lib/supabase'
@@ -720,10 +721,15 @@ export default function ClientePanel({
 
   const handleCriarTarefa = async () => {
     if (!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora) return
+    const horaNorm = arredondarHora5Min(panelTarefaHora)
+    if (isDataHoraNoPassado(panelTarefaData, horaNorm)) {
+      showToast?.('error', 'Não é permitido agendar tarefa com data ou horário anterior ao momento atual.')
+      return
+    }
     try {
       const saved = await db.insertTarefa({
         titulo: panelTarefaTitulo.trim(), data: panelTarefaData,
-        hora: panelTarefaHora,
+        hora: horaNorm,
         tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id
       })
       setTarefas(prev => [saved, ...prev])
@@ -1165,7 +1171,7 @@ export default function ClientePanel({
               {c.etapa === 'proposta' && (
                 <>
                   <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">📦 Enviar Amostra</button>
-                  <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">💰 Negociar</button>
+                  <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">Criar Proposta</button>
                 </>
               )}
               {c.etapa === 'negociacao' && (
@@ -1181,7 +1187,7 @@ export default function ClientePanel({
                       if (!onAddPedido || !proposta || propostaItens.length === 0) {
                         const msg = proposta
                           ? 'A última proposta não tem itens. Complete a proposta para enviar o pedido.'
-                          : 'Nenhuma proposta registrada neste cliente. Crie uma proposta antes de marcar como Ganhou.'
+                          : 'Nenhuma proposta registrada neste cliente. Crie uma proposta antes de marcar como Vendido.'
                         addNotificacao('info', 'Sem proposta válida', msg, c.id)
                         showToast?.('error', msg)
                         setGanhouLoading(false)
@@ -1201,7 +1207,9 @@ export default function ClientePanel({
                         return
                       }
                       try {
-                        const numero = `PED-${Date.now().toString().slice(-6)}`
+                        const ehBonificacao = proposta.numero.toUpperCase().startsWith('BON-')
+                        const sufixoPed = Date.now().toString().slice(-6)
+                        const numero = ehBonificacao ? `BON-${sufixoPed}` : `PED-${sufixoPed}`
                         await onAddPedido({
                           numero,
                           clienteId: c.id,
@@ -1212,8 +1220,8 @@ export default function ClientePanel({
                           dataCriacao: new Date().toISOString(),
                           dataEnvio: new Date().toISOString(),
                           totalValor: proposta.totalValor,
-                          tipo: 'venda',
-                          formaPagamento: proposta.pagamento || DEFAULT_PAYMENT_TERM,
+                          tipo: ehBonificacao ? 'bonificacao' : 'venda',
+                          formaPagamento: ehBonificacao ? 'À vista' : (proposta.pagamento || DEFAULT_PAYMENT_TERM),
                           tipoFrete: (proposta.frete as 'CIF' | 'FOB') || undefined,
                         })
                         addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${proposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
@@ -1235,7 +1243,7 @@ export default function ClientePanel({
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {pedidoAguardandoAprovacao ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : '🎉 Ganhou'}
+                    {pedidoAguardandoAprovacao ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : 'Vendido'}
                   </button>
                 </>
               )}
@@ -1274,7 +1282,7 @@ export default function ClientePanel({
               })()}
               {(isGerente
                 ? ['prospecção', 'proposta', 'amostra_perdida', 'negociacao', 'inativo'].includes(c.etapa)
-                : ['negociacao', 'amostra_perdida'].includes(c.etapa)
+                : ['proposta', 'negociacao', 'amostra_perdida'].includes(c.etapa)
               ) && (
                 <button onClick={() => {
                   onTriggerPerda(c)
@@ -2285,10 +2293,9 @@ export default function ClientePanel({
                         </div>
                       )}
                       {!isNota && (
-                        <div className="flex-1 min-w-[100px]">
+                        <div className="flex-1 min-w-[130px]">
                           <label className="block text-xs text-gray-500 mb-1">Horário</label>
-                          <input type="time" value={panelAtividadeHora} onChange={(e) => setPanelAtividadeHora(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                          <TimePicker5Min value={panelAtividadeHora} onChange={setPanelAtividadeHora} ariaLabelPrefix="Horário da atividade" />
                         </div>
                       )}
                       {!isNota && (
@@ -2321,10 +2328,9 @@ export default function ClientePanel({
                         <input type="date" value={panelAtividadePrazo} onChange={(e) => setPanelAtividadePrazo(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                           className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
                       </div>
-                      <div className="flex-1 min-w-[100px]">
+                      <div className="flex-1 min-w-[130px]">
                         <label className="block text-xs text-gray-500 mb-1">Horário</label>
-                        <input type="time" value={panelAtividadeHora} onChange={(e) => setPanelAtividadeHora(e.target.value)} onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer" />
+                        <TimePicker5Min value={panelAtividadeHora} onChange={setPanelAtividadeHora} ariaLabelPrefix="Horário da tarefa" />
                       </div>
                       <div className="flex-1 min-w-[140px]">
                         <label className="block text-xs text-gray-500 mb-1">Responsável</label>
@@ -2843,24 +2849,31 @@ export default function ClientePanel({
                                 placeholder="Motivo do reagendamento (ex: cliente não atendeu)"
                                 className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400"
                               />
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <input type="date" value={reagendandoData} onChange={e => setReagendandoData(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer" />
-                                <input type="time" value={reagendandoHora} onChange={e => setReagendandoHora(e.target.value)} onClick={e => (e.target as HTMLInputElement).showPicker?.()} className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-200 bg-white cursor-pointer" />
+                                <TimePicker5Min value={reagendandoHora} onChange={setReagendandoHora} ariaLabelPrefix="Horário reagendamento" />
                                 <button
                                   disabled={!reagendandoMotivo.trim()}
                                   onClick={async () => {
                                     if (!reagendandoMotivo.trim()) return
+                                    const horaNorm = reagendandoHora ? arredondarHora5Min(reagendandoHora) : tarefaVinculada!.hora
+                                    if (isDataHoraNoPassado(reagendandoData, horaNorm)) {
+                                      showToast?.('error', 'Não é permitido reagendar tarefa para data ou horário no passado.')
+                                      return
+                                    }
+                                    const mudouData = reagendandoData !== tarefaVinculada!.data
                                     const reagendamento = {
                                       dataOriginal: tarefaVinculada!.data,
                                       horaOriginal: tarefaVinculada!.hora,
                                       motivo: reagendandoMotivo.trim(),
                                       reagendadoEm: new Date().toISOString(),
+                                      alteradoPor: loggedUser?.nome || 'Vendedor',
                                     }
                                     const updates = {
                                       data: reagendandoData,
-                                      hora: reagendandoHora || tarefaVinculada!.hora,
+                                      hora: horaNorm,
                                       status: 'pendente' as const,
-                                      reagendamentos: [...(tarefaVinculada!.reagendamentos || []), reagendamento],
+                                      reagendamentos: mudouData ? [...(tarefaVinculada!.reagendamentos || []), reagendamento] : (tarefaVinculada!.reagendamentos || []),
                                     }
                                     await db.updateTarefa(tarefaVinculada!.id, updates)
                                     setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates } : t))

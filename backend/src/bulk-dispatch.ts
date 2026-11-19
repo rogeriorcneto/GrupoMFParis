@@ -31,6 +31,7 @@ export interface BulkStatus {
   status: 'running' | 'done' | 'cancelled'
   startedAt: string
   finishedAt?: string
+  vendedorId: number
 }
 
 // ── In-memory batch store ──
@@ -52,6 +53,10 @@ export function getBatchStatus(batchId: string): BulkStatus | null {
 
 export function getAllBatches(): BulkStatus[] {
   return [...batches.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+}
+
+export function getBatchesByVendedor(vendedorId: number): BulkStatus[] {
+  return getAllBatches().filter(b => b.vendedorId === vendedorId)
 }
 
 export function cancelBatch(batchId: string): boolean {
@@ -95,6 +100,7 @@ export function startBulkDispatch(req: BulkRequest): string {
     errors: [],
     status: 'running',
     startedAt: new Date().toISOString(),
+    vendedorId: req.vendedorId,
   }
 
   batches.set(batchId, batch)

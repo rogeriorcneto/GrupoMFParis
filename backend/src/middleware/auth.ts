@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { CONFIG } from '../config.js'
+import { supabase as serviceSupabase } from '../supabase.js'
 import { log } from '../logger.js'
 
 // Shared Supabase client for auth operations (no session persistence needed)
@@ -8,23 +9,43 @@ const authClient = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
-// P1-6: TTL cache to avoid 1-2 DB queries per request
-const AUTH_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-const authCache = new Map<string, { userId: string; email: string; expiresAt: number }>()
-const cargoCache = new Map<string, { cargo: string; expiresAt: number }>()
+interface CachedVendedor {
+  id: number
+  nome: string
+  email: string
+  cargo: string
+  ativo: boolean
+}
 
-// Cleanup stale cache entries every 10 minutes
+const AUTH_CACHE_TTL = 60 * 1000 // 1 min para refletir desativações rapidamente
+const authCache = new Map<string, { userId: string; email: string; vendedor: CachedVendedor | null; expiresAt: number }>()
+
 setInterval(() => {
   const now = Date.now()
   for (const [k, v] of authCache) if (v.expiresAt < now) authCache.delete(k)
-  for (const [k, v] of cargoCache) if (v.expiresAt < now) cargoCache.delete(k)
-}, 10 * 60_000)
+}, 5 * 60_000)
+
+async function fetchVendedorByAuth(userId: string): Promise<CachedVendedor | null> {
+  const { data, error } = await serviceSupabase
+    .from('vendedores')
+    .select('id, nome, email, cargo, ativo')
+    .eq('auth_id', userId)
+    .order('ativo', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error || !data) return null
+  return {
+    id: Number(data.id),
+    nome: String(data.nome || ''),
+    email: String(data.email || ''),
+    cargo: String(data.cargo || 'vendedor'),
+    ativo: data.ativo !== false,
+  }
+}
 
 /**
  * Middleware de autenticação para proteger endpoints da API.
- * Valida o token JWT do Supabase enviado no header Authorization.
- * 
- * O frontend deve enviar: Authorization: Bearer <supabase_access_token>
+ * Valida o JWT do Supabase E bloqueia imediatamente contas desativadas (ativo = false).
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization
@@ -33,13 +54,17 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return
   }
 
-  const token = authHeader.slice(7) // Remove 'Bearer '
+  const token = authHeader.slice(7)
 
-  // Check cache first
   const cached = authCache.get(token)
   if (cached && cached.expiresAt > Date.now()) {
+    if (cached.vendedor && !cached.vendedor.ativo) {
+      res.status(403).json({ success: false, error: 'Conta desativada.' })
+      return
+    }
     ;(req as any).userId = cached.userId
     ;(req as any).userEmail = cached.email
+    ;(req as any).vendedor = cached.vendedor
     ;(req as any).supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -49,7 +74,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   try {
-    // Validate token by getting user from Supabase (reuses shared client)
     const { data: { user }, error } = await authClient.auth.getUser(token)
 
     if (error || !user) {
@@ -58,15 +82,23 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return
     }
 
-    // Cache the result
-    authCache.set(token, { userId: user.id, email: user.email || '', expiresAt: Date.now() + AUTH_CACHE_TTL })
+    const vendedor = await fetchVendedorByAuth(user.id)
+    if (vendedor && !vendedor.ativo) {
+      authCache.delete(token)
+      res.status(403).json({ success: false, error: 'Conta desativada.' })
+      return
+    }
 
-    // Attach user to request for downstream use
+    authCache.set(token, {
+      userId: user.id,
+      email: user.email || '',
+      vendedor,
+      expiresAt: Date.now() + AUTH_CACHE_TTL,
+    })
+
     ;(req as any).userId = user.id
     ;(req as any).userEmail = user.email
-
-    // Create a per-request Supabase client authenticated with the user's token
-    // This allows DB operations to pass RLS policies that check auth.uid()
+    ;(req as any).vendedor = vendedor
     ;(req as any).supabase = createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -80,7 +112,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 }
 
 /**
- * Middleware que verifica se o usuário é gerente.
+ * Middleware que verifica se o usuário é gerente ativo.
  * Deve ser usado APÓS requireAuth.
  */
 export async function requireGerente(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -90,10 +122,9 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
     return
   }
 
-  // Check cargo cache first
-  const cached = cargoCache.get(userId)
-  if (cached && cached.expiresAt > Date.now()) {
-    if (cached.cargo !== 'gerente') {
+  const vendReq = (req as any).vendedor as CachedVendedor | null | undefined
+  if (vendReq) {
+    if (!vendReq.ativo || vendReq.cargo !== 'gerente') {
       res.status(403).json({ success: false, error: 'Acesso restrito ao gerente.' })
       return
     }
@@ -102,27 +133,12 @@ export async function requireGerente(req: Request, res: Response, next: NextFunc
   }
 
   try {
-    // Use per-request authenticated client if available, fallback to authClient
-    const client = (req as any).supabase || authClient
-    const { data, error } = await client
-      .from('vendedores')
-      .select('cargo')
-      .eq('auth_id', userId)
-      .single()
-
-    if (error || !data) {
+    const vend = await fetchVendedorByAuth(userId)
+    if (!vend || !vend.ativo || vend.cargo !== 'gerente') {
       res.status(403).json({ success: false, error: 'Acesso restrito ao gerente.' })
       return
     }
-
-    // Cache the cargo
-    cargoCache.set(userId, { cargo: data.cargo, expiresAt: Date.now() + AUTH_CACHE_TTL })
-
-    if (data.cargo !== 'gerente') {
-      res.status(403).json({ success: false, error: 'Acesso restrito ao gerente.' })
-      return
-    }
-
+    ;(req as any).vendedor = vend
     next()
   } catch (err) {
     log.error({ err }, 'Erro ao verificar cargo')

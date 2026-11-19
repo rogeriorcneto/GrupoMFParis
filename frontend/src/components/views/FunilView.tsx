@@ -920,28 +920,23 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             ))}
                           </div>
                         )}
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{cliente.contatoNome}</span>
+                        {/* Item 7 Rodada 3: Ciclo + Vendedor (sem nome do contato e sem WA/Email/Ligar no Kanban) */}
+                        <div className="flex items-center justify-between mt-1.5 gap-1">
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md border border-gray-200 dark:border-gray-600">
+                            Ciclo {cliente.cicloNumero || 1}
+                          </span>
                           {vendedor && <span className="text-[10px] text-primary-500 dark:text-primary-400 font-semibold flex-shrink-0 bg-primary-50 dark:bg-primary-900/30 px-1.5 py-0.5 rounded-full">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
-                        {/* Ações rápidas — sempre visíveis no topo */}
-                        <div className="flex gap-1 mt-2 flex-wrap">
-                          {cliente.etapa === 'amostra' && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Registrar resultado da amostra por item">🧪 Resultado</button>
-                          )}
-                          {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && moverCliente && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(cliente.statusAmostra || '') && (
-                            <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-0.5 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium border border-red-100" title="Cancelar amostra e voltar para Prospecção">❌ Cancelar</button>
-                          )}
-                          {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Abrir WhatsApp">📱 WA</button>
-                          )}
-                          {cliente.contatoEmail && (
-                            <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 font-medium border border-blue-100" title="Enviar Email">📧 Email</button>
-                          )}
-                          {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                            <button onClick={(e) => { e.stopPropagation(); setCallRecordingCliente(cliente); onQuickAction(cliente, 'ligacao', 'contato') }} className="px-2 py-0.5 text-[9px] bg-orange-50 text-orange-700 rounded-md hover:bg-orange-100 font-medium border border-orange-100" title="Ligar com gravação">📞 Ligar</button>
-                          )}
-                        </div>
+                        {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && (
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {cliente.etapa === 'amostra' && (
+                              <button onClick={(e) => { e.stopPropagation(); onClickCliente?.(cliente) }} className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md hover:bg-green-100 font-medium border border-green-100" title="Registrar resultado da amostra por item">🧪 Resultado</button>
+                            )}
+                            {moverCliente && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(cliente.statusAmostra || '') && (
+                              <button onClick={(e) => { e.stopPropagation(); if (confirm(`Cancelar envio de amostra para ${cliente.razaoSocial}?`)) moverCliente(cliente.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }) }} className="px-2 py-0.5 text-[9px] bg-red-50 text-red-700 rounded-md hover:bg-red-100 font-medium border border-red-100" title="Cancelar amostra e voltar para Prospecção">❌ Cancelar</button>
+                            )}
+                          </div>
+                        )}
 
                         {/* Histórico de Propostas (negociação) */}
                         {(() => {
@@ -980,8 +975,8 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             <div className="mt-1.5 p-2 bg-gray-50 dark:bg-gray-700/40 rounded-md border border-gray-100 dark:border-gray-600/40 space-y-1">
                               {/* Tipo + Status */}
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200'}`}>
-                                  {p.tipo === 'bonificacao' ? '🧪 Amostra' : '🛒 Venda'}
+                                <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded-full ${p.tipo === 'bonificacao' ? (p.numero?.toUpperCase().startsWith('BON-') ? 'bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200') : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-200'}`}>
+                                  {p.tipo === 'bonificacao' ? (p.numero?.toUpperCase().startsWith('BON-') ? 'BONIFICAÇÃO' : '🧪 Amostra') : '🛒 Venda'}
                                 </span>
                                 <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-full ${p.status === 'confirmado' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-200' : p.status === 'enviado' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-200' : p.status === 'cancelado' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-200' : 'bg-gray-100 dark:bg-gray-600/40 text-gray-600 dark:text-gray-300'}`}>
                                   {statusLabel[p.status] || p.status}
@@ -1091,18 +1086,11 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                   <h4 className="font-bold text-[13px] text-gray-900 leading-snug line-clamp-2">{cliente.razaoSocial}</h4>
                                   <span className="text-[10px] font-bold text-gray-400 flex-shrink-0">{cliente.score}</span>
                                 </div>
-                                <div className="flex items-center justify-between mt-1">
-                                  <span className="text-[11px] text-gray-500 truncate">{cliente.contatoNome}</span>
+                                <div className="flex items-center justify-between mt-1.5 gap-1">
+                                  <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-700 rounded-md border border-gray-200">
+                                    Ciclo {cliente.cicloNumero || 2}
+                                  </span>
                                   {vendedor && <span className="text-[10px] text-primary-500 font-medium flex-shrink-0">{vendedor.nome.split(' ')[0]}</span>}
-                                </div>
-                                <div className="flex gap-1 mt-2 flex-wrap">
-                                  {(cliente.whatsapp || cliente.contatoCelular || cliente.contatoTelefone) && (
-                                    <span className="px-2 py-0.5 text-[9px] bg-green-50 text-green-700 rounded-md font-medium border border-green-100">📱 WA</span>
-                                  )}
-                                  {cliente.contatoEmail && (
-                                    <span className="px-2 py-0.5 text-[9px] bg-blue-50 text-blue-700 rounded-md font-medium border border-blue-100">📧 Email</span>
-                                  )}
-                                  <span className="px-2 py-0.5 text-[9px] bg-gray-100 text-gray-500 rounded-md font-medium border border-gray-200">🔄 #{cliente.cicloNumero || 2}° ciclo</span>
                                 </div>
                                 {cliente.valorEstimado ? <p className="text-[11px] font-bold text-primary-600 mt-1.5">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                               </div>

@@ -114,7 +114,7 @@ export default function GlobalSearch({ isOpen, onClose, clientes, tarefas, pedid
     } else if (item.type === 'tarefa') {
       onNavigate('tarefas')
     } else if (item.type === 'pedido') {
-      onNavigate('pedidos')
+      onNavigate('aprovacao')
     }
     onClose()
   }

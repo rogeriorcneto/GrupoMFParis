@@ -1407,7 +1407,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                   </button>
                 </div>
                 <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-apple p-2 grid grid-cols-2 gap-1.5 bg-gray-50/50">
-                  {vendedores.filter(v => v.ativo).map(v => {
+                  {vendedores.map(v => {
                     const checked = expVendedorIds.includes(v.id)
                     return (
                       <label key={v.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer px-2 py-1 rounded hover:bg-white">
@@ -1419,7 +1419,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                           }
                           className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                         />
-                        <span className="truncate">{v.nome}</span>
+                        <span className="truncate">{v.nome}{!v.ativo ? ' (inativo)' : ''}</span>
                       </label>
                     )
                   })}

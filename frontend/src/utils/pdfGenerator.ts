@@ -118,7 +118,7 @@ export async function gerarPropostaPDF(
   doc.setTextColor(17, 24, 39)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.text('PROPOSTA', headX, y + 5)
+  doc.text(numeroProposta.toUpperCase().startsWith('BON-') ? 'BONIFICAÇÃO' : 'PROPOSTA', headX, y + 5)
 
   doc.setFontSize(12)
   doc.text(EMISSOR.nome, headX, y + 12)

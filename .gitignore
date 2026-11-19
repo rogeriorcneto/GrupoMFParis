@@ -14,9 +14,13 @@ Thumbs.db
 rf-cnpj-data/
 __pycache__/
 backend/backup-supabase/
+backend/backup-supabase-*/
 backend/*.json
 backend/*.png
 backend/*.csv
 backend/scripts/_*
 frontend/test-results/
+frontend/shots*/
+frontend/playwright-report/
+frontend/e2e/_debug-*.spec.ts
 *.sqlite

@@ -477,11 +477,13 @@ export function useFunilActions({
       const fromStage = item.fromStage
       const now = new Date().toISOString()
       const today = now.split('T')[0]
+      const autorNome = loggedUser?.nome || 'Usuário'
       const motivo = motivoPerdaTexto.trim() || `Perdido por: ${categoriaPerdaSel}`
       const extras: Partial<Cliente> = {
         motivoPerda: motivo,
         categoriaPerda: categoriaPerdaSel || 'outro',
         dataPerda: today,
+        etapaAnterior: fromStage,
         ...(fromStage === 'negociacao' ? { statusFollowUp: 'perdido_negociacao' } : {}),
       }
 
@@ -493,14 +495,26 @@ export function useFunilActions({
           ? { ...c, etapa: 'perdido', etapaAnterior: fromStage, ...extras, dataEntradaEtapa: now }
           : c
         ))
+        // Registrar na timeline quem marcou Perdido, etapa de origem, motivo e observação (sai na exportação/análise)
+        try {
+          const savedInter = await db.insertInteracao({
+            clienteId: clienteOriginal.id,
+            tipo: 'nota',
+            data: now,
+            assunto: `Marcado como Perdido (${stageLabels[fromStage] || fromStage})`,
+            descricao: `[PERDA_REGISTRADA] Etapa de origem: ${stageLabels[fromStage] || fromStage} | Motivo: ${categoriaPerdaSel || 'outro'} | Observação: ${motivo} | Marcado por: ${autorNome}`,
+            automatico: true,
+          })
+          setInteracoes(prev => [savedInter, ...prev])
+        } catch { /* non-critical */ }
       } catch (e) {
         logger.error('Erro ao mover para perdido:', e)
         draggedItemRef.current = null; setDraggedItemState(null); setPendingDrop(null); setShowMotivoPerda(false); setMotivoPerdaTexto(''); setCategoriaPerdaSel('outro')
         return
       }
 
-      // Matriz oficial: perder em Negociação abre automaticamente um novo ciclo em Proposta
-      if (fromStage === 'negociacao' && !existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
+      // Regra oficial Rodada 3 (Item 3): Perdido em qualquer etapa abre automaticamente novo ciclo em Proposta (funil 100% fechado)
+      if (!existeCardAtivo(clienteOriginal, ['proposta', 'negociacao'])) {
         const novoCliente = buildNovoCicloCliente(clienteOriginal, 'proposta', loggedUser?.id, { etapaAnterior: 'perdido' })
         try {
           const clienteCriado = await inserirNovoCiclo(clienteOriginal, novoCliente)

@@ -105,10 +105,17 @@ const VendedoresView: React.FC<{
   }, [selectedVendedorId])
 
   const getVendedorMetrics = (vendedor: Vendedor) => {
-    const clientesVendedor = clientes.filter(c => c.vendedorId === vendedor.id)
+    const cardsAtivos = clientes.filter(c => !c.arquivadoDuplicata && c.vendedorId === vendedor.id)
+    const porChave = new Map<string, typeof cardsAtivos[number]>()
+    for (const c of cardsAtivos) {
+      const doc = (c.cnpj || c.cpf || '').replace(/\D/g, '')
+      const ch = (doc.length === 14 || doc.length === 11) ? `doc:${doc}` : c.empresaFunilId ? `ef:${c.empresaFunilId}` : `id:${c.id}`
+      if (!porChave.has(ch) || (porChave.get(ch)!.novoCiclo && !c.novoCiclo)) porChave.set(ch, c)
+    }
+    const clientesVendedor = Array.from(porChave.values())
     const totalLeads = clientesVendedor.length
-    const valorPipeline = clientesVendedor.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
-    const conversoes = clientesVendedor.filter(c => c.etapa === 'follow_up').length
+    const valorPipeline = cardsAtivos.reduce((sum, c) => sum + (c.valorEstimado || 0), 0)
+    const conversoes = cardsAtivos.filter(c => c.etapa === 'follow_up').length
     const taxaConversao = totalLeads > 0 ? (conversoes / totalLeads) * 100 : 0
     return { totalLeads, valorPipeline, conversoes, taxaConversao, clientesVendedor }
   }
