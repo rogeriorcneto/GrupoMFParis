@@ -1429,7 +1429,11 @@ export async function insertJobAutomacao(j: {
 }
 
 export async function fetchAutomacoesAtivas(): Promise<any[]> {
-  const { data, error } = await supabase.from('automacoes').select('*').eq('ativo', true)
+  const { data, error } = await supabase
+    .from('automacoes')
+    .select('*')
+    .eq('ativo', true)
+    .eq('status', 'ativa')
   if (error) { log.error({ error }, 'Erro fetchAutomacoesAtivas'); return [] }
   return data || []
 }

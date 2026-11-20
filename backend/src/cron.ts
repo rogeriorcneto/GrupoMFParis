@@ -1,5 +1,6 @@
 import * as db from './database.js'
 import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.js'
+import { sendUserWhatsAppMessage, getUserWhatsAppStatus } from './whatsapp-multi.js'
 import { sendEmail, getEmailStatus } from './email.js'
 import { log } from './logger.js'
 
@@ -35,17 +36,21 @@ export async function processarJobsPendentes(): Promise<void> {
         if (job.mensagem) mensagem = job.mensagem
 
         if (job.canal === 'whatsapp') {
-          const waStatus = getWhatsAppStatus()
-          if (!waStatus.connected) {
-            await db.updateJobStatus(job.id, 'erro', 'WhatsApp não conectado')
-            continue
-          }
-          const numero = cliente.whatsapp || cliente.contatoTelefone
+          const numero = (cliente as any).whatsapp || (cliente as any).contatoCelular || cliente.contatoTelefone
           if (!numero) {
             await db.updateJobStatus(job.id, 'erro', 'Cliente sem número de WhatsApp/telefone')
             continue
           }
-          const result = await sendWhatsAppMessage(numero, mensagem)
+          // Tenta primeiro pelo WhatsApp conectado do vendedor dono da carteira; fallback para o WhatsApp global
+          const vendWa = cliente.vendedorId ? getUserWhatsAppStatus(cliente.vendedorId) : null
+          const globalWa = getWhatsAppStatus()
+          if (!vendWa?.connected && !globalWa.connected) {
+            await db.updateJobStatus(job.id, 'erro', 'WhatsApp não conectado')
+            continue
+          }
+          const result = vendWa?.connected && cliente.vendedorId
+            ? await sendUserWhatsAppMessage(cliente.vendedorId, numero, mensagem)
+            : await sendWhatsAppMessage(numero, mensagem)
           if (result.success) {
             await db.updateJobStatus(job.id, 'enviado')
             await db.insertInteracao({

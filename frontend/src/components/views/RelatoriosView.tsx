@@ -1,10 +1,11 @@
 import React from 'react'
 import { SparklesIcon, FlagIcon } from '@heroicons/react/24/outline'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
-import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade, Missao } from '../../types'
+import type { Cliente, Vendedor, Interacao, Produto, Pedido, Tarefa, Atividade, Missao, PropostaHistorico } from '../../types'
 import { fetchTempoTelaRelatorio, type TempoTelaRelatorioItem, authFetch, BOT_URL } from '../../lib/botApi'
+import { fetchAllPropostas } from '../../lib/database'
 import { stageLabels } from '../../utils/constants'
-import { calcularIndicadoresOperacionais } from '../../utils/indicadores-comerciais'
+import { calcularIndicadoresOperacionais, criarIndiceEmpresas, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import { calcularDuracoesEtapas, diasEtapaAtual, EtapaDuracao } from '../../utils/etapas'
 
 type Periodo = '7d' | '30d' | '90d' | 'total'
@@ -30,6 +31,11 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
   }, [ttDataInicio, ttDataFim])
 
   const [missoes, setMissoes] = React.useState<Missao[]>([])
+  const [propostasLoaded, setPropostasLoaded] = React.useState<PropostaHistorico[]>([])
+
+  React.useEffect(() => {
+    fetchAllPropostas().then(setPropostasLoaded).catch(() => {})
+  }, [])
 
   React.useEffect(() => {
     authFetch(`${BOT_URL}/api/missoes?status=em_andamento`)
@@ -37,6 +43,10 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
       .then(r => setMissoes(r.data || []))
       .catch(() => {})
   }, [])
+
+  const mapaUltimaProposta = React.useMemo(() => criarMapaUltimaProposta(propostasLoaded), [propostasLoaded])
+  const indiceEmpresas = React.useMemo(() => criarIndiceEmpresas(clientesProp), [clientesProp])
+  const chaveEmpresa = React.useCallback((clienteId: number) => indiceEmpresas.get(clienteId) || `cliente:${clienteId}`, [indiceEmpresas])
 
   const threshold = React.useMemo(() => {
     if (periodo === 'total') return null
@@ -62,10 +72,12 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
 
   const fp = React.useMemo(() => {
     if (!threshold) return pedidos
-    return pedidos.filter(p => new Date(p.dataCriacao) >= threshold)
+    return pedidos.filter(p => new Date(p.dataAprovacao || p.dataCriacao) >= threshold)
   }, [pedidos, threshold])
 
-  const fpConfirmed = React.useMemo(() => fp.filter(p => p.status === 'confirmado'), [fp])
+  // Vendas reais confirmadas (exclui amostras e bonificações para não distorcer Faturamento, Ticket Médio e Curva ABC)
+  const fpConfirmed = React.useMemo(() => fp.filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao'), [fp])
+  const fpBonificacoes = React.useMemo(() => fp.filter(p => p.status === 'confirmado' && p.tipo === 'bonificacao'), [fp])
 
   const ft = React.useMemo(() => {
     if (!threshold) return tarefas
@@ -80,27 +92,78 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
   const stages = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo', 'perdido']
   const COLORS = ['#3B82F6', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#EF4444']
 
-  const pipelineData = stages.map(s => ({ name: stageLabels[s] || s, valor: fc.filter(c => c.etapa === s).reduce((sum, c) => sum + (c.valorEstimado || 0), 0), qtd: fc.filter(c => c.etapa === s).length }))
-  const pieData = stages.map(s => ({ name: stageLabels[s] || s, value: fc.filter(c => c.etapa === s).length })).filter(d => d.value > 0)
-  const vendedorData = vendedores.filter(v => v.ativo).map(v => { const cv = fc.filter(c => c.vendedorId === v.id); return { name: v.nome.split(' ')[0], pipeline: cv.reduce((s, c) => s + (c.valorEstimado || 0), 0), leads: cv.length, conversoes: cv.filter(c => c.etapa === 'follow_up').length } })
-  const interacaoData = ['email', 'whatsapp', 'linkedin', 'instagram', 'ligacao', 'reuniao'].map(tipo => ({ name: tipo.charAt(0).toUpperCase() + tipo.slice(1), qtd: fi.filter(i => i.tipo === tipo).length })).filter(d => d.qtd > 0)
+  const pipelineData = React.useMemo(
+    () => stages.map(s => ({
+      name: stageLabels[s] || s,
+      valor: fc.filter(c => c.etapa === s).reduce((sum, c) => sum + valorPropostaAtivaCard(c, mapaUltimaProposta), 0),
+      qtd: fc.filter(c => c.etapa === s).length,
+    })),
+    [fc, mapaUltimaProposta]
+  )
+  const pieData = React.useMemo(
+    () => stages.map(s => ({ name: stageLabels[s] || s, value: fc.filter(c => c.etapa === s).length })).filter(d => d.value > 0),
+    [fc]
+  )
+  const vendedorData = React.useMemo(
+    () => vendedores.filter(v => v.ativo).map(v => {
+      const cv = fc.filter(c => c.vendedorId === v.id && (c.etapa === 'proposta' || c.etapa === 'negociacao'))
+      const todosV = fc.filter(c => c.vendedorId === v.id)
+      return {
+        name: v.nome.split(' ')[0],
+        pipeline: cv.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0),
+        leads: todosV.length,
+        conversoes: todosV.filter(c => c.etapa === 'follow_up').length,
+      }
+    }),
+    [vendedores, fc, mapaUltimaProposta]
+  )
+  const interacaoData = React.useMemo(
+    () => ['email', 'whatsapp', 'linkedin', 'instagram', 'ligacao', 'reuniao']
+      .map(tipo => ({ name: tipo.charAt(0).toUpperCase() + tipo.slice(1), qtd: fi.filter(i => i.tipo === tipo).length }))
+      .filter(d => d.qtd > 0),
+    [fi]
+  )
+  const prodPipelineData = React.useMemo(() => {
+    const prodPipeline: Record<string, number> = {}
+    fc.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').forEach(c => {
+      const valCard = valorPropostaAtivaCard(c, mapaUltimaProposta)
+      ;(c.produtosInteresse || []).forEach(p => {
+        prodPipeline[p] = (prodPipeline[p] || 0) + valCard
+      })
+    })
+    propostasLoaded.forEach(pr => {
+      const cli = fc.find(c => c.id === pr.clienteId && (c.etapa === 'proposta' || c.etapa === 'negociacao'))
+      if (!cli) return
+      ;(pr.itens || []).forEach(it => {
+        if (it.nomeProduto) {
+          prodPipeline[it.nomeProduto] = (prodPipeline[it.nomeProduto] || 0) + (it.preco || 0) * (it.quantidade || 0)
+        }
+      })
+    })
+    return Object.entries(prodPipeline)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, valor]) => ({ name: name.length > 22 ? name.slice(0, 22) + '…' : name, valor }))
+  }, [fc, mapaUltimaProposta, propostasLoaded])
 
   const gerarRelatorioPDF = () => {
     const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
-    const totalLeads = clientes.length
-    const leadsAtivos = clientes.filter(c => c.etapa !== 'perdido').length
+    const confirmedOrders = pedidos.filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao')
+    const empresasTotalSet = new Set(clientes.map(c => chaveEmpresa(c.id)))
+    const totalLeads = empresasTotalSet.size
+    const leadsAtivos = clientes.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').length
     const perdidos = clientes.filter(c => c.etapa === 'perdido')
-    const clientesAtivos = clientes.filter(c => c.etapa === 'follow_up')
-    const totalPipeline = clientes.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-    const valorPerdido = perdidos.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-    const valorGanho = clientesAtivos.reduce((s, c) => s + (c.valorEstimado || 0), 0)
-    const taxaConversao = totalLeads > 0 ? ((clientesAtivos.length / totalLeads) * 100).toFixed(1) : '0'
-    const taxaPerda = totalLeads > 0 ? ((perdidos.length / totalLeads) * 100).toFixed(1) : '0'
-    const ticketMedio = leadsAtivos > 0 ? Math.round(totalPipeline / leadsAtivos) : 0
-    const stLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Perdida', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativos', 'perdido': 'Perdido' }
+    const totalPipeline = clientes.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
+    const valorPerdido = perdidos.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
+    const valorGanho = confirmedOrders.reduce((s, p) => s + p.totalValor, 0)
+    const activeEmpresas = new Set(confirmedOrders.map(p => chaveEmpresa(p.clienteId)))
+    const taxaConversao = totalLeads > 0 ? ((activeEmpresas.size / totalLeads) * 100).toFixed(1) : '0'
+    const taxaPerda = clientes.length > 0 ? ((perdidos.length / clientes.length) * 100).toFixed(1) : '0'
+    const ticketMedio = confirmedOrders.length > 0 ? Math.round(valorGanho / confirmedOrders.length) : 0
+    const stLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Finalizada', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'inativo': 'Inativos', 'perdido': 'Perdido' }
     const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
-    const pipelineRows = stages.map(s => { const cls = clientes.filter(c => c.etapa === s); return `<tr><td>${stLabels[s]}</td><td style="text-align:center">${cls.length}</td><td style="text-align:right">R$ ${cls.reduce((sum, c) => sum + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
-    const vendRows = vendedores.filter(v => v.ativo).map(v => { const cv = clientes.filter(c => c.vendedorId === v.id); return `<tr><td>${v.nome}</td><td style="text-align:center">${cv.length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'follow_up').length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'perdido').length}</td><td style="text-align:right">R$ ${cv.filter(c => c.etapa !== 'perdido').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
+    const pipelineRows = stages.map(s => { const cls = clientes.filter(c => c.etapa === s); return `<tr><td>${stLabels[s]}</td><td style="text-align:center">${cls.length}</td><td style="text-align:right">R$ ${cls.reduce((sum, c) => sum + valorPropostaAtivaCard(c, mapaUltimaProposta), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
+    const vendRows = vendedores.filter(v => v.ativo).map(v => { const cv = clientes.filter(c => c.vendedorId === v.id); return `<tr><td>${v.nome}</td><td style="text-align:center">${new Set(cv.map(c => chaveEmpresa(c.id))).size}</td><td style="text-align:center">${confirmedOrders.filter(p => p.vendedorId === v.id).length}</td><td style="text-align:center">${cv.filter(c => c.etapa === 'perdido').length}</td><td style="text-align:right">R$ ${cv.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0).toLocaleString('pt-BR')}</td></tr>` }).join('')
     const catCount = perdidos.reduce((acc, c) => { const k = c.categoriaPerda || 'outro'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)
     const perdaRows = Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>${catLabels[k] || k}</td><td style="text-align:center">${v}</td><td style="text-align:right">${totalLeads > 0 ? ((v / totalLeads) * 100).toFixed(1) : 0}%</td></tr>`).join('')
     const funilStages = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
@@ -108,30 +171,28 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
     funilStages.forEach(s => { passaramPor[s] = 0 })
     clientes.forEach(c => { const etapas = new Set<string>(); etapas.add(c.etapa); (c.historicoEtapas || []).forEach(h => { etapas.add(h.etapa); if (h.de) etapas.add(h.de) }); funilStages.forEach(s => { if (etapas.has(s)) passaramPor[s]++ }) })
     const convRows = funilStages.map((s, i) => { const qtd = passaramPor[s]; const ant = i > 0 ? passaramPor[funilStages[i - 1]] : qtd; const taxa = ant > 0 ? ((qtd / ant) * 100).toFixed(0) : '—'; return `<tr><td>${stLabels[s]}</td><td style="text-align:center">${qtd}</td><td style="text-align:center">${i > 0 ? taxa + '%' : '—'}</td></tr>` }).join('')
-    const topClientes = [...clientes].filter(c => c.etapa !== 'perdido').sort((a, b) => (b.valorEstimado || 0) - (a.valorEstimado || 0)).slice(0, 10)
-    const topRows = topClientes.map(c => { const vend = vendedores.find(v => v.id === c.vendedorId); return `<tr><td>${c.razaoSocial}</td><td>${stLabels[c.etapa] || c.etapa}</td><td style="text-align:center">${c.score || 0}</td><td style="text-align:right">R$ ${(c.valorEstimado || 0).toLocaleString('pt-BR')}</td><td>${vend?.nome || '—'}</td></tr>` }).join('')
+    const topClientes = [...clientes].filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').sort((a, b) => valorPropostaAtivaCard(b, mapaUltimaProposta) - valorPropostaAtivaCard(a, mapaUltimaProposta)).slice(0, 10)
+    const topRows = topClientes.map(c => { const vend = vendedores.find(v => v.id === c.vendedorId); return `<tr><td>${c.razaoSocial}</td><td>${stLabels[c.etapa] || c.etapa}</td><td style="text-align:center">${c.score || 0}</td><td style="text-align:right">R$ ${valorPropostaAtivaCard(c, mapaUltimaProposta).toLocaleString('pt-BR')}</td><td>${vend?.nome || '—'}</td></tr>` }).join('')
     const etapaMaisPerdas = Object.entries(perdidos.reduce((acc, c) => { const k = c.etapaAnterior || 'desconhecido'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1])
     const motivoTop = Object.entries(catCount).sort((a, b) => b[1] - a[1])
-    const probEtapa: Record<string, number> = { 'lead': 0.05, 'prospecção': 0.10, 'amostra': 0.25, 'amostra_perdida': 0.05, 'proposta': 0.40, 'negociacao': 0.60, 'follow_up': 0.80, 'inativo': 0.10 }
-    const receitaProjetada = clientes.filter(c => c.etapa !== 'perdido').reduce((s, c) => s + (c.valorEstimado || 0) * (probEtapa[c.etapa] || 0), 0)
-    const clientesRisco = clientes.filter(c => { if (!c.dataEntradaEtapa) return false; const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000); return (c.etapa === 'amostra' && dias >= 35) || (c.etapa === 'proposta' && dias >= 25) || (c.etapa === 'negociacao' && dias >= 35) })
+    const probEtapa: Record<string, number> = { 'lead': 0.05, 'prospecção': 0.10, 'amostra': 0.25, 'amostra_perdida': 0.05, 'proposta': 0.80, 'negociacao': 0.95, 'follow_up': 0, 'inativo': 0.10 }
+    const receitaProjetada = clientes.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta) * (probEtapa[c.etapa] || 0), 0)
+    const clientesRisco = clientes.filter(c => { if (!c.dataEntradaEtapa) return false; const dias = Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000); return (c.etapa === 'amostra' && dias >= 35) || (c.etapa === 'proposta' && dias >= 25) || (c.etapa === 'negociacao' && dias >= 3) })
     const insights = [
-      `O pipeline atual totaliza <strong>R$ ${totalPipeline.toLocaleString('pt-BR')}</strong> distribuídos em <strong>${leadsAtivos}</strong> leads ativos.`,
-      `A taxa de conversão global é de <strong>${taxaConversao}%</strong> (${clientesAtivos.length} de ${totalLeads} leads chegaram a Cliente Ativo).`,
-      `Receita projetada (ponderada por probabilidade): <strong>R$ ${receitaProjetada.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</strong>.`,
+      `O pipeline comercial aberto totaliza <strong>R$ ${totalPipeline.toLocaleString('pt-BR')}</strong> distribuídos em <strong>${leadsAtivos}</strong> negociações/propostas ativas.`,
+      `A taxa de conversão da carteira única é de <strong>${taxaConversao}%</strong> (${activeEmpresas.size} de ${totalLeads} empresas únicas já compraram).`,
+      `Receita projetada (pipeline ponderado): <strong>R$ ${receitaProjetada.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</strong>.`,
       motivoTop.length > 0 ? `O principal motivo de perda é <strong>"${catLabels[motivoTop[0][0]] || motivoTop[0][0]}"</strong> com ${motivoTop[0][1]} ocorrência(s).` : '',
       etapaMaisPerdas.length > 0 ? `A etapa com mais perdas é <strong>"${stLabels[etapaMaisPerdas[0][0]] || etapaMaisPerdas[0][0]}"</strong> (${etapaMaisPerdas[0][1]} clientes).` : '',
-      clientesRisco.length > 0 ? `⚠️ <strong>${clientesRisco.length}</strong> cliente(s) em risco de perda por prazo: ${clientesRisco.map(c => c.razaoSocial).join(', ')}.` : 'Nenhum cliente em risco iminente de prazo.',
-      `Ticket médio: <strong>R$ ${ticketMedio.toLocaleString('pt-BR')}</strong>.`,
+      clientesRisco.length > 0 ? `⚠️ <strong>${clientesRisco.length}</strong> cliente(s) exigindo atenção de prazo no funil.` : 'Nenhum cliente em risco iminente de prazo.',
+      `Ticket médio real por venda: <strong>R$ ${ticketMedio.toLocaleString('pt-BR')}</strong>.`,
     ].filter(Boolean)
 
-    const confirmedOrders = pedidos.filter(p => p.status === 'confirmado')
-    const activeClientIds = new Set(confirmedOrders.map(p => p.clienteId))
-    const ativos = activeClientIds.size
-    const receitaTotal = confirmedOrders.reduce((s, p) => s + p.totalValor, 0)
+    const ativos = activeEmpresas.size
+    const receitaTotal = valorGanho
     const receitaMedia = ativos > 0 ? Math.round(receitaTotal / ativos) : 0
-    const clientRev = new Map<number, number>()
-    confirmedOrders.forEach(p => clientRev.set(p.clienteId, (clientRev.get(p.clienteId) || 0) + p.totalValor))
+    const clientRev = new Map<string, number>()
+    confirmedOrders.forEach(p => { const k = chaveEmpresa(p.clienteId); clientRev.set(k, (clientRev.get(k) || 0) + p.totalValor) })
     const revArr = Array.from(clientRev.entries()).sort((a, b) => b[1] - a[1])
     const totalRev = revArr.reduce((s, [, v]) => s + v, 0)
     let cum = 0, classeA = 0, classeB = 0, classeC = 0
@@ -161,7 +222,7 @@ const RelatoriosView: React.FC<{ clientes: Cliente[], vendedores: Vendedor[], in
 <h2>🏆 Top 10 Clientes (por valor)</h2><table><thead><tr><th>Cliente</th><th>Etapa</th><th style="text-align:center">Score</th><th style="text-align:right">Valor</th><th>Vendedor</th></tr></thead><tbody>${topRows}</tbody></table>
 ${perdidos.length > 0 ? `<h2>❌ Análise de Perdas</h2><table><thead><tr><th>Motivo</th><th style="text-align:center">Qtd</th><th style="text-align:right">% do Total</th></tr></thead><tbody>${perdaRows}</tbody></table>` : ''}
 <h2>🔮 Projeção de Receita</h2><table><thead><tr><th>Etapa</th><th style="text-align:center">Leads</th><th style="text-align:center">Prob.</th><th style="text-align:right">Valor Pipeline</th><th style="text-align:right">Projetado</th></tr></thead><tbody>
-${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const val = cls.reduce((sum, c) => sum + (c.valorEstimado || 0), 0); const proj = val * (probEtapa[s] || 0); return `<tr><td>${stLabels[s]}</td><td style="text-align:center">${cls.length}</td><td style="text-align:center">${((probEtapa[s] || 0) * 100).toFixed(0)}%</td><td style="text-align:right">R$ ${val.toLocaleString('pt-BR')}</td><td style="text-align:right"><strong>R$ ${proj.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</strong></td></tr>` }).join('')}
+${funilStages.map(s => { const cls = clientes.filter(c => c.etapa === s); const val = cls.reduce((sum, c) => sum + valorPropostaAtivaCard(c, mapaUltimaProposta), 0); const proj = val * (probEtapa[s] || 0); return `<tr><td>${stLabels[s]}</td><td style="text-align:center">${cls.length}</td><td style="text-align:center">${((probEtapa[s] || 0) * 100).toFixed(0)}%</td><td style="text-align:right">R$ ${val.toLocaleString('pt-BR')}</td><td style="text-align:right"><strong>R$ ${proj.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</strong></td></tr>` }).join('')}
 <tr style="background:#f0fdf4;font-weight:700"><td colspan="4">Total Projetado</td><td style="text-align:right;color:#16a34a">R$ ${receitaProjetada.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</td></tr>
 </tbody></table>
 <div class="footer">Relatório gerado automaticamente pelo CRM MF Paris com análise de IA • ${hoje}</div><div class="page-break"></div>
@@ -258,20 +319,20 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">📦 Produtos por Volume de Pipeline</h3>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={(() => { const prodPipeline: Record<string, number> = {}; clientes.forEach(c => (c.produtosInteresse || []).forEach(p => { prodPipeline[p] = (prodPipeline[p] || 0) + (c.valorEstimado || 0) })); return Object.entries(prodPipeline).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, valor]) => ({ name: name.length > 18 ? name.slice(0, 18) + '…' : name, valor })) })()} layout="vertical">
+          <BarChart data={prodPipelineData} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} /><YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={140} /><Tooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Pipeline']} /><Bar dataKey="valor" fill="#F59E0B" name="Pipeline" radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Resumo Executivo */}
+      {/* Resumo Executivo (valores reais de propostas ativas + vendas confirmadas sem bonificação) */}
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Resumo Executivo</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-4 bg-blue-50 rounded-apple border border-blue-200"><p className="text-xs text-blue-600 font-medium">Total Pipeline</p><p className="text-xl font-bold text-blue-900">R$ {fc.reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
-          <div className="p-4 bg-green-50 rounded-apple border border-green-200"><p className="text-xs text-green-600 font-medium">Vendas Fechadas</p><p className="text-xl font-bold text-green-900">R$ {fc.filter(c => c.etapa === 'follow_up').reduce((s, c) => s + (c.valorEstimado || 0), 0).toLocaleString('pt-BR')}</p></div>
-          <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Perdidos</p><p className="text-xl font-bold text-red-900">{fc.filter(c => c.etapa === 'perdido').length} leads</p></div>
-          <div className="p-4 bg-purple-50 rounded-apple border border-purple-200"><p className="text-xs text-purple-600 font-medium">Taxa Conversão</p><p className="text-xl font-bold text-purple-900">{fc.length > 0 ? ((fc.filter(c => c.etapa === 'follow_up').length / fc.length) * 100).toFixed(1) : 0}%</p></div>
+          <div className="p-4 bg-blue-50 rounded-apple border border-blue-200"><p className="text-xs text-blue-600 font-medium">Pipeline Aberto (Proposta + Negoc.)</p><p className="text-xl font-bold text-blue-900">R$ {fc.filter(c => c.etapa === 'proposta' || c.etapa === 'negociacao').reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p></div>
+          <div className="p-4 bg-green-50 rounded-apple border border-green-200"><p className="text-xs text-green-600 font-medium">Vendas Confirmadas</p><p className="text-xl font-bold text-green-900">R$ {fpConfirmed.reduce((s, p) => s + p.totalValor, 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</p></div>
+          <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Cards Perdidos</p><p className="text-xl font-bold text-red-900">{fc.filter(c => c.etapa === 'perdido').length}</p></div>
+          <div className="p-4 bg-purple-50 rounded-apple border border-purple-200"><p className="text-xs text-purple-600 font-medium">Conversão de Empresas</p><p className="text-xl font-bold text-purple-900">{(() => { const totEmp = new Set(fc.map(c => chaveEmpresa(c.id))).size; const compEmp = new Set(fpConfirmed.map(p => chaveEmpresa(p.clienteId))).size; return totEmp > 0 ? ((compEmp / totEmp) * 100).toFixed(1) : '0.0' })()}%</p></div>
         </div>
       </div>
 
@@ -357,8 +418,8 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
             </div>
 
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">🕒 Tempo de Tela por Cliente</h3>
-              <p className="text-sm text-gray-500 mb-4">Quanto tempo cada cliente está na etapa atual</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">🕒 Tempo na Etapa Atual por Cliente</h3>
+              <p className="text-sm text-gray-500 mb-4">Quanto tempo cada cliente está parado na etapa atual do funil</p>
               {tempoAtualClientes.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Nenhum cliente nos funil</p> : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
@@ -405,8 +466,8 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
 
         return (
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">⏱️ Tempo de Tela por Vendedor</h3>
-            <p className="text-sm text-gray-500 mb-4">Média de dias que os clientes de cada vendedor ficam em cada etapa</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">⏱️ Tempo Médio por Etapa e Vendedor</h3>
+            <p className="text-sm text-gray-500 mb-4">Média de dias que os clientes de cada vendedor permanecem em cada etapa</p>
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 text-xs font-medium text-gray-600 sticky left-0 bg-white">Vendedor</th>{funilStages.map(s => (<th key={s} className="text-center py-2 px-2 text-xs font-medium text-gray-600 min-w-[90px]">{funilLabels[s]}</th>))}</tr></thead>
@@ -438,40 +499,44 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
         const now = new Date()
         const fmtCurrency = (v: number) => `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
         const clienteMap = new Map(clientes.map(c => [c.id, c]))
-        const confirmedAll = pedidos.filter(p => p.status === 'confirmado')
-        const activeIds = new Set(fpConfirmed.map(p => p.clienteId))
-        const ativos = activeIds.size
+        const confirmedAll = pedidos.filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao')
+        const activeEmpresas = new Set(fpConfirmed.map(p => chaveEmpresa(p.clienteId)))
+        const ativos = activeEmpresas.size
         const receita = fpConfirmed.reduce((s, p) => s + p.totalValor, 0)
 
-        // first purchase per client (all time) to detect new clients in period
-        const firstPurchase: Record<number, string> = {}
-        confirmedAll.forEach(p => { if (!firstPurchase[p.clienteId] || p.dataCriacao < firstPurchase[p.clienteId]) firstPurchase[p.clienteId] = p.dataCriacao })
+        // Primeira compra por empresa única (CNPJ/CPF) para detectar novos clientes compradores no período
+        const firstPurchase: Record<string, string> = {}
+        confirmedAll.forEach(p => {
+          const emp = chaveEmpresa(p.clienteId)
+          const dt = p.dataAprovacao || p.dataCriacao
+          if (!firstPurchase[emp] || dt < firstPurchase[emp]) firstPurchase[emp] = dt
+        })
         const novos = Object.entries(firstPurchase).filter(([, d]) => !threshold || new Date(d) >= threshold).length
 
         const perdidos = fc.filter(c => c.etapa === 'perdido').length
 
-        // retention / churn using previous period
+        // Retenção / Churn por empresa única comparando com janela anterior equivalente
         let retencao = 0, churn = 0
         if (threshold) {
           const rangeMs = now.getTime() - threshold.getTime()
           const prevStart = new Date(threshold.getTime() - rangeMs)
-          const prevIds = new Set(confirmedAll.filter(p => { const d = new Date(p.dataCriacao); return d >= prevStart && d < threshold }).map(p => p.clienteId))
-          const mantidos = [...prevIds].filter(id => activeIds.has(id)).length
-          retencao = prevIds.size > 0 ? (mantidos / prevIds.size) * 100 : 0
-          churn = prevIds.size > 0 ? ((prevIds.size - mantidos) / prevIds.size) * 100 : 0
+          const prevEmpresas = new Set(confirmedAll.filter(p => { const d = new Date(p.dataAprovacao || p.dataCriacao); return d >= prevStart && d < threshold }).map(p => chaveEmpresa(p.clienteId)))
+          const mantidos = [...prevEmpresas].filter(emp => activeEmpresas.has(emp)).length
+          retencao = prevEmpresas.size > 0 ? (mantidos / prevEmpresas.size) * 100 : 0
+          churn = prevEmpresas.size > 0 ? ((prevEmpresas.size - mantidos) / prevEmpresas.size) * 100 : 0
         }
 
-        // repurchase and averages
-        const purchaseCounts: Record<number, number> = {}
-        confirmedAll.forEach(p => { purchaseCounts[p.clienteId] = (purchaseCounts[p.clienteId] || 0) + 1 })
-        const recompraClientes = [...activeIds].filter(id => (purchaseCounts[id] || 0) >= 2).length
+        // Recompra e médias por empresa única
+        const purchaseCounts: Record<string, number> = {}
+        confirmedAll.forEach(p => { const emp = chaveEmpresa(p.clienteId); purchaseCounts[emp] = (purchaseCounts[emp] || 0) + 1 })
+        const recompraClientes = [...activeEmpresas].filter(emp => (purchaseCounts[emp] || 0) >= 2).length
         const taxaRecompra = ativos > 0 ? (recompraClientes / ativos) * 100 : 0
         const freqMedia = ativos > 0 ? fpConfirmed.length / ativos : 0
         const receitaMedia = ativos > 0 ? receita / ativos : 0
 
-        // ABC and top 10 concentration
-        const clientRev = new Map<number, number>()
-        fpConfirmed.forEach(p => clientRev.set(p.clienteId, (clientRev.get(p.clienteId) || 0) + p.totalValor))
+        // Curva ABC e concentração Top 10 por empresa única
+        const clientRev = new Map<string, number>()
+        fpConfirmed.forEach(p => { const emp = chaveEmpresa(p.clienteId); clientRev.set(emp, (clientRev.get(emp) || 0) + p.totalValor) })
         const revArr = Array.from(clientRev.entries()).sort((a, b) => b[1] - a[1])
         const totalRev = revArr.reduce((s, [, v]) => s + v, 0)
         let cum = 0, classeA = 0, classeB = 0, classeC = 0
@@ -480,14 +545,16 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
         const concentracaoTop10 = totalRev > 0 ? (top10Rev / totalRev) * 100 : 0
 
         // Funil
-        const leadsGerados = fc.length
+        const leadsGerados = new Set(fc.map(c => chaveEmpresa(c.id))).size
         const prospeccoes = fi.filter(i => ['ligacao', 'email', 'whatsapp'].includes(i.tipo)).length
         const diagnosticos = fi.filter(i => i.tipo === 'reuniao').length
-        const propostasEnviadas = fc.filter(c => c.dataProposta && (!threshold || new Date(c.dataProposta) >= threshold)).length
-        const testesRealizados = fc.filter(c => c.dataEnvioAmostra && (!threshold || new Date(c.dataEnvioAmostra) >= threshold)).length
+        const propostasEnviadas = propostasLoaded.length > 0
+          ? propostasLoaded.filter(pr => !threshold || new Date(pr.criadoEm) >= threshold).length
+          : fc.filter(c => c.dataProposta && (!threshold || new Date(c.dataProposta) >= threshold)).length
+        const testesRealizados = fpBonificacoes.length || fc.filter(c => c.dataEnvioAmostra && (!threshold || new Date(c.dataEnvioAmostra) >= threshold)).length
         const negociacoes = fc.filter(c => c.etapa === 'negociacao').length
         const pedidosFech = fpConfirmed.length
-        const taxaConversaoFunil = leadsGerados > 0 ? (pedidosFech / leadsGerados) * 100 : 0
+        const taxaConversaoFunil = leadsGerados > 0 ? (activeEmpresas.size / leadsGerados) * 100 : 0
         const temposFech: number[] = []
         fc.filter(c => c.etapa === 'follow_up' && c.criadoEm && c.dataEntradaEtapa).forEach(c => {
           const dias = Math.max(0, Math.floor((new Date(c.dataEntradaEtapa!).getTime() - new Date(c.criadoEm!).getTime()) / 86400000))
@@ -495,36 +562,31 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
         })
         const tempoMedioFech = temposFech.length > 0 ? Math.round(temposFech.reduce((a, b) => a + b, 0) / temposFech.length) : 0
 
-        // Equipe
+        // Equipe (vendas reais sem bonificação + conversão por empresa única)
         const statsEquipe = vendedores.filter(v => v.ativo).map(v => {
           const cv = fc.filter(c => c.vendedorId === v.id)
+          const cvIds = new Set(cv.map(c => c.id))
           const pv = fpConfirmed.filter(p => p.vendedorId === v.id)
           const faturamento = pv.reduce((s, p) => s + p.totalValor, 0)
           const volume = pv.reduce((s, p) => s + p.itens.reduce((is, it) => is + it.quantidade, 0), 0)
-          const oport = cv.length
-          const ganhos = cv.filter(c => c.etapa === 'follow_up').length
-          const taxaConv = oport > 0 ? (ganhos / oport) * 100 : 0
+          const empV = new Set(cv.map(c => chaveEmpresa(c.id)))
+          const empComp = new Set(pv.map(p => chaveEmpresa(p.clienteId)))
+          const taxaConv = empV.size > 0 ? (empComp.size / empV.size) * 100 : 0
           const ligacoes = fi.filter(i => i.tipo === 'ligacao' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
           const emails = fi.filter(i => i.tipo === 'email' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
           const whats = fi.filter(i => i.tipo === 'whatsapp' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
           const reunioes = fi.filter(i => i.tipo === 'reuniao' && clienteMap.get(i.clienteId)?.vendedorId === v.id).length
           const visitas = ft.filter(t => t.tipo === 'reuniao' && t.vendedorId === v.id).length
-          const propostas = cv.filter(c => c.dataProposta).length
+          const propostas = propostasLoaded.length > 0
+            ? propostasLoaded.filter(pr => cvIds.has(pr.clienteId) && (!threshold || new Date(pr.criadoEm) >= threshold)).length
+            : cv.filter(c => c.dataProposta).length
           return { id: v.id, nome: v.nome.split(' ')[0], faturamento, volume, taxaConv, ligacoes, emails, whats, reunioes, visitas, propostas }
         }).filter(v => v.faturamento > 0 || v.ligacoes > 0 || v.emails > 0 || v.whats > 0 || v.reunioes > 0 || v.visitas > 0 || v.propostas > 0 || v.volume > 0)
 
-        // Concorrência
-        const perdasList = fc.filter(c => c.etapa === 'perdido')
-        const totalPerdas = perdasList.length
-        const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
-        const catColors: Record<string, string> = { preco: '#EAB308', prazo: '#F97316', qualidade: '#3B82F6', concorrencia: '#EF4444', sem_resposta: '#6B7280', outro: '#A855F7' }
-        const perdasCat = Object.entries(perdasList.reduce((acc, c) => { const k = c.categoriaPerda || 'outro'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).map(([k, v]) => ({ name: catLabels[k] || k, value: v, fill: catColors[k] || '#6B7280' }))
-        const motivosFreq = Object.entries(perdasList.reduce((acc, c) => { if (c.motivoPerda) acc[c.motivoPerda] = (acc[c.motivoPerda] || 0) + 1; return acc }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 5)
-
-        // Indicadores operacionais (spec PDFs): sem-compra, pipeline ponderado, mix produto, UF
+        // Indicadores operacionais (spec PDFs): sem-compra, pipeline ponderado real com propostas, mix produto, UF
         const hojeIso = new Date().toISOString().slice(0, 10)
         const inicioIso = threshold ? threshold.toISOString().slice(0, 10) : '0001-01-01'
-        const indOps = calcularIndicadoresOperacionais(clientes, pedidos, { inicio: inicioIso, fim: hojeIso }, hojeIso)
+        const indOps = calcularIndicadoresOperacionais(clientes, pedidos, { inicio: inicioIso, fim: hojeIso }, hojeIso, { propostas: propostasLoaded })
         const topProdutos = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 10)
         const vendasUF = [...indOps.porEstado.entries()].sort((a, b) => b[1].receita - a[1].receita)
 
@@ -597,8 +659,8 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 10 Produtos (receita no período)</h3>
                   {topProdutos.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem vendas no período</p> : (
                     <table className="w-full text-sm">
-                      <thead><tr className="border-b border-gray-200"><th className="text-left py-2 text-gray-500 font-medium">Produto</th><th className="text-right py-2 text-gray-500 font-medium">Qtd</th><th className="text-right py-2 text-gray-500 font-medium">Receita</th><th className="text-right py-2 text-gray-500 font-medium">%</th></tr></thead>
-                      <tbody>{topProdutos.map(([nome, v]) => (<tr key={nome} className="border-b border-gray-100"><td className="py-2 text-gray-900">{nome}</td><td className="py-2 text-right text-gray-600">{v.quantidade}</td><td className="py-2 text-right font-medium text-green-700">{fmtCurrency(v.receita)}</td><td className="py-2 text-right text-gray-600">{v.participacao}%</td></tr>))}</tbody>
+                      <thead><tr className="border-b border-gray-200"><th className="text-left py-2 text-gray-500 font-medium">Produto</th><th className="text-right py-2 text-gray-500 font-medium">Volume (kg)</th><th className="text-right py-2 text-gray-500 font-medium">Receita</th><th className="text-right py-2 text-gray-500 font-medium">%</th></tr></thead>
+                      <tbody>{topProdutos.map(([nome, v]) => (<tr key={nome} className="border-b border-gray-100"><td className="py-2 text-gray-900">{nome}</td><td className="py-2 text-right text-gray-600">{v.quantidade.toLocaleString('pt-BR')} kg</td><td className="py-2 text-right font-medium text-green-700">{fmtCurrency(v.receita)}</td><td className="py-2 text-right text-gray-600">{v.participacao}%</td></tr>))}</tbody>
                     </table>
                   )}
                 </div>
@@ -615,7 +677,7 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">7. Performance da Equipe Comercial</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">8. Performance da Equipe Comercial</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
                 <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Faturamento por Vendedor</h3>
@@ -629,56 +691,30 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
               <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6 overflow-x-auto">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Ranking de Vendedores</h3>
                 <table className="min-w-full">
-                  <thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Vendedor</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Faturamento</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Volume</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Conversão</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Ligações</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Emails</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Whats</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Reuniões</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Visitas</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Propostas</th></tr></thead>
-                  <tbody>{statsEquipe.sort((a, b) => b.faturamento - a.faturamento).map(v => (<tr key={v.id} className="border-b border-gray-100"><td className="py-2 px-3 text-sm font-medium text-gray-900">{v.nome}</td><td className="py-2 px-3 text-sm text-right font-bold text-green-700">{fmtCurrency(v.faturamento)}</td><td className="py-2 px-3 text-sm text-right">{v.volume}</td><td className="py-2 px-3 text-sm text-right">{v.taxaConv.toFixed(1)}%</td><td className="py-2 px-3 text-sm text-right">{v.ligacoes}</td><td className="py-2 px-3 text-sm text-right">{v.emails}</td><td className="py-2 px-3 text-sm text-right">{v.whats}</td><td className="py-2 px-3 text-sm text-right">{v.reunioes}</td><td className="py-2 px-3 text-sm text-right">{v.visitas}</td><td className="py-2 px-3 text-sm text-right">{v.propostas}</td></tr>))}</tbody>
+                  <thead><tr className="border-b border-gray-200"><th className="text-left py-2 px-3 text-xs font-medium text-gray-600">Vendedor</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Faturamento</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Volume (kg)</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Conversão</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Ligações</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Emails</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Whats</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Reuniões</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Visitas</th><th className="text-right py-2 px-3 text-xs font-medium text-gray-600">Propostas</th></tr></thead>
+                  <tbody>{statsEquipe.sort((a, b) => b.faturamento - a.faturamento).map(v => (<tr key={v.id} className="border-b border-gray-100"><td className="py-2 px-3 text-sm font-medium text-gray-900">{v.nome}</td><td className="py-2 px-3 text-sm text-right font-bold text-green-700">{fmtCurrency(v.faturamento)}</td><td className="py-2 px-3 text-sm text-right">{v.volume.toLocaleString('pt-BR')} kg</td><td className="py-2 px-3 text-sm text-right">{v.taxaConv.toFixed(1)}%</td><td className="py-2 px-3 text-sm text-right">{v.ligacoes}</td><td className="py-2 px-3 text-sm text-right">{v.emails}</td><td className="py-2 px-3 text-sm text-right">{v.whats}</td><td className="py-2 px-3 text-sm text-right">{v.reunioes}</td><td className="py-2 px-3 text-sm text-right">{v.visitas}</td><td className="py-2 px-3 text-sm text-right">{v.propostas}</td></tr>))}</tbody>
                 </table>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4">8. Inteligência Competitiva</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                <KPICard label="Negócios Perdidos" value={totalPerdas} sub="no período" color="text-red-600" />
-                <KPICard label="Perdas por Preço" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'preco').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-yellow-600" />
-                <KPICard label="Perdas por Prazo" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'prazo').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-orange-600" />
-                <KPICard label="Perdas por Qualidade" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'qualidade').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-blue-600" />
-                <KPICard label="Perdas por Concorrência" value={totalPerdas > 0 ? `${((perdasList.filter(c => c.categoriaPerda === 'concorrencia').length / totalPerdas) * 100).toFixed(1)}%` : '0%'} sub="do total" color="text-red-600" />
-                <KPICard label="Preço Médio Mercado" value="—" sub="dados não coletados" color="text-gray-400" />
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Principais Motivos de Perda</h3>
-                  {perdasCat.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Nenhuma perda no período</p> : <ResponsiveContainer width="100%" height={240}><PieChart><Pie data={perdasCat} cx="50%" cy="50%" outerRadius={90} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>{perdasCat.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>}
-                </div>
-                <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Motivos de Perda mais Citados</h3>
-                  {motivosFreq.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Nenhum motivo registrado</p> : (
-                    <div className="space-y-2">
-                      {motivosFreq.map(([motivo, qtd]) => (<div key={motivo} className="flex items-center justify-between py-1 border-b border-gray-100"><span className="text-sm text-gray-700 truncate flex-1 pr-3" title={motivo}>{motivo}</span><span className="text-sm font-bold text-red-600">{qtd}</span></div>))}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>
         )
       })()}
 
-      {/* Relatório de Perdas */}
+      {/* 9. Análise de Perdas e Inteligência Competitiva (seção unificada, sem duplicidade) */}
       {(() => {
         const perdidos = fc.filter(c => c.etapa === 'perdido')
         const totalPerdido = perdidos.length
-        const valorPerdido = perdidos.reduce((s, c) => s + (c.valorEstimado || 0), 0)
+        const valorPerdido = perdidos.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
         const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
         const catColors: Record<string, string> = { preco: '#EAB308', prazo: '#F97316', qualidade: '#3B82F6', concorrencia: '#EF4444', sem_resposta: '#6B7280', outro: '#A855F7' }
         const porCategoria = Object.entries(perdidos.reduce((acc, c) => { const k = c.categoriaPerda || 'outro'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).map(([key, value]) => ({ name: catLabels[key] || key, value, fill: catColors[key] || '#6B7280' }))
         const porEtapaOrigem = Object.entries(perdidos.reduce((acc, c) => { const k = c.etapaAnterior || 'desconhecido'; acc[k] = (acc[k] || 0) + 1; return acc }, {} as Record<string, number>)).map(([key, value]) => ({ name: stageLabels[key] || key, qtd: value }))
-        const porVendedor = vendedores.filter(v => v.ativo).map(v => ({ name: v.nome.split(' ')[0], perdidos: perdidos.filter(c => c.vendedorId === v.id).length, valorPerdido: perdidos.filter(c => c.vendedorId === v.id).reduce((s, c) => s + (c.valorEstimado || 0), 0) })).filter(v => v.perdidos > 0)
-        const motivoMaisFrequente = porCategoria.length > 0 ? porCategoria.sort((a, b) => b.value - a.value)[0].name : '—'
+        const porVendedor = vendedores.filter(v => v.ativo).map(v => ({ name: v.nome.split(' ')[0], perdidos: perdidos.filter(c => c.vendedorId === v.id).length, valorPerdido: perdidos.filter(c => c.vendedorId === v.id).reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0) })).filter(v => v.perdidos > 0)
+        const motivoMaisFrequente = porCategoria.length > 0 ? [...porCategoria].sort((a, b) => b.value - a.value)[0].name : '—'
 
         return (
           <div className="space-y-6">
-            <h2 className="text-xl font-bold text-gray-900">❌ Relatório de Perdas</h2>
+            <h2 className="text-xl font-bold text-gray-900">9. Análise de Perdas e Inteligência Competitiva</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Total Perdidos</p><p className="text-2xl font-bold text-red-900">{totalPerdido}</p></div>
               <div className="p-4 bg-red-50 rounded-apple border border-red-200"><p className="text-xs text-red-600 font-medium">Valor Perdido</p><p className="text-2xl font-bold text-red-900">R$ {valorPerdido.toLocaleString('pt-BR')}</p></div>
@@ -722,7 +758,7 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
         const chartData = ttRelatorio.map(r => ({ name: r.nome.split(' ')[0], horas: Math.round((r.totalSegundos / 3600) * 100) / 100 }))
         return (
           <div className="space-y-6 mt-8">
-            <h2 className="text-xl font-bold text-gray-900">⏱️ Tempo de Tela</h2>
+            <h2 className="text-xl font-bold text-gray-900">10. Tempo de Tela no CRM</h2>
             <div className="flex flex-wrap gap-4 items-end">
               <div>
                 <label className="block text-xs text-gray-600 mb-1">Data início</label>

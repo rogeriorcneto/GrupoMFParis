@@ -269,29 +269,10 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
     }
     checkSession()
 
-    // Desconectar WhatsApp ao fechar/recarregar a página
-    const handleBeforeUnload = () => {
-      const token = sessionStorage.getItem('wa_auth_token')
-      if (token) {
-        const url = `${(import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'}/api/whatsapp/user/disconnect`
-        // fetch com keepalive envia mesmo ao fechar a aba (suporta headers)
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: '{}',
-          keepalive: true,
-        }).catch(() => {})
-        sessionStorage.removeItem('wa_auth_token')
-      }
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    // Se é um novo carregamento de página (sem flag de sessão), desconectar sessão WA anterior
-    if (!sessionStorage.getItem('wa_page_alive')) {
-      sessionStorage.setItem('wa_page_alive', '1')
-      // Desconectar sessão antiga (se existir) ao abrir nova aba/página
-      disconnectUserWhatsApp().catch(() => {})
-    }
+    // IMPORTANTE: NÃO desconectar a sessão WhatsApp do vendedor em beforeunload/reload!
+    // A sessão fica persistida no Supabase (`whatsapp_session`) e mantida viva no servidor
+    // para receber mensagens e executar automações mesmo com o navegador fechado.
+    // O despareamento só ocorre quando o usuário clica explicitamente em "Desconectar" no painel WA.
 
     // Escutar mudanças de auth (login/logout/token refresh)
     // IMPORTANTE: NUNCA usar async/await dentro deste callback — causa deadlock no lock do Supabase Auth
@@ -301,7 +282,6 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
         if (_appExplicitSignOut) {
           _appExplicitSignOut = false
           setTimeout(async () => {
-            try { await disconnectUserWhatsApp() } catch { /* ignore */ }
             sessionStorage.removeItem('wa_auth_token')
             sessionStorage.removeItem('wa_page_alive')
             stopActiveTimer()
@@ -328,8 +308,6 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
             }
           } catch { /* session truly invalid, proceed with logout */ }
 
-          // Desconectar WhatsApp ao fazer logout
-          try { await disconnectUserWhatsApp() } catch { /* ignore */ }
           sessionStorage.removeItem('wa_auth_token')
           sessionStorage.removeItem('wa_page_alive')
           stopActiveTimer()
@@ -346,7 +324,6 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
 
     return () => {
       subscription.unsubscribe()
-      window.removeEventListener('beforeunload', handleBeforeUnload)
     }
   }, [loadAllData])
 
@@ -652,6 +629,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
                   setActiveView('tarefas')
                 }}
                 onVerNoFunil={(c) => { setActiveView('funil'); setSelectedClientePanel(c) }}
+                onNavigate={setActiveView}
                 highlightTarefaId={highlightTarefaId}
               />
               <PersistentViews

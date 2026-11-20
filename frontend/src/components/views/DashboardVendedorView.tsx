@@ -22,11 +22,11 @@ import {
   ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
 import { stageLabels } from '../../utils/constants'
-import { calcularIndicadoresOperacionais, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
+import { calcularIndicadoresComerciais, calcularIndicadoresOperacionais, criarIndiceEmpresas, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import { fetchAllPropostas } from '../../lib/database'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
-import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao, PropostaHistorico } from '../../types'
+import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao, PropostaHistorico, ViewType } from '../../types'
 
 interface Props {
   clientes: Cliente[]
@@ -38,6 +38,7 @@ interface Props {
   tarefas: Tarefa[]
   pedidos: Pedido[]
   loggedUser: Vendedor | null
+  onNavigate?: (view: ViewType) => void
 }
 
 const fmtBRL = (v: number) =>
@@ -77,13 +78,12 @@ const isSemana = (d?: string | null) => {
   return t >= inicioSemana && t <= fimSemana
 }
 
-const stageOrder = ['prospecção', 'qualificação', 'amostra', 'proposta', 'negociacao', 'follow_up']
 const stageColors: Record<string, string> = {
+  lead: '#10B981',
   prospecção: '#3B82F6',
-  qualificação: '#0EA5E9',
-  amostra: '#6366F1',
-  proposta: '#A855F7',
-  negociacao: '#F59E0B',
+  amostra: '#F59E0B',
+  proposta: '#6366F1',
+  negociacao: '#A855F7',
   follow_up: '#22C55E',
 }
 
@@ -94,11 +94,12 @@ interface MetricCardProps {
   total: number
   color: string
   unit?: string
+  subtitle?: string
   icon: React.ReactNode
   onClick?: () => void
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, color, unit, icon, onClick }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, color, unit, subtitle, icon, onClick }) => {
   const pct = meta > 0 ? Math.min(100, Math.round((total / meta) * 100)) : 0
   return (
     <div className={`bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4 flex flex-col justify-between h-full ${onClick ? 'cursor-pointer hover:shadow-md hover:border-gray-300 transition-all' : ''}`} onClick={onClick}>
@@ -110,6 +111,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, colo
         <p className="text-2xl font-bold text-gray-900">
           {value} {unit && <span className="text-sm font-medium text-gray-500">{unit}</span>}
         </p>
+        {subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
       <div className="mt-3">
         <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -151,6 +153,7 @@ export default function DashboardVendedorView({
   tarefas,
   pedidos,
   loggedUser,
+  onNavigate,
 }: Props) {
   const userId = loggedUser?.id
   const isGerente = loggedUser?.cargo === 'gerente'
@@ -221,9 +224,11 @@ export default function DashboardVendedorView({
     }).catch(() => {})
   }, [isGerente, periodoInicio, periodoFim, vendedores])
 
-  // ─── Data derivada ────────────────────────────────────────────────────────────
+  // ─── Data derivada (unificada com Relatórios e Funil — exclui bonificação/amostra e agrupa por empresa única) ──
   const meusClientes = useMemo(() => clientes.filter(c => !c.arquivadoDuplicata && (isGerente || c.vendedorId === userId)), [clientes, userId, isGerente])
+  const meusClientesIds = useMemo(() => new Set(meusClientes.map(c => c.id)), [meusClientes])
   const meusPedidos = useMemo(() => isGerente ? pedidos : pedidos.filter(p => p.vendedorId === userId), [pedidos, userId, isGerente])
+  const indiceEmpresas = useMemo(() => criarIndiceEmpresas(clientes), [clientes])
 
   const metaVendas = isGerente
     ? vendedores.filter(v => v.ativo && v.cargo !== 'gerente').reduce((s, v) => s + (v.metaVendas || 0), 0) || 500000
@@ -233,24 +238,46 @@ export default function DashboardVendedorView({
     : (loggedUser?.metaLeads || 10)
   const metaConversao = loggedUser?.metaConversao || 35
 
-  const fatMes = useMemo(
-    () => meusPedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0),
-    [meusPedidos, periodoInicio, periodoFim]
-  )
-  const novosClientesMes = useMemo(() => meusClientes.filter(c => inRange(c.dataEntradaEtapa)).length, [meusClientes, periodoInicio, periodoFim])
-  const propostasMes = useMemo(
-    () => meusClientes.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && inRange(c.dataEntradaEtapa)).length
-      + meusPedidos.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && inRange(p.dataCriacao)).length,
-    [meusClientes, meusPedidos, periodoInicio, periodoFim]
-  )
+  const periodoValidoInicio = periodoInicio || '2000-01-01'
+  const periodoValidoFim = periodoFim && periodoFim >= periodoValidoInicio ? periodoFim : hojeISO
+
+  const indCom = useMemo(() => calcularIndicadoresComerciais(
+    clientes,
+    pedidos,
+    { inicio: periodoValidoInicio, fim: periodoValidoFim },
+    { ...(isGerente ? {} : { vendedorId: userId }), meta: metaVendas }
+  ), [clientes, pedidos, periodoValidoInicio, periodoValidoFim, isGerente, userId, metaVendas])
+
+  // Vendas reais confirmadas (sem amostra/bonificação)
+  const fatMes = indCom.vendasConfirmadas
+  // Novos clientes: 1ª compra faturada no período + contagem separada de novos cadastros únicos criados (sem ciclos automáticos)
+  const novosClientesMes = indCom.novosClientes
+  const novosCadastrosMes = useMemo(() => {
+    const setEmp = new Set<string>()
+    meusClientes.forEach(c => {
+      if (!c.novoCiclo && inRange(c.criadoEm)) {
+        setEmp.add(indiceEmpresas.get(c.id) || `cliente:${c.id}`)
+      }
+    })
+    return setEmp.size
+  }, [meusClientes, indiceEmpresas, periodoInicio, periodoFim])
+
+  // Propostas reais emitidas no período (tabela `propostas`)
+  const propostasMes = useMemo(() => {
+    const filtradas = propostasLoaded.filter(p =>
+      inRange(p.criadoEm) && (isGerente || meusClientesIds.has(p.clienteId))
+    )
+    if (filtradas.length > 0 || propostasLoaded.length > 0) return filtradas.length
+    return meusClientes.filter(c => c.dataProposta && inRange(c.dataProposta)).length
+  }, [propostasLoaded, isGerente, meusClientesIds, meusClientes, periodoInicio, periodoFim])
 
   const minhasTarefas = useMemo(
     () => isGerente ? tarefas : tarefas.filter(t => t.vendedorId === userId),
     [tarefas, userId, isGerente]
   )
   const interacoesUsuario = useMemo(
-    () => isGerente ? interacoes : interacoes.filter(i => meusClientes.some(c => c.id === i.clienteId)),
-    [interacoes, meusClientes, isGerente]
+    () => isGerente ? interacoes : interacoes.filter(i => meusClientesIds.has(i.clienteId)),
+    [interacoes, meusClientesIds, isGerente]
   )
   const visitasMes = useMemo(
     () => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && inRange(t.concluidaEm || t.data)).length,
@@ -259,20 +286,39 @@ export default function DashboardVendedorView({
   const visitasHoje = useMemo(() => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'pendente' && isHoje(t.data)),
     [minhasTarefas])
 
-  const ativos = meusClientes.filter(c => c.etapa !== 'perdido')
-  const convertidos = ativos.filter(c => c.etapa === 'follow_up').length
-  const taxaConversao = ativos.length > 0 ? (convertidos / ativos.length) * 100 : 0
+  // Taxa de conversão por empresa única (empresas com venda confirmada / total de empresas únicas da carteira)
+  const taxaConversao = useMemo(() => {
+    const empresasCarteira = new Set(meusClientes.map(c => indiceEmpresas.get(c.id) || `cliente:${c.id}`))
+    if (empresasCarteira.size === 0) return 0
+    const empresasCompradoras = new Set(
+      meusPedidos
+        .filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao')
+        .map(p => indiceEmpresas.get(p.clienteId) || `cliente:${p.clienteId}`)
+    )
+    return (empresasCompradoras.size / empresasCarteira.size) * 100
+  }, [meusClientes, meusPedidos, indiceEmpresas])
 
   const mapaUltimaProposta = useMemo(() => criarMapaUltimaProposta(propostasLoaded), [propostasLoaded])
 
   const funil = useMemo(() => {
-    const max = Math.max(...stageOrder.map(s => meusClientes.filter(c => c.etapa === s).length), 1)
-    return stageOrder.map(s => {
-      const qtd = meusClientes.filter(c => c.etapa === s).length
-      const valor = meusClientes.filter(c => c.etapa === s).reduce((acc, c) => acc + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
+    const etapasDashboard = isGerente
+      ? ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
+      : ['prospecção', 'amostra', 'proposta', 'negociacao', 'follow_up']
+    const isCardAtivoDaEtapa = (c: Cliente, s: string) =>
+      s === 'follow_up' ? (c.etapa === 'follow_up' && c.statusFollowUp !== 'concluido') : c.etapa === s
+    const max = Math.max(...etapasDashboard.map(s => meusClientes.filter(c => isCardAtivoDaEtapa(c, s)).length), 1)
+    const valorPedidosPorCliente = new Map<number, number>()
+    meusPedidos.filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao').forEach(p => {
+      if (!valorPedidosPorCliente.has(p.clienteId)) valorPedidosPorCliente.set(p.clienteId, p.totalValor || 0)
+    })
+    return etapasDashboard.map(s => {
+      const cardsEtapa = meusClientes.filter(c => isCardAtivoDaEtapa(c, s))
+      const qtd = cardsEtapa.length
+      const valor = cardsEtapa.reduce((acc, c) =>
+        acc + (s === 'follow_up' ? (valorPedidosPorCliente.get(c.id) || valorPropostaAtivaCard(c, mapaUltimaProposta)) : valorPropostaAtivaCard(c, mapaUltimaProposta)), 0)
       return { stage: s, label: stageLabels[s] || s, qtd, valor, pct: Math.max((qtd / max) * 100, 8) }
     })
-  }, [meusClientes, mapaUltimaProposta])
+  }, [meusClientes, meusPedidos, mapaUltimaProposta, isGerente])
 
   const formatHoraAgenda = (hora?: string | null): string => {
     const raw = (hora || '').trim()
@@ -314,9 +360,11 @@ export default function DashboardVendedorView({
   const ranking = useMemo(() => {
     const map = new Map<number, number>()
     vendedores.forEach(v => map.set(v.id, 0))
-    pedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).forEach(p => {
-      map.set(p.vendedorId, (map.get(p.vendedorId) || 0) + p.totalValor)
-    })
+    pedidos
+      .filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao' && inRange(p.dataAprovacao || p.dataCriacao))
+      .forEach(p => {
+        map.set(p.vendedorId, (map.get(p.vendedorId) || 0) + p.totalValor)
+      })
     return vendedores
       .map(v => ({ ...v, valor: map.get(v.id) || 0 }))
       .filter(v => v.valor > 0)
@@ -326,13 +374,14 @@ export default function DashboardVendedorView({
 
   const oportunidades = useMemo(() => {
     return meusClientes
-      .filter(c => (c.valorEstimado || 0) > 0 && ['proposta', 'negociacao', 'follow_up'].includes(c.etapa) && inRange(c.ultimaInteracao || c.dataEntradaEtapa))
-      .sort((a, b) => (b.valorEstimado || 0) - (a.valorEstimado || 0))
+      .filter(c => ['proposta', 'negociacao', 'follow_up'].includes(c.etapa) && valorPropostaAtivaCard(c, mapaUltimaProposta) > 0 && inRange(c.ultimaInteracao || c.dataEntradaEtapa))
+      .sort((a, b) => valorPropostaAtivaCard(b, mapaUltimaProposta) - valorPropostaAtivaCard(a, mapaUltimaProposta))
       .slice(0, 5)
-  }, [meusClientes, periodoInicio, periodoFim])
+  }, [meusClientes, mapaUltimaProposta, periodoInicio, periodoFim])
 
   const atualizacoes = useMemo(
     () => (isGerente ? atividades : atividades.filter(a => loggedUser?.nome && a.vendedorNome === loggedUser.nome))
+      .filter(a => !String(a.tipo || '').startsWith('store:'))
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 5),
     [atividades, loggedUser, isGerente]
@@ -343,7 +392,7 @@ export default function DashboardVendedorView({
     whatsapp: interacoesUsuario.filter(i => i.tipo === 'whatsapp' && isHoje(i.data)).length,
     email: interacoesUsuario.filter(i => i.tipo === 'email' && isHoje(i.data)).length,
     reuniao: interacoesUsuario.filter(i => i.tipo === 'reuniao' && isHoje(i.data)).length,
-    prospeccao: meusClientes.filter(c => isHoje(c.criadoEm)).length,
+    prospeccao: meusClientes.filter(c => !c.novoCiclo && isHoje(c.criadoEm)).length,
   }), [interacoesUsuario, meusClientes])
 
   const pctMeta = metaVendas > 0 ? Math.min(100, Math.round((fatMes / metaVendas) * 100)) : 0
@@ -354,13 +403,23 @@ export default function DashboardVendedorView({
   // Indicadores operacionais (spec PDF vendedor): sem-compra, pipeline ponderado, ticket médio
   const indOps = useMemo(() => calcularIndicadoresOperacionais(
     clientes, pedidos,
-    { inicio: periodoInicio || '0001-01-01', fim: periodoFim || hojeISO },
+    { inicio: periodoValidoInicio, fim: periodoValidoFim },
     hojeISO,
     { ...(isGerente ? {} : { vendedorId: userId }), propostas: propostasLoaded },
-  ), [clientes, pedidos, periodoInicio, periodoFim, hojeISO, isGerente, userId, propostasLoaded])
-  const pedidosMes = meusPedidos.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).length
-  const ticketMedio = pedidosMes > 0 ? fatMes / pedidosMes : 0
+  ), [clientes, pedidos, periodoValidoInicio, periodoValidoFim, hojeISO, isGerente, userId, propostasLoaded])
+  const ticketMedio = indCom.ticketMedioPedido || 0
   const topProdutosVendedor = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 5)
+
+  // Gargalos comerciais acionáveis
+  const gargalos = useMemo(() => {
+    const diasDesdeISO = (d?: string) => d ? Math.max(0, Math.floor((Date.parse(hojeISO) - Date.parse(d.slice(0, 10))) / 86400000)) : 0
+    return {
+      tarefasAtrasadas: tarefasPendentes.filter(t => t.data && t.data.slice(0, 10) < hojeISO).length,
+      amostrasMais30d: meusClientes.filter(c => c.etapa === 'amostra' && diasDesdeISO(c.dataEnvioAmostra || c.dataEntradaEtapa) > 30).length,
+      negociacoesMais3d: meusClientes.filter(c => c.etapa === 'negociacao' && diasDesdeISO(c.dataEntradaEtapa) > 3).length,
+      semCompraMais60d: indOps.semCompra.d60 + indOps.semCompra.d90,
+    }
+  }, [tarefasPendentes, meusClientes, indOps.semCompra, hojeISO])
 
   const [missoesAtivas, setMissoesAtivas] = useState<Missao[]>([])
 
@@ -390,18 +449,20 @@ export default function DashboardVendedorView({
   const detailData = useMemo(() => {
     if (!detailOpen || !isGerente) return []
     return vendedoresAtivos.map(v => {
-      const vc = clientes.filter(c => c.vendedorId === v.id)
-      const vp = pedidos.filter(p => p.vendedorId === v.id)
+      const vc = clientes.filter(c => !c.arquivadoDuplicata && c.vendedorId === v.id)
+      const vcIds = new Set(vc.map(c => c.id))
+      const vp = pedidos.filter(p => p.vendedorId === v.id && p.tipo !== 'bonificacao')
       const vt = tarefas.filter(t => t.vendedorId === v.id)
+      const indV = calcularIndicadoresComerciais(clientes, pedidos, { inicio: periodoValidoInicio, fim: periodoValidoFim }, { vendedorId: v.id })
       let valor = 0
       let label = ''
       switch (detailOpen) {
         case 'faturamento':
-          valor = vp.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0)
+          valor = indV.vendasConfirmadas
           label = fmtBRL(valor)
           break
         case 'comissao':
-          valor = vp.filter(p => p.status === 'confirmado' && inRange(p.dataCriacao)).reduce((s, p) => s + p.totalValor, 0) * 0.01
+          valor = indV.vendasConfirmadas * 0.01
           label = fmtBRL(valor)
           break
         case 'visitas':
@@ -409,18 +470,19 @@ export default function DashboardVendedorView({
           label = String(valor)
           break
         case 'propostas':
-          valor = vc.filter(c => ['proposta', 'negociacao'].includes(c.etapa) && inRange(c.dataEntradaEtapa)).length
-            + vp.filter(p => (p.status === 'rascunho' || p.status === 'enviado') && inRange(p.dataCriacao)).length
+          valor = propostasLoaded.length > 0
+            ? propostasLoaded.filter(pr => vcIds.has(pr.clienteId) && inRange(pr.criadoEm)).length
+            : vc.filter(c => c.dataProposta && inRange(c.dataProposta)).length
           label = String(valor)
           break
         case 'novos':
-          valor = vc.filter(c => inRange(c.dataEntradaEtapa)).length
-          label = String(valor)
+          valor = indV.novosClientes
+          label = `${valor} (${vc.filter(c => !c.novoCiclo && inRange(c.criadoEm)).length} cadastros)`
           break
         case 'conversao': {
-          const atv = vc.filter(c => c.etapa !== 'perdido')
-          const conv = atv.filter(c => c.etapa === 'follow_up').length
-          valor = atv.length > 0 ? (conv / atv.length) * 100 : 0
+          const empCart = new Set(vc.map(c => indiceEmpresas.get(c.id) || `cliente:${c.id}`))
+          const empComp = new Set(vp.filter(p => p.status === 'confirmado').map(p => indiceEmpresas.get(p.clienteId) || `cliente:${p.clienteId}`))
+          valor = empCart.size > 0 ? (empComp.size / empCart.size) * 100 : 0
           label = `${valor.toFixed(0)}%`
           break
         }
@@ -688,8 +750,9 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             onClick={isGerente ? () => setDetailOpen('propostas') : undefined}
           />
           <MetricCard
-            label="Novos clientes"
+            label="Novos clientes (1ª compra)"
             value={String(novosClientesMes)}
+            subtitle={`${novosCadastrosMes} cadastro(s) novo(s) no período`}
             meta={metaLeads}
             total={novosClientesMes}
             color="#F59E0B"
@@ -697,8 +760,9 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             onClick={isGerente ? () => setDetailOpen('novos') : undefined}
           />
           <MetricCard
-            label="Conversão"
+            label="Conversão da carteira"
             value={`${taxaConversao.toFixed(0)}%`}
+            subtitle={`${indCom.pedidosFechados} pedido(s) fechado(s) no período`}
             meta={metaConversao}
             total={taxaConversao}
             color="#EF4444"
@@ -757,7 +821,56 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
           />
         </div>
 
-        {/* Volume por produto (spec vendedor: volume vendido por produto) */}
+        {/* Painel Acionável: Gargalos de Atenção */}
+        <div className="bg-amber-50/60 rounded-apple border border-amber-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-bold text-amber-950 flex items-center gap-1.5">
+              <ExclamationCircleIcon className="h-4 w-4 text-amber-600" />
+              Gargalos de atenção imediata
+            </h2>
+            <span className="text-[11px] text-amber-800">Clique para agir</span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => onNavigate?.('tarefas')}
+              className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Tarefas atrasadas</p>
+              <p className={`text-xl font-bold mt-0.5 ${gargalos.tarefasAtrasadas > 0 ? 'text-red-600' : 'text-green-700'}`}>{gargalos.tarefasAtrasadas}</p>
+              <p className="text-[11px] text-gray-400">vencidas antes de hoje</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('funil')}
+              className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Amostras &gt; 30 dias</p>
+              <p className={`text-xl font-bold mt-0.5 ${gargalos.amostrasMais30d > 0 ? 'text-amber-700' : 'text-green-700'}`}>{gargalos.amostrasMais30d}</p>
+              <p className="text-[11px] text-gray-400">aguardando avaliação</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('funil')}
+              className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Negociações &gt; 3 dias</p>
+              <p className={`text-xl font-bold mt-0.5 ${gargalos.negociacoesMais3d > 0 ? 'text-purple-700' : 'text-green-700'}`}>{gargalos.negociacoesMais3d}</p>
+              <p className="text-[11px] text-gray-400">encerrar venda ou perda</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate?.('clientes')}
+              className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Sem compra &gt; 60 dias</p>
+              <p className={`text-xl font-bold mt-0.5 ${gargalos.semCompraMais60d > 0 ? 'text-orange-700' : 'text-green-700'}`}>{gargalos.semCompraMais60d}</p>
+              <p className="text-[11px] text-gray-400">clientes p/ reativação</p>
+            </button>
+          </div>
+        </div>
+
+        {/* Volume por produto (spec vendedor: volume vendido por produto em kg) */}
         {topProdutosVendedor.length > 0 && (
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
             <h2 className="text-lg font-bold text-gray-900 mb-3">Top produtos no período</h2>
@@ -765,7 +878,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
               {topProdutosVendedor.map(([nome, v]) => (
                 <div key={nome} className="border border-gray-100 rounded-lg p-3">
                   <p className="text-xs font-medium text-gray-500 truncate" title={nome}>{nome}</p>
-                  <p className="text-sm font-bold text-gray-900 mt-1">{v.quantidade} un</p>
+                  <p className="text-sm font-bold text-gray-900 mt-1">{v.quantidade.toLocaleString('pt-BR')} kg</p>
                   <p className="text-xs text-green-700 font-medium">{fmtBRL(v.receita)} · {v.participacao}%</p>
                 </div>
               ))}
@@ -990,7 +1103,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                     })}
                   </ol>
                 )}
-                <button className="mt-3 text-xs text-primary-600 font-medium hover:underline">Ver mapa completo</button>
+                <button type="button" onClick={() => onNavigate?.('mapa')} className="mt-3 text-xs text-primary-600 font-medium hover:underline">Ver mapa completo</button>
               </div>
             </div>
 

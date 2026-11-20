@@ -47,9 +47,9 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
   const [indSearch, setIndSearch] = React.useState('')
   const [indSelectedId, setIndSelectedId] = React.useState<number>(clientes[0]?.id ?? 0)
 
-  // ── Filtered clients ──
+  // ── Filtered clients (ignora duplicatas históricas arquivadas) ──
   const filteredClientes = React.useMemo(() => {
-    let list = clientes
+    let list = clientes.filter(c => !c.arquivadoDuplicata)
     if (filtroEtapa !== 'todas') list = list.filter(c => c.etapa === filtroEtapa)
     if (filtroVendedor !== 'todos') list = list.filter(c => String(c.vendedorId) === filtroVendedor)
     if (filtroBusca.trim()) {

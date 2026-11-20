@@ -1962,6 +1962,16 @@ export default function ClientePanel({
 
           {/* ===== ABA WHATSAPP — conversa completa do cliente ===== */}
           {activeTab === 'whatsapp' && (
+            <div className="space-y-2">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowWhatsApp(true)}
+                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-apple transition-colors"
+                >
+                  Abrir chat WhatsApp
+                </button>
+              </div>
             <div className="bg-[#e5ddd5] rounded-apple border border-gray-200 min-h-[400px] max-h-[60vh] overflow-y-auto p-4 space-y-3">
               {waHistoricoLoading && (
                 <div className="text-center py-8">
@@ -2002,6 +2012,7 @@ export default function ClientePanel({
                   </div>
                 </div>
               ))}
+            </div>
             </div>
           )}
 
@@ -3014,7 +3025,26 @@ export default function ClientePanel({
 
           {/* === TIMELINE (collapsible) === */}
 
-          {/* === WHATSAPP MODAL (separado) === */}
+          {/* === EMAIL (collapsible) === */}
+          <div ref={emailRef} className="bg-gray-50 rounded-apple border border-gray-200">
+            <button onClick={() => setShowEmail(!showEmail)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
+              <span>📧 Email</span>
+              <span>{showEmail ? '▲' : '▼'}</span>
+            </button>
+            {showEmail && (
+              <div className="px-4 pb-4">
+                <EmailCenterPanel
+                  cliente={c}
+                  vendedorNome={loggedUser?.nome}
+                  showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'Email' : 'Erro Email', texto, c.id)}
+                />
+              </div>
+            )}
+          </div>
+
+          </>}{/* fim aba Histórico */}
+
+          {/* === WHATSAPP MODAL (disponível em todas as abas do card) === */}
           {showWhatsApp && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowWhatsApp(false)}>
               <div
@@ -3051,25 +3081,6 @@ export default function ClientePanel({
               </div>
             </div>
           )}
-
-          {/* === EMAIL (collapsible) === */}
-          <div ref={emailRef} className="bg-gray-50 rounded-apple border border-gray-200">
-            <button onClick={() => setShowEmail(!showEmail)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
-              <span>📧 Email</span>
-              <span>{showEmail ? '▲' : '▼'}</span>
-            </button>
-            {showEmail && (
-              <div className="px-4 pb-4">
-                <EmailCenterPanel
-                  cliente={c}
-                  vendedorNome={loggedUser?.nome}
-                  showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'Email' : 'Erro Email', texto, c.id)}
-                />
-              </div>
-            )}
-          </div>
-
-          </>}{/* fim aba Histórico */}
 
           </div>
         </div>

@@ -64,6 +64,7 @@ interface AppRouterProps {
   addNotificacao: (tipo: 'info' | 'warning' | 'error' | 'success', titulo: string, mensagem: string, clienteId?: number) => void
   onNovoCiclo?: (cliente: Cliente) => void
   onVerNoFunil?: (cliente: Cliente) => void
+  onNavigate?: (view: ViewType) => void
   highlightTarefaId?: number
   onColetarSatisfacao: (cliente: Cliente) => Promise<void>
 }
@@ -85,7 +86,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, requestStageMove, handleQuickAction,
-  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, highlightTarefaId, onColetarSatisfacao
+  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, onNavigate, highlightTarefaId, onColetarSatisfacao
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -101,7 +102,7 @@ export default function AppRouter({
 
   switch (activeView) {
     case 'dashboard':
-      return <DashboardVendedorView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
+      return <DashboardVendedorView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} onNavigate={onNavigate} />
     case 'aprovacao':
       return <AprovacaoView
         pedidos={pedidos}

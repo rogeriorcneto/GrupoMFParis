@@ -278,18 +278,17 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
   }
 ]
 
-// Etapas disponíveis
+// Etapas disponíveis (alinhadas ao funil oficial)
 const ETAPAS = [
-  { key: 'lead', label: 'Lead' },
+  { key: 'lead', label: 'Leads' },
   { key: 'prospecção', label: 'Prospecção' },
   { key: 'amostra', label: 'Amostra' },
-  { key: 'amostra_perdida', label: 'Amostra Perdida' },
+  { key: 'amostra_perdida', label: 'Amostra Finalizada' },
   { key: 'proposta', label: 'Proposta' },
   { key: 'negociacao', label: 'Negociação' },
-  { key: 'perdido', label: 'Perdido' },
-  { key: 'homologado', label: 'Homologado' },
-  { key: 'pos_venda', label: 'Pós-venda' },
-  { key: 'follow_up', label: 'Follow-up' }
+  { key: 'follow_up', label: 'Follow-up' },
+  { key: 'inativo', label: 'Clientes Inativos' },
+  { key: 'perdido', label: 'Perdido' }
 ]
 
 // Gatilhos disponíveis

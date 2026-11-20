@@ -2485,6 +2485,8 @@ export async function createAutomacao(
         nome,
         descricao,
         tipo,
+        status: 'ativa',
+        ativo: true,
         gatilho_tipo: gatilhoTipo,
         gatilho_config: gatilhoConfig,
         acoes,

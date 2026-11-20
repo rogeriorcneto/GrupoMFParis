@@ -30,9 +30,7 @@ import {
   type Automacao 
 } from '../../lib/database'
 import { callAI, buildCRMContext } from '../../lib/gemini'
-import { authFetch } from '../../lib/botApi'
-
-const BOT_URL = (import.meta as any).env?.VITE_BOT_URL || 'http://localhost:3002'
+import { authFetch, BOT_URL } from '../../lib/botApi'
 
 interface CriarAutomacaoViewProps {
   loggedUser: any
@@ -163,6 +161,12 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
       campos: ['mensagem', 'numero']
     },
     {
+      id: 'notificacao',
+      nome: 'Enviar Notificação',
+      descricao: 'Criar alerta interno para a equipe no CRM',
+      campos: ['titulo', 'mensagem']
+    },
+    {
       id: 'atualizar_score',
       nome: 'Atualizar Score',
       descricao: 'Atualizar score do cliente',
@@ -239,6 +243,10 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
 
     if (formData.acoes.length === 0) {
       alert('⚠️ Adicione pelo menos uma ação')
+      return
+    }
+    if (formData.acoes.some(a => !a.tipo)) {
+      alert('⚠️ Selecione o tipo de todas as ações adicionadas')
       return
     }
 
@@ -644,7 +652,16 @@ Como posso ajudar você hoje?`
                     {tiposGatilho.map(tipo => (
                       <button
                         key={tipo.id}
-                        onClick={() => setFormData(prev => ({ ...prev, gatilhoTipo: tipo.id as any }))}
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          gatilhoTipo: tipo.id as any,
+                          gatilhoConfig: tipo.id === 'tempo'
+                            ? { intervalo_minutos: (prev.gatilhoConfig as any)?.intervalo_minutos || 60 }
+                            : tipo.id === 'evento'
+                              ? { evento: (prev.gatilhoConfig as any)?.evento || 'mudanca_etapa', etapa: (prev.gatilhoConfig as any)?.etapa || '' }
+                              : {},
+                        }))}
                         className={`p-4 border rounded-lg transition-all text-left ${
                           formData.gatilhoTipo === tipo.id
                             ? 'border-indigo-300 bg-indigo-50'
@@ -657,6 +674,67 @@ Como posso ajudar você hoje?`
                       </button>
                     ))}
                   </div>
+
+                  {formData.gatilhoTipo === 'tempo' && (
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 max-w-sm">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Intervalo de execução (em minutos)
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        aria-label="Intervalo em minutos"
+                        value={(formData.gatilhoConfig as any)?.intervalo_minutos ?? 60}
+                        onChange={e => setFormData(prev => ({
+                          ...prev,
+                          gatilhoConfig: { ...prev.gatilhoConfig, intervalo_minutos: Math.max(5, Number(e.target.value) || 60) },
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  )}
+
+                  {formData.gatilhoTipo === 'evento' && (
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Evento do sistema</label>
+                        <select
+                          aria-label="Evento do gatilho"
+                          value={(formData.gatilhoConfig as any)?.evento || 'mudanca_etapa'}
+                          onChange={e => setFormData(prev => ({
+                            ...prev,
+                            gatilhoConfig: { ...prev.gatilhoConfig, evento: e.target.value },
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="mudanca_etapa">Mudança de etapa do cliente</option>
+                          <option value="tarefa_concluida">Tarefa concluída</option>
+                        </select>
+                      </div>
+                      {((formData.gatilhoConfig as any)?.evento || 'mudanca_etapa') === 'mudanca_etapa' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Quando entrar na etapa</label>
+                          <select
+                            aria-label="Etapa do gatilho"
+                            value={(formData.gatilhoConfig as any)?.etapa || ''}
+                            onChange={e => setFormData(prev => ({
+                              ...prev,
+                              gatilhoConfig: { ...prev.gatilhoConfig, evento: (prev.gatilhoConfig as any)?.evento || 'mudanca_etapa', etapa: e.target.value },
+                            }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">Qualquer etapa</option>
+                            <option value="prospecção">Prospecção</option>
+                            <option value="amostra">Amostra</option>
+                            <option value="proposta">Proposta</option>
+                            <option value="negociacao">Negociação</option>
+                            <option value="follow_up">Follow-up</option>
+                            <option value="perdido">Perdido</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Ações */}
@@ -714,17 +792,138 @@ Como posso ajudar você hoje?`
                               </select>
                             </div>
 
-                            {acao.tipo === 'enviar_mensagem' && (
+                            {(acao.tipo === 'enviar_mensagem' || acao.tipo === 'enviar_whatsapp') && (
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Mensagem
+                                  Mensagem WhatsApp
                                 </label>
                                 <textarea
                                   value={acao.configuracao.mensagem || ''}
                                   onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, mensagem: e.target.value })}
                                   rows={2}
                                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                  placeholder="Digite a mensagem..."
+                                  placeholder="Digite a mensagem (ex.: Olá {{nome}}, tudo bem?)..."
+                                />
+                              </div>
+                            )}
+
+                            {acao.tipo === 'enviar_email' && (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Assunto do e-mail</label>
+                                  <input
+                                    type="text"
+                                    value={acao.configuracao.assunto || ''}
+                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, assunto: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Assunto..."
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Corpo do e-mail</label>
+                                  <textarea
+                                    value={acao.configuracao.mensagem || ''}
+                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, mensagem: e.target.value })}
+                                    rows={2}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Mensagem do e-mail..."
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            {acao.tipo === 'criar_tarefa' && (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Título da tarefa</label>
+                                  <input
+                                    type="text"
+                                    aria-label="Título da tarefa automática"
+                                    value={acao.configuracao.titulo || ''}
+                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, titulo: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Ex.: Ligar para {cliente}"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <select
+                                    aria-label="Tipo da tarefa automática"
+                                    value={acao.configuracao.tipoTarefa || 'ligacao'}
+                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, tipoTarefa: e.target.value })}
+                                    className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white"
+                                  >
+                                    <option value="ligacao">Ligação</option>
+                                    <option value="whatsapp">WhatsApp</option>
+                                    <option value="email">E-mail</option>
+                                    <option value="reuniao">Reunião</option>
+                                    <option value="outro">Outro</option>
+                                  </select>
+                                  <select
+                                    aria-label="Prioridade da tarefa automática"
+                                    value={acao.configuracao.prioridade || 'media'}
+                                    onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, prioridade: e.target.value })}
+                                    className="px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white"
+                                  >
+                                    <option value="alta">Prioridade Alta</option>
+                                    <option value="media">Prioridade Média</option>
+                                    <option value="baixa">Prioridade Baixa</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
+
+                            {acao.tipo === 'mover_etapa' && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Etapa de destino</label>
+                                <select
+                                  aria-label="Etapa de destino da ação"
+                                  value={acao.configuracao.etapa || ''}
+                                  onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, etapa: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                  <option value="">Selecione a etapa...</option>
+                                  <option value="prospecção">Prospecção</option>
+                                  <option value="amostra">Amostra</option>
+                                  <option value="proposta">Proposta</option>
+                                  <option value="negociacao">Negociação</option>
+                                  <option value="follow_up">Follow-up</option>
+                                  <option value="inativo">Clientes Inativos</option>
+                                </select>
+                              </div>
+                            )}
+
+                            {acao.tipo === 'notificacao' && (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  aria-label="Título da notificação"
+                                  value={acao.configuracao.titulo || ''}
+                                  onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, titulo: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                  placeholder="Título da notificação..."
+                                />
+                                <input
+                                  type="text"
+                                  aria-label="Mensagem da notificação"
+                                  value={acao.configuracao.mensagem || ''}
+                                  onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, mensagem: e.target.value })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                  placeholder="Mensagem da notificação..."
+                                />
+                              </div>
+                            )}
+
+                            {acao.tipo === 'atualizar_score' && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Novo Score (0 a 100)</label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  aria-label="Novo score"
+                                  value={acao.configuracao.valor ?? 80}
+                                  onChange={(e) => atualizarAcao(index, 'configuracao', { ...acao.configuracao, valor: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                                 />
                               </div>
                             )}
@@ -1060,4 +1259,5 @@ Como posso ajudar você hoje?`
   )
 }
 
+export { CriarAutomacaoView }
 export default CriarAutomacaoView
