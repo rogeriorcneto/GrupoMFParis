@@ -4,9 +4,11 @@ import {
   calcularPrecosTabela,
   fetchSimuladorParams,
   formatarMoeda,
+  resolverTaxaPrazo,
   type SimuladorParams,
 } from '../data/simuladorPrecos'
 import { BOT_URL } from '../lib/botApi'
+import { useParametrosListas } from '../lib/parametrosListas'
 
 interface SimuladorPrecoPanelProps {
   produtoNome?: string
@@ -17,14 +19,38 @@ interface SimuladorPrecoPanelProps {
 
 export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarTabelaA, onUsarTabelaB }: SimuladorPrecoPanelProps) {
   const [params, setParams] = useState<SimuladorParams | null>(null)
+  const { parametros, opcoesAtivas } = useParametrosListas()
 
   useEffect(() => {
     fetchSimuladorParams(BOT_URL).then(setParams)
   }, [])
 
   const produtoKeys = useMemo(() => Object.keys(params?.produtos ?? {}), [params])
-  const prazoKeys = useMemo(() => Object.keys(params?.prazos ?? {}), [params])
-  const freteOptions = useMemo(() => params?.fretes ?? [], [params])
+
+  // Item 2 Rodada 3.1: alimenta o dropdown de Prazo do simulador em tempo real com Parâmetros (incluindo novos prazos como "15/30/35")
+  const prazoKeys = useMemo(() => {
+    const ativosParam = opcoesAtivas('prazo_pagamento')
+      .map(o => o.valor)
+      .filter(v => resolverTaxaPrazo(v, params?.prazos) !== undefined)
+    const desativadosSet = new Set(
+      (parametros.listas.prazo_pagamento || []).filter(o => !o.ativo).map(o => o.valor)
+    )
+    const extrasTabela = Object.keys(params?.prazos ?? {}).filter(
+      k => !ativosParam.includes(k) && !desativadosSet.has(k)
+    )
+    return ativosParam.length > 0 ? [...ativosParam, ...extrasTabela] : Object.keys(params?.prazos ?? {})
+  }, [params, parametros, opcoesAtivas])
+
+  // Respeita tipos de frete ativos em Parâmetros (se FOB for desativado, oculta FOB; se CIF for desativado, oculta faixas CIF)
+  const freteOptions = useMemo(() => {
+    const todos = params?.fretes ?? []
+    const fretesParam = opcoesAtivas('tipo_frete').map(f => f.valor.toUpperCase())
+    if (fretesParam.length === 0) return todos
+    const temFob = fretesParam.includes('FOB')
+    const temCif = fretesParam.includes('CIF')
+    const filtrados = todos.filter(f => (f.key === 'FOB' ? temFob : temCif))
+    return filtrados.length > 0 ? filtrados : todos
+  }, [params, parametros, opcoesAtivas])
 
   const [produto, setProduto] = useState('')
   const [prazo, setPrazo] = useState('')
@@ -33,10 +59,10 @@ export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarT
   useEffect(() => {
     if (produtoKeys.length && !produto) {
       setProduto(produtoKeys[0])
-      setPrazo(prazoKeys[0] || '')
+      setPrazo(prazoExterno && prazoKeys.includes(prazoExterno) ? prazoExterno : (prazoKeys[0] || ''))
       setFreteKey(freteOptions[0]?.key || '')
     }
-  }, [produtoKeys, prazoKeys, freteOptions, produto])
+  }, [produtoKeys, prazoKeys, freteOptions, produto, prazoExterno])
 
   useEffect(() => {
     if (produtoNome && params) {
@@ -47,10 +73,10 @@ export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarT
 
   // Sincroniza o prazo do simulador com o prazo selecionado no pedido (pode ser alterado aqui só para comparar)
   useEffect(() => {
-    if (prazoExterno && prazoKeys.includes(prazoExterno)) {
+    if (prazoExterno && (prazoKeys.includes(prazoExterno) || resolverTaxaPrazo(prazoExterno, params?.prazos) !== undefined)) {
       setPrazo(prazoExterno)
     }
-  }, [prazoExterno, prazoKeys])
+  }, [prazoExterno, prazoKeys, params])
 
   const result = useMemo(
     () => (params ? calcularPrecosTabela(produto, prazo, freteKey, params) : null),
@@ -62,6 +88,7 @@ export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarT
       <div className="space-y-1">
         <label className="block text-[10px] font-medium text-gray-500 uppercase">Produto</label>
         <select
+          aria-label="Produto do simulador"
           value={produto}
           onChange={e => setProduto(e.target.value)}
           className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
@@ -76,10 +103,14 @@ export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarT
         <div className="space-y-1">
           <label className="block text-[10px] font-medium text-gray-500 uppercase">Prazo</label>
           <select
+            aria-label="Prazo do simulador"
             value={prazo}
             onChange={e => setPrazo(e.target.value)}
             className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"
           >
+            {prazo && !prazoKeys.includes(prazo) && (
+              <option value={prazo}>{prazo}</option>
+            )}
             {prazoKeys.map(k => (
               <option key={k} value={k}>{k}</option>
             ))}
@@ -88,6 +119,7 @@ export default function SimuladorPrecoPanel({ produtoNome, prazoExterno, onUsarT
         <div className="space-y-1">
           <label className="block text-[10px] font-medium text-gray-500 uppercase">Frete</label>
           <select
+            aria-label="Frete do simulador"
             value={freteKey}
             onChange={e => setFreteKey(e.target.value)}
             className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary-400 bg-white"

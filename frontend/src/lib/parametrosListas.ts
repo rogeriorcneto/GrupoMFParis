@@ -192,39 +192,18 @@ export async function saveParametrosListas(novo: ParametrosState, usuarioNome: s
     }
   } catch { /* fallback supabase */ }
 
-  // 2) Fallback direto via Supabase caso o backend não esteja respondendo (ex.: suíte E2E local)
+  // 2) Fallback direto via Supabase caso o backend não esteja respondendo:
+  // ATENÇÃO: a tabela `atividades` possui policy RLS para SELECT e INSERT (sem policy UPDATE para anon/authenticated).
+  // Por isso inserimos um novo snapshot versionado (lido via `.order('id', { ascending: false }).limit(1)`).
   if (!savedViaApi) {
     const payloadStr = JSON.stringify(novo)
-    if (cachedRowId) {
-      const { error } = await supabase
-        .from('atividades')
-        .update({ descricao: payloadStr, vendedor_nome: usuarioNome })
-        .eq('id', cachedRowId)
-      if (error) throw error
-    } else {
-      const { data: existing } = await supabase
-        .from('atividades')
-        .select('id')
-        .eq('tipo', STORE_TIPO)
-        .order('id', { ascending: false })
-        .limit(1)
-      if (existing && existing.length > 0) {
-        cachedRowId = Number(existing[0].id)
-        const { error } = await supabase
-          .from('atividades')
-          .update({ descricao: payloadStr, vendedor_nome: usuarioNome })
-          .eq('id', cachedRowId)
-        if (error) throw error
-      } else {
-        const { data, error } = await supabase
-          .from('atividades')
-          .insert({ tipo: STORE_TIPO, descricao: payloadStr, vendedor_nome: usuarioNome })
-          .select('id')
-          .single()
-        if (error) throw error
-        cachedRowId = Number(data.id)
-      }
-    }
+    const { data, error } = await supabase
+      .from('atividades')
+      .insert({ tipo: STORE_TIPO, descricao: payloadStr, vendedor_nome: usuarioNome })
+      .select('id')
+      .single()
+    if (error) throw error
+    if (data?.id) cachedRowId = Number(data.id)
   }
 
   if (typeof window !== 'undefined') {

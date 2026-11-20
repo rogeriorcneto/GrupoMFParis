@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { fetchSimuladorParams, calcularPrecosTabela, type SimuladorParams } from '../../data/simuladorPrecos'
+import { fetchSimuladorParams, calcularPrecosTabela, resolverTaxaPrazo, type SimuladorParams } from '../../data/simuladorPrecos'
 import { CheckCircleIcon, XCircleIcon, ClockIcon, ShoppingCartIcon, Cog6ToothIcon, ArrowPathIcon, CloudArrowUpIcon, DocumentArrowDownIcon, ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline'
 import { gerarPropostaPDF } from '../../utils/pdfGenerator'
 import type { Pedido, Cliente, Vendedor } from '../../types'
@@ -349,7 +349,7 @@ export default function AprovacaoView({
                   <span className="text-xs text-gray-400">/{item.unidade}</span>
                   {(() => {
                     const tabela = tabelaPorPedido[pedido.id] ?? pedido.tabelaPreco ?? 'A'
-                    const prazo = pedido.formaPagamento && pedido.formaPagamento in (simParams?.prazos ?? {})
+                    const prazo = pedido.formaPagamento && resolverTaxaPrazo(pedido.formaPagamento, simParams?.prazos) !== undefined
                       ? pedido.formaPagamento
                       : 'À vista'
                     const t = calcularPrecosTabela(item.nomeProduto, prazo, 'FOB', simParams ?? undefined)

@@ -6,7 +6,6 @@ export const stageLabels: Record<string, string> = {
   'proposta': 'Proposta',
   'negociacao': 'Negociação',
   'follow_up': 'Follow-up',
-  'arquivado': 'Arquivados',
   'inativo': 'Clientes Inativos',
   'perdido': 'Perdido'
 }
@@ -18,8 +17,7 @@ export const transicoesPermitidas: Record<string, string[]> = {
   'amostra_perdida': ['amostra', 'perdido'],
   'proposta': ['amostra', 'negociacao', 'perdido'],
   'negociacao': ['follow_up', 'perdido'],
-  'follow_up': ['arquivado'],
-  'arquivado': [],
+  'follow_up': [],
   'inativo': ['prospecção', 'proposta'],
   'perdido': ['prospecção', 'proposta']
 }
@@ -52,7 +50,7 @@ export const subStatusFollowUpLabels: Record<string, string> = {
   'expedido': 'Expedido',
   'entregue': 'Entregue',
   'satisfacao_pendente': 'Satisfação Pendente',
-  'concluido': 'Concluído',
+  'concluido': 'Finalizado',
   'novo_ciclo_iniciado': 'Novo Ciclo Iniciado',
   'cancelado': 'Cancelado (Omie)',
 }

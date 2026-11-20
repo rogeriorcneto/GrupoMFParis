@@ -163,10 +163,17 @@ export default function ClientePanel({
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
-  const { opcoesAtivas } = useParametrosListas()
+  const { opcoesAtivas, reload: reloadParametros } = useParametrosListas()
   const prazosAtivos = opcoesAtivas('prazo_pagamento')
   const setoresAtivos = opcoesAtivas('setor_contato')
   const fretesAtivos = opcoesAtivas('tipo_frete')
+  const segmentosAtivos = opcoesAtivas('segmento_cliente')
+  const [produtoPendenteNome, setProdutoPendenteNome] = useState<string | null>(null)
+  const [produtoPendenteKg, setProdutoPendenteKg] = useState('')
+
+  useEffect(() => {
+    reloadParametros().catch(() => {})
+  }, [c.id])
   const [showVendedorPicker, setShowVendedorPicker] = useState(false)
   const [vendedorSearch, setVendedorSearch] = useState('')
   const [showMaisOpcoesHeader, setShowMaisOpcoesHeader] = useState(false)
@@ -509,9 +516,13 @@ export default function ClientePanel({
     await salvarProdutosEConsumo(produtosInteresse, novoMapa)
   }
 
-  const atualizarConsumoKgMes = async (nomeProduto: string, rawDigits: string) => {
+  const atualizarConsumoKgMes = async (nomeProduto: string, rawDigits: string): Promise<boolean> => {
     const limpo = rawDigits.replace(/\D/g, '')
     const kgMes = limpo === '' ? 0 : Number(limpo)
+    if (!Number.isFinite(kgMes) || kgMes <= 0) {
+      showToast?.('error', 'Informe um consumo mensal maior que 0 kg/mês.')
+      return false
+    }
     const prodCatalogo = (produtos || []).find(p => p.nome === nomeProduto)
     const info: ConsumoProdutoInfo = {
       kgMes,
@@ -525,6 +536,7 @@ export default function ClientePanel({
     const novaLista = consumoUnificado.lista.includes(nomeProduto) ? consumoUnificado.lista : [...consumoUnificado.lista, nomeProduto]
     const novoMapa: ProdutosConsumoMap = { ...consumoUnificado.mapa, [nomeProduto]: info }
     await salvarProdutosEConsumo(novaLista, novoMapa)
+    return true
   }
   const enderecoPrincipal = [
     c.enderecoRua,
@@ -1234,7 +1246,8 @@ export default function ClientePanel({
                         setGanhouLoading(false)
                         return
                       }
-                      onMoverCliente(c.id, 'negociacao', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
+                      // Regra oficial Rodada 3.1 (Item 1a): ao marcar Vendido, o card vai para Follow-up e abre automaticamente novo ciclo em Proposta
+                      onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
                       onClose()
                     }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-colors ${
@@ -1247,14 +1260,19 @@ export default function ClientePanel({
                   </button>
                 </>
               )}
-              {c.etapa === 'follow_up' && onTriggerSatisfacao && (
+              {c.etapa === 'follow_up' && c.statusFollowUp !== 'concluido' && onTriggerSatisfacao && (
                 <button
                   onClick={() => { onTriggerSatisfacao(c); onClose() }}
                   className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700"
-                  title="Registrar satisfação do cliente e encerrar card em Arquivados"
+                  title="Registrar satisfação do cliente e finalizar card em Follow-up"
                 >
                   ⭐ Coletar Satisfação
                 </button>
+              )}
+              {((c.etapa === 'follow_up' && c.statusFollowUp === 'concluido') || c.etapa === 'arquivado') && (
+                <span className="px-2.5 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded-apple border border-green-200">
+                  Finalizado
+                </span>
               )}
               {c.etapa === 'follow_up' && (() => {
                 const pedidoCancelavel = (todosPedidos || []).find(p => p.clienteId === c.id && (p.status === 'confirmado' || p.status === 'enviado' || p.status === 'cancelamento_solicitado') && !['faturado', 'expedido', 'entregue'].includes(p.omieStatus || ''))
@@ -1353,7 +1371,34 @@ export default function ClientePanel({
               <div><p className="text-xs text-gray-500">Razão social</p><p className="font-medium text-gray-900">{c.razaoSocial}</p></div>
               <div><p className="text-xs text-gray-500">{c.cpf && !c.cnpj ? 'CPF' : 'CNPJ'}</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || c.cpf || '-'}</p></div>
               <div><p className="text-xs text-gray-500">Nome fantasia</p><p className="font-medium text-gray-900">{c.nomeFantasia || '-'}</p></div>
-              <div><p className="text-xs text-gray-500">Segmento</p><p className="font-medium text-gray-900">{c.segmento || '-'}</p></div>
+              <div>
+                <p className="text-xs text-gray-500">Segmento</p>
+                <select
+                  aria-label="Segmento do cliente"
+                  value={c.segmento || ''}
+                  onChange={async (e) => {
+                    const novoSeg = e.target.value
+                    try {
+                      const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => !cl.arquivadoDuplicata && mesmaEmpresaNoFunil(cl, c))
+                      const ids = familia.length > 0 ? familia.map(cl => cl.id) : [c.id]
+                      await Promise.all(ids.map(id => db.updateCliente(id, { segmento: novoSeg || undefined })))
+                      const idSet = new Set(ids)
+                      setClientes(prev => prev.map(cl => idSet.has(cl.id) ? { ...cl, segmento: novoSeg || undefined } : cl))
+                    } catch (err) {
+                      logger.error('Erro ao salvar segmento:', err)
+                    }
+                  }}
+                  className="w-full px-2 py-1 border border-gray-300 rounded-apple text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Selecionar...</option>
+                  {c.segmento && !segmentosAtivos.some(s => s.valor === c.segmento) && (
+                    <option value={c.segmento}>{c.segmento} (desativado)</option>
+                  )}
+                  {segmentosAtivos.map(s => (
+                    <option key={s.id} value={s.valor}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             {c.descricao && (
               <div className="mt-2">
@@ -1387,17 +1432,20 @@ export default function ClientePanel({
                             defaultValue={valorKg === '' ? '' : String(valorKg)}
                             key={`${nomeProd}-${valorKg}`}
                             onChange={e => { e.target.value = e.target.value.replace(/\D/g, '') }}
-                            onBlur={e => {
+                            onBlur={async e => {
                               const novoDig = e.target.value.replace(/\D/g, '')
-                              if (novoDig !== (valorKg === '' ? '' : String(valorKg))) {
-                                atualizarConsumoKgMes(nomeProd, novoDig)
+                              const valorAtualStr = valorKg === '' || valorKg === 0 ? '' : String(valorKg)
+                              if (novoDig === valorAtualStr) return
+                              const ok = await atualizarConsumoKgMes(nomeProd, novoDig)
+                              if (!ok) {
+                                e.target.value = valorAtualStr
                               }
                             }}
                             onKeyDown={e => {
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
                             }}
-                            placeholder="0"
-                            className="w-20 px-2 py-1 border border-gray-300 rounded-apple text-xs text-right font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="> 0"
+                            className={`w-20 px-2 py-1 border rounded-apple text-xs text-right font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${!valorKg || Number(valorKg) <= 0 ? 'border-amber-400 bg-amber-50/40' : 'border-gray-300'}`}
                           />
                           <span className="text-xs font-medium text-gray-500 whitespace-nowrap">kg/mês</span>
                           <button
@@ -1425,6 +1473,52 @@ export default function ClientePanel({
             ) : (
               <p className="text-xs text-indigo-800/70">Nenhum produto de interesse registrado. Adicione abaixo informando o consumo em kg/mês.</p>
             )}
+            {produtoPendenteNome && (
+              <div className="bg-white rounded-apple border-2 border-indigo-300 p-2.5 space-y-2">
+                <p className="text-xs font-semibold text-indigo-950 truncate" title={produtoPendenteNome}>
+                  Informar consumo mensal para: <span className="text-indigo-700">{produtoPendenteNome}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    inputMode="numeric"
+                    aria-label="Consumo mensal (kg/mês) do novo produto"
+                    value={produtoPendenteKg}
+                    onChange={e => setProdutoPendenteKg(e.target.value.replace(/\D/g, ''))}
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const ok = await atualizarConsumoKgMes(produtoPendenteNome, produtoPendenteKg)
+                        if (ok) { setProdutoPendenteNome(null); setProdutoPendenteKg('') }
+                      }
+                      if (e.key === 'Escape') { setProdutoPendenteNome(null); setProdutoPendenteKg('') }
+                    }}
+                    placeholder="Ex.: 100"
+                    className="w-28 px-2.5 py-1.5 border border-gray-300 rounded-apple text-xs text-right font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs font-medium text-gray-600">kg/mês</span>
+                  <button
+                    type="button"
+                    disabled={salvandoProdutosInteresse || !produtoPendenteKg || Number(produtoPendenteKg) <= 0}
+                    onClick={async () => {
+                      const ok = await atualizarConsumoKgMes(produtoPendenteNome, produtoPendenteKg)
+                      if (ok) { setProdutoPendenteNome(null); setProdutoPendenteKg('') }
+                    }}
+                    className="ml-auto px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-apple text-xs font-semibold"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setProdutoPendenteNome(null); setProdutoPendenteKg('') }}
+                    className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="relative">
               <input
                 value={produtoInteresseBusca}
@@ -1442,7 +1536,8 @@ export default function ClientePanel({
                         key={produto.id}
                         type="button"
                         onClick={() => {
-                          atualizarConsumoKgMes(produto.nome, '0')
+                          setProdutoPendenteNome(produto.nome)
+                          setProdutoPendenteKg('')
                           setProdutoInteresseBusca('')
                         }}
                         disabled={salvandoProdutosInteresse}
@@ -1587,7 +1682,22 @@ export default function ClientePanel({
               <div><p className="text-xs text-gray-500">Pessoa responsável</p><p className="font-medium text-gray-900">{c.contatoNome || '-'}</p></div>
               <div>
                 <p className="text-xs text-gray-500">Setor</p>
-                <select value={panelContatoSetor} onChange={(e) => setPanelContatoSetor(e.target.value)} className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+                <select
+                  aria-label="Setor do contato"
+                  value={panelContatoSetor}
+                  onChange={async (e) => {
+                    const novoSetor = e.target.value
+                    setPanelContatoSetor(novoSetor)
+                    const notas = composeNotasEmpresa(novoSetor, panelInfoAdicional)
+                    try {
+                      await db.updateCliente(c.id, { notas })
+                      setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, notas } : cl))
+                    } catch (err) {
+                      logger.error('Erro ao salvar setor do contato:', err)
+                    }
+                  }}
+                  className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
                   <option value="">Selecionar...</option>
                   {panelContatoSetor && !setoresAtivos.some(s => s.valor === panelContatoSetor) && (
                     <option value={panelContatoSetor}>{panelContatoSetor} (desativado)</option>
@@ -1974,7 +2084,12 @@ export default function ClientePanel({
                                 {isAtual && <span className="ml-1.5 text-[10px] bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">aberto agora</span>}
                               </p>
                               <p className="text-[11px] text-gray-500">
-                                Etapa: <span className="font-medium">{etapaLabels[cardCiclo.etapa] || cardCiclo.etapa}</span>
+                                Etapa:{' '}
+                                <span className="font-medium">
+                                  {(cardCiclo.etapa === 'follow_up' && cardCiclo.statusFollowUp === 'concluido') || cardCiclo.etapa === 'arquivado'
+                                    ? 'Follow-up · Finalizado'
+                                    : (etapaLabels[cardCiclo.etapa] || cardCiclo.etapa)}
+                                </span>
                                 {cardCiclo.dataEntradaEtapa ? ` · desde ${new Date(cardCiclo.dataEntradaEtapa).toLocaleDateString('pt-BR')}` : ''}
                               </p>
                             </div>
@@ -3024,10 +3139,20 @@ export default function ClientePanel({
               {/* Frete */}
               <div>
                 <p className="text-xs font-medium text-gray-700 mb-2">Tipo de Frete</p>
-                <div className="flex gap-2">
-                  <button onClick={() => setEditPropostaFrete('CIF')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${editPropostaFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>📦 CIF (Entrega)</button>
-                  <button onClick={() => setEditPropostaFrete('FOB')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${editPropostaFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🏭 FOB (Retirada)</button>
-                </div>
+                <select
+                  aria-label="Tipo de frete da proposta"
+                  value={editPropostaFrete}
+                  onChange={e => setEditPropostaFrete(e.target.value as 'CIF' | 'FOB')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">— Selecionar —</option>
+                  {editPropostaFrete && !fretesAtivos.some(f => f.valor === editPropostaFrete) && (
+                    <option value={editPropostaFrete}>{editPropostaFrete} (desativado)</option>
+                  )}
+                  {fretesAtivos.map(frt => (
+                    <option key={frt.id} value={frt.valor}>{frt.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Pagamento */}
@@ -3327,8 +3452,12 @@ export default function ClientePanel({
                   <select value={editPedidoFrete} onChange={e => setEditPedidoFrete(e.target.value as 'CIF' | 'FOB' | 'VISITA')}
                     className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-apple">
                     <option value="">Selecione…</option>
-                    <option value="CIF">CIF (emitente paga)</option>
-                    <option value="FOB">FOB (cliente paga)</option>
+                    {editPedidoFrete && !fretesAtivos.some(f => f.valor === editPedidoFrete) && (
+                      <option value={editPedidoFrete}>{editPedidoFrete} (desativado)</option>
+                    )}
+                    {fretesAtivos.map(frt => (
+                      <option key={frt.id} value={frt.valor}>{frt.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

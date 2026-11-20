@@ -11,15 +11,34 @@ vi.mock('../config.js', () => ({
 // Mock logger
 vi.mock('../logger.js', () => ({ log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-// Track createClient calls — use vi.hoisted to avoid TDZ issue
-const { mockGetUser, mockCreateClient } = vi.hoisted(() => {
+// Hoisted mocks for @supabase/supabase-js AND ../supabase.js (serviceSupabase)
+const { mockGetUser, mockCreateClient, mockMaybeSingle, mockServiceFrom } = vi.hoisted(() => {
   const mockGetUser = vi.fn()
   const mockCreateClient = vi.fn().mockReturnValue({
     auth: { getUser: mockGetUser },
     from: vi.fn(),
   })
-  return { mockGetUser, mockCreateClient }
+  const mockMaybeSingle = vi.fn().mockResolvedValue({
+    data: { id: 1, nome: 'Rafael', email: 'rafael@mfparis.com.br', cargo: 'gerente', ativo: true },
+    error: null,
+  })
+  const mockServiceFrom = vi.fn().mockImplementation(() => ({
+    select: vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        order: vi.fn().mockReturnValue({
+          limit: vi.fn().mockReturnValue({
+            maybeSingle: mockMaybeSingle,
+          }),
+        }),
+      }),
+    }),
+  }))
+  return { mockGetUser, mockCreateClient, mockMaybeSingle, mockServiceFrom }
 })
+
+vi.mock('../supabase.js', () => ({
+  supabase: { from: (...args: any[]) => mockServiceFrom(...args) },
+}))
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: (...args: any[]) => mockCreateClient(...args),
@@ -27,7 +46,6 @@ vi.mock('@supabase/supabase-js', () => ({
 
 import { requireAuth, requireGerente } from '../middleware/auth.js'
 
-// Helper: mock Express req/res/next
 function createMockReqRes(headers: Record<string, string> = {}) {
   const req: any = { headers }
   const res: any = {
@@ -41,6 +59,10 @@ function createMockReqRes(headers: Record<string, string> = {}) {
 describe('Auth Middleware — Full Coverage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockMaybeSingle.mockResolvedValue({
+      data: { id: 1, nome: 'Rafael', email: 'rafael@mfparis.com.br', cargo: 'gerente', ativo: true },
+      error: null,
+    })
   })
 
   describe('requireAuth', () => {
@@ -71,7 +93,27 @@ describe('Auth Middleware — Full Coverage', () => {
       )
     })
 
-    it('chama next() e attach userId/userEmail quando token válido', async () => {
+    it('bloqueia imediatamente (403) vendedor desativado (ativo = false)', async () => {
+      mockGetUser.mockResolvedValueOnce({
+        data: { user: { id: 'uid-demitido', email: 'vendas07@mfparis.com.br' } },
+        error: null,
+      })
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { id: 11, nome: 'Vendas 05', email: 'vendas07@mfparis.com.br', cargo: 'vendedor', ativo: false },
+        error: null,
+      })
+
+      const { req, res, next } = createMockReqRes({ authorization: 'Bearer inactive-token' })
+      await requireAuth(req, res, next)
+
+      expect(res.status).toHaveBeenCalledWith(403)
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('desativada') })
+      )
+      expect(next).not.toHaveBeenCalled()
+    })
+
+    it('chama next() e attach userId/userEmail/vendedor quando token válido e ativo', async () => {
       mockGetUser.mockResolvedValueOnce({
         data: { user: { id: 'uid-123', email: 'rafael@mfparis.com.br' } },
         error: null,
@@ -83,6 +125,7 @@ describe('Auth Middleware — Full Coverage', () => {
       expect(next).toHaveBeenCalled()
       expect(req.userId).toBe('uid-123')
       expect(req.userEmail).toBe('rafael@mfparis.com.br')
+      expect(req.vendedor?.ativo).toBe(true)
     })
 
     it('cria per-request Supabase client com token do usuário', async () => {
@@ -97,7 +140,6 @@ describe('Auth Middleware — Full Coverage', () => {
       expect(next).toHaveBeenCalled()
       expect(req.supabase).toBeDefined()
 
-      // Verify createClient was called with the user's token in the headers
       const lastCall = mockCreateClient.mock.calls[mockCreateClient.mock.calls.length - 1]
       expect(lastCall[0]).toBe('https://test.supabase.co')
       expect(lastCall[1]).toBe('test-anon-key')
@@ -115,14 +157,12 @@ describe('Auth Middleware — Full Coverage', () => {
       await requireAuth(req1, res1, next1)
       expect(next1).toHaveBeenCalled()
 
-      // Reset getUser call count
       const callsBefore = mockGetUser.mock.calls.length
 
       const { req: req2, res: res2, next: next2 } = createMockReqRes({ authorization: `Bearer ${token}` })
       await requireAuth(req2, res2, next2)
       expect(next2).toHaveBeenCalled()
 
-      // getUser should NOT be called again (cache hit)
       expect(mockGetUser.mock.calls.length).toBe(callsBefore)
       expect(req2.userId).toBe('uid-cache')
     })
@@ -145,17 +185,12 @@ describe('Auth Middleware — Full Coverage', () => {
     })
 
     it('retorna 403 quando vendedor não é gerente', async () => {
-      const mockFrom = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { cargo: 'vendedor' }, error: null }),
-          }),
-        }),
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { id: 6, nome: 'Wiliam', email: 'w@x.com', cargo: 'vendedor', ativo: true },
+        error: null,
       })
-
       const { req, res, next } = createMockReqRes()
       req.userId = 'uid-vendedor'
-      req.supabase = { from: mockFrom }
 
       await requireGerente(req, res, next)
       expect(res.status).toHaveBeenCalledWith(403)
@@ -165,102 +200,34 @@ describe('Auth Middleware — Full Coverage', () => {
       expect(next).not.toHaveBeenCalled()
     })
 
-    it('chama next() quando vendedor é gerente', async () => {
-      const mockFrom = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { cargo: 'gerente' }, error: null }),
-          }),
-        }),
-      })
-
+    it('chama next() quando vendedor é gerente ativo', async () => {
       const { req, res, next } = createMockReqRes()
       req.userId = 'uid-gerente-new'
-      req.supabase = { from: mockFrom }
+      req.vendedor = { id: 1, nome: 'Rafael', email: 'r@x.com', cargo: 'gerente', ativo: true }
 
       await requireGerente(req, res, next)
       expect(next).toHaveBeenCalled()
     })
 
     it('retorna 403 quando vendedor não encontrado no DB', async () => {
-      const mockFrom = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: null, error: { message: 'Not found' } }),
-          }),
-        }),
-      })
-
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'Not found' } })
       const { req, res, next } = createMockReqRes()
       req.userId = 'uid-missing'
-      req.supabase = { from: mockFrom }
 
       await requireGerente(req, res, next)
       expect(res.status).toHaveBeenCalledWith(403)
     })
 
     it('retorna 403 para cargo sdr', async () => {
-      const mockFrom = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { cargo: 'sdr' }, error: null }),
-          }),
-        }),
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { id: 14, nome: 'SDR', email: 's@x.com', cargo: 'sdr', ativo: true },
+        error: null,
       })
-
       const { req, res, next } = createMockReqRes()
       req.userId = 'uid-sdr'
-      req.supabase = { from: mockFrom }
 
       await requireGerente(req, res, next)
       expect(res.status).toHaveBeenCalledWith(403)
-    })
-
-    it('usa per-request supabase client quando disponível', async () => {
-      const customFrom = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { cargo: 'gerente' }, error: null }),
-          }),
-        }),
-      })
-
-      const { req, res, next } = createMockReqRes()
-      req.userId = 'uid-custom-client'
-      req.supabase = { from: customFrom }
-
-      await requireGerente(req, res, next)
-      expect(customFrom).toHaveBeenCalledWith('vendedores')
-      expect(next).toHaveBeenCalled()
-    })
-
-    it('usa cargo cache na segunda chamada', async () => {
-      const mockFrom = vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { cargo: 'gerente' }, error: null }),
-          }),
-        }),
-      })
-
-      const userId = 'uid-cache-gerente-' + Date.now()
-
-      const { req: req1, res: res1, next: next1 } = createMockReqRes()
-      req1.userId = userId
-      req1.supabase = { from: mockFrom }
-      await requireGerente(req1, res1, next1)
-      expect(next1).toHaveBeenCalled()
-
-      const callsBefore = mockFrom.mock.calls.length
-
-      const { req: req2, res: res2, next: next2 } = createMockReqRes()
-      req2.userId = userId
-      req2.supabase = { from: mockFrom }
-      await requireGerente(req2, res2, next2)
-      expect(next2).toHaveBeenCalled()
-
-      // DB should NOT be queried again (cache hit)
-      expect(mockFrom.mock.calls.length).toBe(callsBefore)
     })
   })
 })

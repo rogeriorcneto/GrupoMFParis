@@ -355,8 +355,8 @@ export function useFunilActions({
       }
     }
 
-    // Matriz oficial: ganhar em Negociação (ir para Follow-up) abre automaticamente um novo ciclo em Proposta
-    if (toStage === 'follow_up' && fromStage === 'negociacao' && !existeCardAtivo(cliente, ['proposta', 'negociacao'])) {
+    // Matriz oficial (Rodada 3.1 Item 1): entrar/finalizar em Follow-up garante sempre um card ativo aberto em Proposta
+    if (toStage === 'follow_up' && !existeCardAtivo(cliente, ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await inserirNovoCiclo(cliente, novoCard)
@@ -436,11 +436,6 @@ export function useFunilActions({
       setPendingDrop({ e: null, toStage })
       setModalPropostaValor(cliente.valorEstimado?.toString() || '')
       setShowModalProposta(true)
-      return
-    }
-    if (toStage === 'arquivado' && fromStage === 'follow_up') {
-      setPendingDrop({ e: null, toStage })
-      setShowModalSatisfacao(true)
       return
     }
 
@@ -552,8 +547,8 @@ export function useFunilActions({
 
   const confirmSatisfacao = () => {
     if (draggedItem) {
-      // Matriz oficial: após a coleta de satisfação, o card de Follow-up é encerrado e vai para Arquivados
-      moverCliente(draggedItem.cliente.id, 'arquivado', {
+      // Regra oficial Rodada 3.1 (Item 1b): após a coleta de satisfação, o card permanece em Follow-up com status "Finalizado" (oculto por padrão)
+      moverCliente(draggedItem.cliente.id, 'follow_up', {
         statusSatisfacao: modalSatisfacaoNota >= 4 ? 'satisfeito' : 'insatisfeito',
         notaSatisfacao: modalSatisfacaoNota,
         feedbackSatisfacao: modalSatisfacaoFeedback.trim() || undefined,

@@ -144,7 +144,8 @@ export default function AppRouter({
             }
             // Auto-move client to follow_up only for clear sales orders
             const cliAprov = clientes.find(c => c.id === pedido.clienteId)
-            const isAmostraFlow = pedido.tipo === 'bonificacao' || cliAprov?.etapa === 'amostra' || cliAprov?.etapa === 'amostra_perdida'
+            const isBonificacaoComercial = Boolean(pedido.numero?.toUpperCase().startsWith('BON-'))
+            const isAmostraFlow = (pedido.tipo === 'bonificacao' && !isBonificacaoComercial) || cliAprov?.etapa === 'amostra' || cliAprov?.etapa === 'amostra_perdida'
             if (isAmostraFlow && cliAprov && cliAprov.statusAmostra !== 'liberada') {
               setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusAmostra: 'liberada' } : c))
               try { await db.updateCliente(pedido.clienteId, { statusAmostra: 'liberada' }) } catch { /* non-critical */ }
@@ -187,8 +188,8 @@ export default function AppRouter({
             await db.recusarPedido(pedido.id, motivo)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
             addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
-            // Se for pedido de bonificação (amostra), mover cliente para amostra_perdida
-            if (pedido.tipo === 'bonificacao') {
+            // Se for pedido de amostra real (não BON comercial), mover cliente para amostra_perdida
+            if (pedido.tipo === 'bonificacao' && !pedido.numero?.toUpperCase().startsWith('BON-')) {
               const cli = clientes.find(c => c.id === pedido.clienteId)
               if (cli && cli.etapa !== 'amostra_perdida' && cli.etapa !== 'perdido') {
                 try {
@@ -580,8 +581,8 @@ export default function AppRouter({
                 const hoje = new Date().toISOString().split('T')[0]
                 const feedback = t.conclusao || t.descricao || ''
                 if (targetCli.etapa === 'follow_up') {
-                  // Matriz oficial: após a coleta de satisfação, o card de Follow-up é encerrado e vai para Arquivados
-                  await moverCliente(targetCli.id, 'arquivado', {
+                  // Regra oficial Rodada 3.1: após a coleta de satisfação, o card permanece em Follow-up com status Finalizado (oculto)
+                  await moverCliente(targetCli.id, 'follow_up', {
                     ultimaInteracao: hoje,
                     feedbackSatisfacao: feedback,
                     statusSatisfacao: 'satisfeito',

@@ -418,6 +418,7 @@ describe('Omie Pedidos', () => {
       pedido?: any
       listarClientes?: any
       tabelasPreco?: any[]
+      cenariosOmie?: any[]
       upsertClienteResponse?: any
     }) {
       const captured: { payload?: any; upsertCliente?: any } = {}
@@ -478,7 +479,7 @@ describe('Omie Pedidos', () => {
             captured.upsertCliente = param[0]
             return opts.upsertClienteResponse ?? { codigo_cliente_omie: 456 }
           case 'ListarCenarios':
-            return { cenariosEncontrados: [{ nCodigo: 100, cNome: 'VENDAS', padrao: true }] }
+            return { cenariosEncontrados: opts.cenariosOmie ?? [{ nCodigo: 100, cNome: 'VENDAS', padrao: true }] }
           case 'ListarDepartamentos':
             return { departamentos: [{ codigo: 'DEP1', descricao: 'COMERCIAL' }] }
           case 'ListarCategorias':
@@ -929,6 +930,40 @@ describe('Omie Pedidos', () => {
 
       await criarPedidoOmie(1)
       expect(captured.payload.informacoes_adicionais.codigo_tabela_preco).toBeUndefined()
+    })
+
+    it('Pedido BON-... sobe no Omie com codigo CRM-BON-{id}-N2, mesmo cenario fiscal da amostra, CFOP 6910 (interestadual) e parcela 000 (A vista)', async () => {
+      clearCache('cenarios')
+      const captured = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 50, preco: 1.0 }],
+        produtos: {
+          7: { id: 7, nome: 'OKEY LAC CREAM 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' },
+        },
+        consultaOmiePorProduto: {
+          7: { codigo_produto: 2071041102, descricao: 'OKEY LAC CREAM 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 },
+        },
+        pedido: {
+          numero: 'BON-123456',
+          tipo: 'bonificacao',
+          forma_pagamento: 'À vista',
+          tipo_frete: 'CIF',
+          observacoes: 'Necessário chapa para descarga',
+          total_valor: 50,
+        },
+        cliente: { endereco_estado: 'RJ' }, // empresa do mock é SP -> interestadual -> CFOP 6910
+        cenariosOmie: [
+          { nCodigo: 100, cNome: 'VENDAS', padrao: true },
+          { nCodigo: 200, cNome: 'BONIFICACAO / AMOSTRA GRATIS', padrao: false },
+        ],
+      })
+
+      await criarPedidoOmie(1)
+      const p = captured.payload
+      expect(p.cabecalho.codigo_pedido_integracao).toBe('CRM-BON-1-N2')
+      expect(p.cabecalho.codigo_cenario_impostos).toBe(200)
+      expect(p.cabecalho.codigo_parcela).toBe('000')
+      expect(p.det[0].produto.cfop).toBe('6910')
+      expect(p.observacoes.obs_venda).toContain('Necessário chapa para descarga')
     })
   })
 })

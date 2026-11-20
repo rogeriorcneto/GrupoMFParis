@@ -95,10 +95,17 @@ export default function FunilModals({
   isNovoCiclo = false, onCloseNovoCiclo, onClickCliente, onCriarNovoCiclo,
   showModalSatisfacao = false, setShowModalSatisfacao, modalSatisfacaoNota = 5, setModalSatisfacaoNota, modalSatisfacaoFeedback = '', setModalSatisfacaoFeedback, confirmSatisfacao
 }: FunilModalsProps) {
-  const { opcoesAtivas } = useParametrosListas()
+  const { opcoesAtivas, reload: reloadParametros } = useParametrosListas()
   const prazosAtivos = opcoesAtivas('prazo_pagamento')
   const fretesAtivos = opcoesAtivas('tipo_frete')
   const categoriasPerdaAtivas = opcoesAtivas('categoria_perda')
+
+  // Garante recarga imediata de Parâmetros sempre que qualquer modal do funil for aberto
+  React.useEffect(() => {
+    if (showModalProposta || showMotivoPerda || showModalAmostra) {
+      reloadParametros().catch(() => {})
+    }
+  }, [showModalProposta, showMotivoPerda, showModalAmostra])
   const agora = new Date()
   const dataHoraAtual = `${agora.toLocaleDateString('pt-BR')} às ${agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
   const [pedidoFrete, setPedidoFrete] = React.useState<'CIF' | 'FOB' | 'VISITA' | ''>('')
@@ -915,7 +922,7 @@ export default function FunilModals({
           <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">⭐ Coleta de Satisfação</h2>
-              <p className="text-sm text-gray-500 mt-0.5">Registre a satisfação de {draggedItem?.cliente.razaoSocial} para encerrar o card em Arquivados.</p>
+              <p className="text-sm text-gray-500 mt-0.5">Registre a satisfação de {draggedItem?.cliente.razaoSocial} para finalizar o acompanhamento em Follow-up.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1.5">Nota (1 a 5)</label>
@@ -949,7 +956,7 @@ export default function FunilModals({
                 onClick={confirmSatisfacao}
                 className="px-4 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Salvar e Arquivar
+                Salvar e Finalizar
               </button>
             </div>
           </div>

@@ -715,8 +715,9 @@ describe('D — transicoesPermitidas', () => {
     expect(transicoesPermitidas['negociacao']).toContain('perdido')
   })
 
-  it('follow_up → arquivado é válida (pós-satisfação)', () => {
-    expect(transicoesPermitidas['follow_up']).toContain('arquivado')
+  it('follow_up não muda mais para arquivado (fica Finalizado e oculto no próprio Follow-up)', () => {
+    expect(transicoesPermitidas['follow_up']).toEqual([])
+    expect(transicoesPermitidas['follow_up']).not.toContain('arquivado')
   })
 
   it('perdido → prospecção é válida (reconquista)', () => {

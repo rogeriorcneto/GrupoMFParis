@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { stageLabels, transicoesPermitidas, subStatusAmostraLabels, subStatusFollowUpLabels } from '../utils/constants'
 
 describe('stageLabels', () => {
-  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo', 'perdido']
+  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo', 'perdido']
 
   it('deve ter label para cada etapa do funil', () => {
     for (const stage of ALL_STAGES) {
@@ -20,7 +20,7 @@ describe('stageLabels', () => {
 })
 
 describe('transicoesPermitidas', () => {
-  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo', 'perdido']
+  const ALL_STAGES = ['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo', 'perdido']
 
   it('deve definir transições para cada etapa', () => {
     for (const stage of ALL_STAGES) {
@@ -54,8 +54,10 @@ describe('transicoesPermitidas', () => {
     expect(transicoesPermitidas['negociacao']).not.toContain('proposta')
   })
 
-  it('follow_up encerra em arquivado após coleta de satisfação', () => {
-    expect(transicoesPermitidas['follow_up']).toEqual(['arquivado'])
+  it('follow_up encerra no próprio Follow-up como Finalizado (não existe mais etapa Arquivados)', () => {
+    expect(transicoesPermitidas['follow_up']).toEqual([])
+    expect(stageLabels['arquivado']).toBeUndefined()
+    expect(subStatusFollowUpLabels['concluido']).toBe('Finalizado')
   })
 
   it('inativo pode ir para prospecção ou proposta', () => {

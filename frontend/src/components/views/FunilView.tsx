@@ -7,6 +7,7 @@ import { PESO_PIPELINE, criarMapaUltimaProposta, valorPropostaAtivaCard } from '
 import { extractValidSocialLinks } from '../../utils/socialLinks'
 import { fetchAllPropostas } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
+import { useParametrosListas } from '../../lib/parametrosListas'
 import CallRecorder from '../CallRecorder'
 
 // Função para abreviar nomes de produtos
@@ -80,10 +81,13 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [sortBy, setSortBy] = React.useState<'urgencia' | 'score' | 'valor' | 'antigo' | 'recente'>('urgencia')
   const [importStatus, setImportStatus] = React.useState<string | null>(null)
   const [search, setSearch] = React.useState('')
+  const { opcoesAtivas } = useParametrosListas()
+  const segmentosAtivos = opcoesAtivas('segmento_cliente')
+  const categoriasPerdaAtivas = opcoesAtivas('categoria_perda')
   const [hidePerdidos, setHidePerdidos] = React.useState(true)
   const [hideInativos, setHideInativos] = React.useState(true)
   const [hideAmostraPerdida, setHideAmostraPerdida] = React.useState(true)
-  const [hideArquivados, setHideArquivados] = React.useState(true)
+  const [showFollowUpFinalizados, setShowFollowUpFinalizados] = React.useState(false)
   const [filterSegmento, setFilterSegmento] = React.useState('')
   const [filterLocalizacao, setFilterLocalizacao] = React.useState('')
   const [callRecordingCliente, setCallRecordingCliente] = useState<Cliente | null>(null)
@@ -311,8 +315,12 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   // Vendedor vê: Prospecção, Amostra, Proposta, Negociação, Follow-up, Inativos, Perdido
   // Gerente vê todas: Leads, Prospecção, Amostra, Amostra Perdida, Proposta, Negociação, Follow-up, Inativos, Perdido
-  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo'])
-  const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'arquivado', 'inativo'])
+  // Item 1b Rodada 3.1: não existe mais a etapa "Arquivados"; cards de Follow-up pós-satisfação ficam "Finalizado" e ocultos no próprio Follow-up
+  const isFollowUpFinalizado = (c: Cliente) =>
+    (c.etapa === 'follow_up' && c.statusFollowUp === 'concluido') || c.etapa === 'arquivado'
+
+  const VENDEDOR_ETAPAS = new Set(['prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
+  const GERENTE_ETAPAS = new Set(['lead', 'prospecção', 'amostra', 'amostra_perdida', 'proposta', 'negociacao', 'follow_up', 'inativo'])
   const FUNIL_ETAPAS = isGerente ? GERENTE_ETAPAS : VENDEDOR_ETAPAS
 
   const allStages = [
@@ -324,7 +332,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     { title: 'Proposta', key: 'proposta', badge: 'bg-indigo-100 text-indigo-800', icon: '📋', prob: PESO_PIPELINE.proposta, gerenteOnly: false },
     { title: 'Negociação', key: 'negociacao', badge: 'bg-purple-100 text-purple-800', icon: '🤝', prob: PESO_PIPELINE.negociacao, gerenteOnly: false },
     { title: 'Follow-up', key: 'follow_up', badge: 'bg-blue-100 text-blue-800', icon: '📦', prob: 0.80, gerenteOnly: false },
-    { title: 'Arquivados', key: 'arquivado', badge: 'bg-slate-200 text-slate-700', icon: '🗄️', prob: 0, gerenteOnly: false },
     { title: 'Perdido', key: 'perdido', badge: 'bg-red-100 text-red-800', icon: '❌', prob: 0, gerenteOnly: false }
   ]
 
@@ -335,10 +342,9 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       if (hidePerdidos && stage.key === 'perdido') return false
       if (hideInativos && stage.key === 'inativo') return false
       if (hideAmostraPerdida && stage.key === 'amostra_perdida') return false
-      if (hideArquivados && stage.key === 'arquivado') return false
       return true
     })
-  }, [hideAmostraPerdida, hideArquivados, hideInativos, hidePerdidos, isGerente])
+  }, [hideAmostraPerdida, hideInativos, hidePerdidos, isGerente])
 
   // P1-2: O(1) vendedor lookup instead of O(m) find per card
   const vendedorMap = useMemo(() => {
@@ -355,7 +361,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
 
   const clientesFiltrados = useMemo(() => {
     let base = clientesFiltradosVendedor.filter(c =>
-      !c.arquivadoDuplicata && (FUNIL_ETAPAS.has(c.etapa) || c.etapa === 'perdido')
+      !c.arquivadoDuplicata && (FUNIL_ETAPAS.has(c.etapa) || c.etapa === 'perdido' || c.etapa === 'arquivado')
     )
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -367,7 +373,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       )
     }
     if (filterSegmento) {
-      base = base.filter(c => c.etapa !== 'lead' || (c.segmento || '').toLowerCase().includes(filterSegmento.toLowerCase()))
+      base = base.filter(c => (c.segmento || '').toLowerCase().includes(filterSegmento.toLowerCase()))
     }
     if (filterLocalizacao) {
       base = base.filter(c => c.etapa !== 'lead' || (c.localizacao || '').toLowerCase().includes(filterLocalizacao.toLowerCase()))
@@ -375,11 +381,18 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     return base
   }, [clientesFiltradosVendedor, search, filterSegmento, filterLocalizacao])
 
-  // P1-1: Single O(n) pass to group clients by stage (instead of 7× filter)
+  // Cards de Follow-up finalizados pós-satisfação (ocultos por padrão, exibidos pelo botão "Finalizados (N)" no cabeçalho do Follow-up)
+  const followUpFinalizados = useMemo(
+    () => sortCards(clientesFiltrados.filter(isFollowUpFinalizado), sortBy),
+    [clientesFiltrados, sortBy]
+  )
+
+  // P1-1: Single O(n) pass to group clients by stage (Follow-up exibe apenas os em andamento; finalizados ficam ocultos no toggle)
   const stageMap = useMemo(() => {
     const m = new Map<string, Cliente[]>()
     displayedStages.forEach(s => m.set(s.key, []))
     clientesFiltrados.forEach(c => {
+      if (isFollowUpFinalizado(c)) return
       const arr = m.get(c.etapa)
       if (arr) arr.push(c)
     })
@@ -463,7 +476,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     let ps = allPs
     if (cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') {
       ps = allPs.filter(p => p.tipo === 'bonificacao')
-    } else if (cliente.etapa === 'negociacao' || cliente.etapa === 'follow_up') {
+    } else if (cliente.etapa === 'negociacao' || cliente.etapa === 'follow_up' || cliente.etapa === 'arquivado') {
       ps = allPs.filter(p => p.tipo === 'venda' || !p.tipo)
     }
     if (ps.length === 0) return null
@@ -576,12 +589,14 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
           </div>
         )
       }
+      case 'arquivado':
       case 'follow_up': {
-        const subLabel = cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando'
-        const subIdx = cliente.statusFollowUp ? ['aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0
+        const ehFinalizado = isFollowUpFinalizado(cliente)
+        const subLabel = ehFinalizado ? 'Finalizado' : (cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando')
+        const subIdx = ehFinalizado ? 7 : (cliente.statusFollowUp ? ['aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0)
         const pctSub = Math.min(((subIdx + 1) / 8) * 100, 100)
         const subBadgeColor = cliente.statusFollowUp === 'cancelado' ? 'bg-red-100 text-red-700' :
-          cliente.statusFollowUp === 'concluido' ? 'bg-green-100 text-green-700' :
+          ehFinalizado ? 'bg-green-100 text-green-700' :
           cliente.statusFollowUp === 'entregue' ? 'bg-emerald-100 text-emerald-700' :
           cliente.statusFollowUp === 'expedido' ? 'bg-cyan-100 text-cyan-700' :
           cliente.statusFollowUp === 'faturado' ? 'bg-indigo-100 text-indigo-700' :
@@ -641,11 +656,14 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       }
       case 'perdido': {
         const catLabels: Record<string, string> = { preco: 'Preço', prazo: 'Prazo', qualidade: 'Qualidade', concorrencia: 'Concorrência', sem_resposta: 'Sem resposta', outro: 'Outro' }
+        const labelMotivoPerda = cliente.categoriaPerda
+          ? (categoriasPerdaAtivas.find(o => o.valor === cliente.categoriaPerda)?.label || catLabels[cliente.categoriaPerda] || cliente.categoriaPerda)
+          : ''
         const diasPerdido = diasDesde(cliente.dataPerda)
         const pctReconquista = Math.min((diasPerdido / 60) * 100, 100)
         return (
           <div className="mt-1.5 space-y-1">
-            {cliente.categoriaPerda && <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded-full">{catLabels[cliente.categoriaPerda]}</span>}
+            {labelMotivoPerda && <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-red-100 text-red-700 rounded-full">{labelMotivoPerda}</span>}
             {cliente.etapaAnterior && <p className="text-[10px] text-gray-500">↩ {stageLabels[cliente.etapaAnterior] || cliente.etapaAnterior}</p>}
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctReconquista >= 100 ? 'bg-green-500' : 'bg-gray-400'}`} style={{ width: `${pctReconquista}%` }} /></div>
@@ -747,7 +765,12 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
           <option value="antigo">Mais antigo</option>
           <option value="recente">Mais recente</option>
         </select>
-        <input type="text" value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} placeholder="Segmento" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-24 focus:outline-none focus:ring-2 focus:ring-primary-400" />
+        <select value={filterSegmento} onChange={e => setFilterSegmento(e.target.value)} aria-label="Filtrar por segmento" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-28 focus:outline-none focus:ring-2 focus:ring-primary-400">
+          <option value="">Segmento</option>
+          {segmentosAtivos.map(s => (
+            <option key={s.id} value={s.valor}>{s.label}</option>
+          ))}
+        </select>
         <input type="text" value={filterLocalizacao} onChange={e => setFilterLocalizacao(e.target.value)} placeholder="Local" className="px-2 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl text-xs w-24 focus:outline-none focus:ring-2 focus:ring-primary-400" />
 
         <div className="h-5 w-px bg-gray-300" />
@@ -756,9 +779,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         </button>
         <button onClick={() => setHideInativos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideInativos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-gray-100 text-gray-600 border-gray-300'}`} title={hideInativos ? 'Mostrar Inativos' : 'Ocultar Inativos'}>
           💤
-        </button>
-        <button onClick={() => setHideArquivados(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hideArquivados ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-slate-100 text-slate-700 border-slate-300'}`} title={hideArquivados ? 'Mostrar Arquivados' : 'Ocultar Arquivados'}>
-          🗄️
         </button>
         <button onClick={() => setHidePerdidos(v => !v)} className={`h-7 w-7 flex items-center justify-center rounded-md text-xs border transition-colors ${hidePerdidos ? 'bg-white border-gray-300 text-gray-400 hover:bg-gray-50' : 'bg-red-50 text-red-600 border-red-200'}`} title={hidePerdidos ? 'Mostrar Perdidos' : 'Ocultar Perdidos'}>
           ❌
@@ -821,8 +841,12 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       <div ref={kanbanScrollRef} onScroll={handleKanbanScroll} className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory md:snap-none">
         <div className="flex gap-3 h-full px-2 pb-2" style={{ minWidth: `${displayedStages.length * 300}px` }}>
           {displayedStages.map((stage) => {
-            const stageClientes = sortCards(stageMap.get(stage.key) || [], sortBy)
-            const stageValor = stageClientes.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
+            const stageClientesAtivos = sortCards(stageMap.get(stage.key) || [], sortBy)
+            const isFollowUp = stage.key === 'follow_up'
+            const stageClientes = isFollowUp && showFollowUpFinalizados
+              ? [...stageClientesAtivos, ...followUpFinalizados]
+              : stageClientesAtivos
+            const stageValor = stageClientesAtivos.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
             const stageWeighted = Math.round(stageValor * stage.prob)
             const isProposta = stage.key === 'proposta'
             const novoCicloCount = isProposta ? clientesNovoCiclo.length : 0
@@ -860,7 +884,17 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           🔄 {novoCicloCount}
                         </button>
                       )}
-                      <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full leading-none ${stage.badge}`}>{stageClientes.length}</span>
+                      {isFollowUp && (
+                        <button
+                          type="button"
+                          onClick={() => setShowFollowUpFinalizados(v => !v)}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${showFollowUpFinalizados ? 'bg-green-100 text-green-800 border-green-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:bg-green-50 hover:text-green-700'}`}
+                          title={showFollowUpFinalizados ? 'Esconder cards finalizados' : `Mostrar ${followUpFinalizados.length} card(s) finalizado(s)`}
+                        >
+                          Finalizados ({followUpFinalizados.length})
+                        </button>
+                      )}
+                      <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full leading-none ${stage.badge}`}>{stageClientesAtivos.length}</span>
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
@@ -995,7 +1029,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                           • {abreviarProduto(item.nomeProduto)}
                                         </span>
                                         <span className="font-bold text-gray-900 dark:text-gray-100 whitespace-nowrap flex-shrink-0">
-                                          {item.quantidade}x
+                                          {item.quantidade} kg
                                         </span>
                                       </div>
                                       <div className="text-gray-500 dark:text-gray-400 pl-2 text-[9px]">
@@ -1005,7 +1039,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                   ))}
                                   <div className="flex items-center justify-between pt-1 mt-1 border-t border-gray-200 dark:border-gray-600/40">
                                     <span className="text-[9px] text-gray-500 dark:text-gray-400">
-                                      {p.itens.reduce((s, i) => s + i.quantidade, 0)} un
+                                      {p.itens.reduce((s, i) => s + i.quantidade, 0)} kg
                                     </span>
                                     <span className="text-[11px] font-bold text-green-700 dark:text-green-400">
                                       {p.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

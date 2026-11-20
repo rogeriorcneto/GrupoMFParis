@@ -1991,7 +1991,7 @@ app.get('/api/store/:collection', requireAuth, async (req, res) => {
   const c = req.params.collection
   if (!STORE_COLLECTIONS.has(c)) { res.status(400).json({ error: 'Coleção inválida' }); return }
   try {
-    let q = supabase.from('atividades').select('id, descricao, created_at').eq('tipo', storeTipo(c)).order('created_at', { ascending: false })
+    let q = supabase.from('atividades').select('id, descricao, created_at').eq('tipo', storeTipo(c)).order('id', { ascending: false })
     const { data, error } = await q
     if (error) { res.status(500).json({ error: error.message }); return }
     res.json((data || []).map(parseStoreRow))

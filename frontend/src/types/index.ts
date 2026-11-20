@@ -89,7 +89,7 @@ export interface Cliente {
   statusFaturamento?: 'a_faturar' | 'faturado'
   dataUltimoPedido?: string
   etapaAnterior?: string
-  categoriaPerda?: 'preco' | 'prazo' | 'qualidade' | 'concorrencia' | 'sem_resposta' | 'outro'
+  categoriaPerda?: 'preco' | 'prazo' | 'qualidade' | 'concorrencia' | 'sem_resposta' | 'outro' | (string & {})
   motivoPerda?: string
   dataPerda?: string
   segmento?: string

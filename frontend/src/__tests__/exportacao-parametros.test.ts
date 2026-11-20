@@ -9,6 +9,7 @@ import {
 } from '../utils/exportacaoAuditoria'
 import { buildDefaultParametros, getOpcoesAtivas } from '../lib/parametrosListas'
 import { isDataHoraNoPassado, MINUTOS_5 } from '../components/TimePicker5Min'
+import { resolverTaxaPrazo, calcularPrecosTabela } from '../data/simuladorPrecos'
 
 describe('Rodada 2 & 3 — Parâmetros, Exportação completa (4.1–4.7) e Agendamento de Tarefas (Item 5)', () => {
   it('começa Segmento do cliente apenas com Indústria, Distribuição e Consumo e seletor de minutos de 5 em 5', () => {
@@ -113,5 +114,18 @@ describe('Rodada 2 & 3 — Parâmetros, Exportação completa (4.1–4.7) e Agen
     expect(abaAuditoria.some(a => a.tipo_evento === 'Reagendamento' && a.quem_alterou === 'Wiliam Rodrigues')).toBe(true)
     // 4.5 Exclusão aparece na auditoria com quem excluiu
     expect(abaAuditoria.some(a => a.tipo_evento === 'Tarefa Excluída' && a.quem_alterou === 'Bernardo Nery')).toBe(true)
+  })
+
+  it('Rodada 3.1 Item 2: Simulador calcula prazos novos cadastrados em Parâmetros (ex.: "15/30/35")', () => {
+    // 15/30/35 -> média 26,6667 dias -> taxa 0.002 + 0.001 * 26.6667 = 0.0287 (entre 15/30=0.0245 e 15/30/45=0.032)
+    const taxa153035 = resolverTaxaPrazo('15/30/35')
+    expect(taxa153035).toBeCloseTo(0.0287, 4)
+    expect(resolverTaxaPrazo('15/30')).toBe(0.0245)
+    expect(resolverTaxaPrazo('15/30/45')).toBe(0.032)
+
+    const calc = calcularPrecosTabela('OKEY LAC CREAM 25KG', '15/30/35', 'FOB')
+    expect(calc).not.toBeNull()
+    expect(calc!.precoA).toBeGreaterThan(20)
+    expect(calc!.precoB).toBeGreaterThan(19)
   })
 })

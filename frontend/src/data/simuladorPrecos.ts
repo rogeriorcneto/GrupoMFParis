@@ -566,6 +566,34 @@ export async function fetchSimuladorParams(botUrl: string): Promise<SimuladorPar
   return { produtos: SIMULADOR_PRODUTOS, prazos: SIMULADOR_PRAZOS, fretes: SIMULADOR_FRETES }
 }
 
+/**
+ * Resolve a taxa financeira de um prazo de pagamento:
+ * 1) Se existir chave exata em `prazos`, usa o valor da tabela;
+ * 2) Para "À vista" / "Antecipado" / "Bonificação", retorna 0;
+ * 3) Para prazos novos cadastrados em Parâmetros (ex.: "15/30/35", "45", "20/40/60"),
+ *    aplica a fórmula oficial da curva da planilha: 0.002 + 0.001 * média_de_dias.
+ */
+export function resolverTaxaPrazo(
+  prazo?: string | null,
+  prazos: Record<string, number> = SIMULADOR_PRAZOS
+): number | undefined {
+  if (!prazo) return undefined
+  const limpo = prazo.trim()
+  if (!limpo) return undefined
+  if (prazos[limpo] !== undefined) return prazos[limpo]
+  const norm = normalizarNome(limpo)
+  if (norm === 'avista' || norm === 'antecipado' || norm === 'bonificacao' || norm === '0') return 0
+  const parcelas = (limpo.match(/\d+(?:[.,]\d+)?/g) || [])
+    .map(n => parseFloat(n.replace(',', '.')))
+    .filter(n => Number.isFinite(n) && n >= 0)
+  if (parcelas.length > 0) {
+    const mediaDias = parcelas.reduce((s, d) => s + d, 0) / parcelas.length
+    if (mediaDias === 0) return 0
+    return Math.round((0.002 + 0.001 * mediaDias) * 10000) / 10000
+  }
+  return undefined
+}
+
 export function calcularPrecosTabela(
   nomeProduto: string,
   prazo: string,
@@ -578,7 +606,7 @@ export function calcularPrecosTabela(
   const prodKey = encontrarProdutoSimulador(nomeProduto, prods)
   if (!prodKey || !prods[prodKey]) return null
   const prod = prods[prodKey]
-  const taxa = prazos[prazo]
+  const taxa = resolverTaxaPrazo(prazo, prazos)
   const freteObj = fretes.find(f => f.key === freteKey)
   if (taxa === undefined || !freteObj) return null
   const base = prod.custo + freteObj.valor
