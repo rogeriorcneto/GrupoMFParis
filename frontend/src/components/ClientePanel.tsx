@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { XMarkIcon, PencilIcon } from '@heroicons/react/24/outline'
 import WhatsAppIcon from './icons/WhatsAppIcon'
-import type { Cliente, Interacao, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico, ConsumoProdutoInfo, ProdutosConsumoMap } from '../types'
+import type { Cliente, Interacao, Atividade, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico, ConsumoProdutoInfo, ProdutosConsumoMap } from '../types'
 import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
 import { gerarPropostaPDF } from '../utils/pdfGenerator'
 import * as db from '../lib/database'
@@ -59,6 +59,7 @@ interface ClientePanelProps {
   onCriarNovoCiclo?: (cliente: Cliente, extras?: Partial<Cliente>, etapa?: string) => Promise<Cliente>
   onTriggerSatisfacao?: (cliente: Cliente) => void
   interacoes: Interacao[]
+  atividades?: Atividade[]
   tarefas: Tarefa[]
   vendedores: Vendedor[]
   loggedUser: Vendedor | null
@@ -102,18 +103,22 @@ const STATUS_CLIENTE_BADGE: Record<string, { label: string; cls: string; title?:
   bloqueado: { label: 'Bloqueado', cls: 'bg-purple-100 text-purple-700 border-purple-200' },
 }
 
-function calcStatusAutomatico(c: { statusCliente?: string; etapa?: string; dataUltimaVenda?: string; etapaAnterior?: string; inativadoPorAbandono?: boolean }): string {
+function calcStatusAutomatico(
+  c: { statusCliente?: string; etapa?: string; dataUltimaVenda?: string; etapaAnterior?: string; inativadoPorAbandono?: boolean },
+  ultimaVendaOmieISO?: string | null
+): string {
   if (c.statusCliente === 'inativado') return 'inativado'
   if (c.statusCliente === 'descartado') return 'descartado'
   if (c.statusCliente === 'bloqueado') return 'bloqueado'
   if (c.etapa === 'inativo' && c.inativadoPorAbandono !== true) return 'inativado'
-  if (c.dataUltimaVenda) {
-    const diasSemCompra = Math.floor((Date.now() - new Date(c.dataUltimaVenda).getTime()) / 86400000)
+  // Condição 5: só considerar "Cliente" (Ativo / Em Risco / Inativo de recompra) quem tem pedido de venda aprovado/faturado no Omie
+  if (ultimaVendaOmieISO) {
+    const diasSemCompra = Math.floor((Date.now() - new Date(ultimaVendaOmieISO).getTime()) / 86400000)
     if (diasSemCompra <= 30) return 'ativo'
     if (diasSemCompra <= 60) return 'em_risco'
     return 'inativo'
   }
-  return c.statusCliente || 'prospecto'
+  return 'prospecto'
 }
 
 const etapaLabels: Record<string, string> = { 'lead': 'Leads', 'prospecção': 'Prospecção', 'amostra': 'Amostra', 'amostra_perdida': 'Amostra Finalizada', 'proposta': 'Proposta', 'negociacao': 'Negociação', 'follow_up': 'Follow-up', 'arquivado': 'Arquivados', 'inativo': 'Clientes Inativos', 'perdido': 'Perdido' }
@@ -155,7 +160,7 @@ function composeNotasEmpresa(setor: string, info: string): string {
 }
 
 export default function ClientePanel({
-  cliente: c, todosClientes, onSelectCardCiclo, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, tarefas, vendedores, loggedUser,
+  cliente: c, todosClientes, onSelectCardCiclo, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, atividades, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onNovoCiclo, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
@@ -221,17 +226,57 @@ export default function ClientePanel({
       .finally(() => { if (!cancelled) setLoadingCnpj(false) })
     return () => { cancelled = true }
   }, [c.cnpj])
-  // Histórico WhatsApp completo do cliente (tab "Ver WhatsApp")
+  // ─── Família completa de cards/ciclos da empresa (Histórico Global por Cliente — Item 3 + Item 8) ───
+  const familiaEmpresa = React.useMemo(() => {
+    const base = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
+    return [...base].sort((a, b) => (a.cicloNumero || 0) - (b.cicloNumero || 0) || a.id - b.id)
+  }, [todosClientes, c])
+  const familiaEmpresaIds = React.useMemo(() => new Set(familiaEmpresa.map(cl => cl.id)), [familiaEmpresa])
+  const familiaKeyStr = React.useMemo(() => Array.from(familiaEmpresaIds).sort((a, b) => a - b).join(','), [familiaEmpresaIds])
+  const cicloPorCardId = React.useMemo(() => {
+    const m = new Map<number, number>()
+    familiaEmpresa.forEach((cl, idx) => {
+      m.set(cl.id, cl.cicloNumero || idx + 1)
+    })
+    return m
+  }, [familiaEmpresa])
+
+  // Condição 5: última venda aprovada/faturada no Omie em qualquer ciclo da empresa
+  const ultimaVendaOmieISO = React.useMemo(() => {
+    const vendasOmie = (todosPedidos || []).filter(p =>
+      familiaEmpresaIds.has(p.clienteId) &&
+      p.status === 'confirmado' &&
+      p.tipo !== 'bonificacao' &&
+      Boolean(p.omieCodigo || p.omieNumero) &&
+      p.omieStatus !== 'cancelado'
+    )
+    if (vendasOmie.length === 0) return null
+    const datas = vendasOmie.map(p => p.dataAprovacao || p.dataCriacao).filter(Boolean).sort()
+    return datas[datas.length - 1] || null
+  }, [todosPedidos, familiaEmpresaIds])
+
+  // Histórico WhatsApp completo do cliente em todos os ciclos (tab "Ver WhatsApp")
   useEffect(() => {
     if (activeTab !== 'whatsapp' || !c.id) return
     let cancelled = false
     setWaHistoricoLoading(true)
-    fetchWhatsAppMessages({ clienteId: c.id, limit: 300 })
-      .then(msgs => { if (!cancelled) setWaHistorico(msgs || []) })
+    const ids = Array.from(familiaEmpresaIds)
+    const numRef = (c.whatsapp || c.contatoCelular || c.contatoTelefone || '').replace(/\D/g, '')
+    Promise.all([
+      ...ids.map(cid => fetchWhatsAppMessages({ clienteId: cid, limit: 200 }).catch(() => [])),
+      numRef.length >= 8 ? fetchWhatsAppMessages({ numero: numRef, limit: 200 }).catch(() => []) : Promise.resolve([]),
+    ])
+      .then(listas => {
+        if (cancelled) return
+        const unicos = new Map<string | number, any>()
+        listas.flat().forEach(m => { if (m && m.id != null) unicos.set(m.id, m) })
+        const ordenadas = Array.from(unicos.values()).sort((a, b) => String(a.createdAt || a.created_at || '').localeCompare(String(b.createdAt || b.created_at || '')))
+        setWaHistorico(ordenadas)
+      })
       .catch(() => { if (!cancelled) setWaHistorico([]) })
       .finally(() => { if (!cancelled) setWaHistoricoLoading(false) })
     return () => { cancelled = true }
-  }, [activeTab, c.id])
+  }, [activeTab, c.id, familiaKeyStr])
   React.useEffect(() => {
     if (!editingInfoAdicional) {
       setPanelInfoAdicional(notasEmpresa.info)
@@ -322,8 +367,9 @@ export default function ClientePanel({
   const [transcricoes, setTranscricoes] = useState<Record<number, string>>({})
   const [transcrevendo, setTranscrevendo] = useState<Record<number, boolean>>({})
 
-  // Carregar propostas do cliente
+  // Carregar propostas e histórico de mudanças de etapa de TODOS os ciclos da empresa (Item 3 + Item 8)
   const [todasPropostas, setTodasPropostas] = useState<PropostaHistorico[]>([])
+  const [historicoEtapasGlobal, setHistoricoEtapasGlobal] = useState<Array<{ id: number; cliente_id: number; etapa: string; etapa_anterior?: string; data: string; observacao?: string }>>([])
   const [showPropostasAnteriores, setShowPropostasAnteriores] = useState(false)
   const [propostasExpandidas, setPropostasExpandidas] = useState<Set<number>>(new Set())
   const togglePropostaExpandida = (id: number) => setPropostasExpandidas(prev => {
@@ -332,10 +378,25 @@ export default function ClientePanel({
     return next
   })
   useEffect(() => {
-    fetchPropostasByCliente(c.id)
-      .then(list => { setUltimaProposta(list[0] || null); setTodasPropostas(list) })
+    const ids = Array.from(familiaEmpresaIds)
+    if (ids.length === 0) return
+    Promise.all(ids.map(cid => fetchPropostasByCliente(cid).catch(() => [])))
+      .then(listas => {
+        const todas = listas.flat().sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime())
+        const doCardAtual = todas.find(p => p.clienteId === c.id) || null
+        setUltimaProposta(doCardAtual)
+        setTodasPropostas(todas)
+      })
       .catch(() => {})
-  }, [c.id])
+    supabase
+      .from('historico_etapas')
+      .select('id, cliente_id, etapa, etapa_anterior, data, observacao, created_at')
+      .in('cliente_id', ids)
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setHistoricoEtapasGlobal(data as any)
+      })
+  }, [c.id, familiaKeyStr])
 
   // Pedido real aguardando aprovação do gerente. Usa a tabela de pedidos como fonte
   // de verdade — o campo statusFollowUp pode ficar travado ('aguardando_aprovacao_gerente')
@@ -353,10 +414,12 @@ export default function ClientePanel({
   }
 
   useEffect(() => {
+    const ids = Array.from(familiaEmpresaIds)
+    if (ids.length === 0) return
     supabase
       .from('gravacoes_chamada')
       .select('*')
-      .eq('cliente_id', c.id)
+      .in('cliente_id', ids)
       .order('created_at', { ascending: false })
       .then(({ data }) => {
         if (!data) return
@@ -367,7 +430,7 @@ export default function ClientePanel({
         }
         setTranscricoes(trMap)
       })
-  }, [c.id])
+  }, [c.id, familiaKeyStr])
 
   const handleTranscrever = useCallback(async (gravacaoId: number) => {
     setTranscrevendo(prev => ({ ...prev, [gravacaoId]: true }))
@@ -397,49 +460,141 @@ export default function ClientePanel({
 
   const vendedor = vendedores.find(v => v.id === c.vendedorId)
   const diasNaEtapa = c.dataEntradaEtapa ? Math.floor((Date.now() - new Date(c.dataEntradaEtapa).getTime()) / 86400000) : 0
-  const clienteInteracoesBase = interacoes.filter(i => i.clienteId === c.id)
-  const clienteTarefasBase = tarefas.filter(t => tarefaPertenceCliente(t, c))
 
+  // Histórico Global por Cliente (Item 3 + Condição 8): agrega TODOS os ciclos da empresa!
+  const clienteInteracoesBase = interacoes.filter(i => familiaEmpresaIds.has(i.clienteId))
+  const clienteTarefasBase = React.useMemo(() => {
+    const vistas = new Set<number>()
+    const out: Tarefa[] = []
+    for (const t of tarefas) {
+      if (vistas.has(t.id)) continue
+      if ((t.clienteId && familiaEmpresaIds.has(t.clienteId)) || familiaEmpresa.some(cl => tarefaPertenceCliente(t, cl))) {
+        vistas.add(t.id)
+        out.push(t)
+      }
+    }
+    return out
+  }, [tarefas, familiaEmpresaIds, familiaEmpresa])
+
+  const limparConclusao = (txt?: string) => (txt || '').split(/\n*\[CONCLUSAO\]/i)[0].trim()
   const tarefasVinculadasIds = new Set<number>()
   for (const inter of clienteInteracoesBase) {
+    const interDescBase = limparConclusao(inter.descricao)
+    const interTs = new Date(inter.data).getTime()
     const t = clienteTarefasBase.find(t => {
       if (tarefasVinculadasIds.has(t.id)) return false
-      const descMatch = (t.descricao || '').trim() === (inter.descricao || '').trim() && (inter.descricao || '').trim().length > 3
+      const tDescBase = limparConclusao(t.descricao)
+      const descMatch = tDescBase.length > 3 && tDescBase === interDescBase
       const tituloLower = (t.titulo || '').toLowerCase()
       const assuntoLower = (inter.assunto || '').toLowerCase()
       const assuntoMatch = assuntoLower.length > 5 && tituloLower.includes(assuntoLower.slice(0, 30))
-      return descMatch || assuntoMatch
+      const tTs = t.criadoEm ? new Date(t.criadoEm).getTime() : NaN
+      const tsMatch = Number.isFinite(interTs) && Number.isFinite(tTs) && Math.abs(interTs - tTs) < 15_000 && t.clienteId === inter.clienteId
+      return descMatch || assuntoMatch || tsMatch
     })
     if (t) tarefasVinculadasIds.add(t.id)
   }
 
-  // Gravações sem uma interação 'ligacao' próxima (ex.: salvas pelo funil) entram
-  // como itens sintéticos. IDs abaixo de -10_000_000 as distinguem de tarefas.
+  // Offsets negativos para itens sintéticos de todas as origens do Item 8 na timeline unificada:
   const GRAVACAO_ID_OFFSET = 10_000_000
-  const clienteInteracoes = [
-    ...clienteInteracoesBase,
-    ...clienteTarefasBase.filter(t => !tarefasVinculadasIds.has(t.id)).map(t => ({
-      id: -t.id,
-      clienteId: c.id,
-      tipo: 'nota' as Interacao['tipo'],
-      assunto: t.titulo,
-      descricao: t.descricao || t.titulo,
-      data: t.criadoEm || `${t.data}T${t.hora || '00:00'}`,
-      automatico: false,
-    } as Interacao)),
+  const PROPOSTA_ID_OFFSET = 20_000_000
+  const AMOSTRA_ID_OFFSET = 30_000_000
+  const ETAPA_ID_OFFSET = 40_000_000
+  const ATIVIDADE_ID_OFFSET = 50_000_000
+
+  const razaoNormUpper = (c.razaoSocial || '').trim().toUpperCase()
+  const atividadesDoCliente = React.useMemo(() => {
+    if (!atividades || razaoNormUpper.length < 4) return []
+    return atividades.filter(a =>
+      !String(a.tipo || '').startsWith('store:') &&
+      String(a.descricao || '').toUpperCase().includes(razaoNormUpper)
+    )
+  }, [atividades, razaoNormUpper])
+
+  const amostrasDaEmpresa = React.useMemo(
+    () => (todosPedidos || []).filter(p => familiaEmpresaIds.has(p.clienteId) && p.tipo === 'bonificacao'),
+    [todosPedidos, familiaEmpresaIds]
+  )
+
+  type InteracaoGlobal = Interacao & { cicloOrigem?: number; anexoNome?: string }
+
+  const clienteInteracoes: InteracaoGlobal[] = [
+    ...clienteInteracoesBase.map(i => ({
+      ...i,
+      cicloOrigem: cicloPorCardId.get(i.clienteId) || 1,
+    })),
+    ...clienteTarefasBase.filter(t => !tarefasVinculadasIds.has(t.id)).map(t => {
+      const checkInInfo = t.chegadaEm
+        ? `\n📍 Check-in de visita: ${new Date(t.chegadaEm).toLocaleString('pt-BR')}${t.resultado ? ` · Resultado: ${t.resultado}` : ''}`
+        : ''
+      const missaoInfo = t.missaoId ? `\n🚩 Missão comercial #${t.missaoId}` : ''
+      return {
+        id: -t.id,
+        clienteId: t.clienteId || c.id,
+        cicloOrigem: (t.clienteId ? cicloPorCardId.get(t.clienteId) : undefined) || 1,
+        tipo: (t.tipo === 'ligacao' || t.tipo === 'whatsapp' || t.tipo === 'email' || t.tipo === 'reuniao' ? t.tipo : 'nota') as Interacao['tipo'],
+        assunto: t.titulo,
+        descricao: `${t.descricao || t.titulo}${checkInInfo}${missaoInfo}`,
+        data: t.criadoEm || `${t.data}T${t.hora || '00:00'}`,
+        automatico: Boolean((t as any).origemAutomacaoId),
+      } as InteracaoGlobal
+    }),
     ...gravacoes
       .filter(g => !clienteInteracoesBase.some(i =>
         i.tipo === 'ligacao' && Math.abs(new Date(i.data).getTime() - new Date(g.created_at).getTime()) < 24 * 3600 * 1000
       ))
       .map(g => ({
         id: -(g.id + GRAVACAO_ID_OFFSET),
-        clienteId: c.id,
+        clienteId: g.cliente_id || c.id,
+        cicloOrigem: cicloPorCardId.get(g.cliente_id) || 1,
         tipo: 'ligacao' as Interacao['tipo'],
         assunto: `Ligação - ${c.razaoSocial}`,
         descricao: `Ligação gravada para ${g.numero_telefone || '—'}${g.notas ? ` — ${g.notas}` : ''}`,
         data: g.created_at,
         automatico: true,
-      } as Interacao)),
+      } as InteracaoGlobal)),
+    ...todasPropostas.map(pr => ({
+      id: -(pr.id + PROPOSTA_ID_OFFSET),
+      clienteId: pr.clienteId,
+      cicloOrigem: cicloPorCardId.get(pr.clienteId) || 1,
+      tipo: 'nota' as Interacao['tipo'],
+      assunto: `Proposta - ${pr.numero}`,
+      descricao: `Proposta ${pr.numero} (${pr.vendedorNome || 'Comercial'}) — R$ ${(pr.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${pr.pagamento ? ` · Pgto: ${pr.pagamento}` : ''}${pr.frete ? ` · Frete: ${pr.frete}` : ''}${pr.observacoes ? `\n${pr.observacoes}` : ''}`,
+      data: pr.criadoEm,
+      automatico: false,
+    } as InteracaoGlobal)),
+    ...amostrasDaEmpresa.map(am => ({
+      id: -(am.id + AMOSTRA_ID_OFFSET),
+      clienteId: am.clienteId,
+      cicloOrigem: cicloPorCardId.get(am.clienteId) || 1,
+      tipo: 'nota' as Interacao['tipo'],
+      assunto: `${am.numero?.toUpperCase().startsWith('BON-') ? 'Bonificação' : 'Amostra'} - ${am.numero}`,
+      descricao: `${am.numero?.toUpperCase().startsWith('BON-') ? 'Bonificação comercial' : 'Envio de amostra'} ${am.numero} (${am.status})${(am.itens || []).length > 0 ? ` — ${am.itens.map(it => `${it.nomeProduto} (${it.quantidade} kg)`).join(', ')}` : ''}`,
+      data: am.dataCriacao,
+      automatico: false,
+    } as InteracaoGlobal)),
+    ...historicoEtapasGlobal.map(h => ({
+      id: -(h.id + ETAPA_ID_OFFSET),
+      clienteId: h.cliente_id,
+      cicloOrigem: cicloPorCardId.get(h.cliente_id) || 1,
+      tipo: 'nota' as Interacao['tipo'],
+      assunto: 'Mudança de etapa',
+      descricao: `Etapa alterada${h.etapa_anterior ? ` de ${etapaLabels[h.etapa_anterior] || h.etapa_anterior}` : ''} para ${etapaLabels[h.etapa] || h.etapa}${h.observacao ? ` — ${h.observacao}` : ''}`,
+      data: (h as any).created_at || h.data,
+      automatico: true,
+    } as InteracaoGlobal)),
+    ...atividadesDoCliente
+      .filter(a => a.tipo !== 'moveu') // mudanças de etapa já vêm com ciclo exato via historico_etapas
+      .map(a => ({
+        id: -(a.id + ATIVIDADE_ID_OFFSET),
+        clienteId: c.id,
+        cicloOrigem: cicloPorCardId.get(c.id) || 1,
+        tipo: (a.tipo === 'whatsapp' || a.tipo === 'email' || a.tipo === 'ligacao' ? a.tipo : 'nota') as Interacao['tipo'],
+        assunto: `Atividade (${a.vendedorNome || 'Sistema'})`,
+        descricao: a.descricao,
+        data: a.timestamp,
+        automatico: a.vendedorNome === 'Sistema',
+      } as InteracaoGlobal)),
   ].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime())
   const clienteInteracoesOrdenadas = [...clienteInteracoes].sort((a, b) => {
     const aPinned = pinnedInteracoes.includes(a.id)
@@ -812,7 +967,7 @@ export default function ClientePanel({
               <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
               {/* Tag Status do Cliente */}
               {(() => {
-                const statusKey = calcStatusAutomatico(c)
+                const statusKey = calcStatusAutomatico(c, ultimaVendaOmieISO)
                 const stb = STATUS_CLIENTE_BADGE[statusKey] || STATUS_CLIENTE_BADGE.prospecto
                 return <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${stb.cls}`} title={stb.title}>{stb.label}</span>
               })()}
@@ -1048,7 +1203,7 @@ export default function ClientePanel({
                 </>
               )}
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-apple"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
+            <button aria-label="Fechar painel" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-apple"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
           </div>
         </div>
 
@@ -1829,7 +1984,7 @@ export default function ClientePanel({
             </div>
             {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <>
               <input value={taskHistorySearch} onChange={e => { setTaskHistorySearch(e.target.value); setTaskHistoryLimit(5) }} placeholder="Buscar tarefa por palavra-chave..." className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-400" />
-              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => <button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors"><div className="flex items-start justify-between gap-2"><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">{new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}</p></button>)}</div>}
+              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => { const cicloTar = (tarefa.clienteId ? cicloPorCardId.get(tarefa.clienteId) : undefined) || 1; return (<button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5 flex-wrap"><span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">Ciclo {cicloTar}</span><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p></div></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}</p></button>) })}</div>}
               {filteredTaskHistory.length > visibleTaskHistory.length && <button onClick={() => setTaskHistoryLimit(limit => limit + 5)} className="w-full py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-xl">Mostrar mais 5</button>}
             </>}
           </div>
@@ -2671,6 +2826,10 @@ export default function ClientePanel({
                       // Label real: para notas que são proposta/visita/tarefa genérica, extrair do assunto
                       const labelReal = (() => {
                         if (isTaskItem) return 'Tarefa'
+                        if (inter.assunto === 'Mudança de etapa') return 'Mudança de etapa'
+                        if (inter.assunto?.startsWith('Amostra - ')) return 'Amostra'
+                        if (inter.assunto?.startsWith('Bonificação - ')) return 'Bonificação'
+                        if (inter.assunto?.startsWith('Atividade (')) return 'Atividade'
                         if (tipo !== 'nota') return tipoInteracaoLabel[tipo] || tipo
                         const assunto = inter.assunto || ''
                         const prefixos = ['Tarefa Genérica', 'Proposta', 'Visita', 'Reunião', 'Ligação', 'E-mail', 'WhatsApp']
@@ -2713,6 +2872,9 @@ export default function ClientePanel({
                                 <p className="text-[10px] font-bold uppercase tracking-wider text-primary-500 truncate leading-none mb-0.5">{c.razaoSocial}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-sm font-semibold text-gray-700">{labelReal}</span>
+                                  <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                                    Ciclo {(inter as any).cicloOrigem || cicloPorCardId.get(inter.clienteId) || 1}
+                                  </span>
                                   {inter.automatico && (
                                     <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-purple-100 text-purple-700 border border-purple-200 rounded-full">⚡ Auto</span>
                                   )}
@@ -2739,12 +2901,34 @@ export default function ClientePanel({
                             )}
                           </div>
 
-                          {/* Descrição (sem assunto/label duplicado) */}
+                          {/* Descrição + Anexos embutidos (Item 8) */}
                           {(inter.descricao || tarefaVinculada?.conclusao) && (
                             <div className="px-3 py-1.5 space-y-2">
-                              {inter.descricao && (
-                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
-                              )}
+                              {inter.descricao && (() => {
+                                const urls = (inter.descricao.match(/https?:\/\/[^\s)]+/g) || []).filter(u =>
+                                  /\.(pdf|png|jpe?g|webp|xlsx?|csv|docx?|zip)(\?|$)/i.test(u) || u.includes('/storage/v1/object/')
+                                )
+                                return (
+                                  <>
+                                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
+                                    {urls.length > 0 && (
+                                      <div className="flex flex-wrap gap-1.5 pt-1">
+                                        {urls.map((u, idx) => (
+                                          <a
+                                            key={idx}
+                                            href={u}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100"
+                                          >
+                                            📎 Abrir anexo {urls.length > 1 ? idx + 1 : ''}
+                                          </a>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </>
+                                )
+                              })()}
                               {tarefaVinculada?.conclusao && (
                                 <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-green-700 mb-1">Conclusão</p>

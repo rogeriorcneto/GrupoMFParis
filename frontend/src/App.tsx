@@ -705,6 +705,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
             onCriarNovoCiclo={criarNovoCiclo}
             onTriggerSatisfacao={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'follow_up' }); setShowModalSatisfacao(true) }}
             interacoes={interacoes}
+            atividades={atividades}
             tarefas={tarefas}
             vendedores={vendedores}
             loggedUser={loggedUser}

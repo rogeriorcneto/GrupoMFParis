@@ -8,29 +8,15 @@ import { logger } from '../utils/logger'
 interface DragItem { cliente: Cliente; fromStage: string }
 
 async function copiarHistoricoETarefas(
-  clienteOriginalId: number,
-  novoClienteId: number,
-  historicoOriginal: HistoricoEtapa[],
-  tarefasAll: Tarefa[],
-  setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>,
+  _clienteOriginalId: number,
+  _novoClienteId: number,
+  _historicoOriginal: HistoricoEtapa[],
+  _tarefasAll: Tarefa[],
+  _setTarefas: React.Dispatch<React.SetStateAction<Tarefa[]>>,
 ) {
-  // 1. Copiar histórico de etapas
-  for (const h of historicoOriginal) {
-    try { await db.insertHistoricoEtapa(novoClienteId, h) } catch { /* non-critical */ }
-  }
-  // 2. Migrar tarefas pendentes para o card do novo ciclo (sem criar cópias duplicadas na agenda!)
-  const tarefasPendentes = tarefasAll.filter(t => t.clienteId === clienteOriginalId && t.status === 'pendente')
-  if (tarefasPendentes.length > 0) {
-    try {
-      for (const t of tarefasPendentes) {
-        await db.updateTarefa(t.id, { clienteId: novoClienteId })
-      }
-      const idsMigrados = new Set(tarefasPendentes.map(t => t.id))
-      setTarefas(prev => prev.map(t => idsMigrados.has(t.id) ? { ...t, clienteId: novoClienteId } : t))
-    } catch (e) {
-      logger.error('Erro ao migrar tarefas para novo ciclo:', e)
-    }
-  }
+  // Regra oficial (Histórico Global por Cliente + Prevenção):
+  // Tarefas, notas e histórico de etapas pertencem ao cliente como um todo e permanecem
+  // vinculados ao ciclo original com suas datas de criação originais intactas.
 }
 
 interface UseFunilActionsParams {

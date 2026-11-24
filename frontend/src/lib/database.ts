@@ -324,6 +324,13 @@ export function tarefaFromDb(row: any): Tarefa {
     vendedorId: row.vendedor_id,
     criadoEm: row.created_at || undefined,
     reagendamentos: row.reagendamentos || undefined,
+    missaoId: row.missao_id ?? undefined,
+    diaMissao: row.dia_missao ?? undefined,
+    chegadaEm: row.chegada_em || undefined,
+    saidaEm: row.saida_em || undefined,
+    resultado: row.resultado || undefined,
+    proximosPassos: row.proximos_passos || undefined,
+    amostrasEntregues: row.amostras_entregues ?? undefined,
   }
 }
 
@@ -2015,9 +2022,12 @@ export async function processarRegrasAutomacao(
       if (condicoes.etapaDestino && condicoes.etapaDestino !== toStage) continue
       if (condicoes.etapaOrigem && condicoes.etapaOrigem !== fromStage) continue
       
-      // Substituir {cliente} pelo nome real
+      // Substituir {cliente} pelo nome real e nunca escrever "Amostra aprovada" quando não veio de amostra (Item 6)
       const titulo = (regra.acao?.titulo || '').replace(/\{cliente\}/g, nomeCliente)
-      const descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
+      let descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
+      if (fromStage !== 'amostra') {
+        descricao = descricao.replace(/^Amostra aprovada\.\s*/i, '')
+      }
       
       const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
       const tipoTarefa = regra.acao?.tipo || 'outro'

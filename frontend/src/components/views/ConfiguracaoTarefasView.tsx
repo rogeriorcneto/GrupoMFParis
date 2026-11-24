@@ -186,7 +186,7 @@ const REGRAS_INICIAIS: RegraAutomacao[] = [
     condicoes: { etapaDestino: 'proposta' },
     acao: {
       titulo: 'Preparar proposta — {cliente}',
-      descricao: 'Amostra aprovada. Preparar e enviar proposta comercial.',
+      descricao: 'Preparar e enviar proposta comercial.',
       tipo: 'reuniao',
       prioridade: 'alta',
       diasPrazo: 5
