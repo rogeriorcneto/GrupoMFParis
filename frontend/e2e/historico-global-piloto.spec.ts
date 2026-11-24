@@ -22,6 +22,8 @@ test.describe('Histórico Global por Cliente + Condições 5, 6 e 8 (Desktop & M
         status_follow_up: 'concluido',
         status_cliente: 'ativo',
         vendedor_id: 2,
+        score: 95,
+        data_ultima_venda: '2026-09-03',
         ciclo_numero: 1,
         empresa_funil_id: 22392,
         arquivado_duplicata: false,
@@ -35,17 +37,17 @@ test.describe('Histórico Global por Cliente + Condições 5, 6 e 8 (Desktop & M
         cnpj: '35.798.353/0001-63',
         contato_nome: 'Juliana',
         contato_telefone: '31999143356',
-        etapa: 'perdido',
-        motivo_perda: 'Preço acima do concorrente',
-        categoria_perda: 'preco',
+        etapa: 'follow_up',
+        status_follow_up: 'concluido',
         status_cliente: 'ativo',
         vendedor_id: 2,
+        score: 95,
         ciclo_numero: 2,
         novo_ciclo: true,
         empresa_funil_id: 22392,
         origem_ciclo_id: 22392,
         arquivado_duplicata: false,
-        data_entrada_etapa: '2026-11-17T20:37:35Z',
+        data_entrada_etapa: '2026-11-10T13:58:10Z',
         created_at: '2026-11-09T13:35:48Z',
       },
       {
@@ -58,6 +60,7 @@ test.describe('Histórico Global por Cliente + Condições 5, 6 e 8 (Desktop & M
         etapa: 'proposta',
         status_cliente: 'ativo',
         vendedor_id: 2,
+        score: 43, // mesmo que venha 43 legado no Ciclo 3, cabeçalho deve exibir 95 unificado da empresa!
         ciclo_numero: 3,
         novo_ciclo: true,
         empresa_funil_id: 22392,
@@ -93,9 +96,27 @@ test.describe('Histórico Global por Cliente + Condições 5, 6 e 8 (Desktop & M
         omie_codigo: '9709098914',
         omie_numero: '000000000012441',
         omie_status: 'entregue',
-        data_criacao: '2026-11-15T14:27:41Z',
-        data_aprovacao: '2026-11-15T16:46:58Z',
-        itens_pedido: [{ id: 1, produto_id: 1, nome_produto: 'Okey Lac Pró 25kg', quantidade: 100, preco: 15.99 }],
+        data_criacao: '2026-09-03T14:27:41Z',
+        data_aprovacao: '2026-09-03T16:46:58Z',
+        itens_pedido: [{ id: 1, produto_id: 7, nome_produto: 'Okey Lac Pró 25kg', quantidade: 100, preco: 15.99 }],
+      },
+      {
+        id: 1093,
+        numero: 'PED-13204',
+        cliente_id: 24159,
+        vendedor_id: 2,
+        status: 'confirmado',
+        tipo: 'venda',
+        total_valor: 2301.5,
+        omie_codigo: '9736489140',
+        omie_numero: '000000000013204',
+        omie_status: 'faturado',
+        data_criacao: '2026-11-09T13:35:50Z',
+        data_aprovacao: '2026-11-10T13:58:10Z',
+        itens_pedido: [
+          { id: 10, produto_id: 7, nome_produto: 'OKEY LAC PRO 25KG', quantidade: 100, preco: 15.52 },
+          { id: 11, produto_id: 9, nome_produto: 'OKEY LAC ACAI 25KG', quantidade: 50, preco: 14.99 },
+        ],
       },
       {
         id: 500,
@@ -211,8 +232,11 @@ test.describe('Histórico Global por Cliente + Condições 5, 6 e 8 (Desktop & M
     await expect(saporiCard).toBeVisible({ timeout: 15000 })
     await saporiCard.click()
 
-    // 2. Deve exibir badge "Ativo" (pedido Omie 12441 entregue no Ciclo 1!)
+    // 2. Deve exibir badge "Ativo" (pedido Omie 13204 em 10/11 < 30 dias), Última venda 10/11/2026 e Score unificado igual ao do Ciclo 1 (86, nunca 43)!
     await expect(page.locator('span', { hasText: /^Ativo$/ }).first()).toBeVisible()
+    await expect(page.getByText('10/11/2026').first()).toBeVisible()
+    await expect(page.getByText('Score: 86')).toBeVisible()
+    await expect(page.getByText('Score: 43')).toHaveCount(0)
 
     // 3. No Histórico devem aparecer TODOS os ciclos juntos com etiquetas Ciclo 1, Ciclo 2, Ciclo 3!
     await expect(page.getByText('Ciclo 1').first()).toBeVisible()
@@ -227,6 +251,12 @@ test.describe('Histórico Global por Cliente + Condições 5, 6 e 8 (Desktop & M
     await expect(page.getByText(/Check-in de visita/i).first()).toBeVisible()
     await expect(page.getByText(/Missão comercial #7/i).first()).toBeVisible()
     await expect(page.getByText(/teve cadastro conferido/i).first()).toBeVisible()
+
+    // Conferir aba "Ver negócios" -> "Pedidos do cliente" exibe PED-13204 (Omie #13204, R$ 2.301,50) e PED-661797!
+    await page.getByRole('button', { name: /Ver negócios/i }).click()
+    await expect(page.getByText('PED-13204').first()).toBeVisible()
+    await expect(page.getByText(/Omie #13204/).first()).toBeVisible()
+    await expect(page.getByText('PED-661797').first()).toBeVisible()
 
     // Fechar painel da Sapori
     await page.getByRole('button', { name: 'Fechar painel' }).click()

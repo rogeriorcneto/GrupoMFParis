@@ -241,7 +241,7 @@ export default function ClientePanel({
     return m
   }, [familiaEmpresa])
 
-  // Condição 5: última venda aprovada/faturada no Omie em qualquer ciclo da empresa
+  // Condição 5 + Item 3 Sapori: última venda e última amostra considerando TODOS os pedidos de TODOS os ciclos da empresa
   const ultimaVendaOmieISO = React.useMemo(() => {
     const vendasOmie = (todosPedidos || []).filter(p =>
       familiaEmpresaIds.has(p.clienteId) &&
@@ -250,10 +250,46 @@ export default function ClientePanel({
       Boolean(p.omieCodigo || p.omieNumero) &&
       p.omieStatus !== 'cancelado'
     )
-    if (vendasOmie.length === 0) return null
-    const datas = vendasOmie.map(p => p.dataAprovacao || p.dataCriacao).filter(Boolean).sort()
-    return datas[datas.length - 1] || null
+    const datasPedidos = vendasOmie.map(p => p.dataAprovacao || p.dataCriacao).filter(Boolean)
+    if (datasPedidos.length > 0) {
+      datasPedidos.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+      return datasPedidos[datasPedidos.length - 1]
+    }
+    return null
   }, [todosPedidos, familiaEmpresaIds])
+
+  const ultimaVendaExibicaoISO = React.useMemo(() => {
+    if (ultimaVendaOmieISO) return ultimaVendaOmieISO
+    const vendasConfirmadas = (todosPedidos || []).filter(p =>
+      familiaEmpresaIds.has(p.clienteId) && p.status === 'confirmado' && p.tipo !== 'bonificacao'
+    )
+    const datas = [
+      ...vendasConfirmadas.map(p => p.dataAprovacao || p.dataCriacao),
+      ...familiaEmpresa.filter(cl => !cl.arquivadoDuplicata).map(cl => cl.dataUltimaVenda || cl.dataUltimoPedido),
+    ].filter(Boolean) as string[]
+    if (datas.length === 0) return null
+    datas.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    return datas[datas.length - 1]
+  }, [ultimaVendaOmieISO, todosPedidos, familiaEmpresaIds, familiaEmpresa])
+
+  const ultimaAmostraExibicaoISO = React.useMemo(() => {
+    const amostras = (todosPedidos || []).filter(p =>
+      familiaEmpresaIds.has(p.clienteId) && p.status !== 'cancelado' && p.tipo === 'bonificacao'
+    )
+    const datas = [
+      ...amostras.map(p => p.dataAprovacao || p.dataCriacao),
+      ...familiaEmpresa.filter(cl => !cl.arquivadoDuplicata).map(cl => cl.dataUltimaAmostra || cl.dataEnvioAmostra),
+    ].filter(Boolean) as string[]
+    if (datas.length === 0) return null
+    datas.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    return datas[datas.length - 1]
+  }, [todosPedidos, familiaEmpresaIds, familiaEmpresa])
+
+  const scoreUnificado = React.useMemo(() => {
+    const visiveis = familiaEmpresa.filter(cl => !cl.arquivadoDuplicata)
+    const base = visiveis.length > 0 ? visiveis : [c]
+    return Math.max(...base.map(cl => cl.score ?? 0))
+  }, [familiaEmpresa, c])
 
   // Histórico WhatsApp completo do cliente em todos os ciclos (tab "Ver WhatsApp")
   useEffect(() => {
@@ -1012,16 +1048,16 @@ export default function ClientePanel({
                   </div>
                 )
               })()}
-              {/* Última Amostra */}
-              {c.dataUltimaAmostra && (
+              {/* Última Amostra (global entre todos os ciclos) */}
+              {ultimaAmostraExibicaoISO && (
                 <span className="text-[11px] text-gray-500">
-                  🧪 Última amostra: <strong className="text-gray-700">{new Date(c.dataUltimaAmostra).toLocaleDateString('pt-BR')}</strong>
+                  🧪 Última amostra: <strong className="text-gray-700">{new Date(ultimaAmostraExibicaoISO).toLocaleDateString('pt-BR')}</strong>
                 </span>
               )}
-              {/* Última Venda */}
-              {(c.dataUltimaVenda || c.dataUltimoPedido) && (
+              {/* Última Venda (global entre todos os ciclos) */}
+              {ultimaVendaExibicaoISO && (
                 <span className="text-[11px] text-gray-500">
-                  🛒 Última venda: <strong className="text-gray-700">{new Date(c.dataUltimaVenda || c.dataUltimoPedido!).toLocaleDateString('pt-BR')}</strong>
+                  🛒 Última venda: <strong className="text-gray-700">{new Date(ultimaVendaExibicaoISO).toLocaleDateString('pt-BR')}</strong>
                 </span>
               )}
             </div>
@@ -1076,7 +1112,7 @@ export default function ClientePanel({
                   </div>
                 )
               })()}
-              {c.score !== undefined && <span className="text-xs font-bold text-gray-600 ml-auto">Score: {c.score}</span>}
+              <span className="text-xs font-bold text-gray-600 ml-auto">Score: {scoreUnificado}</span>
             </div>
           </div>
 
@@ -2288,7 +2324,16 @@ export default function ClientePanel({
                         <div key={p.id} className="px-4 py-2.5 hover:bg-gray-50">
                           <div className="flex items-center justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900">{p.numero} {p.tipo === 'bonificacao' && <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">amostra</span>}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                                  Ciclo {cicloPorCardId.get(p.clienteId) || 1}
+                                </span>
+                                <p className="text-sm font-medium text-gray-900">
+                                  {p.numero}
+                                  {p.omieNumero ? <span className="ml-1.5 text-[11px] font-normal text-gray-500">(Omie #{String(p.omieNumero).replace(/^0+/, '')})</span> : null}
+                                  {p.tipo === 'bonificacao' && <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-700 px-1 rounded">amostra</span>}
+                                </p>
+                              </div>
                               <p className="text-[11px] text-gray-500">{new Date(p.dataCriacao).toLocaleDateString('pt-BR')} · {(p.itens || []).length} item(ns)</p>
                             </div>
                             <div className="text-right flex-shrink-0 space-y-1">

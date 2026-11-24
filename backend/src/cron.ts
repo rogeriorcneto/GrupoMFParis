@@ -147,6 +147,10 @@ async function executarAcoes(a: AutomacaoRow, clienteId: number | null, ctx: any
           clienteId, vendedorId: cliente?.vendedorId || undefined,
         })
       } else if (acao.tipo === 'mover_etapa' && clienteId && cfg.etapa) {
+        if (cfg.etapa === 'perdido' && !String(cfg.motivoPerda || cfg.motivo || '').trim()) {
+          log.warn({ automacao: a.id, clienteId }, 'Automação bloqueada: proibido mover card para Perdido sem motivo registrado')
+          continue
+        }
         await db.updateClienteEtapa(clienteId, cfg.etapa)
       } else if (acao.tipo === 'notificacao') {
         await db.insertNotificacao({

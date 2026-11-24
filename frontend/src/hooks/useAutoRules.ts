@@ -3,6 +3,7 @@ import type { Cliente, Interacao, Atividade, Vendedor, HistoricoEtapa, Pedido } 
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo, getProspeccaoToReturn, getLeadsNeedingAssignment, getPedidosPendingApproval, getNegociacaoStaleAlert } from '../utils/business-rules'
+import { chaveClienteFunil } from '../utils/funil-logic'
 
 interface UseAutoRulesParams {
   clientes: Cliente[]
@@ -207,9 +208,26 @@ export function useAutoRules({
     interacoes.forEach(i => { interCountMap.set(i.clienteId, (interCountMap.get(i.clienteId) || 0) + 1) })
 
     setClientes(prev => {
+      // Unifica interações e score por empresa para que todos os ciclos da mesma empresa exibam exatamente o mesmo Score
+      const interPorEmpresa = new Map<string, number>()
+      for (const c of prev) {
+        if (c.arquivadoDuplicata) continue
+        const k = chaveClienteFunil(c)
+        interPorEmpresa.set(k, (interPorEmpresa.get(k) || 0) + (interCountMap.get(c.id) || 0))
+      }
+      const maxScorePorEmpresa = new Map<string, number>()
+      for (const c of prev) {
+        if (c.arquivadoDuplicata) continue
+        const k = chaveClienteFunil(c)
+        const s = calcScore(c.etapa, c.valorEstimado || c.valorProposta, interPorEmpresa.get(k) || 0, c.diasInativo)
+        const atual = maxScorePorEmpresa.get(k) ?? 0
+        if (s > atual) maxScorePorEmpresa.set(k, s)
+      }
+
       const changedIds: { id: number; score: number; oldScore: number }[] = []
       const updated = prev.map(c => {
-        const newScore = calcScore(c.etapa, c.valorEstimado, interCountMap.get(c.id) || 0, c.diasInativo)
+        if (c.arquivadoDuplicata) return c
+        const newScore = maxScorePorEmpresa.get(chaveClienteFunil(c)) ?? calcScore(c.etapa, c.valorEstimado, interCountMap.get(c.id) || 0, c.diasInativo)
         if (c.score !== newScore) { changedIds.push({ id: c.id, score: newScore, oldScore: c.score || 0 }); return { ...c, score: newScore } }
         return c
       })

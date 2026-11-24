@@ -18,12 +18,11 @@ export function calcScore(
   return Math.max(0, Math.min(100, Math.round(base + bonusValor + bonusInteracoes - penalidade)))
 }
 
-/** Deadline thresholds per stage (days) — auto-move */
+/** Deadline thresholds per stage (days) — auto-move
+ * Regra obrigatória: NENHUMA automação pode mandar card para 'perdido' sem motivo registrado pelo usuário.
+ */
 export const autoMovePrazos: Record<string, { dias: number; destino: string }> = {
-  'amostra': { dias: 45, destino: 'perdido' },
   'proposta': { dias: 60, destino: 'inativo' },
-  'negociacao': { dias: 45, destino: 'perdido' },
-  'follow_up': { dias: 60, destino: 'perdido' },
 }
 
 /** Returns clients that should be auto-moved due to expired deadlines */

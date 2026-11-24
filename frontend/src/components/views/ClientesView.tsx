@@ -58,15 +58,32 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
   const scopedClientes = React.useMemo(() => {
     const base = (isGerente ? clientes : clientes.filter(c => c.vendedorId === loggedUser?.id))
       .filter(c => !c.arquivadoDuplicata)
-    const porEmpresa = new Map<string, Cliente>()
+    const grupos = new Map<string, Cliente[]>()
     for (const c of base) {
       const chave = chaveUnicaCliente(c)
-      const atual = porEmpresa.get(chave)
-      if (!atual || (atual.novoCiclo && !c.novoCiclo) || (Boolean(atual.novoCiclo) === Boolean(c.novoCiclo) && c.id > atual.id)) {
-        porEmpresa.set(chave, c)
-      }
+      const arr = grupos.get(chave) || []
+      arr.push(c)
+      grupos.set(chave, arr)
     }
-    return Array.from(porEmpresa.values())
+    const consolidados: Cliente[] = []
+    for (const lista of grupos.values()) {
+      let rep = lista[0]
+      for (const c of lista.slice(1)) {
+        if ((rep.novoCiclo && !c.novoCiclo) || (Boolean(rep.novoCiclo) === Boolean(c.novoCiclo) && c.id > rep.id)) {
+          rep = c
+        }
+      }
+      const maxScore = Math.max(...lista.map(x => x.score ?? 0))
+      const datasPedido = lista.map(x => x.dataUltimaVenda || x.dataUltimoPedido).filter(Boolean) as string[]
+      datasPedido.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+      const ultimaData = datasPedido[datasPedido.length - 1]
+      consolidados.push({
+        ...rep,
+        score: maxScore,
+        ...(ultimaData ? { dataUltimoPedido: ultimaData, dataUltimaVenda: ultimaData } : {}),
+      })
+    }
+    return consolidados
   }, [clientes, isGerente, loggedUser?.id])
   const [searchTerm, setSearchTerm] = React.useState('')
   // Filtros aplicados (efetivos) vs rascunho (no painel)

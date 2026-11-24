@@ -762,6 +762,9 @@ export async function executeFunction(
       case 'moverClienteEtapa': {
         const access = await checkClienteAccess(args.clienteId, user)
         if (!access.allowed) return { success: false, message: access.reason! }
+        if (args.novaEtapa === 'perdido') {
+          return { success: false, message: 'Para marcar como Perdido é obrigatório usar marcarClientePerdido informando categoria e motivo.' }
+        }
         const oldEtapa = access.cliente!.etapa
         await db.updateCliente(args.clienteId, {
           etapa: args.novaEtapa,
@@ -785,6 +788,9 @@ export async function executeFunction(
       case 'marcarClientePerdido': {
         const access = await checkClienteAccess(args.clienteId, user)
         if (!access.allowed) return { success: false, message: access.reason! }
+        if (!String(args.motivoPerda || '').trim()) {
+          return { success: false, message: 'Informe o motivo da perda antes de marcar o card como Perdido.' }
+        }
         const oldEtapa = access.cliente!.etapa
         await db.updateCliente(args.clienteId, {
           etapa: 'perdido',
