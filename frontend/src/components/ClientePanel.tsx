@@ -3540,21 +3540,31 @@ export default function ClientePanel({
                   editPropostaLockRef.current = true
                   setEditPropostaSaving(true)
                   try {
-                    const total = editPropostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
+                    const itensSnapshot = editPropostaItens.map(i => ({ ...i }))
+                    const obsSnapshot = editPropostaObs
+                    const pgtoSnapshot = editPropostaPagamento
+                    const freteSnapshot = editPropostaFrete
+                    const total = itensSnapshot.reduce((s, i) => s + i.preco * i.quantidade, 0)
                     const numero = `PROP-${Date.now().toString().slice(-6)}`
-                    await gerarPropostaPDF(c, editPropostaItens, editPropostaObs, loggedUser?.nome || 'Vendedor', numero, { formaPagamento: editPropostaPagamento, tipoFrete: editPropostaFrete as 'CIF' | 'FOB' | '' })
+                    // PRIORIDADE 1: salvar a proposta no banco PRIMEIRO; PDF vem em etapa separada depois
                     const saved = await savePropostaHistorico({
                       numero, clienteId: c.id, vendedorNome: loggedUser?.nome || 'Vendedor',
-                      itens: editPropostaItens, observacoes: editPropostaObs,
-                      frete: editPropostaFrete || undefined, pagamento: editPropostaPagamento || undefined,
+                      itens: itensSnapshot, observacoes: obsSnapshot,
+                      frete: freteSnapshot || undefined, pagamento: pgtoSnapshot || undefined,
                       totalValor: total, criadoEm: new Date().toISOString(),
                     })
                     setUltimaProposta(saved)
                     setTodasPropostas(prev => prev.some(x => x.id === saved.id) ? prev : [saved, ...prev])
                     setShowEditProposta(false)
                     setEditPropostaProdSearch('')
+                    showToast?.('success', `Proposta ${numero} salva com sucesso!`)
+                    try {
+                      await gerarPropostaPDF(c, itensSnapshot, obsSnapshot, loggedUser?.nome || 'Vendedor', numero, { formaPagamento: pgtoSnapshot, tipoFrete: freteSnapshot as 'CIF' | 'FOB' | '' })
+                    } catch {
+                      showToast?.('error', `Proposta ${numero} foi salva com sucesso, mas não foi possível abrir o PDF agora. Use o botão Baixar PDF no card.`)
+                    }
                   } catch {
-                    alert('Erro ao gerar proposta.')
+                    showToast?.('error', 'Não foi possível salvar a proposta. Verifique sua conexão e tente novamente.')
                   } finally {
                     editPropostaLockRef.current = false
                     setEditPropostaSaving(false)

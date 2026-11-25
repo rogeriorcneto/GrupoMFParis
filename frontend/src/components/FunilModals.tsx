@@ -138,8 +138,11 @@ export default function FunilModals({
   const [propostaHistorico, setPropostaHistorico] = React.useState<PropostaHistorico[]>([])
   const [propostaHistoricoLoading, setPropostaHistoricoLoading] = React.useState(false)
 
+  const [propostaErroInline, setPropostaErroInline] = React.useState('')
+
   React.useEffect(() => {
     if (!showModalProposta) return
+    setPropostaErroInline('')
     setPropostaTipo('venda')
     setPropostaFrete('')
     setCifDescargaPropria('')
@@ -222,15 +225,20 @@ export default function FunilModals({
 
   const handleConfirmNegociacao = async () => {
     if (!draggedItem || propostaSaving || propostaLockRef.current) return
+    setPropostaErroInline('')
     if (propostaFrete === 'CIF' && !cifDescargaPropria) {
-      showToast?.('error', 'Para frete CIF, informe se o cliente tem descarga própria (Sim / Não).')
+      const msg = 'Para frete CIF, informe se o cliente tem descarga própria (Sim / Não).'
+      setPropostaErroInline(msg)
+      showToast?.('error', msg)
       return
     }
     propostaLockRef.current = true
     setPropostaSaving(true)
     try {
-      const totalFromProducts = propostaItens.reduce((s, i) => s + i.preco * i.quantidade, 0)
-      const valorFinal = totalFromProducts > 0 ? totalFromProducts : (Number(modalPropostaValor) || draggedItem.cliente.valorEstimado || 0)
+      const clienteSnapshot = draggedItem.cliente
+      const itensSnapshot = propostaItens.map(i => ({ ...i }))
+      const totalFromProducts = itensSnapshot.reduce((s, i) => s + i.preco * i.quantidade, 0)
+      const valorFinal = totalFromProducts > 0 ? totalFromProducts : (Number(modalPropostaValor) || clienteSnapshot.valorEstimado || 0)
       setModalPropostaValor(String(valorFinal))
       const sufixoNum = Date.now().toString().slice(-6)
       const numero = propostaTipo === 'bonificacao' ? `BON-PROP-${sufixoNum}` : `PROP-${sufixoNum}`
@@ -238,9 +246,8 @@ export default function FunilModals({
       const obsFinal = comporObservacaoComDescarga()
       const vendedorNome = loggedUser?.nome || 'Vendedor'
 
-      // 1) Novo ciclo: validar/criar o card em Negociação ANTES de gerar o PDF
-      // (se já existir card ativo, fecha o modal e redireciona sem baixar PDF à toa)
-      let clienteIdProposta = draggedItem.cliente.id
+      // 1) Novo ciclo: validar/criar o card em Negociação ANTES de salvar a proposta
+      let clienteIdProposta = clienteSnapshot.id
       if (isNovoCiclo) {
         if (!onCriarNovoCiclo) {
           showToast?.('error', 'Não foi possível criar o novo ciclo.')
@@ -250,7 +257,7 @@ export default function FunilModals({
           valorProposta: valorFinal,
           dataProposta: new Date().toISOString().split('T')[0],
         }
-        if (propostaItens.length > 0) extrasNovoCiclo.produtosInteresse = propostaItens.map(i => i.nomeProduto)
+        if (itensSnapshot.length > 0) extrasNovoCiclo.produtosInteresse = itensSnapshot.map(i => i.nomeProduto)
         const notasParts: string[] = ['🔄 Novo ciclo de vendas iniciado']
         if (propostaTipo === 'bonificacao') notasParts.push('BONIFICAÇÃO')
         if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
@@ -258,7 +265,7 @@ export default function FunilModals({
         if (obsFinal) notasParts.push(obsFinal)
         extrasNovoCiclo.notas = notasParts.join(' | ')
         try {
-          const criado = await onCriarNovoCiclo(draggedItem.cliente, extrasNovoCiclo)
+          const criado = await onCriarNovoCiclo(clienteSnapshot, extrasNovoCiclo)
           clienteIdProposta = criado.id
         } catch (err: any) {
           const msg = err?.message || 'Erro desconhecido'
@@ -271,27 +278,13 @@ export default function FunilModals({
         }
       }
 
-      // 2) Gerar PDF somente após validar o destino
-      try {
-        await gerarPropostaPDF(
-          draggedItem.cliente,
-          propostaItens,
-          obsFinal,
-          vendedorNome,
-          numero,
-          { formaPagamento: pagamentoEfetivo, tipoFrete: propostaFrete as 'CIF' | 'FOB' | '' }
-        )
-      } catch {
-        showToast?.('error', 'Erro ao gerar PDF da proposta.')
-      }
-
-      // Salvar no histórico
+      // 2) PRIORIDADE 1: Gravar a proposta no banco PRIMEIRO (nunca depende do PDF)
       try {
         const saved = await savePropostaHistorico({
           numero,
           clienteId: clienteIdProposta,
           vendedorNome,
-          itens: propostaItens,
+          itens: itensSnapshot,
           observacoes: obsFinal,
           frete: propostaFrete || undefined,
           pagamento: pagamentoEfetivo || undefined,
@@ -300,22 +293,21 @@ export default function FunilModals({
         })
         setPropostaHistorico(prev => prev.some(x => x.id === saved.id) ? prev : [saved, ...prev])
       } catch {
-        showToast?.('error', 'A proposta não foi salva no histórico. Gere-a novamente antes de prosseguir.')
+        const msg = 'Não foi possível salvar a proposta no banco. Verifique sua conexão e tente novamente.'
+        setPropostaErroInline(msg)
+        showToast?.('error', msg)
+        return
       }
 
-      if (propostaItens.length === 0) {
-        showToast?.('error', 'Atenção: proposta gerada sem itens.')
-      }
-
+      // 3) Avançar o card para Negociação e fechar o modal IMEDIATAMENTE (proposta concluída!)
       if (isNovoCiclo) {
         setShowModalProposta(false)
         setDraggedItem(null)
         setPendingDrop(null)
         onCloseNovoCiclo?.()
-        showToast?.('success', `Proposta ${numero} gerada e novo ciclo iniciado em Negociação!`)
       } else {
         const extras: Partial<Cliente> = { valorProposta: valorFinal }
-        if (propostaItens.length > 0) extras.produtosInteresse = propostaItens.map(i => i.nomeProduto)
+        if (itensSnapshot.length > 0) extras.produtosInteresse = itensSnapshot.map(i => i.nomeProduto)
         const notasParts: string[] = []
         if (propostaTipo === 'bonificacao') notasParts.push('BONIFICAÇÃO')
         if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
@@ -323,7 +315,26 @@ export default function FunilModals({
         if (obsFinal) notasParts.push(obsFinal)
         if (notasParts.length > 0) extras.notas = notasParts.join(' | ')
         confirmProposta(extras)
-        showToast?.('success', `Proposta ${numero} gerada e salva!`)
+      }
+
+      if (itensSnapshot.length === 0) {
+        showToast?.('error', 'Atenção: proposta salva sem itens.')
+      } else {
+        showToast?.('success', `Proposta ${numero} salva e card movido para Negociação!`)
+      }
+
+      // 4) Etapa separada e independente: gerar/abrir o PDF depois que a proposta e a mudança de etapa já estão concluídas
+      try {
+        await gerarPropostaPDF(
+          clienteSnapshot,
+          itensSnapshot,
+          obsFinal,
+          vendedorNome,
+          numero,
+          { formaPagamento: pagamentoEfetivo, tipoFrete: propostaFrete as 'CIF' | 'FOB' | '' }
+        )
+      } catch {
+        showToast?.('error', `Proposta ${numero} já está salva em Negociação, mas não foi possível gerar/abrir o PDF agora. Use o botão PDF no card para baixar ou compartilhar.`)
       }
     } finally {
       propostaLockRef.current = false
@@ -907,10 +918,15 @@ export default function FunilModals({
             </div>
 
             {/* Footer */}
+            {propostaErroInline && (
+              <div className="px-4 sm:px-6 py-2 bg-red-50 border-t border-red-200 text-xs font-medium text-red-700">
+                ⚠️ {propostaErroInline}
+              </div>
+            )}
             <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 flex-shrink-0">
               <button onClick={cancelProposta} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
               <button onClick={handleConfirmNegociacao} disabled={propostaSaving} className="px-5 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2">
-                {propostaSaving ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Gerando PDF...</> : '📄 Gerar Proposta PDF'}
+                {propostaSaving ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Salvando proposta...</> : '📄 Gerar Proposta'}
               </button>
             </div>
           </div>
