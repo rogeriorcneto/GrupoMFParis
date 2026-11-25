@@ -259,23 +259,33 @@ test.describe('Fluxo de Aprovação (Parte 1) + Gerar Proposta iOS iPhone/iPad (
     expect(clientesDb.length).toBe(1)
     expect(clientesDb[0].etapa).toBe('negociacao')
 
-    // Voltar ao Funil -> abrir card em Negociação -> motivo visível + editar e reenviar o MESMO pedido!
+    // Voltar ao Funil -> abrir card em Negociação -> mostra SÓ o aviso vermelho (sem botão redundante "Editar e Reenviar Pedido")!
     await page.getByRole('button', { name: /Funil Comercial/i }).first().dispatchEvent('click')
     if (await chipNeg.isVisible().catch(() => false)) await chipNeg.click()
     await expect(page.getByText(/Incluir glucose e revisar prazo/i).first()).toBeVisible()
 
     await page.getByText('SORVETERIA TESTE FLUXO LTDA').first().click()
-    await expect(page.getByText(/Incluir glucose e revisar prazo/i).first()).toBeVisible()
-    await page.getByRole('button', { name: /Editar e Reenviar Pedido/i }).click()
-    await page.locator('textarea').last().fill('Proposta ajustada com glucose')
-    await page.getByRole('button', { name: /Salvar e Reenviar/i }).click()
+    await expect(page.getByText(/recusado na aprovação — Motivo: Incluir glucose e revisar prazo/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Editar e Reenviar Pedido/i })).toHaveCount(0)
 
-    // Continua existindo APENAS 1 pedido (o mesmo!) agora novamente com status 'enviado' e 1 card em Negociação!
+    // Vendedor corrige pela proposta ("Editar Proposta") e clica em "Vendido" -> o MESMO pedido volta para Aguardando aprovação e o aviso some!
+    await page.getByRole('button', { name: /Editar Proposta/i }).click()
+    await page.locator('textarea').last().fill('Proposta ajustada com glucose')
+    await page.getByRole('button', { name: /Gerar Nova Versão PDF/i }).click()
+    if (isIOSProject) {
+      const viewer2 = page.locator('#crm-ios-pdf-viewer')
+      await expect(viewer2).toBeVisible()
+      await viewer2.getByRole('button', { name: 'Fechar' }).click()
+      await expect(viewer2).toHaveCount(0)
+    }
+    await page.getByRole('button', { name: /^Vendido$/i }).click()
+
+    // Continua existindo APENAS 1 pedido (o mesmo!) agora novamente com status 'enviado', aviso vermelho sumiu e 1 card em Negociação!
     await expect.poll(() => pedidosDb[0].status).toBe('enviado')
+    expect(pedidosDb[0].motivo_recusa).toBeNull()
     expect(pedidosDb.length).toBe(1)
     expect(clientesDb.length).toBe(1)
     expect(clientesDb[0].etapa).toBe('negociacao')
-    await page.getByRole('button', { name: 'Fechar painel' }).click()
 
     // =========================================================================
     // PARTE 1 ITEM 2: Gerente APROVA -> card vai para Follow-up (Vendido) e abre novo ciclo (Ciclo 2) em Proposta!

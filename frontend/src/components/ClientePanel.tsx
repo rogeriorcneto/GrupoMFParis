@@ -1261,27 +1261,10 @@ export default function ClientePanel({
           {/* === AÇÕES RÁPIDAS === */}
           <div className="space-y-2">
             {c.etapa === 'negociacao' && !pedidoAguardandoAprovacao && pedidoRecusadoEditavel && (
-              <div className="rounded-apple border border-red-300 bg-red-50 p-3 space-y-2">
-                <p className="text-xs font-bold text-red-800">
-                  ❌ Pedido {pedidoRecusadoEditavel.numero} recusado na aprovação
+              <div className="rounded-apple border border-red-300 bg-red-50 p-3">
+                <p className="text-xs font-bold text-red-800 whitespace-pre-line">
+                  Pedido {pedidoRecusadoEditavel.numero} recusado na aprovação — Motivo: {pedidoRecusadoEditavel.motivoRecusa}
                 </p>
-                <p className="text-xs text-red-700 whitespace-pre-line">
-                  Motivo: {pedidoRecusadoEditavel.motivoRecusa}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditPedido(pedidoRecusadoEditavel)
-                    setEditPedidoItens((pedidoRecusadoEditavel.itens || []).map(i => ({ ...i })))
-                    setEditPedidoObs(pedidoRecusadoEditavel.observacoes || '')
-                    setEditPedidoPagamento(pedidoRecusadoEditavel.formaPagamento || DEFAULT_PAYMENT_TERM)
-                    setEditPedidoFrete((pedidoRecusadoEditavel.tipoFrete as 'CIF' | 'FOB' | '') || '')
-                    setEditPedidoProdutoSel('')
-                  }}
-                  className="w-full px-3 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-apple hover:bg-red-700 transition-colors"
-                >
-                  ✏️ Editar e Reenviar Pedido
-                </button>
               </div>
             )}
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
@@ -1446,29 +1429,46 @@ export default function ClientePanel({
                       }
                       try {
                         const ehBonificacao = proposta.numero.toUpperCase().startsWith('BON-')
-                        const sufixoPed = Date.now().toString().slice(-6)
-                        const numero = ehBonificacao ? `BON-${sufixoPed}` : `PED-${sufixoPed}`
-                        await onAddPedido({
-                          numero,
-                          clienteId: c.id,
-                          vendedorId: c.vendedorId || loggedUser?.id || 0,
-                          itens: propostaItens,
-                          observacoes: proposta.observacoes || '',
-                          status: 'enviado',
-                          dataCriacao: new Date().toISOString(),
-                          dataEnvio: new Date().toISOString(),
-                          totalValor: proposta.totalValor,
-                          tipo: ehBonificacao ? 'bonificacao' : 'venda',
-                          formaPagamento: ehBonificacao ? 'À vista' : (proposta.pagamento || DEFAULT_PAYMENT_TERM),
-                          tipoFrete: (proposta.frete as 'CIF' | 'FOB') || undefined,
-                        })
+                        const formaPgtoFinal = ehBonificacao ? 'À vista' : (proposta.pagamento || DEFAULT_PAYMENT_TERM)
+                        const freteFinal = (proposta.frete as 'CIF' | 'FOB') || undefined
+                        let numeroPedidoEnviado = ''
+
+                        // Item 5: Se já existe um pedido recusado neste card, atualiza e reenvia o MESMO pedido (sem criar novo pedido nem novo ciclo)
+                        if (pedidoRecusadoEditavel && onEditarPedido) {
+                          numeroPedidoEnviado = pedidoRecusadoEditavel.numero
+                          await onEditarPedido(pedidoRecusadoEditavel.id, {
+                            observacoes: proposta.observacoes || '',
+                            formaPagamento: formaPgtoFinal,
+                            tipoFrete: freteFinal || null,
+                            itens: propostaItens,
+                            totalValor: proposta.totalValor,
+                            reenviar: true,
+                          })
+                        } else {
+                          const sufixoPed = Date.now().toString().slice(-6)
+                          numeroPedidoEnviado = ehBonificacao ? `BON-${sufixoPed}` : `PED-${sufixoPed}`
+                          await onAddPedido({
+                            numero: numeroPedidoEnviado,
+                            clienteId: c.id,
+                            vendedorId: c.vendedorId || loggedUser?.id || 0,
+                            itens: propostaItens,
+                            observacoes: proposta.observacoes || '',
+                            status: 'enviado',
+                            dataCriacao: new Date().toISOString(),
+                            dataEnvio: new Date().toISOString(),
+                            totalValor: proposta.totalValor,
+                            tipo: ehBonificacao ? 'bonificacao' : 'venda',
+                            formaPagamento: formaPgtoFinal,
+                            tipoFrete: freteFinal,
+                          })
+                        }
                         // Parte 1 Item 1: Enviar para aprovação mantém o card em Negociação ("Aguardando aprovação") e NÃO abre novo ciclo!
                         try {
                           await db.updateCliente(c.id, { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
                           setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje } : cl))
                         } catch { /* non-critical */ }
-                        addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${proposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
-                        showToast?.('success', `Pedido ${numero} enviado! Card permanece em Negociação aguardando aprovação.`)
+                        addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numeroPedidoEnviado} — R$ ${proposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
+                        showToast?.('success', `Pedido ${numeroPedidoEnviado} enviado! Card permanece em Negociação aguardando aprovação.`)
                       } catch (err: any) {
                         console.error('[DEBUG Ganhou] Erro ao criar pedido:', err)
                         const msg = err?.message || 'Falha ao criar pedido de aprovação'
@@ -2399,7 +2399,7 @@ export default function ClientePanel({
                                   {ocorrenciasAbertas[p.id] ? '▲ Ocorrências' : '⚠️ Ocorrências'}
                                 </button>
                               </div>
-                              {(p.status === 'rascunho' || p.status === 'enviado' || (p.status === 'cancelado' && Boolean(p.motivoRecusa) && !p.omieCodigo)) && (
+                              {(p.status === 'rascunho' || p.status === 'enviado') && (
                                 <div>
                                   <button
                                     onClick={() => {
@@ -2413,7 +2413,7 @@ export default function ClientePanel({
                                     className="px-2 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100"
                                     title="Editar pedido (antes de integrar ao Omie)"
                                   >
-                                    {p.status === 'cancelado' ? '✏️ Editar e Reenviar' : '✏️ Editar'}
+                                    ✏️ Editar
                                   </button>
                                 </div>
                               )}

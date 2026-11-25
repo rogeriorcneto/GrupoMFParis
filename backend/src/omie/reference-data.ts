@@ -542,11 +542,30 @@ function ehDescricaoQtdParcelasGenerica(descricao: string): boolean {
   return /^\d+\s*parcelas?$/i.test(descricao.trim())
 }
 
+function formatarNomeCondicaoParaOmie(raw: string): string {
+  const limpo = raw.trim()
+  if (limpo.includes('/')) {
+    return limpo
+      .split('/')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n >= 0)
+      .join('/')
+  }
+  const mDia = limpo.match(/(\d+)\s*dias?\b/i)
+  if (mDia) {
+    const d = parseInt(mDia[1], 10)
+    return d === 1 ? 'Para 1 dia' : `Para ${d} dias`
+  }
+  return limpo
+}
+
 /**
  * Resolve o código oficial da condição de pagamento cadastrada no Omie (ex.: "14/21/28" → "S21",
  * "21/28/35" → "S03", "7 dias" → "A07", "À vista" → "000").
- * Se a condição não existir no Omie, NÃO inventa código personalizado ('999') nem cadastra nada:
- * lança erro claro informando qual prazo falta cadastrar no Omie.
+ * Se não existir em ListarParcelas:
+ *   1) Tenta cadastrar no Omie via IncluirParcela seguindo o padrão das existentes (nunca duplica) e registra log;
+ *   2) Se a API do Omie não permitir / recusar o cadastro, registra aviso e retorna '999' (personalizada com lista_parcelas),
+ *      garantindo que NENHUM pedido fique bloqueado por causa de prazo.
  */
 export async function resolverCodigoParcelaOmie(
   formaPagamento: string,
@@ -559,15 +578,15 @@ export async function resolverCodigoParcelaOmie(
     return '000'
   }
 
-  let parcelas = await fetchParcelasOmie(creds)
+  const credentials = creds || await getOmieCredentials()
+  let parcelas = await fetchParcelasOmie(credentials || undefined)
   if (parcelas.length === 0) {
-    parcelas = await fetchParcelasOmie(creds, true)
+    parcelas = await fetchParcelasOmie(credentials || undefined, true)
   }
 
   const candidatas = parcelas.filter(p => !ehDescricaoQtdParcelasGenerica(p.descricao))
   const fpNorm = normalizeParcela(raw)
 
-  // Preferir cadastro sem sufixo "(C)" quando existir duplicata exata (ex.: "Para 30 dias" vs "Para 30 dias (C)")
   const exatos = candidatas.filter(p => normalizeParcela(p.descricao) === fpNorm)
   if (exatos.length > 0) {
     const preferido = exatos.find(p => !/\(c\)/i.test(p.descricao)) || exatos[0]
@@ -590,7 +609,6 @@ export async function resolverCodigoParcelaOmie(
     }
   }
 
-  // Caso "N dias <observação>" sem barra (ex.: "45 dias exclusivo" -> "Para 45 dias")
   if (!raw.includes('/')) {
     const mUnicoDia = semAcento.match(/(\d+)\s*dias?\b/)
     if (mUnicoDia) {
@@ -606,9 +624,45 @@ export async function resolverCodigoParcelaOmie(
     }
   }
 
-  throw new Error(
-    `Condição de pagamento "${raw}" não está cadastrada no Omie ERP. Cadastre o prazo "${raw}" nas Condições de Pagamento do Omie antes de aprovar este pedido.`
-  )
+  // Não existe no Omie -> tentar cadastrar via IncluirParcela seguindo o padrão oficial
+  const cParcelaNovo = formatarNomeCondicaoParaOmie(raw)
+  if (credentials && cParcelaNovo) {
+    try {
+      const incluida = await omieCall<any>(
+        '/geral/parcelas/',
+        'IncluirParcela',
+        [{ cParcela: cParcelaNovo }],
+        { skipCache: true, credentials }
+      )
+      const novoCodigo = String(incluida?.cCodParcela ?? incluida?.nCodigo ?? incluida?.cCodigo ?? '').trim()
+      if (novoCodigo) {
+        clearCache('parcelas')
+        log.info({ formaPagamento: raw, cParcela: cParcelaNovo, codigo: novoCodigo }, '🆕 Nova condição de pagamento cadastrada automaticamente no Omie')
+        try {
+          await supabase.from('atividades').insert({
+            tipo: 'omie_parcela',
+            descricao: `Condição de pagamento "${cParcelaNovo}" cadastrada automaticamente no Omie (código ${novoCodigo}).`,
+            vendedor_nome: 'Sistema',
+          })
+        } catch { /* log de auditoria não-crítico */ }
+        return novoCodigo
+      }
+    } catch (err: any) {
+      const motivoErro = err?.message || 'API não permitiu IncluirParcela'
+      log.warn({ formaPagamento: raw, cParcela: cParcelaNovo, erro: motivoErro }, '⚠️ Omie não permitiu cadastrar condição de pagamento via API — usando personalizada 999 com parcelas explícitas')
+      try {
+        await supabase.from('atividades').insert({
+          tipo: 'omie_parcela_aviso',
+          descricao: `Prazo "${cParcelaNovo}" não pôde ser cadastrado via API no Omie (${motivoErro}); pedido enviado com código 999 e parcelas explícitas. Cadastre "${cParcelaNovo}" manualmente no Omie.`,
+          vendedor_nome: 'Sistema',
+        })
+      } catch { /* não-crítico */ }
+      return '999'
+    }
+  }
+
+  log.warn({ formaPagamento: raw }, '⚠️ Sem retorno de IncluirParcela no Omie — enviando com código 999 e parcelas explícitas')
+  return '999'
 }
 
 export async function mapFormaPagamentoToCodigoParcelaOmie(

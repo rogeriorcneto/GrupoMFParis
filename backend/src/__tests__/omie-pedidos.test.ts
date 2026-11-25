@@ -21,6 +21,7 @@ function buildFromChain() {
   return {
     select: vi.fn().mockReturnValue(selectResult),
     update: vi.fn().mockReturnValue({ eq: mockUpdateEq }),
+    insert: vi.fn().mockResolvedValue({ data: null, error: null }),
   }
 }
 
@@ -420,8 +421,10 @@ describe('Omie Pedidos', () => {
       tabelasPreco?: any[]
       cenariosOmie?: any[]
       upsertClienteResponse?: any
+      incluirParcelaError?: string
+      incluirParcelaResponse?: any
     }) {
-      const captured: { payload?: any; upsertCliente?: any } = {}
+      const captured: { payload?: any; upsertCliente?: any; incluirParcela?: any } = {}
 
       mockFrom.mockImplementation((table: string) => {
         const single = (data: any) => ({
@@ -503,6 +506,10 @@ describe('Omie Pedidos', () => {
                 { nCodigo: 'WVI', cDescricao: '7/14/21/28', nParcelas: 4 },
               ],
             }
+          case 'IncluirParcela':
+            captured.incluirParcela = param[0]
+            if (opts.incluirParcelaError) throw new Error(opts.incluirParcelaError)
+            return opts.incluirParcelaResponse ?? { cCodParcela: 'N35', cDesParcela: param[0]?.cParcela }
           case 'ConsultarProduto': {
             const codigo = param?.[0]?.codigo_produto
             const prod = Object.values(opts.consultaOmiePorProduto ?? {}).find(
@@ -839,15 +846,34 @@ describe('Omie Pedidos', () => {
       expect(capAVista.payload.lista_parcelas).toBeUndefined()
     })
 
-    it('Parte 3: se o prazo nao existir no Omie (ex.: 15/30/35), bloqueia com mensagem clara sem inventar 999', async () => {
-      setupHappyPath({
+    it('Parte 3: se o prazo nao existir no Omie (ex.: 15/30/35), cadastra via IncluirParcela e usa o novo codigo no cabecalho; se a API recusar, nunca bloqueia e usa 999', async () => {
+      // Caso A: IncluirParcela disponível -> cadastra "15/30/35" e envia com cCodParcela="N35"
+      clearCache()
+      const capCriada = setupHappyPath({
         itens: [{ produto_id: 7, quantidade: 100, preco: 15 }],
         produtos: { 7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' } },
         consultaOmiePorProduto: { 7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 } },
         formaPagamento: '15/30/35',
         totalValor: 1500,
       })
-      await expect(criarPedidoOmie(1)).rejects.toThrow('Condição de pagamento "15/30/35" não está cadastrada no Omie ERP')
+      await criarPedidoOmie(1)
+      expect(capCriada.incluirParcela).toEqual({ cParcela: '15/30/35' })
+      expect(capCriada.payload.cabecalho.codigo_parcela).toBe('N35')
+      expect(capCriada.payload.lista_parcelas.parcela.map((x: any) => x.quantidade_dias)).toEqual([15, 30, 35])
+
+      // Caso B: API do Omie recusa IncluirParcela -> NUNCA bloqueia o pedido, usa '999' + lista_parcelas
+      clearCache()
+      const capFallback = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 100, preco: 15 }],
+        produtos: { 7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' } },
+        consultaOmiePorProduto: { 7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 } },
+        formaPagamento: '15/30/35',
+        incluirParcelaError: 'Método não habilitado',
+        totalValor: 1500,
+      })
+      await criarPedidoOmie(1)
+      expect(capFallback.payload.cabecalho.codigo_parcela).toBe('999')
+      expect(capFallback.payload.lista_parcelas.parcela.map((x: any) => x.quantidade_dias)).toEqual([15, 30, 35])
     })
 
     it('forma de pagamento "N dias <texto>" gera 1 parcela no prazo correto', async () => {
