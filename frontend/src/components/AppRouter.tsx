@@ -70,10 +70,11 @@ interface AppRouterProps {
 }
 
 export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
-  const isAmostraFlow = pedido.tipo === 'bonificacao' || cliente?.etapa === 'amostra' || cliente?.etapa === 'amostra_perdida'
+  const isBonificacaoComercial = Boolean(pedido.numero?.toUpperCase().startsWith('BON-'))
+  const isAmostraFlow = (pedido.tipo === 'bonificacao' && !isBonificacaoComercial) || cliente?.etapa === 'amostra' || cliente?.etapa === 'amostra_perdida'
   if (isAmostraFlow) return false
   if (!cliente) return false
-  // Move to follow_up from negociacao when a venda pedido is approved
+  // Move to follow_up from negociacao when a venda/BON pedido is approved (e abre novo ciclo em Proposta)
   if (cliente.etapa === 'negociacao') return true
   return false
 }
@@ -189,6 +190,18 @@ export default function AppRouter({
             await db.recusarPedido(pedido.id, motivo)
             setPedidos(prev => prev.map(p => p.id === pedido.id ? { ...p, status: 'cancelado', motivoRecusa: motivo } : p))
             addNotificacao('info', 'Pedido recusado', `Pedido ${pedido.numero} recusado. Motivo: ${motivo}`, pedido.clienteId)
+            // Registrar o motivo da recusa no Histórico do cliente (Parte 1 Item 3)
+            try {
+              const savedInter = await db.insertInteracao({
+                clienteId: pedido.clienteId,
+                tipo: 'nota',
+                data: new Date().toISOString(),
+                assunto: `Pedido ${pedido.numero} recusado na aprovação`,
+                descricao: `Pedido ${pedido.numero} recusado pelo gerente (${loggedUser?.nome || 'Gerência'}).\nMotivo da recusa: ${motivo}`,
+                automatico: true,
+              })
+              setInteracoes(prev => [savedInter, ...prev])
+            } catch { /* non-critical */ }
             // Se for pedido de amostra real (não BON comercial), mover cliente para amostra_perdida
             if (pedido.tipo === 'bonificacao' && !pedido.numero?.toUpperCase().startsWith('BON-')) {
               const cli = clientes.find(c => c.id === pedido.clienteId)
@@ -202,14 +215,19 @@ export default function AppRouter({
                 } catch { /* non-critical */ }
               }
             } else {
-              // Pedido de venda recusado: liberar o card em negociação — sem isso o
-              // statusFollowUp ficava 'aguardando_aprovacao_gerente' para sempre e o
-              // botão "Ganhou" do cliente nunca mais respondia.
+              // Parte 1 Item 3: Pedido de venda/BON recusado mantém o card em Negociação,
+              // limpando statusFollowUp para liberar edição e reenvio do próprio pedido.
               const cliV = clientes.find(c => c.id === pedido.clienteId)
-              if (cliV?.statusFollowUp === 'aguardando_aprovacao_gerente') {
+              if (cliV && (cliV.statusFollowUp === 'aguardando_aprovacao_gerente' || cliV.etapa === 'follow_up')) {
+                const deveVoltarNegociacao = cliV.etapa === 'follow_up' && !pedidos.some(px => px.id !== pedido.id && px.clienteId === cliV.id && px.status === 'confirmado')
                 try {
-                  await db.updateCliente(pedido.clienteId, { statusFollowUp: null as any })
-                  setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusFollowUp: undefined } : c))
+                  if (deveVoltarNegociacao) {
+                    await db.updateCliente(pedido.clienteId, { etapa: 'negociacao', statusFollowUp: null as any })
+                    setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, etapa: 'negociacao', statusFollowUp: undefined } : c))
+                  } else {
+                    await db.updateCliente(pedido.clienteId, { statusFollowUp: null as any })
+                    setClientes(prev => prev.map(c => c.id === pedido.clienteId ? { ...c, statusFollowUp: undefined } : c))
+                  }
                 } catch { /* non-critical */ }
               }
             }

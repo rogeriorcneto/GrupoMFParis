@@ -81,8 +81,8 @@ interface ClientePanelProps {
   pedidos?: Pedido[]
   onAddPedido?: (p: Omit<Pedido, 'id'>) => Promise<void>
   onSolicitarCancelamentoPedido?: (pedidoId: number, motivo: string) => Promise<void>
-  /** Edita conteúdo de pedido ainda não integrado ao Omie (rascunho/enviado). */
-  onEditarPedido?: (pedidoId: number, fields: { observacoes?: string; formaPagamento?: string; tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | null; itens?: ItemPedido[]; totalValor?: number }) => Promise<void>
+  /** Edita conteúdo de pedido ainda não integrado ao Omie (rascunho/enviado/recusado). */
+  onEditarPedido?: (pedidoId: number, fields: { observacoes?: string; formaPagamento?: string; tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | null; itens?: ItemPedido[]; totalValor?: number; reenviar?: boolean }) => Promise<void>
   /** Redireciona para o Funil já posicionado no card deste cliente. */
   onVerNoFunil?: (c: Cliente) => void
   /** Redireciona para a página de Tarefas. */
@@ -438,6 +438,12 @@ export default function ClientePanel({
   // de verdade — o campo statusFollowUp pode ficar travado ('aguardando_aprovacao_gerente')
   // se um pedido foi recusado, o que deixava o botão "Ganhou" desabilitado para sempre.
   const pedidoAguardandoAprovacao = (todosPedidos || []).some(p => p.clienteId === c.id && p.status === 'enviado')
+  const pedidoRecusadoEditavel = React.useMemo(() => {
+    const recusados = (todosPedidos || [])
+      .filter(p => p.clienteId === c.id && p.status === 'cancelado' && Boolean(p.motivoRecusa) && !p.omieCodigo)
+      .sort((a, b) => new Date(b.dataCriacao).getTime() - new Date(a.dataCriacao).getTime())
+    return recusados[0] || null
+  }, [todosPedidos, c.id])
 
   const abrirEdicaoProposta = () => {
     const itens = ultimaProposta && Array.isArray(ultimaProposta.itens) ? ultimaProposta.itens : []
@@ -1063,6 +1069,11 @@ export default function ClientePanel({
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[c.etapa] || 'bg-gray-100 text-gray-800'}`}>{etapaLabels[c.etapa] || c.etapa}</span>
+              {c.etapa === 'negociacao' && pedidoAguardandoAprovacao && (
+                <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                  ⏳ Aguardando aprovação
+                </span>
+              )}
               <span className="text-xs text-gray-500">Há {diasNaEtapa}d nesta etapa</span>
               {(() => {
                 const vend = vendedores.find(v => v.id === c.vendedorId)
@@ -1249,6 +1260,30 @@ export default function ClientePanel({
 
           {/* === AÇÕES RÁPIDAS === */}
           <div className="space-y-2">
+            {c.etapa === 'negociacao' && !pedidoAguardandoAprovacao && pedidoRecusadoEditavel && (
+              <div className="rounded-apple border border-red-300 bg-red-50 p-3 space-y-2">
+                <p className="text-xs font-bold text-red-800">
+                  ❌ Pedido {pedidoRecusadoEditavel.numero} recusado na aprovação
+                </p>
+                <p className="text-xs text-red-700 whitespace-pre-line">
+                  Motivo: {pedidoRecusadoEditavel.motivoRecusa}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditPedido(pedidoRecusadoEditavel)
+                    setEditPedidoItens((pedidoRecusadoEditavel.itens || []).map(i => ({ ...i })))
+                    setEditPedidoObs(pedidoRecusadoEditavel.observacoes || '')
+                    setEditPedidoPagamento(pedidoRecusadoEditavel.formaPagamento || DEFAULT_PAYMENT_TERM)
+                    setEditPedidoFrete((pedidoRecusadoEditavel.tipoFrete as 'CIF' | 'FOB' | '') || '')
+                    setEditPedidoProdutoSel('')
+                  }}
+                  className="w-full px-3 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-apple hover:bg-red-700 transition-colors"
+                >
+                  ✏️ Editar e Reenviar Pedido
+                </button>
+              </div>
+            )}
             <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
             <div className="flex flex-wrap gap-1.5">
               {c.etapa === 'negociacao' && ultimaProposta && (
@@ -1427,8 +1462,13 @@ export default function ClientePanel({
                           formaPagamento: ehBonificacao ? 'À vista' : (proposta.pagamento || DEFAULT_PAYMENT_TERM),
                           tipoFrete: (proposta.frete as 'CIF' | 'FOB') || undefined,
                         })
+                        // Parte 1 Item 1: Enviar para aprovação mantém o card em Negociação ("Aguardando aprovação") e NÃO abre novo ciclo!
+                        try {
+                          await db.updateCliente(c.id, { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
+                          setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje } : cl))
+                        } catch { /* non-critical */ }
                         addNotificacao('success', 'Pedido enviado para aprovação', `Pedido ${numero} — R$ ${proposta.totalValor.toLocaleString('pt-BR')} aguardando aprovação do gerente`, c.id)
-                        showToast?.('success', `Pedido ${numero} enviado para aprovação do gerente!`)
+                        showToast?.('success', `Pedido ${numero} enviado! Card permanece em Negociação aguardando aprovação.`)
                       } catch (err: any) {
                         console.error('[DEBUG Ganhou] Erro ao criar pedido:', err)
                         const msg = err?.message || 'Falha ao criar pedido de aprovação'
@@ -1437,17 +1477,16 @@ export default function ClientePanel({
                         setGanhouLoading(false)
                         return
                       }
-                      // Regra oficial Rodada 3.1 (Item 1a): ao marcar Vendido, o card vai para Follow-up e abre automaticamente novo ciclo em Proposta
-                      onMoverCliente(c.id, 'follow_up', { statusFollowUp: 'aguardando_aprovacao_gerente', dataUltimoPedido: hoje })
+                      setGanhouLoading(false)
                       onClose()
                     }}
                     className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-colors ${
                       ganhouLoading || pedidoAguardandoAprovacao
-                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300 cursor-not-allowed'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {pedidoAguardandoAprovacao ? 'Pedido em aprovação' : ganhouLoading ? '⏳ Processando...' : 'Vendido'}
+                    {pedidoAguardandoAprovacao ? '⏳ Aguardando aprovação' : ganhouLoading ? '⏳ Processando...' : 'Vendido'}
                   </button>
                 </>
               )}
@@ -2360,7 +2399,7 @@ export default function ClientePanel({
                                   {ocorrenciasAbertas[p.id] ? '▲ Ocorrências' : '⚠️ Ocorrências'}
                                 </button>
                               </div>
-                              {(p.status === 'rascunho' || p.status === 'enviado') && (
+                              {(p.status === 'rascunho' || p.status === 'enviado' || (p.status === 'cancelado' && Boolean(p.motivoRecusa) && !p.omieCodigo)) && (
                                 <div>
                                   <button
                                     onClick={() => {
@@ -2374,12 +2413,17 @@ export default function ClientePanel({
                                     className="px-2 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100"
                                     title="Editar pedido (antes de integrar ao Omie)"
                                   >
-                                    ✏️ Editar
+                                    {p.status === 'cancelado' ? '✏️ Editar e Reenviar' : '✏️ Editar'}
                                   </button>
                                 </div>
                               )}
                             </div>
                           </div>
+                          {p.motivoRecusa && p.status === 'cancelado' && (
+                            <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1.5">
+                              <strong>Motivo da recusa:</strong> {p.motivoRecusa}
+                            </p>
+                          )}
                           {p.itens && p.itens.length > 0 && (
                             <p className="text-[11px] text-gray-400 mt-1 truncate">
                               {p.itens.map(it => `${it.quantidade}× ${it.nomeProduto}`).join(' · ')}
@@ -3728,6 +3772,7 @@ export default function ClientePanel({
                     onClick={async () => {
                       if (!onEditarPedido) { addNotificacao('error', 'Erro', 'Função de edição não disponível.', c.id); return }
                       setEditPedidoSaving(true)
+                      const ehReenvioRecusado = editPedido.status === 'cancelado'
                       try {
                         await onEditarPedido(editPedido.id, {
                           observacoes: editPedidoObs.trim(),
@@ -3735,8 +3780,19 @@ export default function ClientePanel({
                           tipoFrete: editPedidoFrete || null,
                           itens: editPedidoItens,
                           totalValor: ehBonificacao ? 0 : totalEdit,
+                          reenviar: ehReenvioRecusado,
                         })
-                        addNotificacao('success', 'Pedido atualizado', `Pedido ${editPedido.numero} salvo.`, c.id)
+                        if (ehReenvioRecusado) {
+                          try {
+                            await db.updateCliente(c.id, { statusFollowUp: 'aguardando_aprovacao_gerente' })
+                            setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusFollowUp: 'aguardando_aprovacao_gerente' } : cl))
+                          } catch { /* non-critical */ }
+                          addNotificacao('success', 'Pedido reenviado', `Pedido ${editPedido.numero} corrigido e reenviado para aprovação.`, c.id)
+                          showToast?.('success', `Pedido ${editPedido.numero} reenviado para aprovação!`)
+                        } else {
+                          addNotificacao('success', 'Pedido atualizado', `Pedido ${editPedido.numero} salvo.`, c.id)
+                          showToast?.('success', `Pedido ${editPedido.numero} atualizado!`)
+                        }
                         setEditPedido(null)
                       } catch (err) {
                         logger.error('Erro ao editar pedido:', err)
@@ -3747,7 +3803,7 @@ export default function ClientePanel({
                     }}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-apple hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editPedidoSaving ? '⏳ Salvando...' : 'Salvar alterações'}
+                    {editPedidoSaving ? '⏳ Salvando...' : editPedido.status === 'cancelado' ? '📤 Salvar e Reenviar' : 'Salvar alterações'}
                   </button>
                 </div>
               </div>

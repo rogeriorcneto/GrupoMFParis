@@ -69,7 +69,7 @@ import { clearCache } from '../omie/reference-data.js'
 describe('Omie Pedidos', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    clearCache('tabelas_preco')
+    clearCache()
     mockFrom.mockImplementation(buildFromChain)
     mockGetCreds.mockResolvedValue({ appKey: 'test-key', appSecret: 'test-secret' })
   })
@@ -491,7 +491,18 @@ describe('Omie Pedidos', () => {
           case 'ListarEmpresas':
             return { empresasCadastro: [{ estado: 'SP' }] }
           case 'ListarParcelas':
-            return { cadastros: opts.parcelasOmie ?? [] }
+            return {
+              cadastros: opts.parcelasOmie ?? [
+                { nCodigo: '000', cDescricao: 'A Vista', nParcelas: 1 },
+                { nCodigo: '003', cDescricao: '3 Parcelas', nParcelas: 3 },
+                { nCodigo: 'A28', cDescricao: 'Para 28 dias', nParcelas: 1 },
+                { nCodigo: 'A45', cDescricao: 'Para 45 dias', nParcelas: 1 },
+                { nCodigo: 'S20', cDescricao: '7/14', nParcelas: 2 },
+                { nCodigo: 'S21', cDescricao: '14/21/28', nParcelas: 3 },
+                { nCodigo: 'S03', cDescricao: '21/28/35', nParcelas: 3 },
+                { nCodigo: 'WVI', cDescricao: '7/14/21/28', nParcelas: 4 },
+              ],
+            }
           case 'ConsultarProduto': {
             const codigo = param?.[0]?.codigo_produto
             const prod = Object.values(opts.consultaOmiePorProduto ?? {}).find(
@@ -763,7 +774,7 @@ describe('Omie Pedidos', () => {
       expect(p.frete.quantidade_volumes).toBe(28) // 8 sacos de 25kg + 20 embalagens de 1kg
     })
 
-    it('pedido a prazo usa codigo_parcela 999 + qtde_parcelas + lista explícita', async () => {
+    it('pedido a prazo usa codigo_parcela oficial do Omie (ex.: S20 p/ 7/14) + qtde_parcelas + lista_parcelas intacta', async () => {
       const captured = setupHappyPath({
         itens: [{ produto_id: 7, quantidade: 100, preco: 10 }],
         produtos: {
@@ -778,11 +789,65 @@ describe('Omie Pedidos', () => {
 
       await criarPedidoOmie(1)
       const p = captured.payload
-      expect(p.cabecalho.codigo_parcela).toBe('999')
+      expect(p.cabecalho.codigo_parcela).toBe('S20')
       expect(p.cabecalho.qtde_parcelas).toBe(2)
       expect(p.lista_parcelas.parcela).toHaveLength(2)
       expect(p.lista_parcelas.parcela[0].quantidade_dias).toBe(7)
       expect(p.lista_parcelas.parcela[1].quantidade_dias).toBe(14)
+    })
+
+    it('Parte 3: envia condicao oficial no cabecalho para 14/21/28 (S21), 21/28/35 (S03) e À vista (000), mantendo parcelas exatas', async () => {
+      // 1) 14/21/28 -> S21 + 3 parcelas (vencimentos +14d, +21d, +28d)
+      clearCache()
+      const cap142128 = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 100, preco: 15 }],
+        produtos: { 7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' } },
+        consultaOmiePorProduto: { 7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 } },
+        formaPagamento: '14/21/28',
+        totalValor: 1500,
+      })
+      await criarPedidoOmie(1)
+      expect(cap142128.payload.cabecalho.codigo_parcela).toBe('S21')
+      expect(cap142128.payload.cabecalho.qtde_parcelas).toBe(3)
+      expect(cap142128.payload.lista_parcelas.parcela.map((x: any) => x.quantidade_dias)).toEqual([14, 21, 28])
+      expect(cap142128.payload.lista_parcelas.parcela.map((x: any) => x.valor)).toEqual([500, 500, 500])
+
+      // 2) 21/28/35 -> S03 + 3 parcelas (vencimentos +21d, +28d, +35d)
+      clearCache()
+      const cap212835 = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 100, preco: 15 }],
+        produtos: { 7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' } },
+        consultaOmiePorProduto: { 7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 } },
+        formaPagamento: '21/28/35',
+        totalValor: 1500,
+      })
+      await criarPedidoOmie(1)
+      expect(cap212835.payload.cabecalho.codigo_parcela).toBe('S03')
+      expect(cap212835.payload.lista_parcelas.parcela.map((x: any) => x.quantidade_dias)).toEqual([21, 28, 35])
+
+      // 3) À vista -> 000 (sem lista_parcelas)
+      clearCache()
+      const capAVista = setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 100, preco: 15 }],
+        produtos: { 7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' } },
+        consultaOmiePorProduto: { 7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 } },
+        formaPagamento: 'À vista',
+        totalValor: 1500,
+      })
+      await criarPedidoOmie(1)
+      expect(capAVista.payload.cabecalho.codigo_parcela).toBe('000')
+      expect(capAVista.payload.lista_parcelas).toBeUndefined()
+    })
+
+    it('Parte 3: se o prazo nao existir no Omie (ex.: 15/30/35), bloqueia com mensagem clara sem inventar 999', async () => {
+      setupHappyPath({
+        itens: [{ produto_id: 7, quantidade: 100, preco: 15 }],
+        produtos: { 7: { id: 7, nome: 'OKEY LAC PRO 25KG', unidade: 'kg', peso_kg: 25, omie_codigo: '2071041102' } },
+        consultaOmiePorProduto: { 7: { codigo_produto: 2071041102, descricao: 'OKEY LAC PRO 25KG', unidade: 'KG', peso_bruto: 1.003, peso_liq: 1 } },
+        formaPagamento: '15/30/35',
+        totalValor: 1500,
+      })
+      await expect(criarPedidoOmie(1)).rejects.toThrow('Condição de pagamento "15/30/35" não está cadastrada no Omie ERP')
     })
 
     it('forma de pagamento "N dias <texto>" gera 1 parcela no prazo correto', async () => {

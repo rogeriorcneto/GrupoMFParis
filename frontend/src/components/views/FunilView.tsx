@@ -571,17 +571,24 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         const diasNeg = diasDesde(cliente.dataEntradaEtapa || cliente.dataProposta)
         const pctPrazo = Math.min((diasNeg / 45) * 100, 100)
         const diasRestam = Math.max(45 - diasNeg, 0)
+        const infoPedNeg = getClientePedidoInfo(cliente)
+        const aguardandoAprov = cliente.statusFollowUp === 'aguardando_aprovacao_gerente' || infoPedNeg?.latest?.status === 'enviado'
         return (
           <div className="mt-1.5 space-y-1">
+            {aguardandoAprov && (
+              <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                ⏳ Aguardando aprovação
+              </span>
+            )}
             {cliente.valorProposta && <p className="text-[10px] font-bold text-purple-700">💰 R$ {cliente.valorProposta.toLocaleString('pt-BR')}</p>}
             <div className="flex items-center justify-between text-[9px]">
-              <span className={`font-semibold ${diasNeg > 3 ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>⏱ Na etapa: {diasNeg}d</span>
+              <span className={`font-semibold ${diasNeg > 3 && !aguardandoAprov ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>⏱ Na etapa: {diasNeg}d</span>
               <span className={`font-bold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 10 ? 'text-yellow-600' : 'text-gray-500'}`}>{diasRestam > 0 ? `Prazo: ${diasRestam}d rest.` : 'Prazo vencido!'}</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-gray-200 rounded-full h-1.5"><div className={`h-1.5 rounded-full transition-all ${pctPrazo >= 100 ? 'bg-red-500' : pctPrazo >= 78 ? 'bg-yellow-500' : 'bg-purple-500'}`} style={{ width: `${pctPrazo}%` }} /></div>
             </div>
-            {diasNeg > 3 && (
+            {diasNeg > 3 && !aguardandoAprov && (
               <p className="text-[9px] font-semibold text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700/50 rounded px-1.5 py-0.5 leading-tight">
                 ⚠️ +3d em Negociação — encerrar (Ganho ou Perdido)
               </p>

@@ -1372,12 +1372,18 @@ export async function updatePedido(id: number, fields: {
   tipoFrete?: 'CIF' | 'FOB' | 'VISITA' | null
   itens?: ItemPedido[]
   totalValor?: number
+  reenviar?: boolean
 }): Promise<Pedido> {
   const row: any = {}
   if (fields.observacoes !== undefined) row.observacoes = fields.observacoes
   if (fields.formaPagamento !== undefined) row.forma_pagamento = fields.formaPagamento
   if (fields.tipoFrete !== undefined) row.tipo_frete = fields.tipoFrete
   if (fields.totalValor !== undefined) row.total_valor = fields.totalValor
+  if (fields.reenviar) {
+    row.status = 'enviado'
+    row.motivo_recusa = null
+    row.data_envio = new Date().toISOString()
+  }
   const { data, error } = await supabase.from('pedidos').update(row).eq('id', id).select().single()
   if (error) throw error
 

@@ -17,6 +17,7 @@ import {
   getEstadoEmpresa,
   fetchTabelasPreco,
   getCodigoTabelaPreco,
+  resolverCodigoParcelaOmie,
 } from './reference-data.js'
 
 // ============================================
@@ -767,10 +768,10 @@ export async function criarPedidoOmie(
     .trim()
   const ehAVista = fpNormalizada === 'a vista' || fpNormalizada === 'avista'
 
-  // Per a API Omie: lista_parcelas customizada só é aceita com codigo_parcela '999'.
-  // Para garantir que cada parcela saia exatamente como o CRM (datas e valores),
-  // sempre enviamos '999' + qtde_parcelas + lista_parcelas quando não é à vista.
-  const codigoParcela = ehAVista ? '000' : '999'
+  // Parte 3: preencher codigo_parcela no cabeçalho com o código oficial da condição
+  // cadastrada no Omie (ex.: "14/21/28" -> "S21", "21/28/35" -> "S03", "À vista" -> "000").
+  // Se o prazo não existir no Omie, resolverCodigoParcelaOmie bloqueia com aviso claro.
+  const codigoParcela = await resolverCodigoParcelaOmie(formaPagamento, creds)
 
   // 5. Cabeçalho do pedido
   const ehBonificacaoComercial = tipoPedido === 'bonificacao' && String(pedido.numero || '').toUpperCase().startsWith('BON-')

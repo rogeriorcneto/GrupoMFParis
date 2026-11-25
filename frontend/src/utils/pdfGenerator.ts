@@ -25,6 +25,17 @@ const EMISSOR = {
   email: 'vendas@mfparis.com.br',
 }
 
+let cachedLogoDataUrl: string | null | undefined = undefined
+
+export function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  if (/iPad|iPhone|iPod/i.test(ua)) return true
+  // iPadOS 13+ no Safari desktop-mode reporta MacIntel com múltiplos pontos de toque
+  if (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1) return true
+  return false
+}
+
 function formatCurrency(value: number): string {
   return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -63,19 +74,123 @@ function getClienteEndereco(cliente: Cliente): string {
 }
 
 async function loadLogoDataUrl(): Promise<string | null> {
+  if (cachedLogoDataUrl !== undefined) return cachedLogoDataUrl
   try {
     const response = await fetch(LOGO_PATH)
-    if (!response.ok) return null
+    if (!response.ok) {
+      cachedLogoDataUrl = null
+      return null
+    }
     const blob = await response.blob()
-    return await new Promise((resolve) => {
+    const dataUrl = await new Promise<string | null>((resolve) => {
       const reader = new FileReader()
       reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null)
       reader.onerror = () => resolve(null)
       reader.readAsDataURL(blob)
     })
+    cachedLogoDataUrl = dataUrl
+    return dataUrl
   } catch {
+    cachedLogoDataUrl = null
     return null
   }
+}
+
+// Pré-aquece o logo em background quando o módulo é carregado no navegador
+if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+  loadLogoDataUrl().catch(() => {})
+}
+
+/**
+ * No iPhone / iPad (Safari, Chrome iOS CriOS e PWA), o WebKit bloqueia `<a download>`
+ * assíncrono em `blob:` e exige gesto de toque síncrono direto do usuário para
+ * `navigator.share({ files })` (WhatsApp / Salvar em Arquivos) ou abertura em nova aba.
+ * Este visualizador modal apresenta o PDF pronto com botões de toque síncrono imediato.
+ */
+function abrirModalPdfIOS(blob: Blob, nomeArquivo: string): void {
+  if (typeof document === 'undefined') return
+  const existing = document.getElementById('crm-ios-pdf-viewer')
+  if (existing) existing.remove()
+
+  const blobUrl = URL.createObjectURL(blob)
+  const pdfFile = typeof File !== 'undefined' ? new File([blob], nomeArquivo, { type: 'application/pdf' }) : null
+  const canShareFile = Boolean(
+    pdfFile &&
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [pdfFile] }))
+  )
+
+  const overlay = document.createElement('div')
+  overlay.id = 'crm-ios-pdf-viewer'
+  overlay.setAttribute('role', 'dialog')
+  overlay.setAttribute('aria-label', 'PDF da Proposta')
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.72);display:flex;flex-direction:column;justify-content:flex-end;padding:0;'
+
+  const card = document.createElement('div')
+  card.style.cssText = 'background:#ffffff;border-radius:20px 20px 0 0;max-height:92dvh;height:92dvh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -10px 30px rgba(0,0,0,0.25);'
+
+  const header = document.createElement('div')
+  header.style.cssText = 'padding:14px 16px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0;'
+  const titleWrap = document.createElement('div')
+  titleWrap.style.cssText = 'min-width:0;flex:1;'
+  const title = document.createElement('p')
+  title.textContent = 'Proposta gerada com sucesso'
+  title.style.cssText = 'margin:0;font-size:15px;font-weight:700;color:#111827;'
+  const subtitle = document.createElement('p')
+  subtitle.textContent = nomeArquivo
+  subtitle.style.cssText = 'margin:2px 0 0;font-size:11px;color:#6b7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+  titleWrap.appendChild(title)
+  titleWrap.appendChild(subtitle)
+
+  const closeBtn = document.createElement('button')
+  closeBtn.type = 'button'
+  closeBtn.textContent = 'Fechar'
+  closeBtn.style.cssText = 'padding:8px 12px;border-radius:10px;border:1px solid #d1d5db;background:#f9fafb;color:#374151;font-size:13px;font-weight:600;cursor:pointer;'
+
+  const cleanup = () => {
+    overlay.remove()
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 15000)
+  }
+  closeBtn.onclick = cleanup
+  header.appendChild(titleWrap)
+  header.appendChild(closeBtn)
+
+  const actions = document.createElement('div')
+  actions.style.cssText = 'padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;display:flex;flex-wrap:wrap;gap:8px;flex-shrink:0;'
+
+  if (canShareFile && pdfFile) {
+    const shareBtn = document.createElement('button')
+    shareBtn.type = 'button'
+    shareBtn.textContent = 'Compartilhar / WhatsApp / Salvar'
+    shareBtn.style.cssText = 'flex:1;min-width:200px;padding:12px 14px;border-radius:12px;border:none;background:#16a34a;color:#ffffff;font-size:14px;font-weight:700;cursor:pointer;'
+    shareBtn.onclick = () => {
+      navigator.share({ files: [pdfFile], title: nomeArquivo }).catch(() => {})
+    }
+    actions.appendChild(shareBtn)
+  }
+
+  const openLink = document.createElement('a')
+  openLink.href = blobUrl
+  openLink.target = '_blank'
+  openLink.rel = 'noopener noreferrer'
+  openLink.textContent = 'Abrir PDF em tela cheia'
+  openLink.style.cssText = 'flex:1;min-width:170px;padding:12px 14px;border-radius:12px;border:1px solid #4f46e5;background:#eef2ff;color:#4338ca;font-size:14px;font-weight:700;text-align:center;text-decoration:none;display:inline-block;'
+  actions.appendChild(openLink)
+
+  const previewWrap = document.createElement('div')
+  previewWrap.style.cssText = 'flex:1;background:#e5e7eb;overflow:auto;-webkit-overflow-scrolling:touch;'
+  const iframe = document.createElement('iframe')
+  iframe.src = blobUrl
+  iframe.title = nomeArquivo
+  iframe.style.cssText = 'width:100%;height:100%;border:none;background:#ffffff;'
+  previewWrap.appendChild(iframe)
+
+  card.appendChild(header)
+  card.appendChild(actions)
+  card.appendChild(previewWrap)
+  overlay.appendChild(card)
+  document.body.appendChild(overlay)
 }
 
 export async function gerarPropostaPDF(
@@ -108,10 +223,15 @@ export async function gerarPropostaPDF(
   const logoSize = 24
 
   if (logoDataUrl) {
-    doc.setDrawColor(220, 223, 235)
-    doc.setLineWidth(0.25)
-    doc.roundedRect(logoX, logoY, logoSize, logoSize, 2, 2, 'S')
-    doc.addImage(logoDataUrl, 'JPEG', logoX + 1, logoY + 1, logoSize - 2, logoSize - 2)
+    try {
+      doc.setDrawColor(220, 223, 235)
+      doc.setLineWidth(0.25)
+      doc.roundedRect(logoX, logoY, logoSize, logoSize, 2, 2, 'S')
+      const imgFormat = logoDataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG'
+      doc.addImage(logoDataUrl, imgFormat, logoX + 1, logoY + 1, logoSize - 2, logoSize - 2)
+    } catch {
+      // Se a imagem falhar em algum WebKit específico, gera o PDF normalmente sem quebrar
+    }
   }
 
   const headX = logoX + logoSize + 8
@@ -290,6 +410,13 @@ export async function gerarPropostaPDF(
     doc.text(doc.splitTextToSize(observacoes.trim(), usableWidth), margin, y)
   }
 
-  const nomeArquivo = `Proposta_${numeroProposta}_${cliente.razaoSocial.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+  const nomeArquivo = `Proposta_${numeroProposta}_${(cliente.razaoSocial || 'Cliente').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+
+  if (isIOSDevice()) {
+    const blob = doc.output('blob')
+    abrirModalPdfIOS(blob, nomeArquivo)
+    return
+  }
+
   doc.save(nomeArquivo)
 }

@@ -36,6 +36,10 @@ export default defineConfig({
       name: 'mobile-safari',
       use: { ...devices['iPhone 13'] },
     },
+    {
+      name: 'ipad-safari',
+      use: { ...devices['iPad Pro 11'] },
+    },
   ],
   webServer: {
     command: 'npm run dev',

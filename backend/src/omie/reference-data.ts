@@ -486,110 +486,137 @@ export interface OmieParcela {
   descricao: string
 }
 
-export async function fetchParcelasOmie(creds?: OmieCredentials): Promise<OmieParcela[]> {
-  const cached = getCached<OmieParcela[]>('parcelas')
-  if (cached) return cached
+export async function fetchParcelasOmie(creds?: OmieCredentials, skipCache = false): Promise<OmieParcela[]> {
+  if (!skipCache) {
+    const cached = getCached<OmieParcela[]>('parcelas')
+    if (cached) return cached
+  }
 
   const credentials = creds || await getOmieCredentials()
   if (!credentials) throw new Error('Credenciais Omie não configuradas')
 
   try {
-    const response = await omieCall<any>(
-      '/geral/parcelas/',
-      'ListarParcelas',
-      [{ nPagina: 1, nRegPorPagina: 200 }],
-      { credentials }
-    )
-    const parcelas: OmieParcela[] = (response.cadastros || []).map((p: any) => ({
-      codigo: String(p.codigo || p.cCodigo || ''),
-      descricao: p.descricao || p.cDescricao || '',
-    }))
-    setCache('parcelas', parcelas)
-    log.info({ count: parcelas.length }, 'Parcelas carregadas do Omie')
-    return parcelas
+    const todas: OmieParcela[] = []
+    let pagina = 1
+    let totalPaginas = 1
+    do {
+      const response = await omieCall<any>(
+        '/geral/parcelas/',
+        'ListarParcelas',
+        [{ pagina, registros_por_pagina: 200 }],
+        { credentials, skipCache: pagina === 1 && skipCache }
+      )
+      totalPaginas = Number(response?.total_de_paginas) || 1
+      for (const p of response?.cadastros || response?.parcelas || []) {
+        const codigo = String(p.nCodigo ?? p.cCodigo ?? p.codigo ?? '').trim()
+        const descricao = String(p.cDescricao ?? p.descricao ?? '').trim()
+        if (codigo && descricao) todas.push({ codigo, descricao })
+      }
+      pagina++
+    } while (pagina <= totalPaginas && pagina <= 10)
+
+    setCache('parcelas', todas)
+    log.info({ count: todas.length }, 'Parcelas carregadas do Omie')
+    return todas
   } catch (err) {
     log.warn({ err }, 'Erro ao buscar parcelas do Omie')
     return []
   }
 }
 
-/**
- * Mapeia forma de pagamento para código de parcela Omie.
- * Busca parcelas cadastradas no Omie e tenta fazer match com a descrição.
- */
-/**
- * Normaliza uma string de parcela para comparação.
- * Remove espaços, "dd", "dias", "dia" e converte para minúsculo.
- * Ex: "07/14/21 DD" → "7/14/21", "Para 07 dias" → "para7", "07/14 Dias" → "7/14"
- */
 function normalizeParcela(s: string): string {
   return s
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\(c\)/gi, '')
     .replace(/\bdd\b/gi, '')
     .replace(/\bdias?\b/gi, '')
     .replace(/\bpara\b/gi, '')
     .replace(/\s+/g, '')
-    // Remove leading zeros from numbers: "07/14" → "7/14"
     .replace(/\b0+(\d)/g, '$1')
     .trim()
+}
+
+function ehDescricaoQtdParcelasGenerica(descricao: string): boolean {
+  return /^\d+\s*parcelas?$/i.test(descricao.trim())
+}
+
+/**
+ * Resolve o código oficial da condição de pagamento cadastrada no Omie (ex.: "14/21/28" → "S21",
+ * "21/28/35" → "S03", "7 dias" → "A07", "À vista" → "000").
+ * Se a condição não existir no Omie, NÃO inventa código personalizado ('999') nem cadastra nada:
+ * lança erro claro informando qual prazo falta cadastrar no Omie.
+ */
+export async function resolverCodigoParcelaOmie(
+  formaPagamento: string,
+  creds?: OmieCredentials
+): Promise<string> {
+  const raw = String(formaPagamento || 'À vista').trim()
+  const semAcento = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+  if (semAcento === 'a vista' || semAcento === 'avista') {
+    return '000'
+  }
+
+  let parcelas = await fetchParcelasOmie(creds)
+  if (parcelas.length === 0) {
+    parcelas = await fetchParcelasOmie(creds, true)
+  }
+
+  const candidatas = parcelas.filter(p => !ehDescricaoQtdParcelasGenerica(p.descricao))
+  const fpNorm = normalizeParcela(raw)
+
+  // Preferir cadastro sem sufixo "(C)" quando existir duplicata exata (ex.: "Para 30 dias" vs "Para 30 dias (C)")
+  const exatos = candidatas.filter(p => normalizeParcela(p.descricao) === fpNorm)
+  if (exatos.length > 0) {
+    const preferido = exatos.find(p => !/\(c\)/i.test(p.descricao)) || exatos[0]
+    log.info({ formaPagamento: raw, codigo: preferido.codigo, descricao: preferido.descricao }, '✅ Condição de pagamento localizada no Omie')
+    return preferido.codigo
+  }
+
+  const fpDias = fpNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n >= 0)
+  if (fpDias.length > 0 && fpNorm.split('/').every(seg => /^\d+$/.test(seg))) {
+    const porDias = candidatas.filter(p => {
+      const dNorm = normalizeParcela(p.descricao)
+      if (!dNorm.split('/').every(seg => /^\d+$/.test(seg))) return false
+      const descDias = dNorm.split('/').map(n => parseInt(n, 10))
+      return descDias.length === fpDias.length && descDias.every((d, i) => d === fpDias[i])
+    })
+    if (porDias.length > 0) {
+      const preferido = porDias.find(p => !/\(c\)/i.test(p.descricao)) || porDias[0]
+      log.info({ formaPagamento: raw, codigo: preferido.codigo, descricao: preferido.descricao }, '✅ Condição de pagamento localizada por dias no Omie')
+      return preferido.codigo
+    }
+  }
+
+  // Caso "N dias <observação>" sem barra (ex.: "45 dias exclusivo" -> "Para 45 dias")
+  if (!raw.includes('/')) {
+    const mUnicoDia = semAcento.match(/(\d+)\s*dias?\b/)
+    if (mUnicoDia) {
+      const diaAlvo = parseInt(mUnicoDia[1], 10)
+      const porDiaUnico = candidatas.filter(p => {
+        const dNorm = normalizeParcela(p.descricao)
+        return /^\d+$/.test(dNorm) && parseInt(dNorm, 10) === diaAlvo
+      })
+      if (porDiaUnico.length > 0) {
+        const preferido = porDiaUnico.find(p => !/\(c\)/i.test(p.descricao)) || porDiaUnico[0]
+        return preferido.codigo
+      }
+    }
+  }
+
+  throw new Error(
+    `Condição de pagamento "${raw}" não está cadastrada no Omie ERP. Cadastre o prazo "${raw}" nas Condições de Pagamento do Omie antes de aprovar este pedido.`
+  )
 }
 
 export async function mapFormaPagamentoToCodigoParcelaOmie(
   formaPagamento: string,
   creds?: OmieCredentials
 ): Promise<{ codigo: string; usarListaParcelas: boolean }> {
-  const fp = formaPagamento.toLowerCase().trim()
-  
-  // À vista → código 000
-  if (fp === 'à vista' || fp === 'a vista') {
-    return { codigo: '000', usarListaParcelas: false }
-  }
-  
-  // Buscar parcelas cadastradas no Omie
-  const parcelas = await fetchParcelasOmie(creds)
-  
-  const fpNorm = normalizeParcela(fp)
-  
-  // 1. Exact match (normalized)
-  for (const p of parcelas) {
-    const descNorm = normalizeParcela(p.descricao)
-    if (descNorm === fpNorm) {
-      log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao }, '✅ Match exato de parcela Omie')
-      return { codigo: p.codigo, usarListaParcelas: false }
-    }
-  }
-  
-  // 2. Check if the normalized CRM string contains ONLY the same day-numbers as a parcela
-  //    Parse "7/14/21" → [7,14,21] and compare sets
-  const fpDias = fpNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
-  if (fpDias.length > 0) {
-    for (const p of parcelas) {
-      const descNorm = normalizeParcela(p.descricao)
-      const descDias = descNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
-      if (descDias.length === fpDias.length && descDias.every((d, i) => d === fpDias[i])) {
-        log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao, diasMatch: fpDias }, '✅ Match por dias de parcela Omie')
-        return { codigo: p.codigo, usarListaParcelas: false }
-      }
-    }
-  }
-  
-  // 3. Single day match: "28 dias" → parcela "028" or "28"
-  const matchSingleDay = fp.match(/^(\d+)\s*dias?$/)
-  if (matchSingleDay) {
-    const dia = parseInt(matchSingleDay[1], 10)
-    for (const p of parcelas) {
-      const descNorm = normalizeParcela(p.descricao)
-      const descDias = descNorm.split('/').map(n => parseInt(n, 10)).filter(n => !isNaN(n) && n > 0)
-      if (descDias.length === 1 && descDias[0] === dia) {
-        log.info({ formaPagamento, codigo: p.codigo, descricao: p.descricao }, '✅ Match single-day parcela Omie')
-        return { codigo: p.codigo, usarListaParcelas: false }
-      }
-    }
-  }
-  
-  // Se não encontrou match, usar código 999 (parcelas customizadas via lista_parcelas)
-  log.info({ formaPagamento, fpNorm, parcelasDisponiveis: parcelas.map(p => ({ codigo: p.codigo, desc: p.descricao, norm: normalizeParcela(p.descricao) })) }, '⚠️ Nenhum match de parcela, usando customizado (999)')
-  return { codigo: '999', usarListaParcelas: true }
+  const codigo = await resolverCodigoParcelaOmie(formaPagamento, creds)
+  return { codigo, usarListaParcelas: codigo !== '000' }
 }
 
 // ============================================

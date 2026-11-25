@@ -184,6 +184,7 @@ export function getNextAction(cliente: Cliente): { text: string; color: string }
       if (diasEtapa >= 30) return { text: '📞 Follow-up da proposta — ' + (60 - diasEtapa) + 'd restantes', color: 'text-orange-600' }
       return { text: '📝 Preparar proposta comercial', color: 'text-blue-600' }
     case 'negociacao':
+      if (cliente.statusFollowUp === 'aguardando_aprovacao_gerente') return { text: '⏳ Aguardando aprovação', color: 'text-amber-600' }
       if (diasEtapa >= 35) return { text: '🚨 Cobrar resposta proposta', color: 'text-red-600' }
       if (diasEtapa >= 14) return { text: '📞 Follow-up negociação', color: 'text-orange-600' }
       return { text: '💬 Aguardar decisão', color: 'text-gray-500' }
