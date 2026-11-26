@@ -27,6 +27,8 @@ import {
   saveUserDraftOrOutbox,
   deleteUserOutboxItem,
   sendUserPersonalEmail,
+  getUserEmailSignature,
+  saveUserEmailSignature,
 } from './email-multi.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
@@ -1710,6 +1712,28 @@ app.delete('/api/email/user/outbox/:id', requireAuth, async (req, res) => {
     res.json({ success: true })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro ao remover item' })
+  }
+})
+
+app.get('/api/email/user/signature', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const signature = await getUserEmailSignature(me.id)
+    res.json({ success: true, signature })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao carregar assinatura' })
+  }
+})
+
+app.put('/api/email/user/signature', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const result = await saveUserEmailSignature(me.id, req.body || {})
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao salvar assinatura' })
   }
 })
 

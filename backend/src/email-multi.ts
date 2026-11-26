@@ -21,6 +21,23 @@ export interface EmailAttachmentPayload {
   contentType?: string
   part?: string
   size?: number
+  cid?: string
+}
+
+export interface UserEmailSignature {
+  enabled: boolean
+  text: string
+  fields: {
+    nome?: string
+    cargo?: string
+    empresa?: string
+    telefone?: string
+    email?: string
+    site?: string
+    endereco?: string
+  }
+  image?: EmailAttachmentPayload
+  updatedAt?: string
 }
 
 export interface UserMailItem {
@@ -98,6 +115,10 @@ function outboxStoreKey(vendedorId: number): string {
   return `email_outbox:user_${vendedorId}`
 }
 
+function signatureStoreKey(vendedorId: number): string {
+  return `email_signature:user_${vendedorId}`
+}
+
 export async function getUserEmailCredentials(vendedorId: number): Promise<UserEmailCredentials | null> {
   const { data } = await supabase
     .from('whatsapp_session')
@@ -141,6 +162,124 @@ async function writeJsonList<T>(key: string, list: T[]): Promise<void> {
   await supabase
     .from('whatsapp_session')
     .upsert({ key, value: JSON.stringify(list.slice(0, 150)), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+}
+
+function escapeEmailHtml(text: string): string {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+export function buildUserSignaturePlain(signature: UserEmailSignature): string {
+  const freeText = String(signature.text || '').trim()
+  if (freeText) return freeText
+  const f = signature.fields || {}
+  return [f.nome, f.cargo, f.empresa, f.telefone, f.email, f.site, f.endereco]
+    .map(v => String(v || '').trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+export function buildUserSignatureHtml(signature: UserEmailSignature): string {
+  const plain = buildUserSignaturePlain(signature)
+  if (!plain) return ''
+  const textHtml = escapeEmailHtml(plain).replace(/\n/g, '<br>')
+  const imgHtml = signature.image?.contentBase64
+    ? `<td style="vertical-align:top;padding-right:14px;"><img src="cid:email-signature-image" alt="" style="display:block;width:92px;max-width:92px;height:auto;border-radius:10px;"></td>`
+    : ''
+  return `<div style="margin-top:18px;padding-top:14px;border-top:1px solid #d8dee9;"><table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>${imgHtml}<td style="vertical-align:top;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:13px;line-height:1.48;color:#1f2937;">${textHtml}</td></tr></table></div>`
+}
+
+export function mergeSignatureIntoBody(body: string, signature: UserEmailSignature | null): {
+  text: string
+  mainText: string
+  quoteText: string
+  signatureText: string
+} {
+  const rawBody = String(body || '')
+  if (!signature?.enabled) return { text: rawBody, mainText: rawBody, quoteText: '', signatureText: '' }
+  const signatureText = buildUserSignaturePlain(signature)
+  if (!signatureText) return { text: rawBody, mainText: rawBody, quoteText: '', signatureText: '' }
+
+  const normalizedBody = rawBody.toLowerCase().replace(/\s+/g, ' ').trim()
+  const signatureProbe = signatureText.toLowerCase().replace(/\s+/g, ' ').slice(0, 80).trim()
+  if (signatureProbe.length >= 12 && normalizedBody.includes(signatureProbe)) {
+    return { text: rawBody, mainText: rawBody, quoteText: '', signatureText: '' }
+  }
+
+  const markers = ['\n\n---\nEm ', '\n\n---------- Mensagem encaminhada ----------']
+  let splitIndex = -1
+  for (const marker of markers) {
+    const idx = rawBody.indexOf(marker)
+    if (idx >= 0 && (splitIndex < 0 || idx < splitIndex)) splitIndex = idx
+  }
+  const mainText = (splitIndex >= 0 ? rawBody.slice(0, splitIndex) : rawBody).trimEnd()
+  const quoteText = splitIndex >= 0 ? rawBody.slice(splitIndex) : ''
+  const text = `${mainText}\n\n--\n${signatureText}${quoteText}`
+  return { text, mainText, quoteText, signatureText }
+}
+
+export async function getUserEmailSignature(vendedorId: number): Promise<UserEmailSignature | null> {
+  const { data } = await supabase
+    .from('whatsapp_session')
+    .select('value')
+    .eq('key', signatureStoreKey(vendedorId))
+    .maybeSingle()
+  if (!data?.value) return null
+  try {
+    const parsed = JSON.parse(data.value)
+    return {
+      enabled: parsed.enabled !== false,
+      text: String(parsed.text || ''),
+      fields: parsed.fields || {},
+      image: parsed.image || undefined,
+      updatedAt: parsed.updatedAt,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function saveUserEmailSignature(
+  vendedorId: number,
+  input: Partial<UserEmailSignature>
+): Promise<{ success: boolean; signature?: UserEmailSignature; error?: string }> {
+  const text = String(input.text || '').trim().slice(0, 3000)
+  const image = input.image
+  if (image) {
+    const type = String(image.contentType || '').toLowerCase()
+    if (!type.startsWith('image/')) return { success: false, error: 'A assinatura aceita apenas arquivos de imagem.' }
+    const estimatedBytes = Math.floor(String(image.contentBase64 || '').length * 0.75)
+    if (!image.contentBase64 || estimatedBytes > 650 * 1024) {
+      return { success: false, error: 'A imagem da assinatura deve ter no máximo 650 KB.' }
+    }
+  }
+  const signature: UserEmailSignature = {
+    enabled: input.enabled !== false,
+    text,
+    fields: {
+      nome: String(input.fields?.nome || '').trim().slice(0, 120),
+      cargo: String(input.fields?.cargo || '').trim().slice(0, 120),
+      empresa: String(input.fields?.empresa || '').trim().slice(0, 160),
+      telefone: String(input.fields?.telefone || '').trim().slice(0, 60),
+      email: String(input.fields?.email || '').trim().slice(0, 160),
+      site: String(input.fields?.site || '').trim().slice(0, 160),
+      endereco: String(input.fields?.endereco || '').trim().slice(0, 220),
+    },
+    image: image ? {
+      filename: String(image.filename || 'assinatura.png').slice(0, 160),
+      contentBase64: image.contentBase64,
+      contentType: image.contentType,
+    } : undefined,
+    updatedAt: new Date().toISOString(),
+  }
+  const { error } = await supabase
+    .from('whatsapp_session')
+    .upsert({ key: signatureStoreKey(vendedorId), value: JSON.stringify(signature), updated_at: new Date().toISOString() }, { onConflict: 'key' })
+  if (error) return { success: false, error: error.message }
+  return { success: true, signature }
 }
 
 export async function connectAndSaveUserEmail(
@@ -700,12 +839,13 @@ export async function sendUserPersonalEmail(
     tls: { rejectUnauthorized: false },
   })
 
-  const htmlBody = /<[a-z][\s\S]*>/i.test(params.body)
-    ? params.body
-    : `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.55;color:#111827;white-space:pre-wrap;">${params.body
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')}</div>`
+  const signature = await getUserEmailSignature(vendedorId)
+  const mergedBody = mergeSignatureIntoBody(params.body, signature)
+  const signatureHtml = signature?.enabled ? buildUserSignatureHtml(signature) : ''
+  const bodyLooksHtml = /<[a-z][\s\S]*>/i.test(params.body)
+  const htmlBody = bodyLooksHtml
+    ? `${params.body}${signatureHtml}`
+    : `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.55;color:#111827;white-space:pre-wrap;">${escapeEmailHtml(mergedBody.mainText)}${signatureHtml}${escapeEmailHtml(mergedBody.quoteText)}</div>`
 
   try {
     const fromHeader = creds.displayName
@@ -717,15 +857,23 @@ export async function sendUserPersonalEmail(
       to,
       cc: params.cc?.trim() || undefined,
       subject,
-      text: params.body,
+      text: mergedBody.text,
       html: htmlBody,
       inReplyTo: params.inReplyTo || undefined,
       references: params.inReplyTo ? [params.inReplyTo] : undefined,
-      attachments: (params.attachments || []).map(a => ({
-        filename: a.filename,
-        content: Buffer.from(a.contentBase64, 'base64'),
-        contentType: a.contentType || undefined,
-      })),
+      attachments: [
+        ...(params.attachments || []).map(a => ({
+          filename: a.filename,
+          content: Buffer.from(a.contentBase64, 'base64'),
+          contentType: a.contentType || undefined,
+        })),
+        ...(signature?.enabled && signature.image?.contentBase64 ? [{
+          filename: signature.image.filename || 'assinatura.png',
+          content: Buffer.from(signature.image.contentBase64, 'base64'),
+          contentType: signature.image.contentType || 'image/png',
+          cid: 'email-signature-image',
+        }] : []),
+      ],
     })
 
     // Remove da Caixa de Saída e grava em Enviados
@@ -740,8 +888,8 @@ export async function sendUserPersonalEmail(
       cc: params.cc?.trim() || undefined,
       subject,
       date: new Date().toISOString(),
-      snippet: params.body.slice(0, 200),
-      bodyText: params.body,
+      snippet: mergedBody.text.slice(0, 200),
+      bodyText: mergedBody.text,
       bodyHtml: htmlBody,
       unread: false,
       status: 'sent',

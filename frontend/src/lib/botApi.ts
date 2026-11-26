@@ -119,6 +119,22 @@ export interface UserEmailStatusInfo {
   error?: string
 }
 
+export interface UserEmailSignature {
+  enabled: boolean
+  text: string
+  fields: {
+    nome?: string
+    cargo?: string
+    empresa?: string
+    telefone?: string
+    email?: string
+    site?: string
+    endereco?: string
+  }
+  image?: { filename: string; contentBase64: string; contentType?: string }
+  updatedAt?: string
+}
+
 export interface UserMailItem {
   id: string
   uid?: number
@@ -186,6 +202,28 @@ export async function connectUserEmailAccount(payload: {
 export async function disconnectUserEmailAccount(): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await authFetch(`${BOT_URL}/api/email/user/disconnect`, { method: 'POST' })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function getUserEmailSignature(): Promise<{ success: boolean; signature?: UserEmailSignature | null; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/signature`)
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function saveUserEmailSignature(signature: UserEmailSignature): Promise<{ success: boolean; signature?: UserEmailSignature; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/signature`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signature),
+    })
     return await res.json()
   } catch (err: any) {
     return { success: false, error: err?.message || 'Erro de conexão' }

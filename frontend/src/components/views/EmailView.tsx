@@ -23,11 +23,14 @@ import {
   disconnectUserEmailAccount,
   fetchUserEmailDetail,
   fetchUserFolderEmails,
+  getUserEmailSignature,
   getUserEmailStatus,
   inferUserEmailServers,
   saveUserEmailOutbox,
+  saveUserEmailSignature,
   sendUserPersonalEmailApi,
   suggestSalesMessage,
+  type UserEmailSignature,
   type UserEmailStatusInfo,
   type UserMailItem,
 } from '../../lib/botApi'
@@ -111,6 +114,33 @@ export default function EmailView({
   // Assistente de IA para e-mail (sem referência a provedor externo)
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+
+  // Assinatura automática por usuário
+  const [showSignatureModal, setShowSignatureModal] = useState(false)
+  const [signatureLoaded, setSignatureLoaded] = useState(false)
+  const [signature, setSignature] = useState<UserEmailSignature>({
+    enabled: true,
+    text: '',
+    fields: {},
+  })
+  const [sigAiPrompt, setSigAiPrompt] = useState('')
+  const [sigAiLoading, setSigAiLoading] = useState(false)
+  const [sigSaving, setSigSaving] = useState(false)
+  const sigImageInputRef = useRef<HTMLInputElement>(null)
+
+  const signaturePreviewText = useMemo(() => {
+    const freeText = signature.text.trim()
+    if (freeText) return freeText
+    return [
+      signature.fields.nome,
+      signature.fields.cargo,
+      signature.fields.empresa,
+      signature.fields.telefone,
+      signature.fields.email,
+      signature.fields.site,
+      signature.fields.endereco,
+    ].filter(Boolean).join('\n')
+  }, [signature])
 
   const meusClientesComEmail = useMemo(() => {
     const isGer = loggedUser?.cargo === 'gerente'
@@ -400,6 +430,118 @@ export default function EmailView({
     }
   }
 
+  const abrirAssinatura = async () => {
+    setShowSignatureModal(true)
+    if (!signatureLoaded) {
+      const res = await getUserEmailSignature()
+      if (res.success && res.signature) {
+        setSignature({ enabled: true, text: '', ...res.signature, fields: res.signature.fields || {} })
+      }
+      setSignatureLoaded(true)
+    }
+    setSignature(prev => ({
+      ...prev,
+      fields: {
+        nome: prev.fields.nome || loggedUser?.nome || '',
+        cargo: prev.fields.cargo || (loggedUser?.cargo === 'gerente' ? 'Gerente Comercial' : 'Consultor Comercial'),
+        empresa: prev.fields.empresa || 'Grupo MF Paris',
+        telefone: prev.fields.telefone || loggedUser?.telefone || '',
+        email: prev.fields.email || status.email || loggedUser?.email || '',
+        site: prev.fields.site || '',
+        endereco: prev.fields.endereco || '',
+      },
+    }))
+  }
+
+  const handleSignatureImage = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showToast?.('error', 'Escolha um arquivo de imagem para a assinatura.')
+      return
+    }
+    if (file.size > 650 * 1024) {
+      showToast?.('error', 'A imagem da assinatura deve ter no máximo 650 KB.')
+      return
+    }
+    const b64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    setSignature(prev => ({
+      ...prev,
+      image: { filename: file.name, contentBase64: b64, contentType: file.type || 'image/png' },
+    }))
+  }
+
+  const gerarAssinaturaIA = async () => {
+    setSigAiLoading(true)
+    const dados = [
+      `Nome: ${signature.fields.nome || loggedUser?.nome || ''}`,
+      `Cargo: ${signature.fields.cargo || (loggedUser?.cargo === 'gerente' ? 'Gerente Comercial' : 'Consultor Comercial')}`,
+      `Empresa: ${signature.fields.empresa || 'Grupo MF Paris'}`,
+      `Telefone/WhatsApp: ${signature.fields.telefone || loggedUser?.telefone || ''}`,
+      `E-mail: ${signature.fields.email || status.email || loggedUser?.email || ''}`,
+      `Site: ${signature.fields.site || ''}`,
+      `Endereço: ${signature.fields.endereco || ''}`,
+    ].join('\n')
+    const res = await suggestSalesMessage({
+      canal: 'email',
+      text: signature.text,
+      instruction: `Monte apenas uma ASSINATURA DE E-MAIL corporativa em texto simples, pronta para copiar. Não escreva mensagem comercial, saudação, assunto, explicações, markdown ou aspas. Use de 4 a 8 linhas, organizando os dados abaixo com elegância e incluindo uma frase institucional curta sobre atendimento/parceria. Se faltar algum dado, omita a linha. Pedido extra do usuário: ${sigAiPrompt || 'assinar de forma profissional e objetiva'}.\n\nDados disponíveis:\n${dados}`,
+      clienteNome: signature.fields.nome || loggedUser?.nome,
+      empresaNome: signature.fields.empresa || 'Grupo MF Paris',
+      vendedorNome: loggedUser?.nome,
+    })
+    setSigAiLoading(false)
+    if (res.success && res.suggestion) {
+      setSignature(prev => ({
+        ...prev,
+        text: res.suggestion!.replace(/^```[a-z]*\s*/i, '').replace(/```$/i, '').trim(),
+        fields: {
+          ...prev.fields,
+          nome: prev.fields.nome || loggedUser?.nome || '',
+          cargo: prev.fields.cargo || (loggedUser?.cargo === 'gerente' ? 'Gerente Comercial' : 'Consultor Comercial'),
+          empresa: prev.fields.empresa || 'Grupo MF Paris',
+          telefone: prev.fields.telefone || loggedUser?.telefone || '',
+          email: prev.fields.email || status.email || loggedUser?.email || '',
+        },
+      }))
+      showToast?.('success', 'Assinatura gerada pela IA. Revise e salve.')
+    } else {
+      showToast?.('error', res.error || 'Não foi possível gerar a assinatura com IA.')
+    }
+  }
+
+  const salvarAssinatura = async () => {
+    setSigSaving(true)
+    const payload: UserEmailSignature = {
+      ...signature,
+      enabled: signature.enabled,
+      text: signature.text.trim(),
+      fields: {
+        nome: signature.fields.nome?.trim(),
+        cargo: signature.fields.cargo?.trim(),
+        empresa: signature.fields.empresa?.trim(),
+        telefone: signature.fields.telefone?.trim(),
+        email: signature.fields.email?.trim(),
+        site: signature.fields.site?.trim(),
+        endereco: signature.fields.endereco?.trim(),
+      },
+    }
+    const res = await saveUserEmailSignature(payload)
+    setSigSaving(false)
+    if (res.success) {
+      if (res.signature) setSignature(res.signature)
+      setShowSignatureModal(false)
+      showToast?.('success', 'Assinatura salva! Ela será anexada automaticamente nos próximos envios.')
+    } else {
+      showToast?.('error', res.error || 'Erro ao salvar assinatura.')
+    }
+  }
+
   if (statusLoading) {
     return (
       <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.06] dark:border-white/[0.08] p-10 text-center text-xs text-gray-500">
@@ -534,6 +676,13 @@ export default function EmailView({
         className="hidden"
         onChange={e => { handleAttachFiles(e.target.files); e.target.value = '' }}
       />
+      <input
+        ref={sigImageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { handleSignatureImage(e.target.files); e.target.value = '' }}
+      />
       <datalist id="crm-client-emails-datalist">
         {meusClientesComEmail.map(c => (
           <option key={c.id} value={c.email}>{c.razao}</option>
@@ -550,6 +699,14 @@ export default function EmailView({
           >
             <PencilSquareIcon className="h-4 w-4" />
             Novo e-mail
+          </button>
+          <button
+            type="button"
+            onClick={abrirAssinatura}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-[#262629] hover:bg-black/[0.05] border border-black/[0.07] dark:border-white/[0.08] text-xs font-semibold text-gray-700 dark:text-gray-200 transition-colors cursor-pointer"
+          >
+            <SparklesIcon className="h-4 w-4 text-primary-700" />
+            Assinatura
           </button>
 
           <div className="space-y-0.5 pt-1">
@@ -846,6 +1003,11 @@ export default function EmailView({
                 >
                   {savingDraft ? 'Salvando...' : 'Salvar na Caixa de Saída'}
                 </button>
+                {signature.enabled && signaturePreviewText && (
+                  <button type="button" onClick={abrirAssinatura} className="text-[11px] text-gray-400 hover:text-primary-700 cursor-pointer" title="Editar assinatura automática">
+                    Assinatura ativa
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -939,6 +1101,105 @@ export default function EmailView({
           </div>
         )}
       </div>
+
+      {showSignatureModal && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-lg border border-black/[0.08] dark:border-white/[0.10] p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Assinatura de e-mail</h3>
+                <p className="text-xs text-gray-500 mt-0.5">A assinatura é adicionada automaticamente aos e-mails enviados.</p>
+              </div>
+              <button type="button" onClick={() => setShowSignatureModal(false)} className="p-1.5 rounded-lg hover:bg-black/[0.05] cursor-pointer">
+                <XMarkIcon className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+
+            <label className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-[#F5F5F7] dark:bg-[#242428] cursor-pointer">
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">Usar assinatura automaticamente</span>
+              <input type="checkbox" checked={signature.enabled} onChange={e => setSignature(prev => ({ ...prev, enabled: e.target.checked }))} className="w-4 h-4 accent-primary-700" />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {([
+                ['nome', 'Nome completo'], ['cargo', 'Cargo'], ['empresa', 'Empresa'], ['telefone', 'Telefone/WhatsApp'], ['email', 'E-mail'], ['site', 'Site'], ['endereco', 'Endereço'],
+              ] as const).map(([key, label]) => (
+                <label key={key} className={key === 'endereco' ? 'sm:col-span-2' : ''}>
+                  <span className="block text-[11px] font-medium text-gray-500 mb-1">{label}</span>
+                  <input
+                    value={signature.fields[key] || ''}
+                    onChange={e => setSignature(prev => ({ ...prev, fields: { ...prev.fields, [key]: e.target.value } }))}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-[#F5F5F7] dark:bg-[#242428] border border-black/[0.06] dark:border-white/[0.08] focus:outline-none"
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-primary-200 dark:border-primary-900/40 bg-primary-50/60 dark:bg-primary-950/20 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800 dark:text-gray-100">
+                <SparklesIcon className="h-4 w-4 text-primary-700" /> Criar assinatura com IA
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={sigAiPrompt}
+                  onChange={e => setSigAiPrompt(e.target.value)}
+                  placeholder="Opcional: estilo desejado (ex.: moderna, elegante, com frase de parceria...)"
+                  className="flex-1 px-3 py-2 text-xs rounded-xl bg-white dark:bg-[#1C1C1E] border border-black/[0.07] focus:outline-none"
+                />
+                <button type="button" disabled={sigAiLoading} onClick={gerarAssinaturaIA} className="px-3 py-2 rounded-xl bg-primary-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 whitespace-nowrap">
+                  {sigAiLoading ? 'Gerando...' : 'Gerar'}
+                </button>
+              </div>
+            </div>
+
+            <label>
+              <span className="block text-[11px] font-medium text-gray-500 mb-1">Texto da assinatura (edição livre)</span>
+              <textarea
+                value={signature.text}
+                onChange={e => setSignature(prev => ({ ...prev, text: e.target.value }))}
+                rows={7}
+                placeholder="Se vazio, o CRM monta automaticamente usando os campos acima..."
+                className="w-full px-3 py-2.5 text-xs leading-relaxed rounded-xl bg-[#F5F5F7] dark:bg-[#242428] border border-black/[0.06] dark:border-white/[0.08] focus:outline-none resize-y"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <span className="block text-[11px] font-medium text-gray-500">Imagem da assinatura</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button type="button" onClick={() => sigImageInputRef.current?.click()} className="px-3 py-2 rounded-xl bg-[#EFEFF4] dark:bg-[#262629] text-xs font-semibold cursor-pointer">
+                    {signature.image ? 'Trocar imagem' : 'Adicionar imagem'}
+                  </button>
+                  {signature.image && (
+                    <button type="button" onClick={() => setSignature(prev => ({ ...prev, image: undefined }))} className="text-xs font-semibold text-red-600 cursor-pointer">
+                      Remover imagem
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">PNG/JPG até 650 KB. A imagem é enviada embutida no e-mail.</p>
+              </div>
+              <div>
+                <span className="block text-[11px] font-medium text-gray-500 mb-1">Pré-visualização</span>
+                <div className="rounded-xl border border-black/[0.07] dark:border-white/[0.09] p-3 bg-white dark:bg-[#171719] min-h-28">
+                  <div className="flex items-start gap-3">
+                    {signature.image?.contentBase64 && (
+                      <img src={`data:${signature.image.contentType || 'image/png'};base64,${signature.image.contentBase64}`} alt="Assinatura" className="w-16 h-16 object-contain rounded-lg bg-white flex-shrink-0" />
+                    )}
+                    <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-gray-800 dark:text-gray-200">{signaturePreviewText || 'Preencha os dados ou gere uma assinatura com IA.'}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
+              <button type="button" onClick={() => setShowSignatureModal(false)} className="px-4 py-2 rounded-xl bg-[#EFEFF4] dark:bg-[#262629] text-xs font-semibold cursor-pointer">Cancelar</button>
+              <button type="button" disabled={sigSaving} onClick={salvarAssinatura} className="px-5 py-2 rounded-xl bg-primary-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50">
+                {sigSaving ? 'Salvando...' : 'Salvar assinatura'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -40,7 +40,7 @@ vi.mock('../supabase.js', () => ({
   },
 }))
 
-import { inferEmailServers, parseMimeParts, saveUserDraftOrOutbox, sendUserPersonalEmail } from '../email-multi.js'
+import { inferEmailServers, parseMimeParts, saveUserDraftOrOutbox, sendUserPersonalEmail, saveUserEmailSignature } from '../email-multi.js'
 import { encrypt } from '../crypto.js'
 
 function seedCredentials(vendedorId = 1) {
@@ -151,6 +151,40 @@ describe('email-multi — detecção automática de servidores e parser MIME', (
     expect(outboxPersisted).toHaveLength(0)
   })
 
+  it('salva assinatura e anexa imagem inline preservando anexos', async () => {
+    seedCredentials(1)
+    const sigText = ['Rogerio Reis','Gerente Comercial','Grupo MF Paris'].join(String.fromCharCode(10))
+    const saved = await saveUserEmailSignature(1, {
+      enabled: true,
+      text: sigText,
+      fields: {},
+      image: { filename: 'logo.png', contentBase64: Buffer.from('fake-png').toString('base64'), contentType: 'image/png' },
+    })
+    expect(saved.success).toBe(true)
+    const result = await sendUserPersonalEmail(1, {
+      to: 'compras@cliente.com.br',
+      subject: 'Cotacao',
+      body: 'Ola, segue nossa cotacao.',
+      attachments: [{ filename: 'cotacao.pdf', contentBase64: Buffer.from('pdf').toString('base64'), contentType: 'application/pdf' }],
+    })
+    expect(result.success).toBe(true)
+    const payload = sendMailMock.mock.calls[0][0]
+    expect(payload.text).toContain('Rogerio Reis')
+    expect(payload.html).toContain('cid:email-signature-image')
+    expect(payload.attachments).toHaveLength(2)
+    expect(payload.attachments[0].filename).toBe('cotacao.pdf')
+    expect(payload.attachments[1].cid).toBe('email-signature-image')
+  })
+
+  it('nao duplica assinatura quando o texto ja foi colado manualmente', async () => {
+    seedCredentials(1)
+    const sigText = ['Rogerio Reis','Gerente Comercial','Grupo MF Paris'].join(String.fromCharCode(10))
+    await saveUserEmailSignature(1, { enabled: true, text: sigText, fields: {} })
+    const body = ['Ola!','','--',sigText].join(String.fromCharCode(10))
+    await sendUserPersonalEmail(1, { to: 'compras@cliente.com.br', subject: 'Teste', body })
+    const payload = sendMailMock.mock.calls[0][0]
+    expect((payload.text.match(/Rogerio Reis/g) || [])).toHaveLength(1)
+  })
   it('mantém mensagem na Caixa de Saída com status failed quando SMTP falha', async () => {
     seedCredentials(1)
     sendMailMock.mockRejectedValueOnce(new Error('SMTP indisponível'))
