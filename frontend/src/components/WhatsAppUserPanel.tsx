@@ -490,17 +490,22 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     setChatText('')
     setSending(true)
 
+    const tempId = Date.now()
     setMessages(prev => [...prev, {
-      id: Date.now(), text: msg, from: 'me',
+      id: tempId, text: msg, from: 'me',
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }])
 
     const result = await sendUserWhatsApp(chatNum, msg, cliente?.id)
     if (!result.success) {
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1, text: '❌ Falha: ' + (result.error || 'Erro'), from: 'system',
-        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      }])
+      setMessages(prev => [
+        ...prev.filter(m => m.id !== tempId),
+        {
+          id: Date.now() + 1, text: 'Falha ao enviar: ' + (result.error || 'Erro'), from: 'system',
+          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        },
+      ])
+      setChatText(msg)
       showToast?.('error', 'Falha ao enviar: ' + (result.error || ''))
     } else {
       showToast?.('success', 'Mensagem enviada!')

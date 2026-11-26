@@ -133,7 +133,7 @@ export async function connectWhatsApp(): Promise<void> {
       version,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
+        keys: state.keys,
       },
       logger: baileysLogger,
       generateHighQualityLinkPreview: false,

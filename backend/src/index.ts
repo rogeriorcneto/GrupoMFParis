@@ -651,22 +651,18 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     primaryJids.add(chatJid)
     if (numero) {
       const raw = String(numero).replace(/\D/g, '')
+      const clean = formatBrazilianPhone(raw)
       primaryJids.add(`${raw}@s.whatsapp.net`)
-      primaryJids.add(`55${raw}@s.whatsapp.net`)
+      primaryJids.add(`${clean}@s.whatsapp.net`)
       if (raw.startsWith('55')) primaryJids.add(`${raw.slice(2)}@s.whatsapp.net`)
-      const with55 = raw.startsWith('55') ? raw : `55${raw}`
-      const without55 = raw.startsWith('55') ? raw.slice(2) : raw
-      if (with55.length === 13 && with55[4] === '9') {
-        variantJids.add(`${with55.slice(0, 4)}${with55.slice(5)}@s.whatsapp.net`)
-      }
-      if (without55.length === 11 && without55[2] === '9') {
-        variantJids.add(`${without55.slice(0, 2)}${without55.slice(3)}@s.whatsapp.net`)
-      }
-      if (with55.length === 12 && with55[4] !== '9') {
-        variantJids.add(`${with55.slice(0, 4)}9${with55.slice(4)}@s.whatsapp.net`)
-      }
-      if (without55.length === 10 && without55[2] !== '9') {
-        variantJids.add(`${without55.slice(0, 2)}9${without55.slice(2)}@s.whatsapp.net`)
+      // Para celulares brasileiros (8 dígitos locais iniciando em 6-9), COM e SEM o 9º dígito
+      // pertencem à MESMA linha móvel (ex.: DDD 31 no WhatsApp usa 8 dígitos sem o 9).
+      // Devem entrar juntos em primaryJids para não esconder mensagens novas vindas do celular!
+      const with55 = clean.startsWith('55') ? clean : `55${raw}`
+      if (with55.length === 13 && with55[4] === '9' && /^[6-9]/.test(with55[5])) {
+        primaryJids.add(`${with55.slice(0, 4)}${with55.slice(5)}@s.whatsapp.net`)
+      } else if (with55.length === 12 && /^[6-9]/.test(with55[4])) {
+        primaryJids.add(`${with55.slice(0, 4)}9${with55.slice(4)}@s.whatsapp.net`)
       }
     }
     // Variantes nunca "vencem" um JID primário igual
@@ -719,25 +715,44 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     merged.sort((a, b) => a.timestamp - b.timestamp)
     let messages = merged.slice(-lim)
 
-    // Fallback: se cache vazio, buscar do DB (isolado por clienteId quando informado ou pelo vendedor logado)
-    if (messages.length === 0 && (clienteId || numero)) {
+    // Fallback / complemento: mesclar também mensagens persistidas no DB para este número/cliente
+    // (ex.: mensagens enviadas pelo celular antes do último restart do servidor)
+    if (clienteId || numero) {
       try {
-        const dbMsgs = clienteId
-          ? await db.fetchWhatsAppMessagesByCliente(Number(clienteId), lim)
-          : await db.fetchWhatsAppMessages(formatBrazilianPhone(String(numero)), lim, vendedor.id)
-        if (dbMsgs.length > 0) {
-          messages = dbMsgs.map(m => ({
-            id: String(m.id),
+        const [byNum, byCli] = await Promise.all([
+          numero && !isPlaceholderPhone(String(numero))
+            ? db.fetchWhatsAppMessages(formatBrazilianPhone(String(numero)), lim, vendedor.id)
+            : Promise.resolve([]),
+          clienteId
+            ? db.fetchWhatsAppMessagesByCliente(Number(clienteId), lim)
+            : Promise.resolve([]),
+        ])
+        const dbCombined = [...byNum, ...byCli.filter(m => m.vendedorId == null || m.vendedorId === vendedor.id)]
+        const seenDbIds = new Set<number>()
+        const existingFingerprints = new Set(
+          messages.map((m: any) => `${m.fromMe ? '1' : '0'}|${String(m.text || '').trim()}|${Math.floor((m.timestamp || 0) / 120)}`)
+        )
+        for (const m of dbCombined) {
+          if (m.id && seenDbIds.has(m.id)) continue
+          if (m.id) seenDbIds.add(m.id)
+          const ts = Math.floor(new Date(m.createdAt || Date.now()).getTime() / 1000)
+          const fp = `${m.direcao === 'enviada' ? '1' : '0'}|${String(m.mensagem || '').trim()}|${Math.floor(ts / 120)}`
+          if (existingFingerprints.has(fp)) continue
+          existingFingerprints.add(fp)
+          messages.push({
+            id: `db-${m.id}`,
             fromMe: m.direcao === 'enviada',
             text: m.mensagem,
             mediaUrl: m.mediaUrl,
             fileName: m.fileName,
-            timestamp: Math.floor(new Date(m.createdAt || Date.now()).getTime() / 1000),
+            timestamp: ts,
             type: m.tipo || 'text',
-          }))
+          })
         }
-      } catch (e) {
-        // ignore DB errors, return empty
+        messages.sort((a: any, b: any) => a.timestamp - b.timestamp)
+        messages = messages.slice(-lim)
+      } catch {
+        // ignore DB errors
       }
     }
 

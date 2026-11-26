@@ -1,7 +1,7 @@
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
+  fetchLatestWaWebVersion,
   downloadMediaMessage,
 } from 'baileys'
 import { Boom } from '@hapi/boom'
@@ -92,18 +92,20 @@ export async function checkWhatsAppSessionTable(): Promise<boolean> {
   }
 }
 
-/** fetchLatestBaileysVersion com timeout de 10s */
+/** Busca versão atual do WhatsApp Web (evita rejeição/hang de protocolo em versões defasadas) */
 async function fetchVersionSafe(): Promise<{ version: [number, number, number] }> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10_000)
   try {
-    const result = await fetchLatestBaileysVersion()
+    if (typeof fetchLatestWaWebVersion === 'function') {
+      const waWeb = await withTimeout(fetchLatestWaWebVersion(), 8_000, 'fetchLatestWaWebVersion')
+      if (waWeb?.version) return { version: waWeb.version }
+    }
+  } catch { /* fallback below */ }
+  try {
+    const result = await withTimeout(fetchLatestBaileysVersion(), 8_000, 'fetchLatestBaileysVersion')
     return result
   } catch (err) {
     log.warn({ err }, 'Falha ao buscar versão Baileys, usando default')
-    return { version: [2, 3000, 1015901307] as [number, number, number] }
-  } finally {
-    clearTimeout(timeout)
+    return { version: [2, 3000, 1056364523] as [number, number, number] }
   }
 }
 
@@ -871,17 +873,23 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
       version,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
+        // IMPORTANTE: NÃO envolver state.keys em makeCacheableSignalKeyStore!
+        // useSupabaseAuthState já possui memCache síncrono em memória. O cacheMutex global
+        // do makeCacheableSignalKeyStore causava deadlock AB-BA com os txMutexes do
+        // addTransactionCapability do Baileys v7, travando sock.sendMessage em 25s!
+        keys: state.keys,
       },
       logger: baileysLogger,
-      browser: ['CRM MF Paris', 'Chrome', '127.0.0.1'],
+      browser: ['Chrome (Linux)', 'Chrome', '131.0.0.0'],
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 30_000,
+      defaultQueryTimeoutMs: 15_000,
+      keepAliveIntervalMs: 25_000,
       retryRequestDelayMs: 250,
-      syncFullHistory: true,
-      // Necessário para reenviar mensagens quando o destinatário pede retry
-      // (sem isso o WhatsApp do destinatário fica preso em "Aguardando esta mensagem")
+      // syncFullHistory: false evita inundar o WebSocket e as transações Signal por vários
+      // minutos após cada deploy/reconexão (o histórico recente já é pré-populado do Supabase).
+      syncFullHistory: false,
       getMessage: async (key) => {
         const id = key?.id
         if (id && session.rawMessages.has(id)) {

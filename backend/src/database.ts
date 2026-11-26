@@ -1134,31 +1134,19 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100, vendedo
     return []
   }
   const cleanNum = formatBrazilianPhone(digits)
-  let exactQuery = supabase
+  // Para celulares brasileiros (8 dígitos locais iniciando em 6-9), unifica com/sem 9º dígito
+  // (ex.: card com 5531996693699 e WhatsApp real 553196693699 são a mesma linha!).
+  const allNums = generateBrazilianPhoneVariations(cleanNum)
+  let q = supabase
     .from('whatsapp_messages')
     .select('*')
-    .eq('numero', cleanNum)
+    .in('numero', allNums)
     .order('created_at', { ascending: true })
     .limit(limit)
-  if (vendedorId) exactQuery = exactQuery.eq('vendedor_id', vendedorId)
-  const exact = await exactQuery
-  if (exact.error) throw exact.error
-  let data = exact.data
-  if (!data || data.length === 0) {
-    const variations = generateBrazilianPhoneVariations(cleanNum).filter(v => v !== cleanNum)
-    if (variations.length > 0) {
-      let varQuery = supabase
-        .from('whatsapp_messages')
-        .select('*')
-        .in('numero', variations)
-        .order('created_at', { ascending: true })
-        .limit(limit)
-      if (vendedorId) varQuery = varQuery.eq('vendedor_id', vendedorId)
-      const res = await varQuery
-      if (res.error) throw res.error
-      data = res.data
-    }
-  }
+  if (vendedorId) q = q.eq('vendedor_id', vendedorId)
+  const res = await q
+  if (res.error) throw res.error
+  const data = res.data
   return attachMediaFromKV((data || []).map((row: any) => ({
     id: row.id,
     numero: row.numero,
