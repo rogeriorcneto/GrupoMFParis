@@ -717,6 +717,7 @@ export async function executeFunction(
           score: 0,
           valorEstimado: args.valorEstimado || 0,
         })
+        try { await db.criarTarefasAutomaticasNovoCliente(newCliente) } catch { /* non-critical */ }
         await db.insertAtividade({ tipo: 'cadastro', descricao: `[IA] Cadastrou cliente ${newCliente.razaoSocial}`, vendedorNome: user.nome })
         return {
           success: true,

@@ -10,16 +10,30 @@ import {
   ArrowUturnRightIcon, ClipboardDocumentListIcon, ArrowTopRightOnSquareIcon, PencilIcon, TrashIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
-import type { Tarefa, TarefaReagendamento, Cliente, Vendedor, Interacao, Pedido } from '../../types'
+import type { Tarefa, TarefaReagendamento, Cliente, Vendedor, Interacao, Pedido, Produto } from '../../types'
 import { logger } from '../../utils/logger'
 import { formatBrazilianPhone } from '../../utils/validators'
 import { insertInteracao, insertAtividade, deleteTarefa } from '../../lib/database'
+import { useParametrosListas } from '../../lib/parametrosListas'
+import { temJustificativaAtiva } from '../../utils/cadastroCompleto'
 import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
 import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from '../TimePicker5Min'
 import FinalizarTarefaInline from '../FinalizarTarefaInline'
-import { CANAIS_TAREFA, CANAL_LABEL, OBJETIVO_LABEL, OBJETIVOS_TAREFA, ObjetivoTarefa, inferirOrigemTarefa, validarFinalizacaoTarefa, validarReagendamentoPrazo } from '../../utils/tarefaFluxo'
+import {
+  CANAIS_TAREFA,
+  CANAL_LABEL,
+  clienteJaTemOutraTarefaAberta,
+  ehTarefaIncluirProdutos,
+  exigeJustificativaPrazoLongo,
+  inferirOrigemTarefa,
+  OBJETIVO_LABEL,
+  OBJETIVOS_TAREFA,
+  ObjetivoTarefa,
+  validarFinalizacaoTarefa,
+  validarReagendamentoPrazo,
+} from '../../utils/tarefaFluxo'
 import * as XLSX from 'xlsx'
 
 // ─── Sub-componente: TarefaCard ───────────────────────────────────────────────
@@ -43,6 +57,10 @@ interface TarefaCardProps {
   tarefa: Tarefa
   cliente?: Cliente
   vendedor?: Vendedor
+  outraTarefaAberta?: Tarefa
+  produtosCatalogo?: Produto[]
+  exigeProdutosInteresse?: boolean
+  vendedorLogadoNome?: string
   isGerente: boolean
   onToggle: (t: Tarefa) => void
   onWhatsApp: (c: Cliente) => void
@@ -61,7 +79,7 @@ interface TarefaCardProps {
 }
 
 const TarefaCard: React.FC<TarefaCardProps> = ({
-  tarefa, cliente, vendedor, isGerente,
+  tarefa, cliente, vendedor, outraTarefaAberta, produtosCatalogo, exigeProdutosInteresse, vendedorLogadoNome, isGerente,
   onToggle, onWhatsApp, onBot, onEmail, onCall, onUpdateNota, onReagendar,
   isOverdue, isToday, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, onVerRegraAutomacao, highlightTarefaId
 }) => {
@@ -334,10 +352,15 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </div>
             )}
 
-            {/* Finalização obrigatória com canal, conclusão e próximo passo */}
+            {/* Finalização obrigatória com canal, conclusão e próximo passo (quando necessário) */}
             {finalizarOpen && !done && (
               <FinalizarTarefaInline
                 tarefa={tarefa}
+                outraTarefaAberta={outraTarefaAberta}
+                cliente={cliente}
+                produtosCatalogo={produtosCatalogo}
+                exigeProdutosInteresse={exigeProdutosInteresse}
+                vendedorNome={vendedorLogadoNome}
                 loading={completing}
                 onConfirm={handleConfirmFinalizar}
                 onCancel={() => setFinalizarOpen(false)}
@@ -717,6 +740,7 @@ const TarefasView: React.FC<{
   loggedUser: Vendedor | null
   interacoes?: Interacao[]
   pedidos?: Pedido[]
+  produtos?: Produto[]
   onUpdateTarefa: (t: Tarefa) => void
   onAddTarefa: (t: Tarefa) => void | Promise<void>
   onImportTarefas?: (novas: Omit<Tarefa, 'id'>[]) => Promise<Tarefa[]>
@@ -725,7 +749,8 @@ const TarefasView: React.FC<{
   onOpenClientePanel?: (cliente: Cliente) => void
   onDeleteTarefa?: (tarefa: Tarefa) => void
   highlightTarefaId?: number
-}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, highlightTarefaId }) => {
+}> = ({ tarefas, clientes, vendedores, loggedUser, interacoes = [], pedidos = [], produtos = [], onUpdateTarefa, onAddTarefa, onImportTarefas, showToast, onVerNoFunil, onOpenClientePanel, onDeleteTarefa, highlightTarefaId }) => {
+  const { parametros } = useParametrosListas()
   const [showModal, setShowModal] = useState(false)
   const [commCliente, setCommCliente] = useState<Cliente | null>(null)
   const [filterStatus, setFilterStatus] = useState<'hoje' | 'todas' | 'concluida'>('hoje')
@@ -1230,14 +1255,25 @@ const TarefasView: React.FC<{
     }
     const finalizacao = tarefa.finalizacao
     if (!finalizacao) {
-      showToast?.('error', 'Para finalizar, informe canal usado, conclusão e próximo passo.')
+      showToast?.('error', 'Para finalizar, informe canal usado e conclusão.')
       return
     }
-    const erro = validarFinalizacaoTarefa(finalizacao)
+    const clienteAlvo = tarefa.clienteId ? clientes.find(c => c.id === tarefa.clienteId) : undefined
+    const outraAberta = clienteJaTemOutraTarefaAberta(tarefa, tarefas, clientes)
+    const exigeProdutos = !!clienteAlvo
+      && ehTarefaIncluirProdutos(tarefa, parametros.tarefasPadraoCadastro?.incluirProdutos)
+      && !temJustificativaAtiva(clienteAlvo, 'produtos_interesse', clientes)
+    const erro = validarFinalizacaoTarefa(finalizacao, new Date(), {
+      exigeProximoPasso: !outraAberta,
+      exigeProdutosInteresse: exigeProdutos,
+    })
     if (erro) {
       showToast?.('error', erro)
       return
     }
+    const justPrazoLongo = finalizacao.proximoPasso && exigeJustificativaPrazoLongo(finalizacao.proximoPasso.data)
+      ? finalizacao.proximoPasso.justificativaPrazoLongo
+      : tarefa.justificativaPrazoLongo
     onUpdateTarefa({
       ...tarefa,
       status: 'concluida',
@@ -1245,10 +1281,10 @@ const TarefasView: React.FC<{
       concluidaPor: loggedUser?.nome || 'Vendedor',
       canalUsado: finalizacao.canalUsado,
       conclusao: finalizacao.conclusao,
-      justificativaPrazoLongo: finalizacao.proximoPasso.justificativaPrazoLongo,
+      justificativaPrazoLongo: justPrazoLongo,
       finalizacao,
     })
-  }, [onUpdateTarefa, showToast, loggedUser?.nome])
+  }, [onUpdateTarefa, showToast, loggedUser?.nome, clientes, tarefas, parametros.tarefasPadraoCadastro?.incluirProdutos])
 
   const taskCreationRef = useRef(false)
 
@@ -1336,13 +1372,14 @@ const TarefasView: React.FC<{
       reagendadoEm: new Date().toISOString(),
       alteradoPor: loggedUser?.nome || 'Vendedor',
     }
+    const prazoLongo = exigeJustificativaPrazoLongo(novaData)
     onUpdateTarefa({
       ...tarefa,
       data: novaData,
       hora: horaNorm,
       status: 'pendente',
       reagendamentos: [...(tarefa.reagendamentos || []), reagendamento],
-      justificativaPrazoLongo: motivo.trim(),
+      justificativaPrazoLongo: prazoLongo ? motivo.trim() : undefined,
     })
     showToast?.('success', `Tarefa reagendada para ${new Date(novaData + 'T00:00:00').toLocaleDateString('pt-BR')}`)
   }, [onUpdateTarefa, showToast, loggedUser])
@@ -1350,12 +1387,20 @@ const TarefasView: React.FC<{
   const renderCard = (tarefa: Tarefa, overdue = false) => {
     const cliente = getClienteDaTarefa(tarefa)
     const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
+    const outraAberta = clienteJaTemOutraTarefaAberta(tarefa, tarefas, clientes)
+    const exigeProdutos = !!cliente
+      && ehTarefaIncluirProdutos(tarefa, parametros.tarefasPadraoCadastro?.incluirProdutos)
+      && !temJustificativaAtiva(cliente, 'produtos_interesse', clientes)
     return (
       <TarefaCard
         key={tarefa.id}
         tarefa={tarefa}
         cliente={cliente}
         vendedor={vendedor}
+        outraTarefaAberta={outraAberta}
+        produtosCatalogo={produtos}
+        exigeProdutosInteresse={exigeProdutos}
+        vendedorLogadoNome={loggedUser?.nome || 'Vendedor'}
         isGerente={isGerente}
         onToggle={toggleStatus}
         onVerRegraAutomacao={(regraId) => {
@@ -1423,12 +1468,12 @@ const TarefasView: React.FC<{
             </div>
 
             {/* Ações */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {isGerente && (
                 <select
                   value={filtroVendedorId}
                   onChange={(e) => setFiltroVendedorId(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
-                  className="hidden md:block px-2.5 py-1.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
+                  className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
                   title="Filtrar por vendedor"
                 >
                   <option value="todos">Todos os vendedores</option>
@@ -1439,7 +1484,7 @@ const TarefasView: React.FC<{
               <select
                 value={filterTipo}
                 onChange={(e) => setFilterTipo(e.target.value)}
-                className="hidden md:block px-2.5 py-1.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
+                className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
               >
                 <option value="todos">Todos os tipos</option>
                 <option value="ligacao">📞 Ligações</option>
@@ -1602,19 +1647,34 @@ const TarefasView: React.FC<{
                           {t.concluidaEm && (
                             <span>✅ Executada em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')} às {new Date(t.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                           )}
-                          {/* Indicador de automação no histórico */}
-                          {t.origemAutomacaoId && (
-                            <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full border border-purple-200">
-                              <BoltIcon className="h-3 w-3" />
-                              Automática
+                          {t.objetivo && (
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
+                              Objetivo: {OBJETIVO_LABEL[t.objetivo] || t.objetivo}
                             </span>
                           )}
+                          {t.canalUsado && (
+                            <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                              Canal: {CANAL_LABEL[t.canalUsado] || t.canalUsado}
+                            </span>
+                          )}
+                          {(() => {
+                            const orig = inferirOrigemTarefa(t)
+                            return (
+                              <span className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${orig === 'automatica' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                {orig === 'automatica' && <BoltIcon className="h-3 w-3" />}
+                                {orig === 'automatica' ? 'Automática' : 'Manual'}
+                              </span>
+                            )
+                          })()}
                         </div>
                         {t.descricao && (
                           <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">📝 {t.descricao}</p>
                         )}
                         {t.conclusao && (
                           <p className="text-xs text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2"><span className="font-semibold">Conclusão:</span> {t.conclusao}</p>
+                        )}
+                        {t.justificativaPrazoLongo && (
+                          <p className="text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2"><span className="font-semibold">Justificativa de prazo longo:</span> {t.justificativaPrazoLongo}</p>
                         )}
                         {t.reagendamentos && t.reagendamentos.length > 0 && (
                           <div className="space-y-1">
@@ -1845,11 +1905,17 @@ const TarefasView: React.FC<{
                 </div>
 
                 {/* Contador de Tarefas */}
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1.5 text-sm">
                   <span className="text-gray-500">
-                    <span className="font-semibold text-gray-800">{tarefasFiltradas.length}</span> tarefa{tarefasFiltradas.length !== 1 ? 's' : ''} para
+                    <span className="font-semibold text-gray-800">{tarefasFiltradas.length}</span> tarefa{tarefasFiltradas.length !== 1 ? 's' : ''}
                   </span>
-                  <span className="font-medium text-gray-800">{loggedUser?.nome.split(' ')[0] || 'Mim'}</span>
+                  <span className="font-medium text-gray-800">
+                    {isGerente
+                      ? (filtroVendedorId === 'todos'
+                        ? '· todos os vendedores'
+                        : `para ${vendedores.find(v => v.id === filtroVendedorId)?.nome.split(' ')[0] || 'vendedor'}`)
+                      : `para ${loggedUser?.nome.split(' ')[0] || 'Mim'}`}
+                  </span>
                 </div>
               </div>
             </div>

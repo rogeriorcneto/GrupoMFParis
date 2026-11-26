@@ -345,16 +345,10 @@ export default function ClienteFormModal({
                 </div>
               </div>
 
-              {/* ── Contato ── */}
+              {/* ── Telefones e E-mail da Empresa ── */}
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Contato</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Telefones e E-mail da Empresa</p>
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Nome do Contato</label>
-                    <input type="text" name="contatoNome" value={formData.contatoNome} onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                      placeholder="João Silva" />
-                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Celular <span className="text-red-500">*</span></label>
@@ -375,11 +369,19 @@ export default function ClienteFormModal({
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
                       placeholder="(00) 99999-0000" maxLength={16} />
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">E-mail</label>
-                    <input type="email" name="contatoEmail" value={formData.contatoEmail} onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                      placeholder="email@empresa.com" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">E-mail geral</label>
+                      <input type="email" name="contatoEmail" value={formData.contatoEmail} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="email@empresa.com" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">E-mail para envio de boleto</label>
+                      <input type="email" name="emailBoleto" value={formData.emailBoleto || ''} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="boletos@empresa.com" />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Inscrição Estadual</label>
@@ -390,24 +392,10 @@ export default function ClienteFormModal({
                 </div>
               </div>
 
-              {/* ── Contatos adicionais (Financeiro / Compras) ── */}
+              {/* ── Dois contatos fixos (Comprador e Financeiro) ── */}
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Contatos fixos e boleto</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Contatos fixos (Comprador e Financeiro)</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="border border-gray-200 rounded-apple p-3 bg-gray-50/40">
-                    <p className="text-xs font-semibold text-gray-700 mb-2">💰 Contato Financeiro</p>
-                    <div className="space-y-2">
-                      <input type="text" name="contatoFinanceiroNome" value={formData.contatoFinanceiroNome || ''} onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="Nome do responsável financeiro" />
-                      <input type="tel" name="contatoFinanceiroTelefone" value={formData.contatoFinanceiroTelefone || ''} onChange={handleTelChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="Telefone/WhatsApp" maxLength={16} />
-                      <input type="text" name="contatoFinanceiroSetor" value={formData.contatoFinanceiroSetor || 'Financeiro'} onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                        placeholder="Setor" />
-                    </div>
-                  </div>
                   <div className="border border-gray-200 rounded-apple p-3 bg-gray-50/40">
                     <p className="text-xs font-semibold text-gray-700 mb-2">🛒 Contato Comprador</p>
                     <div className="space-y-2">
@@ -422,12 +410,19 @@ export default function ClienteFormModal({
                         placeholder="Setor" />
                     </div>
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">E-mail para envio de boleto</label>
-                    <input type="email" name="emailBoleto" value={formData.emailBoleto || ''} onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                      placeholder="boletos@empresa.com" />
-                    <p className="text-[11px] text-gray-400 mt-1">Campo separado do e-mail geral; preparado para o envio automático futuro.</p>
+                  <div className="border border-gray-200 rounded-apple p-3 bg-gray-50/40">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">💰 Contato Financeiro</p>
+                    <div className="space-y-2">
+                      <input type="text" name="contatoFinanceiroNome" value={formData.contatoFinanceiroNome || ''} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Nome do responsável financeiro" />
+                      <input type="tel" name="contatoFinanceiroTelefone" value={formData.contatoFinanceiroTelefone || ''} onChange={handleTelChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Telefone/WhatsApp" maxLength={16} />
+                      <input type="text" name="contatoFinanceiroSetor" value={formData.contatoFinanceiroSetor || 'Financeiro'} onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        placeholder="Setor" />
+                    </div>
                   </div>
                 </div>
               </div>

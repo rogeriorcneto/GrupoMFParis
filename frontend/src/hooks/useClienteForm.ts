@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Cliente, Interacao, Vendedor, FormData } from '../types'
+import type { Cliente, Interacao, Tarefa, Vendedor, FormData } from '../types'
 import * as db from '../lib/database'
 import { formatCNPJ, formatCPF, formatTelefone, validarCNPJ, validarCPF } from '../utils/validators'
 import { mesmaEmpresaNoFunil } from '../utils/funil-logic'
@@ -31,11 +31,12 @@ interface UseClienteFormParams {
   vendedores?: Vendedor[]
   setClientes: React.Dispatch<React.SetStateAction<Cliente[]>>
   setInteracoes: React.Dispatch<React.SetStateAction<Interacao[]>>
+  setTarefas?: React.Dispatch<React.SetStateAction<Tarefa[]>>
   showToast: (tipo: 'success' | 'error', texto: string) => void
   onOpenExistingCliente?: (card: Cliente) => void
 }
 
-export function useClienteForm({ loggedUser, clientes = [], vendedores = [], setClientes, setInteracoes, showToast, onOpenExistingCliente }: UseClienteFormParams) {
+export function useClienteForm({ loggedUser, clientes = [], vendedores = [], setClientes, setInteracoes, setTarefas, showToast, onOpenExistingCliente }: UseClienteFormParams) {
   const [formData, setFormData] = useState<FormData>({ ...emptyForm })
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -131,7 +132,7 @@ export function useClienteForm({ loggedUser, clientes = [], vendedores = [], set
       return
     }
 
-    const temTelefone = formData.contatoTelefone.trim() || formData.contatoCelular.trim() || formData.contatoTelefoneFixo.trim()
+    const temTelefone = formData.contatoTelefone.trim() || formData.contatoCelular.trim() || formData.contatoTelefoneFixo.trim() || (formData.contatoComprasTelefone || '').trim()
     if (!temTelefone) {
       showToast('error', 'Informe ao menos um telefone de contato.')
       return
@@ -202,7 +203,7 @@ export function useClienteForm({ loggedUser, clientes = [], vendedores = [], set
       : loggedUser?.id
 
     // Item 9: em cadastro por CPF (ou geral), usar o nome da pessoa como título do card — nenhum card pode ficar sem título
-    const tituloCard = (formData.razaoSocial || '').trim() || (formData.nomeFantasia || '').trim() || (formData.contatoNome || '').trim()
+    const tituloCard = (formData.razaoSocial || '').trim() || (formData.nomeFantasia || '').trim() || (formData.contatoComprasNome || '').trim() || (formData.contatoNome || '').trim()
     if (!tituloCard) {
       showToast('error', 'Informe o nome completo (CPF) ou a Razão Social do cliente.')
       return
@@ -210,11 +211,13 @@ export function useClienteForm({ loggedUser, clientes = [], vendedores = [], set
 
     const clienteFields: Partial<Cliente> = {
       ...restForm,
-      // O contato legado passa a alimentar o Contato Comprador quando os campos novos estão vazios.
+      // Sincroniza Contato Comprador <-> contatoNome legado para retrocompatibilidade (Omie, buscas, etc.).
+      contatoNome: formData.contatoComprasNome || formData.contatoNome,
       contatoComprasNome: formData.contatoComprasNome || formData.contatoNome,
       contatoComprasTelefone: formData.contatoComprasTelefone || formData.contatoCelular || formData.contatoTelefone || formData.contatoTelefoneFixo,
       contatoComprasSetor: formData.contatoComprasSetor || 'Compras',
       contatoFinanceiroSetor: formData.contatoFinanceiroSetor || 'Financeiro',
+      contatoTelefone: formData.contatoTelefone || formData.contatoCelular || formData.contatoComprasTelefone || '',
       razaoSocial: tituloCard,
       endereco: enderecoCompleto,
       vendedorId: vendedorResponsavelId,
@@ -287,6 +290,14 @@ export function useClienteForm({ loggedUser, clientes = [], vendedores = [], set
           criadoPorNome: loggedUser?.nome || undefined,
         } as Omit<Cliente, 'id'>)
         setClientes(prev => [...prev, savedC])
+        try {
+          const tarefasIniciais = await db.criarTarefasAutomaticasNovoCliente(savedC, [...clientes, savedC])
+          if (tarefasIniciais.length > 0 && setTarefas) {
+            setTarefas(prev => [...tarefasIniciais, ...prev])
+          }
+        } catch (err) {
+          logger.error('Cliente cadastrado, mas não foi possível criar tarefas iniciais automáticas:', err)
+        }
         try {
           const savedI = await db.insertInteracao({
             clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),

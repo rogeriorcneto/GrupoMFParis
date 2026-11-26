@@ -29,6 +29,13 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [editandoLabel, setEditandoLabel] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [nomeTarefaProdutos, setNomeTarefaProdutos] = useState(parametros.tarefasPadraoCadastro?.incluirProdutos || '')
+  const [nomeTarefaCadastro, setNomeTarefaCadastro] = useState(parametros.tarefasPadraoCadastro?.completarCadastro || '')
+
+  React.useEffect(() => {
+    setNomeTarefaProdutos(parametros.tarefasPadraoCadastro?.incluirProdutos || 'Incluir produtos de interesse do cliente')
+    setNomeTarefaCadastro(parametros.tarefasPadraoCadastro?.completarCadastro || 'Completar cadastro')
+  }, [parametros.tarefasPadraoCadastro?.incluirProdutos, parametros.tarefasPadraoCadastro?.completarCadastro])
 
   if (loggedUser.cargo !== 'gerente') {
     return (
@@ -58,6 +65,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
             [abaAtiva]: normalizada,
           },
           camposCadastroObrigatorios: parametros.camposCadastroObrigatorios,
+          tarefasPadraoCadastro: parametros.tarefasPadraoCadastro,
           auditoria: [
             { data: agora, usuario, lista: abaAtiva, acao, detalhe },
             ...(parametros.auditoria || []),
@@ -160,6 +168,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
         {
           listas: parametros.listas,
           camposCadastroObrigatorios: novos,
+          tarefasPadraoCadastro: parametros.tarefasPadraoCadastro,
           auditoria: [
             { data: new Date().toISOString(), usuario, lista: 'segmento_cliente' as ListaParametroKey, acao: (atuais.includes(campo) ? 'desativar' : 'ativar') as 'ativar' | 'desativar', detalhe: `${atuais.includes(campo) ? 'Retirado' : 'Incluído'} campo obrigatório do cadastro: ${campo}` },
             ...(parametros.auditoria || []),
@@ -170,6 +179,39 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
       showToast('success', 'Lista de campos do cadastro atualizada. As situações serão recalculadas nas telas.')
     } catch (err: any) {
       showToast('error', `Erro ao salvar campos do cadastro: ${err?.message || 'falha de rede'}`)
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const handleSalvarNomesTarefasCadastro = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (salvando) return
+    const incluirProdutos = nomeTarefaProdutos.trim() || 'Incluir produtos de interesse do cliente'
+    const completarCadastro = nomeTarefaCadastro.trim() || 'Completar cadastro'
+    setSalvando(true)
+    try {
+      await saveParametrosListas(
+        {
+          listas: parametros.listas,
+          camposCadastroObrigatorios: parametros.camposCadastroObrigatorios,
+          tarefasPadraoCadastro: { incluirProdutos, completarCadastro },
+          auditoria: [
+            {
+              data: new Date().toISOString(),
+              usuario,
+              lista: 'segmento_cliente' as ListaParametroKey,
+              acao: 'renomear' as const,
+              detalhe: `Tarefas automáticas do cadastro atualizadas: "${incluirProdutos}" (5d) e "${completarCadastro}" (15d)`,
+            },
+            ...(parametros.auditoria || []),
+          ].slice(0, 300),
+        },
+        usuario
+      )
+      showToast('success', 'Nomes das tarefas automáticas do cadastro salvos!')
+    } catch (err: any) {
+      showToast('error', `Erro ao salvar tarefas automáticas: ${err?.message || 'falha de rede'}`)
     } finally {
       setSalvando(false)
     }
@@ -369,6 +411,45 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
             )
           })}
         </div>
+      </div>
+
+      {/* Nomes das duas tarefas automáticas criadas ao cadastrar cliente novo */}
+      <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 p-4 sm:p-6 space-y-3">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">📌 Tarefas automáticas no cadastro de cliente novo</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Criadas automaticamente para o vendedor ao salvar cliente novo (manual, importação ou Omie): produtos de interesse (prazo 5 dias) e completar cadastro (prazo 15 dias, apenas se houver campos pendentes).
+          </p>
+        </div>
+        <form onSubmit={handleSalvarNomesTarefasCadastro} className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Tarefa de produtos de interesse (prazo 5 dias)</label>
+            <input
+              type="text"
+              value={nomeTarefaProdutos}
+              onChange={e => setNomeTarefaProdutos(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Tarefa de cadastro pendente (prazo 15 dias)</label>
+            <input
+              type="text"
+              value={nomeTarefaCadastro}
+              onChange={e => setNomeTarefaCadastro(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div className="md:col-span-2 flex justify-end">
+            <button
+              type="submit"
+              disabled={salvando}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-apple text-sm font-semibold"
+            >
+              Salvar nomes das tarefas
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Registro de auditoria (quem alterou e quando) */}

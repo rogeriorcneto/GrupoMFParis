@@ -223,7 +223,7 @@ export async function syncPullClientes(vendedorIdPadrao?: number, credentials?: 
         atualizados++
       } else {
         // Insert
-        const { error } = await supabase
+        const { data: insertedCli, error } = await supabase
           .from('clientes')
           .insert({
             ...dbRow,
@@ -231,7 +231,15 @@ export async function syncPullClientes(vendedorIdPadrao?: number, credentials?: 
             vendedor_id: vendedorIdPadrao,
             data_entrada_etapa: new Date().toISOString().split('T')[0],
           })
+          .select('*')
+          .single()
         if (error) throw new Error(error.message)
+        if (insertedCli?.id) {
+          const { criarTarefasAutomaticasNovoCliente } = await import('../database.js')
+          await criarTarefasAutomaticasNovoCliente(insertedCli).catch(e =>
+            log.warn({ err: e, clienteId: insertedCli.id }, 'Falha ao criar tarefas iniciais no sync Omie')
+          )
+        }
         inseridos++
       }
     } catch (err: any) {

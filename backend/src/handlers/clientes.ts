@@ -222,6 +222,8 @@ async function saveNewClient(senderNumber: string, session: UserSession, data: C
       vendedorId: session.vendedor.id,
     } as any)
 
+    try { await db.criarTarefasAutomaticasNovoCliente(saved) } catch { /* non-critical */ }
+
     await db.insertInteracao({
       clienteId: saved.id,
       tipo: 'whatsapp',

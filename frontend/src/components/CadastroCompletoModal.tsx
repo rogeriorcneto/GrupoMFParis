@@ -214,7 +214,7 @@ export default function CadastroCompletoModal({ cliente, clientes, camposObrigat
 
           {camposObrigatorios.map(campo => {
             const preenchido = campoCadastroPreenchido(cliente, campo, clientes)
-            const just = temJustificativaAtiva(cliente, campo)
+            const just = temJustificativaAtiva(cliente, campo, clientes)
             const aberto = campoAberto === campo
             return (
               <div key={campo} className={`border rounded-xl p-3 ${preenchido ? 'border-blue-100 bg-blue-50/40' : just ? 'border-purple-100 bg-purple-50/40' : 'border-orange-200 bg-orange-50/40'}`}>

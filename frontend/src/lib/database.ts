@@ -6,7 +6,8 @@ import type {
   PropostaHistorico, ChatMensagem,
   ModuloTreinamento, PerfilTreinamento
 } from '../types'
-import { normalizarTipoTarefaNovoFluxo } from '../utils/tarefaFluxo'
+import { montarTarefasIniciaisCliente, normalizarTipoTarefaNovoFluxo } from '../utils/tarefaFluxo'
+import { loadParametrosListas } from './parametrosListas'
 
 // ============================================
 // Helpers: converter snake_case (DB) ↔ camelCase (frontend)
@@ -1142,6 +1143,36 @@ export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void
 export async function deleteTarefa(id: number): Promise<void> {
   const { error } = await supabase.from('tarefas').delete().eq('id', id)
   if (error) throw error
+}
+
+export async function criarTarefasAutomaticasNovosClientes(
+  novosClientes: Cliente[],
+  todosClientes?: Cliente[],
+): Promise<Tarefa[]> {
+  const validos = novosClientes.filter(c => !c.novoCiclo && !c.arquivadoDuplicata)
+  if (validos.length === 0) return []
+  const parametros = await loadParametrosListas().catch(() => null)
+  const aCriar: Omit<Tarefa, 'id'>[] = []
+  for (const cli of validos) {
+    const iniciais = montarTarefasIniciaisCliente(cli, {
+      camposObrigatorios: parametros?.camposCadastroObrigatorios,
+      nomesTarefas: parametros?.tarefasPadraoCadastro,
+      todosClientes: todosClientes && todosClientes.length > 0 ? todosClientes : [cli],
+    })
+    for (const t of iniciais) {
+      const jaExiste = await existeTarefaPendenteNoBanco(cli.id, t.titulo).catch(() => false)
+      if (!jaExiste) aCriar.push(t)
+    }
+  }
+  if (aCriar.length === 0) return []
+  return insertTarefasBatch(aCriar)
+}
+
+export async function criarTarefasAutomaticasNovoCliente(
+  cliente: Cliente,
+  todosClientes?: Cliente[],
+): Promise<Tarefa[]> {
+  return criarTarefasAutomaticasNovosClientes([cliente], todosClientes)
 }
 
 // ============================================

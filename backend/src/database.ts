@@ -659,6 +659,147 @@ export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
   return tarefaFromDb(data)
 }
 
+const CAMPOS_CADASTRO_PADRAO_BACKEND = [
+  'contato_comprador',
+  'contato_financeiro',
+  'email_boleto',
+  'telefone_empresa',
+  'endereco_completo',
+  'segmento',
+  'presenca_digital',
+  'produtos_interesse',
+] as const
+
+const CADASTRO_CAMPO_LABEL_BACKEND: Record<string, string> = {
+  contato_comprador: 'Contato Comprador',
+  contato_financeiro: 'Contato Financeiro',
+  email_boleto: 'E-mail para boleto',
+  telefone_empresa: 'Telefone da empresa',
+  endereco_completo: 'Endereço completo',
+  segmento: 'Segmento',
+  presenca_digital: 'Site ou rede social',
+  produtos_interesse: 'Produtos de interesse',
+}
+
+function camposFaltantesCadastroRow(row: any, camposObrigatorios: string[]): string[] {
+  const ok = (v: any) => !!(v && String(v).trim())
+  const justAtivas = new Set(
+    (Array.isArray(row.cadastro_justificativas || row.cadastroJustificativas) ? (row.cadastro_justificativas || row.cadastroJustificativas) : [])
+      .filter((j: any) => j && j.ativo !== false && ok(j.justificativa))
+      .map((j: any) => String(j.campo))
+  )
+  const faltantes: string[] = []
+  for (const campo of camposObrigatorios) {
+    if (justAtivas.has(campo)) continue
+    let preenchido = false
+    if (campo === 'contato_comprador') {
+      const nome = row.contato_compras_nome ?? row.contatoComprasNome ?? row.contato_nome ?? row.contatoNome
+      const tel = row.contato_compras_telefone ?? row.contatoComprasTelefone ?? row.contato_celular ?? row.contatoCelular ?? row.contato_telefone ?? row.contatoTelefone
+      const setor = row.contato_compras_setor ?? row.contatoComprasSetor ?? 'Compras'
+      preenchido = ok(nome) && ok(tel) && ok(setor)
+    } else if (campo === 'contato_financeiro') {
+      const nome = row.contato_financeiro_nome ?? row.contatoFinanceiroNome
+      const tel = row.contato_financeiro_telefone ?? row.contatoFinanceiroTelefone
+      const setor = row.contato_financeiro_setor ?? row.contatoFinanceiroSetor ?? 'Financeiro'
+      preenchido = ok(nome) && ok(tel) && ok(setor)
+    } else if (campo === 'email_boleto') {
+      preenchido = ok(row.email_boleto ?? row.emailBoleto)
+    } else if (campo === 'telefone_empresa') {
+      preenchido = ok(row.contato_telefone ?? row.contatoTelefone) || ok(row.contato_celular ?? row.contatoCelular) || ok(row.contato_telefone_fixo ?? row.contatoTelefoneFixo) || ok(row.whatsapp)
+    } else if (campo === 'endereco_completo') {
+      preenchido = ok(row.endereco_rua ?? row.enderecoRua)
+        && ok(row.endereco_numero ?? row.enderecoNumero)
+        && ok(row.endereco_bairro ?? row.enderecoBairro)
+        && ok(row.endereco_cidade ?? row.enderecoCidade)
+        && ok(row.endereco_estado ?? row.enderecoEstado)
+        && ok(row.endereco_cep ?? row.enderecoCep)
+    } else if (campo === 'segmento') {
+      preenchido = ok(row.segmento)
+    } else if (campo === 'presenca_digital') {
+      preenchido = ok(row.website) || ok(row.instagram) || ok(row.facebook) || ok(row.linkedin)
+    } else if (campo === 'produtos_interesse') {
+      const lista: string[] = row.produtos_interesse ?? row.produtosInteresse ?? []
+      const qtds: Record<string, any> = row.produtos_quantidades_mensais ?? row.produtosQuantidadesMensais ?? {}
+      preenchido = Array.isArray(lista) && lista.length > 0 && lista.every((nome: string) => {
+        const v = qtds[nome]
+        const kg = typeof v === 'number' ? v : v?.kgMes
+        return typeof kg === 'number' && Number.isFinite(kg) && kg > 0
+      })
+    }
+    if (!preenchido) faltantes.push(campo)
+  }
+  return faltantes
+}
+
+export async function criarTarefasAutomaticasNovoCliente(clienteOuRow: any): Promise<void> {
+  const clienteId = Number(clienteOuRow?.id)
+  if (!clienteId) return
+  const vendedorId = clienteOuRow?.vendedorId ?? clienteOuRow?.vendedor_id ?? null
+
+  let tituloProdutos = 'Incluir produtos de interesse do cliente'
+  let tituloCadastro = 'Completar cadastro'
+  let camposObrigatorios: string[] = [...CAMPOS_CADASTRO_PADRAO_BACKEND]
+
+  try {
+    const { data: cfgRows } = await supabase
+      .from('atividades')
+      .select('descricao')
+      .eq('tipo', 'store:parametros_listas')
+      .order('id', { ascending: false })
+      .limit(1)
+    if (cfgRows && cfgRows.length > 0 && cfgRows[0].descricao) {
+      const parsed = JSON.parse(cfgRows[0].descricao)
+      if (Array.isArray(parsed?.camposCadastroObrigatorios) && parsed.camposCadastroObrigatorios.length > 0) {
+        camposObrigatorios = parsed.camposCadastroObrigatorios
+      }
+      if (parsed?.tarefasPadraoCadastro?.incluirProdutos?.trim()) {
+        tituloProdutos = parsed.tarefasPadraoCadastro.incluirProdutos.trim()
+      }
+      if (parsed?.tarefasPadraoCadastro?.completarCadastro?.trim()) {
+        tituloCadastro = parsed.tarefasPadraoCadastro.completarCadastro.trim()
+      }
+    }
+  } catch { /* usa padrões */ }
+
+  const addDias = (dias: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + dias)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  await insertTarefa({
+    titulo: tituloProdutos,
+    descricao: 'Levantar e registrar os produtos de interesse do cliente com consumo mensal em kg.',
+    data: addDias(5),
+    tipo: 'ligacao',
+    objetivo: 'relacionamento',
+    origem: 'automatica',
+    criadoPor: 'Automação',
+    status: 'pendente',
+    prioridade: 'media',
+    clienteId,
+    vendedorId: vendedorId || undefined,
+  })
+
+  const faltantes = camposFaltantesCadastroRow(clienteOuRow, camposObrigatorios)
+  if (faltantes.length > 0) {
+    const listaLabels = faltantes.map(c => CADASTRO_CAMPO_LABEL_BACKEND[c] || c).join(', ')
+    await insertTarefa({
+      titulo: tituloCadastro,
+      descricao: `Campos pendentes: ${listaLabels}.`,
+      data: addDias(15),
+      tipo: 'ligacao',
+      objetivo: 'relacionamento',
+      origem: 'automatica',
+      criadoPor: 'Automação',
+      status: 'pendente',
+      prioridade: 'media',
+      clienteId,
+      vendedorId: vendedorId || undefined,
+    })
+  }
+}
+
 // ============================================
 // PRODUTOS
 // ============================================

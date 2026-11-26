@@ -409,6 +409,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
     vendedores,
     setClientes,
     setInteracoes,
+    setTarefas,
     showToast,
     onOpenExistingCliente: (card) => { setActiveView('funil'); setSelectedClientePanel(card) },
   })

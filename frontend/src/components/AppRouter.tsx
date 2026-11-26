@@ -18,7 +18,10 @@ import { existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { registrarTarefaExcluida } from '../utils/exportacaoAuditoria'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
 import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
-import { buildProximaTarefa, validarFinalizacaoTarefa } from '../utils/tarefaFluxo'
+import { buildProximaTarefa, clienteJaTemOutraTarefaAberta, ehTarefaIncluirProdutos, exigeJustificativaPrazoLongo, validarFinalizacaoTarefa } from '../utils/tarefaFluxo'
+import { temJustificativaAtiva } from '../utils/cadastroCompleto'
+import { familiaDoClienteNoFunil } from '../utils/situacaoCompra'
+import { loadParametrosListas } from '../lib/parametrosListas'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -397,6 +400,10 @@ export default function AppRouter({
               const comVendedor = novosSeguros.map(c => ({ ...c, vendedorId: c.vendedorId || loggedUser?.id }))
               const { saved: savedNovos } = await db.insertClientesBatch(comVendedor as Omit<Cliente, 'id'>[])
               setClientes(prev => [...prev, ...savedNovos])
+              if (savedNovos.length > 0) {
+                const tarefasNovos = await db.criarTarefasAutomaticasNovosClientes(savedNovos, [...clientes, ...savedNovos]).catch(() => [])
+                if (tarefasNovos.length > 0) setTarefas(prev => [...tarefasNovos, ...prev])
+              }
             }
             showToast('success', `Funil atualizado: ${updatesSeguros.length} atualizados, ${novosSeguros.length} novos`)
           } catch (err) {
@@ -501,6 +508,15 @@ export default function AppRouter({
               setClientes(prev => [...prev, ...result.saved])
               novosInseridos = result.saved.length
               falhas = result.falhas
+              if (result.saved.length > 0) {
+                const empresasRealmenteNovas = result.saved.filter(novo =>
+                  !clientes.some(ex => !ex.arquivadoDuplicata && familiaDoClienteNoFunil(novo, [ex]).length > 0)
+                )
+                if (empresasRealmenteNovas.length > 0) {
+                  const tarefasNovas = await db.criarTarefasAutomaticasNovosClientes(empresasRealmenteNovas, [...clientes, ...result.saved]).catch(() => [])
+                  if (tarefasNovas.length > 0) setTarefas(prev => [...tarefasNovas, ...prev])
+                }
+              }
             }
 
             const msgs: string[] = []
@@ -569,7 +585,7 @@ export default function AppRouter({
         />
       )
     case 'tarefas':
-      return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} showToast={showToast} onVerNoFunil={onVerNoFunil}
+      return <TarefasView tarefas={tarefas} clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} interacoes={interacoes} pedidos={pedidos} produtos={produtos} showToast={showToast} onVerNoFunil={onVerNoFunil}
         onOpenClientePanel={setSelectedClientePanel}
         highlightTarefaId={highlightTarefaId}
         onDeleteTarefa={async (t) => {
@@ -591,29 +607,53 @@ export default function AppRouter({
               return
             }
             
-            // Finalização disciplinada: antes de concluir, cria o próximo passo
-            // obrigatório e vincula a nova tarefa à tarefa finalizada.
+            // Finalização disciplinada: exige próximo passo apenas se o cliente
+            // ainda não tiver outra tarefa aberta (hoje ou futura).
             let tarefaParaSalvar: Tarefa = t
             let proximaTarefaCriada: Tarefa | null = null
             if (foiConcluidaAgora) {
               if (!t.finalizacao) {
-                showToast('error', 'Para finalizar, informe canal usado, conclusão e próximo passo.')
+                showToast('error', 'Para finalizar, informe canal usado e conclusão.')
                 return
               }
-              const erroValidacao = validarFinalizacaoTarefa(t.finalizacao)
+              const clienteDaTarefa = t.clienteId ? clientes.find(c => c.id === t.clienteId) : undefined
+              const outraAberta = clienteJaTemOutraTarefaAberta(t, tarefas, clientes)
+              const parametros = await loadParametrosListas().catch(() => null)
+              const exigeProdutos = !!clienteDaTarefa
+                && ehTarefaIncluirProdutos(t, parametros?.tarefasPadraoCadastro?.incluirProdutos)
+                && !temJustificativaAtiva(clienteDaTarefa, 'produtos_interesse', clientes)
+
+              const erroValidacao = validarFinalizacaoTarefa(t.finalizacao, new Date(), {
+                exigeProximoPasso: !outraAberta,
+                exigeProdutosInteresse: exigeProdutos,
+              })
               if (erroValidacao) {
                 showToast('error', erroValidacao)
                 return
               }
-              const clienteDaTarefa = t.clienteId ? clientes.find(c => c.id === t.clienteId) : undefined
+
+              if (t.finalizacao.produtosInteresseRegistro && clienteDaTarefa) {
+                const { produtosInteresse, produtosQuantidadesMensais } = t.finalizacao.produtosInteresseRegistro
+                const familia = familiaDoClienteNoFunil(clienteDaTarefa, clientes)
+                const idsAlvo = familia.length > 0 ? familia.map(f => f.id) : [clienteDaTarefa.id]
+                await Promise.all(idsAlvo.map(id => db.updateCliente(id, { produtosInteresse, produtosQuantidadesMensais })))
+                const idSet = new Set(idsAlvo)
+                setClientes(prev => prev.map(c => idSet.has(c.id) ? { ...c, produtosInteresse, produtosQuantidadesMensais } : c))
+              }
+
               const existente = tarefaAnterior?.proximaTarefaId ? tarefas.find(x => x.id === tarefaAnterior.proximaTarefaId) : undefined
               if (existente) {
                 proximaTarefaCriada = existente
                 tarefaParaSalvar = { ...t, proximaTarefaId: existente.id }
-              } else {
+              } else if (t.finalizacao.proximoPasso) {
                 const novaTarefa = buildProximaTarefa(t, t.finalizacao, clienteDaTarefa, loggedUser?.nome || 'Vendedor')
                 proximaTarefaCriada = await db.insertTarefa(novaTarefa)
-                tarefaParaSalvar = { ...t, proximaTarefaId: proximaTarefaCriada.id }
+                const justLongo = exigeJustificativaPrazoLongo(t.finalizacao.proximoPasso.data)
+                  ? t.finalizacao.proximoPasso.justificativaPrazoLongo
+                  : undefined
+                tarefaParaSalvar = { ...t, proximaTarefaId: proximaTarefaCriada.id, justificativaPrazoLongo: justLongo }
+              } else if (outraAberta) {
+                tarefaParaSalvar = { ...t, proximaTarefaId: outraAberta.id, justificativaPrazoLongo: t.justificativaPrazoLongo }
               }
             }
 
@@ -705,6 +745,8 @@ export default function AppRouter({
             razaoSocial: nome, cnpj: '', contatoNome: '', contatoTelefone: telefone, contatoEmail: '', endereco, etapa: 'prospecção', ultimaInteracao: new Date().toISOString().split('T')[0], diasInativo: 0, score: 20, vendedorId: loggedUser?.id
           } as Omit<Cliente, 'id'>)
           setClientes(prev => [...prev, saved])
+          const tarefasNovas = await db.criarTarefasAutomaticasNovoCliente(saved, [...clientes, saved]).catch(() => [])
+          if (tarefasNovas.length > 0) setTarefas(prev => [...tarefasNovas, ...prev])
         } catch (err) { logger.error('Erro ao add lead social:', err) }
       }} />
     case 'integracoes':

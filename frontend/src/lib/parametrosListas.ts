@@ -3,6 +3,11 @@ import { supabase } from './supabase'
 import { authFetch, BOT_URL } from './botApi'
 import { PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
 import { CAMPOS_CADASTRO_PADRAO, CampoCadastroKey } from '../utils/cadastroCompleto'
+import {
+  TarefasPadraoCadastroConfig,
+  TITULO_PADRAO_TAREFA_CADASTRO,
+  TITULO_PADRAO_TAREFA_PRODUTOS,
+} from '../utils/tarefaFluxo'
 
 export type ListaParametroKey =
   | 'segmento_cliente'
@@ -34,6 +39,8 @@ export interface ParametrosState {
   auditoria: LogParametro[]
   /** Campos que entram no cálculo de cadastro completo (item 12). */
   camposCadastroObrigatorios: CampoCadastroKey[]
+  /** Nomes editáveis das duas tarefas automáticas criadas no cadastro de cliente novo. */
+  tarefasPadraoCadastro: TarefasPadraoCadastroConfig
 }
 
 const STORE_TIPO = 'store:parametros_listas'
@@ -101,6 +108,10 @@ export function buildDefaultParametros(): ParametrosState {
     },
     auditoria: [],
     camposCadastroObrigatorios: [...CAMPOS_CADASTRO_PADRAO],
+    tarefasPadraoCadastro: {
+      incluirProdutos: TITULO_PADRAO_TAREFA_PRODUTOS,
+      completarCadastro: TITULO_PADRAO_TAREFA_CADASTRO,
+    },
   }
 }
 
@@ -119,10 +130,15 @@ function mergeWithDefaults(raw: any): ParametrosState {
   })
   const camposRaw = Array.isArray(raw.camposCadastroObrigatorios) ? raw.camposCadastroObrigatorios : CAMPOS_CADASTRO_PADRAO
   const camposCadastroObrigatorios = camposRaw.filter((c: any) => (CAMPOS_CADASTRO_PADRAO as string[]).includes(c))
+  const tarefasRaw = raw.tarefasPadraoCadastro && typeof raw.tarefasPadraoCadastro === 'object' ? raw.tarefasPadraoCadastro : {}
   return {
     listas,
     auditoria: Array.isArray(raw.auditoria) ? raw.auditoria.slice(0, 300) : [],
     camposCadastroObrigatorios: camposCadastroObrigatorios.length > 0 ? camposCadastroObrigatorios : [...CAMPOS_CADASTRO_PADRAO],
+    tarefasPadraoCadastro: {
+      incluirProdutos: String(tarefasRaw.incluirProdutos || '').trim() || TITULO_PADRAO_TAREFA_PRODUTOS,
+      completarCadastro: String(tarefasRaw.completarCadastro || '').trim() || TITULO_PADRAO_TAREFA_CADASTRO,
+    },
   }
 }
 

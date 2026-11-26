@@ -111,17 +111,28 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
 
   const checkoutComDados = async (t: Tarefa) => {
     const dados = resultado[t.id] || {}
+    const hojeISO = new Date().toISOString().split('T')[0]
+    const jaTemOutraAberta = !!t.clienteId && (detalhe?.tarefas || []).some(
+      x => x.id !== t.id && x.clienteId === t.clienteId && x.status === 'pendente' && !!x.data && x.data >= hojeISO
+    )
     const proximoData = dados.proximosData || ''
     const proximoTipo = dados.proximosTipo || (['ligacao', 'whatsapp', 'email', 'visita', 'reuniao'].includes(t.tipo) ? t.tipo : 'ligacao')
     const proximoObjetivo = dados.proximosObjetivo || t.objetivo || 'relacionamento'
     const diasProximo = proximoData ? Math.ceil((new Date(`${proximoData}T00:00:00`).getTime() - Date.now()) / 86400000) : 0
-    if (!dados.resultado?.trim() || !dados.proximos?.trim() || !proximoData) {
-      showToast?.('error', 'Informe resultado e próximo passo completo para concluir a visita.')
+    if (!dados.resultado?.trim()) {
+      showToast?.('error', 'Informe o resultado da visita.')
       return
     }
-    if (diasProximo > 15 && !dados.justificativaPrazo?.trim()) {
-      showToast?.('error', 'Próximo passo acima de 15 dias exige justificativa.')
-      return
+    const enviouProximo = !!(dados.proximos?.trim() || proximoData)
+    if (!jaTemOutraAberta || enviouProximo) {
+      if (!dados.proximos?.trim() || !proximoData) {
+        showToast?.('error', 'Informe o próximo passo completo para concluir a visita.')
+        return
+      }
+      if (diasProximo > 15 && !dados.justificativaPrazo?.trim()) {
+        showToast?.('error', 'Próximo passo acima de 15 dias exige justificativa.')
+        return
+      }
     }
     navigator.geolocation.getCurrentPosition((pos) => {
       const body = {
@@ -131,13 +142,15 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
         produtosApresentados: (dados.produtos || '').split(',').map((s: string) => s.trim()).filter(Boolean),
         proximosPassos: dados.proximos || '',
         amostrasEntregues: Number(dados.amostras || 0),
-        proximoPasso: {
-          tipo: proximoTipo,
-          objetivo: proximoObjetivo,
-          data: proximoData,
-          descricao: dados.proximos || '',
-          justificativa: dados.justificativaPrazo || '',
-        },
+        ...(enviouProximo || !jaTemOutraAberta ? {
+          proximoPasso: {
+            tipo: proximoTipo,
+            objetivo: proximoObjetivo,
+            data: proximoData,
+            descricao: dados.proximos || '',
+            justificativa: dados.justificativaPrazo || '',
+          },
+        } : {}),
       }
       api(`/api/missoes/tarefas/${t.id}/checkout`, { method: 'POST', body: JSON.stringify(body) })
         .then(() => { showToast?.('success', 'Check-out registrado'); setResultado((r: any) => ({ ...r, [t.id]: undefined })); if (detalhe) abrir(detalhe.missao) })

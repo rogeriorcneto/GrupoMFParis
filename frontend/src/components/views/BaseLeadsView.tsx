@@ -232,7 +232,7 @@ const LeadDetailModal: React.FC<{
       const cep = lead.cep?.replace(/\D/g, '')
       const cepFormatado = cep?.length === 8 ? `${cep.slice(0,5)}-${cep.slice(5)}` : lead.cep
       const enderecoCompleto = [lead.logradouro, lead.bairro, lead.municipio, lead.uf].filter(Boolean).join(', ')
-      await db.insertCliente({
+      const savedLeadCli = await db.insertCliente({
         razaoSocial: lead.razao_social || lead.nome_fantasia || 'Sem nome',
         nomeFantasia: lead.nome_fantasia || undefined,
         cnpj: lead.cnpj,
@@ -254,6 +254,7 @@ const LeadDetailModal: React.FC<{
         diasInativo: 0,
         vendedorId: loggedUser?.id,
       } as Omit<Cliente, 'id'>)
+      await db.criarTarefasAutomaticasNovoCliente(savedLeadCli).catch(() => {})
       await authFetch(`${import.meta.env.VITE_BOT_URL || 'http://localhost:3001'}/api/leads-rf/importar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -485,7 +486,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
         const cepFmt = cep?.length === 8 ? `${cep.slice(0,5)}-${cep.slice(5)}` : lead.cep
         const enderecoCompleto = [lead.logradouro, lead.bairro, lead.municipio, lead.uf].filter(Boolean).join(', ')
 
-        await db.insertCliente({
+        const savedLeadLote = await db.insertCliente({
           razaoSocial: lead.razao_social || lead.nome_fantasia || 'Sem nome',
           nomeFantasia: lead.nome_fantasia || undefined,
           cnpj: lead.cnpj,
@@ -506,6 +507,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
           diasInativo: 0,
           vendedorId: loggedUser?.id,
         } as Omit<Cliente, 'id'>)
+        await db.criarTarefasAutomaticasNovoCliente(savedLeadLote).catch(() => {})
       }
 
       // Marca como importado na tabela leads_rf

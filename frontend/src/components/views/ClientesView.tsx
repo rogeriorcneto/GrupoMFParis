@@ -2,6 +2,7 @@ import React from 'react'
 import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon, PencilIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
+import { obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../../utils/situacaoCompra'
 import {
   baixarWorkbookXlsx,
   carregarTarefasExcluidas,
@@ -181,6 +182,14 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
     setFilterEtapa(''); setFilterVendedor(''); setFilterStatus(''); setFilterEstado(''); setFilterCidade(''); setFilterScoreMin(''); setFilterValorMin('')
   }
 
+  const situacaoCompraPorId = React.useMemo(() => {
+    const map = new Map<number, ReturnType<typeof obterSituacaoCompraCliente>>()
+    for (const c of scopedClientes) {
+      map.set(c.id, obterSituacaoCompraCliente(c, clientes, pedidos))
+    }
+    return map
+  }, [scopedClientes, clientes, pedidos])
+
   const filteredClientes = React.useMemo(() => {
     const filtered = scopedClientes.filter(cliente => {
       const searchLower = debouncedSearch.toLowerCase()
@@ -190,7 +199,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       const clienteCpf = String(cliente.cpf || '')
       const matchSearch = cliente.razaoSocial.toLowerCase().includes(searchLower) ||
         (cliente.nomeFantasia || '').toLowerCase().includes(searchLower) ||
-        cliente.contatoNome.toLowerCase().includes(searchLower) ||
+        (cliente.contatoComprasNome || cliente.contatoNome || '').toLowerCase().includes(searchLower) ||
         clienteCnpj.toLowerCase().includes(searchLower) ||
         clienteCnpjSecundario.toLowerCase().includes(searchLower) ||
         clienteCpf.toLowerCase().includes(searchLower) ||
@@ -201,7 +210,8 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
         ))
       const matchEtapa = !filterEtapa || cliente.etapa === filterEtapa
       const matchVendedor = !filterVendedor || String(cliente.vendedorId) === filterVendedor
-      const matchStatus = !filterStatus || cliente.statusCliente === filterStatus
+      const sit = situacaoCompraPorId.get(cliente.id)?.situacao || 'prospecto'
+      const matchStatus = !filterStatus || sit === filterStatus || cliente.statusCliente === filterStatus
       const matchEstado = !filterEstado || (cliente.enderecoEstado || '').toLowerCase() === filterEstado.toLowerCase()
       const matchCidade = !filterCidade || (cliente.enderecoCidade || '').toLowerCase().includes(filterCidade.toLowerCase())
       const matchScore = !filterScoreMin || (cliente.score || 0) >= Number(filterScoreMin)
@@ -214,7 +224,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       switch (sortKey) {
         case 'nome': return (c.razaoSocial || '').toLowerCase()
         case 'dataCadastro': return c.id // id cresce com o tempo (proxy para data de cadastro)
-        case 'ultimaCompra': return c.dataUltimoPedido || ''
+        case 'ultimaCompra': return situacaoCompraPorId.get(c.id)?.ultimaVenda || ''
         case 'valor': return c.valorEstimado || 0
         case 'score': return c.score || 0
       }
@@ -225,7 +235,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       if (va > vb) return 1 * dir
       return 0
     })
-  }, [scopedClientes, debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterEstado, filterCidade, filterScoreMin, filterValorMin, sortKey, sortDir])
+  }, [scopedClientes, situacaoCompraPorId, debouncedSearch, filterEtapa, filterVendedor, filterStatus, filterEstado, filterCidade, filterScoreMin, filterValorMin, sortKey, sortDir])
 
   const etapaConfig: Record<string, { label: string; badge: string; dot: string }> = {
     'prospecção': { label: 'Prospecção', badge: 'bg-blue-50 text-blue-700', dot: 'bg-blue-500' },
@@ -977,15 +987,18 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Situação de compra / Status</label>
               <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
                 <option value="">Todos</option>
-                <option value="ativo">Ativo</option>
-                <option value="em_risco">Em Risco</option>
-                <option value="inativo">Inativo</option>
+                <option value="ativo">Ativo (≤ 40d)</option>
+                <option value="em_atencao">Em atenção (41–60d)</option>
+                <option value="em_risco">Em risco (61–90d)</option>
+                <option value="inativo_recente">Inativo recente (91–180d)</option>
+                <option value="inativo_antigo">Inativo antigo (181+d)</option>
                 <option value="prospecto">Prospecto</option>
-                <option value="descartado">Descartado</option>
-                <option value="bloqueado">Bloqueado</option>
+                <option value="inativado">Inativado (manual)</option>
+                <option value="descartado">Descartado (manual)</option>
+                <option value="bloqueado">Bloqueado (manual)</option>
               </select>
             </div>
             <div>
@@ -1126,9 +1139,24 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                 return (
                   <tr key={cliente.id} className="hover:bg-gray-50/60 transition-colors group cursor-pointer" onClick={() => openCliente(cliente)}>
                     <td className="py-3 px-4">
-                      <p className="font-medium text-gray-900 text-sm leading-tight">{cliente.razaoSocial}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-medium text-gray-900 text-sm leading-tight">{cliente.razaoSocial}</p>
+                        {(() => {
+                          const info = situacaoCompraPorId.get(cliente.id)
+                          if (!info) return null
+                          const sc = SITUACAO_COMPRA_CONFIG[info.situacao]
+                          return (
+                            <span
+                              className={`px-1.5 py-0.5 text-[9px] font-bold rounded-full border ${sc.cor}`}
+                              title={info.dias == null ? 'Nunca comprou' : `${info.dias} dia${info.dias === 1 ? '' : 's'} desde a última venda`}
+                            >
+                              {sc.label}{info.dias != null ? ` · ${info.dias}d` : ''}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       <p className="text-xs text-gray-400 mt-0.5 leading-tight">
-                        {[cliente.contatoNome, cliente.contatoTelefone].filter(Boolean).join(' · ') || cliente.cnpj || '—'}
+                        {[cliente.contatoComprasNome || cliente.contatoNome, cliente.contatoComprasTelefone || cliente.contatoTelefone].filter(Boolean).join(' · ') || cliente.cnpj || '—'}
                       </p>
                     </td>
                     {visibleCols.cnpj && (
@@ -1186,7 +1214,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                     )}
                     {visibleCols.ultimaCompra && (
                       <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">
-                        {cliente.dataUltimoPedido ? new Date(cliente.dataUltimoPedido).toLocaleDateString('pt-BR') : <span className="text-gray-300">—</span>}
+                        {(() => {
+                          const uv = situacaoCompraPorId.get(cliente.id)?.ultimaVenda
+                          return uv ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(uv) ? `${uv}T00:00:00` : uv).toLocaleDateString('pt-BR') : <span className="text-gray-300">—</span>
+                        })()}
                       </td>
                     )}
                     <td className="py-3 px-2" onClick={e => e.stopPropagation()}>

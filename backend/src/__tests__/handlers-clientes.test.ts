@@ -7,6 +7,7 @@ vi.mock('../database.js', () => ({
   fetchClientesByIds: vi.fn(),
   searchClientes: vi.fn(),
   insertCliente: vi.fn(),
+  criarTarefasAutomaticasNovoCliente: vi.fn().mockResolvedValue(undefined),
   insertInteracao: vi.fn(),
   insertAtividade: vi.fn(),
 }))

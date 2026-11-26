@@ -19,9 +19,23 @@ import { DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 import { useParametrosListas } from '../lib/parametrosListas'
 import CadastroCompletoModal from './CadastroCompletoModal'
 import FinalizarTarefaInline from './FinalizarTarefaInline'
-import { avaliarCadastroCliente, SITUACAO_CADASTRO_CONFIG } from '../utils/cadastroCompleto'
+import { avaliarCadastroCliente, SITUACAO_CADASTRO_CONFIG, temJustificativaAtiva } from '../utils/cadastroCompleto'
 import { obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../utils/situacaoCompra'
-import { buildProximaTarefa, CANAIS_TAREFA, CANAL_LABEL, CanalTarefa, exigeJustificativaPrazoLongo, OBJETIVO_LABEL, OBJETIVOS_TAREFA, ObjetivoTarefa, validarFinalizacaoTarefa, FinalizacaoTarefaInput } from '../utils/tarefaFluxo'
+import {
+  buildProximaTarefa,
+  CANAIS_TAREFA,
+  CANAL_LABEL,
+  CanalTarefa,
+  clienteJaTemOutraTarefaAberta,
+  ehTarefaIncluirProdutos,
+  exigeJustificativaPrazoLongo,
+  FinalizacaoTarefaInput,
+  inferirOrigemTarefa,
+  OBJETIVO_LABEL,
+  OBJETIVOS_TAREFA,
+  ObjetivoTarefa,
+  validarFinalizacaoTarefa,
+} from '../utils/tarefaFluxo'
 import { supabase } from '../lib/supabase'
 import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages } from '../lib/botApi'
 
@@ -956,15 +970,33 @@ export default function ClientePanel({
   }
 
   const handleFinalizarTarefaComProximoPasso = useCallback(async (tarefa: Tarefa, finalizacao: FinalizacaoTarefaInput) => {
-    const erro = validarFinalizacaoTarefa(finalizacao)
+    const outraAberta = clienteJaTemOutraTarefaAberta(tarefa, tarefas, clientesParaCalculo)
+    const exigeProdutos = ehTarefaIncluirProdutos(tarefa, parametros.tarefasPadraoCadastro?.incluirProdutos)
+      && !temJustificativaAtiva(c, 'produtos_interesse', clientesParaCalculo)
+    const erro = validarFinalizacaoTarefa(finalizacao, new Date(), {
+      exigeProximoPasso: !outraAberta,
+      exigeProdutosInteresse: exigeProdutos,
+    })
     if (erro) {
       showToast?.('error', erro)
       throw new Error(erro)
     }
     try {
+      if (finalizacao.produtosInteresseRegistro) {
+        await salvarCadastroCompleto({
+          produtosInteresse: finalizacao.produtosInteresseRegistro.produtosInteresse,
+          produtosQuantidadesMensais: finalizacao.produtosInteresseRegistro.produtosQuantidadesMensais,
+        })
+      }
       const agora = new Date().toISOString()
-      const proximaTarefa = buildProximaTarefa(tarefa, finalizacao, c, loggedUser?.nome || 'Vendedor')
-      const proximaSalva = await db.insertTarefa(proximaTarefa)
+      let proximaSalva: Tarefa | null = null
+      if (finalizacao.proximoPasso) {
+        const proximaTarefa = buildProximaTarefa(tarefa, finalizacao, c, loggedUser?.nome || 'Vendedor')
+        proximaSalva = await db.insertTarefa(proximaTarefa)
+      }
+      const justPrazoLongo = finalizacao.proximoPasso && exigeJustificativaPrazoLongo(finalizacao.proximoPasso.data)
+        ? finalizacao.proximoPasso.justificativaPrazoLongo
+        : tarefa.justificativaPrazoLongo
       const updates: Partial<Tarefa> = {
         status: 'concluida',
         concluidaEm: agora,
@@ -972,23 +1004,26 @@ export default function ClientePanel({
         canalUsado: finalizacao.canalUsado,
         descricao: tarefa.descricao || '',
         conclusao: finalizacao.conclusao,
-        justificativaPrazoLongo: finalizacao.proximoPasso.justificativaPrazoLongo,
-        proximaTarefaId: proximaSalva.id,
+        justificativaPrazoLongo: justPrazoLongo,
+        proximaTarefaId: proximaSalva?.id ?? outraAberta?.id,
       }
       await db.updateTarefa(tarefa.id, updates)
       setTarefas(prev => [
-        proximaSalva,
+        ...(proximaSalva ? [proximaSalva] : []),
         ...prev.map(t => t.id === tarefa.id ? { ...t, ...updates } as Tarefa : t),
       ])
       setFinalizandoInteracaoId(null)
       setFinalizandoObs('')
-      addNotificacao('success', 'Tarefa finalizada', `Próximo passo agendado para ${new Date(`${proximaSalva.data}T00:00:00`).toLocaleDateString('pt-BR')}`, c.id)
+      const msgNotif = proximaSalva
+        ? `Próximo passo agendado para ${new Date(`${proximaSalva.data}T00:00:00`).toLocaleDateString('pt-BR')}`
+        : `Mantida próxima tarefa aberta em ${outraAberta ? new Date(`${outraAberta.data}T00:00:00`).toLocaleDateString('pt-BR') : 'aberto'}`
+      addNotificacao('success', 'Tarefa finalizada', msgNotif, c.id)
     } catch (err: any) {
       logger.error('Erro ao finalizar tarefa com próximo passo:', err)
       showToast?.('error', `Erro ao finalizar tarefa: ${err?.message || 'falha de rede'}`)
       throw err
     }
-  }, [c, loggedUser?.nome, setTarefas, showToast, addNotificacao])
+  }, [c, tarefas, clientesParaCalculo, parametros.tarefasPadraoCadastro?.incluirProdutos, salvarCadastroCompleto, loggedUser?.nome, setTarefas, showToast, addNotificacao])
 
   const handleCriarTarefa = async () => {
     if (!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora || !panelTarefaTipo) return
@@ -1097,7 +1132,9 @@ export default function ClientePanel({
                   ? 'Cadastro completo'
                   : avaliacaoCadastro.situacao === 'completo_com_justificativa'
                     ? 'Cadastro completo c/ justificativa'
-                    : `Cadastro incompleto (${qtd} campo${qtd === 1 ? '' : 's'})`
+                    : avaliacaoCadastro.situacao === 'incompleto_vencido'
+                      ? `Incompleto vencido (${qtd} campo${qtd === 1 ? '' : 's'})`
+                      : `Cadastro incompleto (${qtd} campo${qtd === 1 ? '' : 's'})`
                 return (
                   <button type="button" onClick={() => setShowCadastroCompleto(true)} className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${cfg.cor} hover:brightness-95`} title="Ver campos pendentes e completar cadastro">
                     {texto}
@@ -1997,38 +2034,22 @@ export default function ClientePanel({
           })()}
 
           {/* === CONTATO E LOCALIZAÇÃO === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
+          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
             <h3 className="text-sm font-semibold text-gray-900">📇 Informações para contato</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              <div><p className="text-xs text-gray-500">Pessoa responsável</p><p className="font-medium text-gray-900">{c.contatoNome || '-'}</p></div>
-              <div>
-                <p className="text-xs text-gray-500">Setor</p>
-                <select
-                  aria-label="Setor do contato"
-                  value={panelContatoSetor}
-                  onChange={async (e) => {
-                    const novoSetor = e.target.value
-                    setPanelContatoSetor(novoSetor)
-                    const notas = composeNotasEmpresa(novoSetor, panelInfoAdicional)
-                    try {
-                      await db.updateCliente(c.id, { notas })
-                      setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, notas } : cl))
-                    } catch (err) {
-                      logger.error('Erro ao salvar setor do contato:', err)
-                    }
-                  }}
-                  className="w-full px-2 py-1.5 border border-gray-300 rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                >
-                  <option value="">Selecionar...</option>
-                  {panelContatoSetor && !setoresAtivos.some(s => s.valor === panelContatoSetor) && (
-                    <option value={panelContatoSetor}>{panelContatoSetor} (desativado)</option>
-                  )}
-                  {setoresAtivos.map(s => (
-                    <option key={s.id} value={s.valor}>{s.label}</option>
-                  ))}
-                </select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
+              <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">🛒 Contato Comprador</p>
+                <p className="font-medium text-gray-900 mt-0.5">{c.contatoComprasNome || c.contatoNome || '—'}</p>
+                <p className="text-xs text-gray-600">{c.contatoComprasTelefone || c.contatoCelular || c.contatoTelefone || '—'}</p>
+                <p className="text-[11px] text-gray-400">Setor: {c.contatoComprasSetor || 'Compras'}</p>
               </div>
-              <div><p className="text-xs text-gray-500">Telefone</p>
+              <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">💰 Contato Financeiro</p>
+                <p className="font-medium text-gray-900 mt-0.5">{c.contatoFinanceiroNome || '—'}</p>
+                <p className="text-xs text-gray-600">{c.contatoFinanceiroTelefone || '—'}</p>
+                <p className="text-[11px] text-gray-400">Setor: {c.contatoFinanceiroSetor || 'Financeiro'}</p>
+              </div>
+              <div><p className="text-xs text-gray-500">Telefone da empresa</p>
                 {(c.contatoTelefone || c.contatoCelular) ? (
                   <button onClick={() => setShowCallRecorder(true)} className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer flex items-center gap-1" title="Ligar com gravação">
                     📞 {c.contatoCelular || c.contatoTelefone}
@@ -2037,9 +2058,10 @@ export default function ClientePanel({
                   <p className="font-medium text-gray-900">{c.contatoTelefone || '-'}</p>
                 )}
               </div>
-              <div><p className="text-xs text-gray-500">Email</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail}</p></div>
               <div><p className="text-xs text-gray-500">WhatsApp</p><p className="font-medium text-gray-900">{c.whatsapp || c.contatoCelular || c.contatoTelefone || '-'}</p></div>
-              <div><p className="text-xs text-gray-500">Site</p>{c.website ? <a href={/^https?:\/\//i.test(c.website) ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" className="font-medium text-primary-700 hover:text-primary-800 hover:underline truncate block" title={c.website}>{c.website}</a> : <p className="font-medium text-gray-900 truncate">{c.localizacao || '-'}</p>}</div>
+              <div><p className="text-xs text-gray-500">E-mail geral</p><p className="font-medium text-gray-900 truncate">{c.contatoEmail || '-'}</p></div>
+              <div><p className="text-xs text-gray-500">E-mail para boleto</p><p className="font-medium text-gray-900 truncate">{c.emailBoleto || '-'}</p></div>
+              <div className="sm:col-span-2"><p className="text-xs text-gray-500">Site</p>{c.website ? <a href={/^https?:\/\//i.test(c.website) ? c.website : `https://${c.website}`} target="_blank" rel="noreferrer" className="font-medium text-primary-700 hover:text-primary-800 hover:underline truncate block" title={c.website}>{c.website}</a> : <p className="font-medium text-gray-900 truncate">{c.localizacao || '-'}</p>}</div>
             </div>
             <div>
               <p className="text-xs text-gray-500">Endereço</p>
@@ -2150,7 +2172,40 @@ export default function ClientePanel({
             </div>
             {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <>
               <input value={taskHistorySearch} onChange={e => { setTaskHistorySearch(e.target.value); setTaskHistoryLimit(5) }} placeholder="Buscar tarefa por palavra-chave..." className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-400" />
-              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => { const cicloTar = (tarefa.clienteId ? cicloPorCardId.get(tarefa.clienteId) : undefined) || 1; return (<button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5 flex-wrap"><span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">Ciclo {cicloTar}</span><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p></div></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}{tarefa.concluidaEm ? ` · Concluída em ${new Date(tarefa.concluidaEm).toLocaleString('pt-BR')}` : ''}</p></button>) })}</div>}
+              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => {
+                const cicloTar = (tarefa.clienteId ? cicloPorCardId.get(tarefa.clienteId) : undefined) || 1
+                const origTar = inferirOrigemTarefa(tarefa)
+                return (
+                  <button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">Ciclo {cicloTar}</span>
+                          <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded border ${origTar === 'automatica' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                            {origTar === 'automatica' ? 'Automática' : 'Manual'}
+                          </span>
+                          {tarefa.objetivo && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 rounded">
+                              {OBJETIVO_LABEL[tarefa.objetivo] || tarefa.objetivo}
+                            </span>
+                          )}
+                          {tarefa.canalUsado && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200 rounded">
+                              Canal: {CANAL_LABEL[tarefa.canalUsado] || tarefa.canalUsado}
+                            </span>
+                          )}
+                          <p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p>
+                        </div>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span>
+                    </div>
+                    {tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}
+                    {tarefa.conclusao && <p className="mt-1 text-xs text-green-800 bg-green-50 border border-green-100 rounded px-2 py-1"><strong>Conclusão:</strong> {tarefa.conclusao}</p>}
+                    {tarefa.justificativaPrazoLongo && <p className="mt-1 text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded px-2 py-1"><strong>Justificativa de prazo longo:</strong> {tarefa.justificativaPrazoLongo}</p>}
+                    <p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}{tarefa.concluidaEm ? ` · Concluída em ${new Date(tarefa.concluidaEm).toLocaleString('pt-BR')}` : ''}</p>
+                  </button>
+                )
+              })}</div>}
               {filteredTaskHistory.length > visibleTaskHistory.length && <button onClick={() => setTaskHistoryLimit(limit => limit + 5)} className="w-full py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-xl">Mostrar mais 5</button>}
             </>}
           </div>
@@ -2948,8 +3003,13 @@ export default function ClientePanel({
                         return descMatch && descMatch
                       })
                       if (tarefaV && (editingInter.prazo || editingInter.hora)) {
+                        const mudouPrazo = !!(editingInter.prazo && editingInter.prazo !== tarefaV.data)
+                        if (mudouPrazo) {
+                          showToast?.('error', 'Para alterar a data da tarefa, use o botão Reagendar (registra o histórico e exige justificativa acima de 15 dias).')
+                          setEditingInterSaving(false)
+                          return
+                        }
                         const updates: Partial<Tarefa> = {}
-                        if (editingInter.prazo) updates.data = editingInter.prazo
                         if (editingInter.hora) updates.hora = editingInter.hora
                         if (editingInter.responsavelId) updates.vendedorId = Number(editingInter.responsavelId)
                         await db.updateTarefa(tarefaV.id, updates)
@@ -3126,8 +3186,25 @@ export default function ClientePanel({
                           </div>
 
                           {/* Descrição + Anexos embutidos (Item 8) */}
-                          {(inter.descricao || tarefaVinculada?.conclusao) && (
+                          {(inter.descricao || tarefaVinculada?.conclusao || tarefaVinculada?.justificativaPrazoLongo || tarefaVinculada?.objetivo || tarefaVinculada?.canalUsado) && (
                             <div className="px-3 py-1.5 space-y-2">
+                              {tarefaVinculada && (tarefaVinculada.objetivo || tarefaVinculada.canalUsado || tarefaVinculada.origem) && (
+                                <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                                  {tarefaVinculada.objetivo && (
+                                    <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      Objetivo: {OBJETIVO_LABEL[tarefaVinculada.objetivo] || tarefaVinculada.objetivo}
+                                    </span>
+                                  )}
+                                  {tarefaVinculada.canalUsado && (
+                                    <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
+                                      Canal usado: {CANAL_LABEL[tarefaVinculada.canalUsado] || tarefaVinculada.canalUsado}
+                                    </span>
+                                  )}
+                                  <span className={`px-2 py-0.5 rounded-full border ${inferirOrigemTarefa(tarefaVinculada) === 'automatica' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                    Origem: {inferirOrigemTarefa(tarefaVinculada) === 'automatica' ? 'Automática' : 'Manual'}
+                                  </span>
+                                </div>
+                              )}
                               {inter.descricao && (() => {
                                 const urls = (inter.descricao.match(/https?:\/\/[^\s)]+/g) || []).filter(u =>
                                   /\.(pdf|png|jpe?g|webp|xlsx?|csv|docx?|zip)(\?|$)/i.test(u) || u.includes('/storage/v1/object/')
@@ -3153,6 +3230,12 @@ export default function ClientePanel({
                                   </>
                                 )
                               })()}
+                              {tarefaVinculada?.justificativaPrazoLongo && (
+                                <div className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-wide text-orange-700 mb-0.5">Justificativa de prazo longo</p>
+                                  <p className="text-xs text-orange-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.justificativaPrazoLongo}</p>
+                                </div>
+                              )}
                               {tarefaVinculada?.conclusao && (
                                 <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-green-700 mb-1">Conclusão</p>
@@ -3336,11 +3419,16 @@ export default function ClientePanel({
                               )}
                             </div>
                           </div>
-                          {/* Finalização disciplinada: canal, conclusão e próximo passo obrigatório */}
+                          {/* Finalização disciplinada: canal, conclusão e próximo passo (quando necessário) */}
                           {finalizandoInteracaoId === inter.id && tarefaVinculada && (
                             <div className="mx-3 mb-3">
                               <FinalizarTarefaInline
                                 tarefa={tarefaVinculada}
+                                outraTarefaAberta={clienteJaTemOutraTarefaAberta(tarefaVinculada, tarefas, clientesParaCalculo)}
+                                cliente={c}
+                                produtosCatalogo={produtos}
+                                exigeProdutosInteresse={ehTarefaIncluirProdutos(tarefaVinculada, parametros.tarefasPadraoCadastro?.incluirProdutos) && !temJustificativaAtiva(c, 'produtos_interesse', clientesParaCalculo)}
+                                vendedorNome={loggedUser?.nome || 'Vendedor'}
                                 onConfirm={(input) => handleFinalizarTarefaComProximoPasso(tarefaVinculada, input)}
                                 onCancel={() => { setFinalizandoInteracaoId(null); setFinalizandoObs('') }}
                               />

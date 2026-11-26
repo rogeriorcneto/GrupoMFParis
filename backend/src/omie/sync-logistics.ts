@@ -209,7 +209,8 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
                       titulo: `Coletar satisfação: ${cliFull?.razao_social || 'cliente'}`,
                       descricao: 'Pedido entregue — coletar feedback de satisfação do cliente.',
                       cliente_id: cli.id, vendedor_id: cli.vendedor_id || null,
-                      tipo: 'follow_up', prioridade: 'alta', status: 'pendente',
+                      tipo: 'ligacao', objetivo: 'pos_venda', origem: 'automatica', criado_por: 'Automação',
+                      prioridade: 'alta', status: 'pendente',
                       data: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
                     })
                   }

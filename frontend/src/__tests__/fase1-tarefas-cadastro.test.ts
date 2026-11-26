@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import type { Cliente, Pedido } from '../types'
+import type { Cliente, Pedido, Tarefa } from '../types'
 import { classificarSituacaoCompra, obterSituacaoCompraCliente } from '../utils/situacaoCompra'
 import { avaliarCadastroCliente, CAMPOS_CADASTRO_PADRAO } from '../utils/cadastroCompleto'
-import { validarFinalizacaoTarefa, addDiasISO } from '../utils/tarefaFluxo'
+import {
+  addDiasISO,
+  clienteJaTemOutraTarefaAberta,
+  ehTarefaIncluirProdutos,
+  montarTarefasIniciaisCliente,
+  validarFinalizacaoTarefa,
+} from '../utils/tarefaFluxo'
 
 const clienteBase = (over: Partial<Cliente> = {}): Cliente => ({
   id: 1,
@@ -118,13 +124,98 @@ describe('Fase 1 — fluxo de finalização de tarefa', () => {
       descricao: 'Verificar estoque',
     },
   }
-  it('não permite finalizar sem próximo passo completo', () => {
-    expect(validarFinalizacaoTarefa({ ...base, proximoPasso: { ...base.proximoPasso, descricao: '' } }, new Date('2026-11-25T12:00:00'))).toMatch(/descrição/i)
+  it('não permite finalizar sem próximo passo quando não há outra tarefa aberta', () => {
+    const ref = new Date('2026-11-25T12:00:00')
+    expect(validarFinalizacaoTarefa({ canalUsado: 'ligacao', conclusao: 'Falei com o comprador' }, ref, { exigeProximoPasso: true })).toMatch(/tipo/i)
+    expect(validarFinalizacaoTarefa({ ...base, proximoPasso: { ...base.proximoPasso, descricao: '' } }, ref)).toMatch(/descrição/i)
+  })
+  it('permite finalizar apenas com canal + conclusão quando já existe outra tarefa futura em aberto para o cliente', () => {
+    const ref = new Date('2026-11-25T12:00:00')
+    const cli = clienteBase({ id: 10 })
+    const tAtual: Tarefa = { id: 1, titulo: 'Incluir produtos de interesse do cliente', data: '2026-11-25', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    const tFutura: Tarefa = { id: 2, titulo: 'Completar cadastro', data: '2026-12-05', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    const outra = clienteJaTemOutraTarefaAberta(tAtual, [tAtual, tFutura], [cli], ref)
+    expect(outra?.id).toBe(2)
+    expect(validarFinalizacaoTarefa({ canalUsado: 'whatsapp', conclusao: 'Contato feito' }, ref, { exigeProximoPasso: !outra })).toBeNull()
+  })
+  it('não considera tarefa atrasada como tarefa futura em aberto', () => {
+    const ref = new Date('2026-11-25T12:00:00')
+    const cli = clienteBase({ id: 10 })
+    const tAtual: Tarefa = { id: 1, titulo: 'Ligação', data: '2026-11-25', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    const tAtrasada: Tarefa = { id: 2, titulo: 'Antiga', data: '2026-11-10', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    expect(clienteJaTemOutraTarefaAberta(tAtual, [tAtual, tAtrasada], [cli], ref)).toBeUndefined()
+  })
+  it('exige registro de produtos com consumo mensal > 0 ao concluir tarefa de incluir produtos', () => {
+    const ref = new Date('2026-11-25T12:00:00')
+    expect(ehTarefaIncluirProdutos({ titulo: 'Incluir produtos de interesse do cliente' })).toBe(true)
+    expect(
+      validarFinalizacaoTarefa({ canalUsado: 'ligacao', conclusao: 'Levantado' }, ref, { exigeProximoPasso: false, exigeProdutosInteresse: true })
+    ).toMatch(/produto/i)
+    expect(
+      validarFinalizacaoTarefa({
+        canalUsado: 'ligacao',
+        conclusao: 'Levantado',
+        produtosInteresseRegistro: { produtosInteresse: ['Leite Pó'], produtosQuantidadesMensais: { 'Leite Pó': { kgMes: 0, atualizadoEm: ref.toISOString(), vendedorNome: 'Ana' } } },
+      }, ref, { exigeProximoPasso: false, exigeProdutosInteresse: true })
+    ).toMatch(/consumo mensal/i)
+    expect(
+      validarFinalizacaoTarefa({
+        canalUsado: 'ligacao',
+        conclusao: 'Levantado',
+        produtosInteresseRegistro: { produtosInteresse: ['Leite Pó'], produtosQuantidadesMensais: { 'Leite Pó': { kgMes: 150, atualizadoEm: ref.toISOString(), vendedorNome: 'Ana' } } },
+      }, ref, { exigeProximoPasso: false, exigeProdutosInteresse: true })
+    ).toBeNull()
   })
   it('exige justificativa quando próximo passo passa de 15 dias', () => {
     const ref = new Date('2026-11-25T12:00:00')
     const data = addDiasISO(ref, 16)
     expect(validarFinalizacaoTarefa({ ...base, proximoPasso: { ...base.proximoPasso, data } }, ref)).toMatch(/justificativa/i)
     expect(validarFinalizacaoTarefa({ ...base, proximoPasso: { ...base.proximoPasso, data, justificativaPrazoLongo: 'Cliente parou a linha' } }, ref)).toBeNull()
+  })
+})
+
+describe('Fase 1 — tarefas automáticas no cadastro de cliente novo', () => {
+  it('cria as duas tarefas (5d produtos + 15d completar cadastro com campos faltantes) quando cadastro está incompleto', () => {
+    const ref = new Date('2026-11-25T12:00:00')
+    const cli = clienteBase({ id: 50, vendedorId: 3 })
+    const tarefas = montarTarefasIniciaisCliente(cli, { referencia: ref })
+    expect(tarefas).toHaveLength(2)
+    expect(tarefas[0]).toMatchObject({
+      titulo: 'Incluir produtos de interesse do cliente',
+      data: '2026-11-30',
+      objetivo: 'relacionamento',
+      origem: 'automatica',
+      clienteId: 50,
+      vendedorId: 3,
+    })
+    expect(tarefas[1]).toMatchObject({
+      titulo: 'Completar cadastro',
+      data: '2026-12-10',
+      objetivo: 'relacionamento',
+      origem: 'automatica',
+      clienteId: 50,
+      vendedorId: 3,
+    })
+    expect(tarefas[1].descricao).toContain('Contato Financeiro')
+    expect(tarefas[1].descricao).toContain('E-mail para boleto')
+  })
+
+  it('cria apenas a tarefa de produtos (5d) quando o cadastro já está completo e respeita nomes customizados de Parâmetros', () => {
+    const ref = new Date('2026-11-25T12:00:00')
+    const completo = clienteBase({
+      id: 51,
+      contatoComprasNome: 'Ana', contatoComprasTelefone: '31999990000', contatoComprasSetor: 'Compras',
+      contatoFinanceiroNome: 'João', contatoFinanceiroTelefone: '31988880000', contatoFinanceiroSetor: 'Financeiro',
+      emailBoleto: 'boletos@teste.com',
+      enderecoRua: 'Rua A', enderecoNumero: '10', enderecoBairro: 'Centro', enderecoCidade: 'BH', enderecoEstado: 'MG', enderecoCep: '30000000',
+      segmento: 'Indústria', instagram: '@empresa',
+      produtosInteresse: ['Leite Pó'], produtosQuantidadesMensais: { 'Leite Pó': 100 },
+    })
+    const tarefas = montarTarefasIniciaisCliente(completo, {
+      referencia: ref,
+      nomesTarefas: { incluirProdutos: 'Mapear mix do cliente', completarCadastro: 'Fechar ficha cadastral' },
+    })
+    expect(tarefas).toHaveLength(1)
+    expect(tarefas[0].titulo).toBe('Mapear mix do cliente')
   })
 })
