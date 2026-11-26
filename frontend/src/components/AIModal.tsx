@@ -64,7 +64,7 @@ export default function AIModal({ show, onClose, clientes, pedidos = [], vendedo
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-blue-600 rounded-t-apple">
             <div className="flex items-center gap-2">
               <SparklesIcon className="h-5 w-5 text-white" />
-              <h2 className="text-lg font-semibold text-white">Assistente IA — Gemini</h2>
+              <h2 className="text-lg font-semibold text-white">Assistente IA</h2>
             </div>
             <button
               onClick={onClose}

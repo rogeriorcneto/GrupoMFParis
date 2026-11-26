@@ -7,7 +7,7 @@
  * Speech-to-Text: Web Speech API nativa (Chrome/Edge, pt-BR)
  * Text-to-Speech: ElevenLabs ou Google TTS Neural via backend /api/tts
  *                 Fallback automático para browser SpeechSynthesis
- * AI:             Gemini com contexto completo do CRM
+ * AI:             IA com contexto completo do CRM
  */
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { PhoneXMarkIcon } from '@heroicons/react/24/solid'
@@ -170,7 +170,7 @@ async function callAIVoice(
     body: JSON.stringify({ messages, systemInstruction: systemPrompt }),
   })
 
-  if (!res.ok) throw new Error(`Gemini ${res.status}`)
+  if (!res.ok) throw new Error(`IA ${res.status}`)
   const data = await res.json()
   return data.response || data.message || 'Entendido.'
 }
@@ -844,7 +844,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
           body: JSON.stringify({ messages: historyRef.current, systemInstruction: voicePrompt }),
           signal: AbortSignal.timeout(15000),
         })
-        if (!res.ok) throw new Error(`Gemini ${res.status}`)
+        if (!res.ok) throw new Error(`IA ${res.status}`)
         const data = await res.json()
         const reply = (data.response || data.message || '').trim() || 'Entendido.'
         console.log('[Voice] Resposta da IA:', reply)

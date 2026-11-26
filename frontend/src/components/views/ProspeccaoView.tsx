@@ -321,7 +321,7 @@ const ProspeccaoView: React.FC<{
             const resumo = sugestoes.slice(0, 5).map(s => `• ${s.prioridade === 'alta' ? '🔴' : s.prioridade === 'media' ? '🟡' : '⚪'} ${s.acao}`).join('\n')
             alert(`✨ IA analisou ${clientes.length} clientes!\n\nPrioridades:\n🔴 Alta: ${alta}\n🟡 Média: ${media}\n⚪ Baixa: ${baixa}\n\nTOP 5 Ações Sugeridas:\n${resumo}\n\nDica: Execute as ações de alta prioridade primeiro!`)
           }}
-          className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-apple hover:from-purple-700 hover:to-blue-700 shadow-apple-sm flex items-center text-sm font-semibold"
+          className="px-4 py-2 bg-primary-700 text-white rounded-xl hover:bg-primary-800 shadow-apple-sm flex items-center text-sm font-semibold"
         >
           <SparklesIcon className="h-4 w-4 mr-2" />
           IA Automatizar

@@ -99,7 +99,7 @@ export default function CerebroParisSystem({ onVoltar }: { onVoltar: () => void 
       const errMsg: Mensagem = {
         id: (Date.now() + 1).toString(),
         papel: 'ai',
-        texto: '⚠️ Erro ao processar. Verifique a configuração da API Gemini.',
+        texto: '⚠️ Erro ao processar. Verifique a configuração da IA.',
         timestamp: new Date()
       }
       setMensagens(prev => [...prev, errMsg])

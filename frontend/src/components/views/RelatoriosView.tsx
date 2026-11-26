@@ -322,7 +322,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
     return m
   }, [ttRelatorio])
 
-  // Consolidação das auditorias IA (só gestor: combina resultados salvos pelo Agente Gemini + avaliação rápida limitada às 250 conclusões mais recentes para zero travamento)
+  // Consolidação das auditorias IA (só gestor: combina resultados salvos pelo Agente de IA + avaliação rápida limitada às 250 conclusões mais recentes para zero travamento)
   const registrosAuditoriaIA = useMemo<RegistroAuditoriaIA[]>(() => {
     if (!isGerente) return []
     const porChave = new Map<string, RegistroAuditoriaIA>()
@@ -1878,9 +1878,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                           setRodandoIA(false)
                         }
                       }}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold hover:bg-indigo-100 disabled:opacity-50 cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-[#EFEFF4] dark:bg-[#262629] text-gray-700 dark:text-gray-200 border border-black/[0.06] text-xs font-semibold hover:bg-black/[0.08] disabled:opacity-50 cursor-pointer transition-colors"
                     >
-                      {rodandoIA ? 'Analisando...' : 'Rodar análise Gemini'}
+                      {rodandoIA ? 'Analisando...' : 'Rodar análise de IA'}
                     </button>
                   </div>
                 </div>

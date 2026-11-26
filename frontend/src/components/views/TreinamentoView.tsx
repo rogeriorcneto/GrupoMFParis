@@ -390,7 +390,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                 <ArrowLeftIcon className="h-5 w-5" />
               </button>
             )}
-            <div className="p-1.5 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg">
+            <div className="p-1.5 bg-primary-700 rounded-lg">
               <AcademicCapIcon className="h-5 w-5 text-white" />
             </div>
             <div>
@@ -487,7 +487,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
               </div>
 
               <button onClick={iniciarSessao} disabled={!moduloId}
-                className="w-full py-3.5 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl font-bold shadow-lg hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+                className="w-full py-3.5 bg-primary-700 hover:bg-primary-800 text-white rounded-xl font-bold shadow-lg hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
                 <ChatBubbleLeftRightIcon className="h-5 w-5" />
                 {moduloId ? 'Iniciar Roleplay' : 'Selecione um módulo'}
               </button>
@@ -570,7 +570,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
       {aba === 'roleplay' && feedbackObj && (
         <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
-            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 text-center">
+            <div className="bg-emerald-600 text-white p-6 text-center">
               <TrophyIcon className="h-12 w-12 mx-auto mb-2" />
               <h2 className="text-2xl font-bold">Roleplay Concluído!</h2>
               <p className="text-green-100 text-sm">Análise de Performance</p>
@@ -658,7 +658,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             <ArrowLeftIcon className="h-4 w-4" /> Voltar ao catálogo
           </button>
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
-            <div className="bg-gradient-to-br from-primary-500 to-primary-700 p-6 text-white">
+            <div className="bg-primary-700 p-6 text-white">
               <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">{produtoVer.categoria}</span>
               <h2 className="text-xl font-bold mt-2">{produtoVer.nome}</h2>
               <p className="text-primary-200 text-sm mt-1">{produtoVer.destaque}</p>
@@ -697,7 +697,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
           </div>
           {!quizAtivo && !quizPergunta && (
             <button onClick={() => { setQuizAtivo(true); gerarQuiz() }}
-              className="w-full py-4 bg-gradient-to-r from-purple-600 to-primary-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
+              className="w-full py-4 bg-primary-700 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2">
               <SparklesIcon className="h-5 w-5" />Gerar Pergunta com IA
             </button>
           )}
@@ -1203,7 +1203,7 @@ REGRAS PARA A NOTA FINAL:
           )}
 
           <button onClick={iniciarLigacao} disabled={!moduloId || !perfilId}
-            className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white rounded-xl font-bold text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3 shadow-lg shadow-green-500/20">
+            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-base transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3">
             <PhoneIcon className="h-6 w-6" />
             Iniciar Ligação
           </button>
@@ -1228,7 +1228,7 @@ REGRAS PARA A NOTA FINAL:
       {callStatus === 'connected' && (
         <div className="flex flex-col h-[calc(100vh-200px)] gap-4">
           {/* Header da ligação */}
-          <div className="bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl p-6 text-white text-center shadow-lg relative overflow-hidden">
+          <div className="bg-emerald-700 rounded-2xl p-6 text-white text-center shadow-lg relative overflow-hidden">
             <div className="absolute inset-0 opacity-10">
               {[...Array(3)].map((_, i) => (
                 <div key={i} className="absolute inset-0 rounded-full border border-white animate-ping" style={{ animationDelay: `${i * 0.5}s`, animationDuration: '2s' }} />
@@ -1281,7 +1281,7 @@ REGRAS PARA A NOTA FINAL:
 
           {/* Botão desligar */}
           <button onClick={encerrarLigacao}
-            className="w-full py-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-xl font-bold text-base transition-all flex items-center justify-center gap-3 shadow-lg shadow-red-500/20">
+            className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-base transition-all flex items-center justify-center gap-3">
             <PhoneIcon className="h-6 w-6 rotate-[135deg]" />
             Desligar
           </button>
@@ -1306,7 +1306,7 @@ REGRAS PARA A NOTA FINAL:
       {callStatus === 'ended' && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden">
-            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 text-center">
+            <div className="bg-emerald-600 text-white p-6 text-center">
               <TrophyIcon className="h-12 w-12 mx-auto mb-2" />
               <h2 className="text-2xl font-bold">Ligação Concluída!</h2>
               <p className="text-green-100 text-sm">Análise de Performance · {fmt(duracao)} com {perfilAtual?.nome}</p>
