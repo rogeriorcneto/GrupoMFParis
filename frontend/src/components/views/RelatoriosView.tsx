@@ -322,18 +322,21 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
     return m
   }, [ttRelatorio])
 
-  // Consolidação das auditorias IA (só gestor: combina resultados salvos pelo Agente Gemini + avaliação imediata das conclusões/justificativas no período)
+  // Consolidação das auditorias IA (só gestor: combina resultados salvos pelo Agente Gemini + avaliação rápida limitada às 250 conclusões mais recentes para zero travamento)
   const registrosAuditoriaIA = useMemo<RegistroAuditoriaIA[]>(() => {
     if (!isGerente) return []
     const porChave = new Map<string, RegistroAuditoriaIA>()
     for (const r of auditoriasBackend) porChave.set(r.chave, r)
 
-    for (const t of tarefasFiltradas) {
+    let avaliadasLocal = 0
+    for (let i = tarefasFiltradas.length - 1; i >= 0 && avaliadasLocal < 250; i--) {
+      const t = tarefasFiltradas[i]
       if (t.status !== 'concluida' || !t.conclusao) continue
       const dt = dataConclusaoISO(t)
       if (inicioISO !== '0001-01-01' && (dt < inicioISO || dt > fimISO)) continue
       const chave = `tarefa:${t.id}`
       if (porChave.has(chave)) continue
+      avaliadasLocal++
       const emp = t.clienteId ? empresaPorCardId.get(t.clienteId) : undefined
       const av = classificarRegistroLocal({
         tipoRegistro: 'tarefa',
@@ -982,22 +985,24 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
 
   return (
     <div className="space-y-3 pb-10">
-      {/* BARRA DE FILTROS FIXA NO TOPO (Itens 6 e 11) */}
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-sm p-2.5 space-y-2">
+      {/* BARRA DE FILTROS FIXA NO TOPO — Estilo Apple macOS Sonoma */}
+      <div className="sticky top-0 z-20 bg-white/85 dark:bg-[#1C1C1E]/88 backdrop-blur-xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-apple-sm p-3 space-y-2.5">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {abasVisiveis.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setAba(t.id)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                  aba === t.id ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex flex-wrap p-0.5 rounded-xl bg-[#E5E5EA]/80 dark:bg-[#262629] gap-0.5">
+              {abasVisiveis.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setAba(t.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    aba === t.id ? 'bg-white dark:bg-[#36363A] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             {isGerente && loggedUser && linhasVendedores.some(l => l.vendedorId === loggedUser.id && l.totalEmpresas > 0) && (
               <button
                 type="button"
@@ -1005,10 +1010,10 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                   setFiltros(f => ({ ...f, vendedorId: f.vendedorId === loggedUser.id ? 'todos' : loggedUser.id }))
                   setVendedorNivel2Id(prev => prev === loggedUser.id ? null : loggedUser.id)
                 }}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                   filtros.vendedorId === loggedUser.id
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                    ? 'bg-primary-700 text-white'
+                    : 'bg-[#EFEFF4] dark:bg-[#262629] text-gray-700 hover:bg-black/[0.08]'
                 }`}
                 title="Alternar entre visão geral de gestor e a sua própria carteira"
               >
@@ -1022,7 +1027,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
               <button
                 type="button"
                 onClick={exportarVisaoGeralExcel}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 text-xs font-semibold cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#262629] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] text-xs font-medium cursor-pointer transition-colors"
                 title="Exportar relatório atual em Excel (.xlsx)"
               >
                 <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Excel
@@ -1030,7 +1035,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
               <button
                 type="button"
                 onClick={() => exportarPDF('geral')}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs font-semibold cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#262629] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] text-xs font-medium cursor-pointer transition-colors"
                 title="Exportar relatório atual em PDF"
               >
                 <DocumentArrowDownIcon className="h-3.5 w-3.5" /> PDF
@@ -1552,7 +1557,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                         onClick={() => { setBancoSubAba(b.vendedorId === 'banco_clientes' ? 'clientes' : 'prospectos'); setAba('bancos') }}
                         className="hover:text-primary-700 hover:underline cursor-pointer"
                       >
-                        🏦 {b.vendedorNome} ({b.totalEmpresas})
+                        {b.vendedorNome} ({b.totalEmpresas})
                       </button>
                     </td>
                     <td onClick={() => abrirListaEmpresas(`${b.vendedorNome} · ≤180d`, b.carteira180)} className="py-1.5 px-2 text-right cursor-pointer hover:underline">{b.carteira180.length}</td>

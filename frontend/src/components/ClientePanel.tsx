@@ -2450,59 +2450,66 @@ export default function ClientePanel({
             </div>
           </div>
 
-          {/* ===== ABA WHATSAPP — conversa completa do cliente ===== */}
+          {/* ===== ABA WHATSAPP — conversa estilo Apple Messages (Claro e Escuro) ===== */}
           {activeTab === 'whatsapp' && (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => setShowWhatsApp(true)}
-                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-apple transition-colors"
+                  className="px-3.5 py-1.5 bg-primary-700 hover:bg-primary-800 text-white text-xs font-medium rounded-lg shadow-apple-sm transition-colors"
                 >
                   Abrir chat WhatsApp
                 </button>
               </div>
-            <div className="bg-[#e5ddd5] rounded-apple border border-gray-200 min-h-[400px] max-h-[60vh] overflow-y-auto p-4 space-y-3">
-              {waHistoricoLoading && (
-                <div className="text-center py-8">
-                  <div className="inline-block animate-spin h-6 w-6 border-2 border-green-600 border-t-transparent rounded-full" />
-                </div>
-              )}
-              {!waHistoricoLoading && waHistorico.length === 0 && (
-                <div className="text-center py-12">
-                  <p className="text-sm text-gray-600 bg-white bg-opacity-80 inline-block px-4 py-2 rounded-lg shadow-sm">
-                    Nenhuma mensagem WhatsApp registrada para este cliente ainda.
-                  </p>
-                </div>
-              )}
-              {waHistorico.map(m => (
-                <div key={m.id} className={`flex ${m.direcao === 'enviada' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`text-sm text-gray-900 px-3 py-2 rounded-lg max-w-[85%] shadow-sm ${m.direcao === 'enviada' ? 'bg-[#dcf8c6]' : 'bg-white'}`}>
-                    {m.mediaUrl && m.tipo === 'audio' && (
-                      <audio controls src={m.mediaUrl} className="w-full max-w-[240px] h-9" />
-                    )}
-                    {m.mediaUrl && m.tipo === 'image' && (
-                      <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer">
-                        <img src={m.mediaUrl} alt={m.mensagem} className="rounded-lg max-w-[240px] max-h-[240px] object-cover mb-1" />
-                      </a>
-                    )}
-                    {m.mediaUrl && m.tipo === 'video' && (
-                      <video controls src={m.mediaUrl} className="rounded-lg max-w-[240px] max-h-[240px] mb-1" />
-                    )}
-                    {m.mediaUrl && m.tipo === 'document' && (
-                      <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline text-xs block mb-1">
-                        📎 {m.fileName || 'Documento'}
-                      </a>
-                    )}
-                    <p className="whitespace-pre-wrap">{m.mensagem}</p>
-                    <p className="text-[10px] text-gray-500 text-right mt-1">
-                      {m.createdAt ? new Date(m.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
-                      {m.direcao === 'enviada' ? ' ✓✓' : ''}
+              <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm min-h-[400px] max-h-[60vh] overflow-y-auto p-4 space-y-2.5">
+                {waHistoricoLoading && (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin h-5 w-5 border-2 border-primary-600 border-t-transparent rounded-full" />
+                  </div>
+                )}
+                {!waHistoricoLoading && waHistorico.length === 0 && (
+                  <div className="text-center py-14">
+                    <p className="text-xs text-gray-400">
+                      Nenhuma mensagem WhatsApp registrada para este cliente ainda.
                     </p>
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+                {waHistorico.map(m => {
+                  const enviada = m.direcao === 'enviada'
+                  return (
+                    <div key={m.id} className={`flex ${enviada ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl max-w-[82%] shadow-sm ${
+                        enviada
+                          ? 'bg-primary-700 dark:bg-[#2A4380] text-white rounded-br-sm'
+                          : 'bg-[#F2F2F7] dark:bg-[#2C2C30] text-gray-900 dark:text-gray-100 rounded-bl-sm'
+                      }`}>
+                        {m.mediaUrl && m.tipo === 'audio' && (
+                          <audio controls src={m.mediaUrl} className="w-full max-w-[240px] h-9" />
+                        )}
+                        {m.mediaUrl && m.tipo === 'image' && (
+                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={m.mediaUrl} alt={m.mensagem} className="rounded-xl max-w-[240px] max-h-[240px] object-cover mb-1" />
+                          </a>
+                        )}
+                        {m.mediaUrl && m.tipo === 'video' && (
+                          <video controls src={m.mediaUrl} className="rounded-xl max-w-[240px] max-h-[240px] mb-1" />
+                        )}
+                        {m.mediaUrl && m.tipo === 'document' && (
+                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className={`underline text-xs block mb-1 ${enviada ? 'text-white/90' : 'text-primary-700'}`}>
+                            {m.fileName || 'Abrir documento'}
+                          </a>
+                        )}
+                        <p className="whitespace-pre-wrap">{m.mensagem}</p>
+                        <p className={`text-[10px] text-right mt-1 tabular-nums ${enviada ? 'text-white/70' : 'text-gray-400'}`}>
+                          {m.createdAt ? new Date(m.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                          {enviada ? ' · enviada' : ''}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 

@@ -1592,23 +1592,23 @@ const TarefasView: React.FC<{
                 </div>
               </div>
 
-              {/* KPIs rápidos */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
-                  <p className="text-2xl font-bold text-green-700">{todas.length}</p>
-                  <p className="text-xs text-green-600 font-medium mt-0.5">Concluídas</p>
+              {/* KPIs rápidos (estilo Apple) */}
+              <div className="grid grid-cols-3 gap-3 tabular-nums">
+                <div className="bg-white dark:bg-[#1C1C1E] border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-semibold tracking-tight text-gray-900">{todas.length}</p>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">Concluídas</p>
                 </div>
-                <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 text-center">
-                  <p className="text-2xl font-bold text-orange-700">{comReagendamento.length}</p>
-                  <p className="text-xs text-orange-600 font-medium mt-0.5">Reagendadas</p>
+                <div className="bg-white dark:bg-[#1C1C1E] border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-semibold tracking-tight text-gray-900">{comReagendamento.length}</p>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">Reagendadas</p>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-center">
-                  <p className="text-2xl font-bold text-blue-700">
+                <div className="bg-white dark:bg-[#1C1C1E] border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-semibold tracking-tight text-gray-900">
                     {todas.length + comReagendamento.length > 0
                       ? Math.round((todas.length / (todas.length + comReagendamento.length)) * 100)
                       : 0}%
                   </p>
-                  <p className="text-xs text-blue-600 font-medium mt-0.5">Taxa de conclusão</p>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">Taxa de conclusão</p>
                 </div>
               </div>
 
@@ -1619,76 +1619,71 @@ const TarefasView: React.FC<{
                   <p className="text-gray-400 text-sm mt-1">As tarefas concluídas e reagendadas aparecerão aqui.</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {/* Concluídas */}
+                <div className="space-y-2.5">
                   {todasExibidas.map(t => {
                     const cliente = getClienteDaTarefa(t)
-                    const cfg = TIPO_CONFIG[t.tipo] || TIPO_CONFIG.outro
                     return (
-                      <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-4 space-y-2">
+                      <div key={t.id} className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm p-4 space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div
-                            className="flex items-center gap-2 cursor-pointer hover:bg-primary-50 rounded px-1 -ml-1 transition-colors"
+                            className="flex items-center gap-2 cursor-pointer hover:text-primary-700 transition-colors"
                             onClick={() => cliente && onOpenClientePanel?.(cliente)}
                             title={cliente ? 'Abrir card do cliente' : ''}
                           >
-                            <span className="text-base">{cfg.icon}</span>
-                            <span className="font-semibold text-gray-700 text-sm">{(() => { const idx = t.titulo.lastIndexOf(' - '); return cliente && idx > 0 ? t.titulo.slice(0, idx) : t.titulo })()}</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                            <span className="font-semibold text-gray-900 text-sm">{(() => { const idx = t.titulo.lastIndexOf(' - '); return cliente && idx > 0 ? t.titulo.slice(0, idx) : t.titulo })()}</span>
                           </div>
-                          <span className="flex-shrink-0 px-2 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200">✓ Concluída</span>
+                          <span className="flex-shrink-0 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 text-[11px] font-medium rounded-full border border-emerald-200/80">Concluída</span>
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+                        <div className="flex items-center gap-2.5 text-xs text-gray-500 flex-wrap tabular-nums">
                           {cliente && (
                             <button
                               onClick={(e) => { e.stopPropagation(); onOpenClientePanel?.(cliente) }}
-                              className="text-primary-700 hover:text-primary-800 hover:underline flex items-center gap-1"
-                              title={t.clienteId ? 'Vinculada ao card' : 'Cliente identificado pelo texto (não vinculado ao card)'}
+                              className="text-gray-800 hover:text-primary-700 hover:underline font-medium"
                             >
-                              🏢 {cliente.razaoSocial}
-                              {t.clienteId ? <span className="text-green-600" title="Tarefa vinculada ao card">🔗</span> : <span className="text-amber-500" title="Tarefa não vinculada ao card">⚠️</span>}
+                              {cliente.razaoSocial}
                             </button>
                           )}
                           {!cliente && t.clienteId && <span className="text-red-500">Cliente não encontrado</span>}
-                          <span>🗓️ Prazo: {new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}{t.hora ? ` às ${t.hora}` : ''}</span>
+                          <span>Prazo: {new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}{t.hora ? ` ${t.hora}` : ''}</span>
                           {t.concluidaEm && (
-                            <span>✅ Executada em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')} às {new Date(t.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>· Concluída em {new Date(t.concluidaEm).toLocaleDateString('pt-BR')} {new Date(t.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                           )}
                           {t.objetivo && (
-                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold">
-                              Objetivo: {OBJETIVO_LABEL[t.objetivo] || t.objetivo}
+                            <span className="px-2 py-0.5 rounded-md bg-[#F5F5F7] dark:bg-[#262629] text-gray-600 font-medium">
+                              {OBJETIVO_LABEL[t.objetivo] || t.objetivo}
                             </span>
                           )}
                           {t.canalUsado && (
-                            <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                            <span className="px-2 py-0.5 rounded-md bg-[#F5F5F7] dark:bg-[#262629] text-gray-600 font-medium">
                               Canal: {CANAL_LABEL[t.canalUsado] || t.canalUsado}
                             </span>
                           )}
                           {(() => {
                             const orig = inferirOrigemTarefa(t)
                             return (
-                              <span className={`flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${orig === 'automatica' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                {orig === 'automatica' && <BoltIcon className="h-3 w-3" />}
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-md bg-[#F5F5F7] dark:bg-[#262629] text-gray-500">
                                 {orig === 'automatica' ? 'Automática' : 'Manual'}
                               </span>
                             )
                           })()}
                         </div>
                         {t.descricao && (
-                          <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">📝 {t.descricao}</p>
+                          <p className="text-xs text-gray-600 bg-[#F5F5F7] dark:bg-[#262629] rounded-lg px-3 py-2">{t.descricao}</p>
                         )}
                         {t.conclusao && (
-                          <p className="text-xs text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2"><span className="font-semibold">Conclusão:</span> {t.conclusao}</p>
+                          <p className="text-xs text-gray-800 border-l-2 border-l-emerald-500 bg-[#F7F9F8] dark:bg-emerald-500/10 rounded-r-lg px-3 py-2"><span className="font-semibold text-emerald-700">Conclusão:</span> {t.conclusao}</p>
                         )}
                         {t.justificativaPrazoLongo && (
-                          <p className="text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2"><span className="font-semibold">Justificativa de prazo longo:</span> {t.justificativaPrazoLongo}</p>
+                          <p className="text-xs text-gray-800 border-l-2 border-l-orange-400 bg-orange-50/50 dark:bg-orange-500/10 rounded-r-lg px-3 py-2"><span className="font-semibold text-orange-700">Justificativa de prazo longo:</span> {t.justificativaPrazoLongo}</p>
                         )}
                         {t.reagendamentos && t.reagendamentos.length > 0 && (
                           <div className="space-y-1">
-                            <p className="text-xs font-semibold text-orange-600">🔁 {t.reagendamentos.length} tentativa(s) anterior(es):</p>
+                            <p className="text-xs font-medium text-gray-500">{t.reagendamentos.length} reagendamento(s) anterior(es):</p>
                             {t.reagendamentos.map((r, i) => (
-                              <div key={i} className="bg-orange-50 rounded-lg px-2.5 py-1.5 text-xs">
-                                <span className="font-medium text-orange-700">❌ {r.motivo}</span>
-                                <span className="text-gray-400 ml-2">· Era {r.dataOriginal}{r.horaOriginal ? ` às ${r.horaOriginal}` : ''}</span>
+                              <div key={i} className="bg-[#F5F5F7] dark:bg-[#262629] rounded-lg px-2.5 py-1.5 text-xs">
+                                <span className="font-medium text-gray-700">{r.motivo}</span>
+                                <span className="text-gray-400 ml-2 tabular-nums">· Era {r.dataOriginal}{r.horaOriginal ? ` ${r.horaOriginal}` : ''}</span>
                               </div>
                             ))}
                           </div>

@@ -311,22 +311,21 @@ export default function FloatingAIAssistant({
     return (
       <button
         onClick={() => setOpen(true)}
-        className={`${hideTriggerOnMobile ? 'hidden md:flex' : 'flex'} fixed bottom-24 right-6 z-30 w-12 h-12 rounded-full bg-gradient-to-br from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white shadow-xl items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 group`}
+        className={`${hideTriggerOnMobile ? 'hidden md:flex' : 'flex'} fixed bottom-14 right-3.5 z-30 w-9 h-9 rounded-full bg-white/90 dark:bg-[#242428]/90 backdrop-blur-xl border border-black/[0.10] dark:border-white/[0.14] text-gray-700 dark:text-gray-200 hover:text-primary-700 dark:hover:text-white shadow-apple items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95`}
         title="Assistente IA"
       >
-        <SparklesIcon className="h-6 w-6" />
-        <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
+        <SparklesIcon className="h-4 w-4" />
       </button>
     )
   }
 
   return (
-    <div className="fixed bottom-4 right-4 md:bottom-24 md:right-6 z-50 w-[calc(100vw-2rem)] max-w-[380px] max-h-[70vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4">
+    <div className="fixed bottom-4 right-4 md:bottom-16 md:right-4 z-50 w-[calc(100vw-2rem)] max-w-[380px] max-h-[70vh] bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.10] flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-r from-violet-600 to-purple-700 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+      <div className="bg-[#1D1D1F] dark:bg-[#262629] text-white px-4 py-3 flex items-center justify-between flex-shrink-0 border-b border-white/[0.08]">
         <div className="flex items-center gap-2">
-          <SparklesIcon className="h-5 w-5" />
-          <span className="font-semibold text-sm">Assistente IA</span>
+          <SparklesIcon className="h-4 w-4 text-gray-300" />
+          <span className="font-semibold text-xs tracking-tight">Assistente IA</span>
         </div>
         <div className="flex items-center gap-1">
           {/* Mode toggle */}

@@ -621,7 +621,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
         />
 
         {/* Content Area */}
-        <div className="flex-1 overflow-auto p-3 sm:p-6 pb-0 bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+        <div className="flex-1 overflow-auto p-3 sm:p-6 pb-16 bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
@@ -903,18 +903,18 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
           />
         )}
 
-        {/* Chat Interno — Botão flutuante (desktop) */}
+        {/* Chat Interno — Botão flutuante discreto estilo Apple (desktop) */}
         {loggedUser && (
           <button
             onClick={() => setShowChat(v => !v)}
-            className="hidden md:flex fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-primary-600 hover:bg-primary-700 text-white shadow-2xl items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
+            className="hidden md:flex fixed bottom-3.5 right-3.5 z-30 w-9 h-9 rounded-full bg-white/90 dark:bg-[#242428]/90 backdrop-blur-xl border border-black/[0.10] dark:border-white/[0.14] text-gray-700 dark:text-gray-200 hover:text-primary-700 dark:hover:text-white shadow-apple items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95"
             title="Chat interno da equipe"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
             </svg>
             {chatUnreadTotal > 0 && !showChat && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-sm">
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1 shadow-sm">
                 {chatUnreadTotal > 99 ? '99+' : chatUnreadTotal}
               </span>
             )}
@@ -971,17 +971,16 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
 
         {/* Banner de nova versão disponível */}
         {newVersionAvailable && (
-          <div className="fixed bottom-4 right-4 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-apple shadow-2xl max-w-md animate-slide-in-right">
+          <div className="fixed bottom-4 right-4 z-50 bg-[#1D1D1F] text-white px-5 py-4 rounded-2xl shadow-2xl border border-white/[0.12] max-w-sm">
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 text-2xl">🎉</div>
               <div className="flex-1">
-                <p className="font-semibold text-sm mb-1">Nova versão disponível!</p>
-                <p className="text-xs text-white/90 mb-3">Uma atualização do CRM está pronta. Recarregue a página para obter as últimas melhorias.</p>
+                <p className="font-semibold text-sm mb-1">Nova versão disponível</p>
+                <p className="text-xs text-white/75 mb-3">Uma atualização do CRM está pronta. Recarregue a página para aplicar.</p>
                 <button
                   onClick={reloadApp}
-                  className="w-full px-4 py-2 bg-white text-blue-600 rounded-apple text-sm font-semibold hover:bg-blue-50 transition-colors"
+                  className="w-full px-4 py-2 bg-white text-gray-900 rounded-lg text-xs font-semibold hover:bg-gray-100 transition-colors"
                 >
-                  🔄 Recarregar Agora
+                  Recarregar agora
                 </button>
               </div>
             </div>

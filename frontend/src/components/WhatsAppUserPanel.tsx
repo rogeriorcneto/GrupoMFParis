@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
@@ -32,7 +32,7 @@ interface Message {
 }
 
 /** Renderiza o corpo da mensagem — mídia (áudio, imagem, vídeo, doc) ou texto */
-function renderMessageContent(msg: Message) {
+function renderMessageContent(msg: Message, isMine = false) {
   if (msg.mediaUrl) {
     switch (msg.tipo) {
       case 'audio':
@@ -40,22 +40,22 @@ function renderMessageContent(msg: Message) {
       case 'image':
         return (
           <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
-            <img src={msg.mediaUrl} alt={msg.text} className="rounded-lg max-w-[240px] max-h-[240px] object-cover mb-1" />
+            <img src={msg.mediaUrl} alt={msg.text} className="rounded-xl max-w-[240px] max-h-[240px] object-cover mb-1" />
           </a>
         )
       case 'video':
-        return <video controls src={msg.mediaUrl} className="rounded-lg max-w-[240px] max-h-[240px] mb-1" />
+        return <video controls src={msg.mediaUrl} className="rounded-xl max-w-[240px] max-h-[240px] mb-1" />
       case 'document':
         return (
-          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline text-xs block mb-1">
-            📎 {msg.fileName || 'Documento'}
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className={`underline text-xs block mb-1 ${isMine ? 'text-white/90' : 'text-primary-700'}`}>
+            {msg.fileName || 'Abrir documento'}
           </a>
         )
       default:
         break
     }
   }
-  return <p className="whitespace-pre-wrap" style={{ color: '#111827' }}>{msg.text}</p>
+  return <p className="whitespace-pre-wrap">{msg.text}</p>
 }
 
 const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
@@ -609,74 +609,76 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   // ─── Not connected: show QR / connect button ───
   if (!waStatus.connected) {
     return (
-      <div className={`bg-white rounded-apple shadow-apple-sm border border-gray-200 ${compact ? 'p-4' : 'p-6'}`}>
+      <div className={`bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple border border-black/[0.06] dark:border-white/[0.08] ${compact ? 'p-4' : 'p-6'}`}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <QrCodeIcon className="h-5 w-5 text-green-600" />
-            <h3 className={`font-semibold text-gray-900 ${compact ? 'text-sm' : 'text-base'}`}>
-              Meu WhatsApp Business
+            <QrCodeIcon className="h-5 w-5 text-gray-700 dark:text-gray-200" />
+            <h3 className={`font-semibold tracking-tight text-gray-900 ${compact ? 'text-sm' : 'text-base'}`}>
+              WhatsApp Business
             </h3>
           </div>
           {onClose && (
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg">
               <XMarkIcon className="h-5 w-5" />
             </button>
           )}
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-            waStatus.status === 'qr' ? 'bg-yellow-400 animate-pulse' :
-            (waStatus.status === 'connecting' || waitingForQR) ? 'bg-blue-400 animate-pulse' :
+          <span className={`inline-block w-2 h-2 rounded-full ${
+            waStatus.status === 'qr' ? 'bg-amber-400 animate-pulse' :
+            (waStatus.status === 'connecting' || waitingForQR) ? 'bg-blue-500 animate-pulse' :
             'bg-gray-300'
           }`} />
-          <span className="text-sm text-gray-600">
+          <span className="text-xs text-gray-500">
             {waStatus.status === 'qr' ? 'Escaneie o QR Code abaixo' :
              (waStatus.status === 'connecting' || waitingForQR) ? 'Gerando QR Code...' :
-             !botOnline ? 'Backend offline' : 'Desconectado'}
+             !botOnline ? 'Servidor offline' : 'Desconectado'}
           </span>
         </div>
 
         {!botOnline && (
-          <div className="bg-orange-50 border border-orange-200 rounded-apple p-3 mb-3 text-sm text-orange-700">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-amber-800">
             O servidor backend não está online. Verifique as integrações.
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-apple p-3 mb-3 text-sm text-red-700">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-3 text-xs text-red-700">
             {error}
           </div>
         )}
 
         {/* QR Code */}
         {qrData && (
-          <div className="flex flex-col items-center py-4 mb-4 bg-gray-50 rounded-apple border border-gray-200">
-            <p className="text-sm font-medium text-gray-700 mb-3">Escaneie com o WhatsApp Business</p>
-            <img src={qrData} alt="WhatsApp QR Code" className="w-56 h-56 rounded-lg shadow-md" />
-            <p className="text-xs text-gray-500 mt-3">WhatsApp → Dispositivos conectados → Conectar dispositivo</p>
+          <div className="flex flex-col items-center py-5 mb-4 bg-[#F5F5F7] dark:bg-[#242428] rounded-2xl border border-black/[0.05]">
+            <p className="text-xs font-medium text-gray-700 mb-3">Escaneie com o WhatsApp Business</p>
+            <img src={qrData} alt="WhatsApp QR Code" className="w-52 h-52 rounded-xl bg-white p-2 shadow-sm" />
+            <p className="text-[11px] text-gray-400 mt-3">WhatsApp → Dispositivos conectados → Conectar dispositivo</p>
           </div>
         )}
 
         {/* Gerando QR Code (aguardando QR do backend) */}
         {!qrData && botOnline && (waitingForQR || waStatus.status === 'connecting') && (
           <div className="flex flex-col items-center py-8">
-            <div className="inline-block animate-spin h-10 w-10 border-4 border-green-600 border-t-transparent rounded-full mb-4" />
-            <p className="text-sm font-medium text-gray-700">Gerando QR Code...</p>
-            <p className="text-xs text-gray-400 mt-1">Aguarde alguns segundos</p>
+            <div className="inline-block animate-spin h-8 w-8 border-2 border-primary-600 border-t-transparent rounded-full mb-3" />
+            <p className="text-xs font-medium text-gray-700">Gerando QR Code...</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Aguarde alguns segundos</p>
           </div>
         )}
 
         {!qrData && botOnline && !waitingForQR && waStatus.status === 'disconnected' && (
           <div className="text-center py-6">
-            <div className="text-5xl mb-3">📱</div>
-            <p className="text-sm text-gray-600 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center mx-auto mb-3">
+              <DevicePhoneMobileIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
+            </div>
+            <p className="text-xs text-gray-500 mb-4 max-w-xs mx-auto">
               Conecte seu WhatsApp Business para enviar e receber mensagens diretamente no CRM.
             </p>
             <button
               onClick={handleConnect}
               disabled={loading}
-              className="px-5 py-2.5 bg-green-600 text-white rounded-apple shadow-apple-sm font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="px-5 py-2 bg-primary-700 text-white rounded-xl shadow-apple-sm text-xs font-semibold hover:bg-primary-800 transition-colors disabled:opacity-50"
             >
               {loading ? 'Conectando...' : 'Conectar WhatsApp'}
             </button>
@@ -699,9 +701,9 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     setMessages([])
   }
 
-  // ─── Connected ───
+  // ─── Connected (Apple Messages / macOS Sonoma style — Light & Dark) ───
   return (
-    <div className={`bg-white rounded-apple shadow-apple-sm border-2 border-green-200 flex flex-col ${compact ? '' : 'h-[600px]'}`}>
+    <div className={`bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple border border-black/[0.07] dark:border-white/[0.10] flex flex-col overflow-hidden ${compact ? '' : 'h-[600px]'}`}>
       {/* Hidden file input for images */}
       <input
         ref={imageInputRef}
@@ -716,16 +718,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       />
 
       {/* Header */}
-      <div className="px-4 py-3 border-b border-green-100 bg-green-50 rounded-t-apple">
+      <div className="px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.08] bg-white/95 dark:bg-[#1C1C1E]/95">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" />
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <div>
-              <p className="text-sm font-semibold text-green-800">
-                WhatsApp conectado — {waStatus.number}
+              <p className="text-xs font-semibold text-gray-900 tabular-nums">
+                WhatsApp conectado · {waStatus.number}
               </p>
-              <p className="text-xs text-green-600">
-                {loggedUser?.nome} • Uptime: {formatUptime(waStatus.uptime)}
+              <p className="text-[11px] text-gray-400 tabular-nums">
+                {loggedUser?.nome} · {formatUptime(waStatus.uptime)}
               </p>
             </div>
           </div>
@@ -733,20 +735,20 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             <button
               onClick={() => { setShowContacts(!showContacts); if (!showContacts) loadContacts() }}
               title="Contatos do WhatsApp"
-              className={`p-1.5 rounded-full transition-colors ${showContacts ? 'bg-green-600 text-white' : 'text-green-700 hover:bg-green-100'}`}
+              className={`p-1.5 rounded-lg transition-colors ${showContacts ? 'bg-primary-700 text-white' : 'bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 hover:bg-black/[0.08]'}`}
             >
               <UserGroupIcon className="h-4 w-4" />
             </button>
             <button
               onClick={handleDisconnect}
               disabled={loading}
-              title="Desconectar"
-              className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+              title="Desconectar sessão"
+              className="px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
-              <XMarkIcon className="h-4 w-4" />
+              Desconectar
             </button>
             {onClose && (
-              <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full">
+              <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg">
                 <XMarkIcon className="h-4 w-4" />
               </button>
             )}
@@ -754,8 +756,8 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         </div>
       </div>
 
-      {/* Validation banner — validates ALL CRM clients against WhatsApp */}
-      <div className="px-4 py-2.5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-green-50">
+      {/* Validation bar — discreta e neutra */}
+      <div className="px-4 py-2 border-b border-black/[0.05] dark:border-white/[0.07] bg-[#F5F5F7]/70 dark:bg-[#161618]">
         {!validating && !validationResult && (
           <button
             onClick={async () => {
@@ -769,109 +771,87 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                 setValidating(false)
               }
             }}
-            className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-white border border-blue-200 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300 transition-colors shadow-sm"
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 bg-white dark:bg-[#242428] border border-black/[0.07] dark:border-white/[0.08] rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
-            </svg>
-            Validar todos os números do CRM no WhatsApp
+            <CheckCircleIcon className="h-3.5 w-3.5 text-gray-500" />
+            Validar números do CRM no WhatsApp
           </button>
         )}
 
         {validating && (
-          <div className="flex items-center gap-3 py-1">
-            <ArrowPathIcon className="h-5 w-5 text-blue-600 animate-spin flex-shrink-0" />
+          <div className="flex items-center gap-2.5 py-1">
+            <ArrowPathIcon className="h-4 w-4 text-primary-600 animate-spin flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-blue-800">Validando números dos clientes...</p>
-              <p className="text-[11px] text-blue-600">Verificando cada número nos servidores do WhatsApp (pode levar alguns minutos)</p>
-              <div className="mt-1.5 h-1.5 bg-blue-100 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+              <p className="text-xs font-medium text-gray-800">Validando números dos clientes...</p>
+              <div className="mt-1 h-1 bg-black/[0.08] rounded-full overflow-hidden">
+                <div className="h-full bg-primary-600 rounded-full animate-pulse" style={{ width: '60%' }} />
               </div>
             </div>
           </div>
         )}
 
         {validationResult && !validating && (
-          <div className="space-y-2">
+          <div className="space-y-2 tabular-nums">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-800">
-                Validação concluída — {validationResult.total} clientes verificados
+              <p className="text-xs font-semibold text-gray-800">
+                {validationResult.total} clientes verificados
               </p>
               <button
                 onClick={() => setValidationResult(null)}
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="text-[11px] text-gray-400 hover:text-gray-600"
               >
                 Fechar
               </button>
             </div>
-            <div className="flex gap-3">
-              <div className="flex-1 bg-green-100 rounded-lg px-3 py-2 text-center">
-                <p className="text-lg font-bold text-green-700">{validationResult.valid}</p>
-                <p className="text-[10px] text-green-600 font-medium">Válidos</p>
+            <div className="flex gap-2">
+              <div className="flex-1 bg-white dark:bg-[#242428] border border-gray-200 rounded-lg px-2.5 py-1.5 text-center">
+                <p className="text-sm font-semibold text-emerald-600">{validationResult.valid}</p>
+                <p className="text-[10px] text-gray-500">Válidos</p>
               </div>
-              <div className="flex-1 bg-red-100 rounded-lg px-3 py-2 text-center">
-                <p className="text-lg font-bold text-red-700">{validationResult.invalid}</p>
-                <p className="text-[10px] text-red-600 font-medium">Inválidos</p>
+              <div className="flex-1 bg-white dark:bg-[#242428] border border-gray-200 rounded-lg px-2.5 py-1.5 text-center">
+                <p className="text-sm font-semibold text-red-600">{validationResult.invalid}</p>
+                <p className="text-[10px] text-gray-500">Inválidos</p>
               </div>
               {validationResult.errors > 0 && (
-                <div className="flex-1 bg-yellow-100 rounded-lg px-3 py-2 text-center">
-                  <p className="text-lg font-bold text-yellow-700">{validationResult.errors}</p>
-                  <p className="text-[10px] text-yellow-600 font-medium">Erros</p>
+                <div className="flex-1 bg-white dark:bg-[#242428] border border-gray-200 rounded-lg px-2.5 py-1.5 text-center">
+                  <p className="text-sm font-semibold text-amber-600">{validationResult.errors}</p>
+                  <p className="text-[10px] text-gray-500">Erros</p>
                 </div>
               )}
             </div>
-            <button
-              onClick={async () => {
-                setValidating(true)
-                setValidationResult(null)
-                try {
-                  const result = await validateWhatsAppContacts()
-                  setValidationResult(result)
-                } catch (err: any) {
-                  showToast?.('error', err?.message || 'Erro ao validar contatos')
-                }
-                setValidating(false)
-              }}
-              className="w-full text-xs text-blue-600 hover:text-blue-800 font-medium py-1"
-            >
-              ↻ Validar novamente
-            </button>
           </div>
         )}
       </div>
 
       {/* Contacts sidebar overlay */}
       {showContacts && (
-        <div className="border-b border-gray-200 bg-white max-h-[350px] flex flex-col">
+        <div className="border-b border-gray-200 bg-white dark:bg-[#1C1C1E] max-h-[340px] flex flex-col">
           <div className="px-3 py-2 border-b border-gray-100">
             <div className="relative">
-              <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <MagnifyingGlassIcon className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={contactSearch}
                 onChange={e => setContactSearch(e.target.value)}
                 placeholder="Buscar contato..."
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-50"
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/25 bg-[#F5F5F7] dark:bg-[#262629]"
                 autoFocus
               />
             </div>
-            <p className="text-[10px] text-gray-400 mt-1 px-1">
+            <p className="text-[10px] text-gray-400 mt-1 px-1 tabular-nums">
               {waContacts.length} contatos sincronizados
             </p>
           </div>
           <div className="flex-1 overflow-y-auto">
             {contactsLoading && waContacts.length === 0 ? (
               <div className="text-center py-6">
-                <div className="inline-block animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full" />
+                <div className="inline-block animate-spin h-5 w-5 border-2 border-primary-600 border-t-transparent rounded-full" />
                 <p className="text-xs text-gray-500 mt-2">Carregando contatos...</p>
               </div>
             ) : filteredContacts.length === 0 ? (
               <div className="text-center py-6">
-                <ChatBubbleLeftRightIcon className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                <ChatBubbleLeftRightIcon className="h-7 w-7 text-gray-300 mx-auto mb-2" />
                 <p className="text-xs text-gray-500">
                   {contactSearch ? 'Nenhum contato encontrado' : 'Nenhum contato sincronizado ainda'}
-                </p>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Os contatos aparecem conforme você usa o WhatsApp
                 </p>
               </div>
             ) : (
@@ -879,26 +859,26 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                 <button
                   key={c.jid}
                   onClick={() => selectWAContact(c)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-green-50 transition-colors text-left border-b border-gray-50 ${
-                    selectedContact?.jid === c.jid ? 'bg-green-50' : ''
+                  className={`w-full flex items-center gap-3 px-3 py-2 hover:bg-gray-50 transition-colors text-left border-b border-gray-100/70 ${
+                    selectedContact?.jid === c.jid ? 'bg-gray-50' : ''
                   }`}
                 >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-sm font-bold">
+                  <div className="w-8 h-8 rounded-full bg-[#EFEFF4] dark:bg-[#2C2C30] flex items-center justify-center flex-shrink-0">
+                    <span className="text-gray-700 dark:text-gray-200 text-xs font-semibold">
                       {(c.name || c.number).charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-xs font-semibold text-gray-900 truncate">
                       {c.notify || c.name || c.number}
                     </p>
-                    <p className="text-xs text-gray-500 truncate">
+                    <p className="text-[11px] text-gray-400 truncate tabular-nums">
                       +{c.number}
-                      {c.lastMsgTimestamp ? ` • ${new Date(c.lastMsgTimestamp * 1000).toLocaleDateString('pt-BR')}` : ''}
+                      {c.lastMsgTimestamp ? ` · ${new Date(c.lastMsgTimestamp * 1000).toLocaleDateString('pt-BR')}` : ''}
                     </p>
                   </div>
                   {(c.unreadCount ?? 0) > 0 && (
-                    <span className="w-5 h-5 bg-green-500 text-white text-[10px] rounded-full flex items-center justify-center flex-shrink-0 font-bold">
+                    <span className="min-w-[18px] h-[18px] px-1 bg-primary-700 text-white text-[10px] rounded-full flex items-center justify-center flex-shrink-0 font-bold tabular-nums">
                       {c.unreadCount}
                     </span>
                   )}
@@ -913,19 +893,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       {hasChatTarget ? (
         <>
           {/* Contact info bar */}
-          <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
-              <span className="text-white text-sm font-bold">
+          <div className="px-4 py-2.5 bg-white dark:bg-[#1C1C1E] border-b border-black/[0.05] dark:border-white/[0.07] flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-[#EFEFF4] dark:bg-[#2C2C30] flex items-center justify-center">
+              <span className="text-gray-800 dark:text-gray-200 text-xs font-semibold">
                 {getChatName().charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{getChatName()}</p>
-              <p className="text-xs text-gray-500 truncate">
+              <p className="text-xs font-semibold text-gray-900 truncate">{getChatName()}</p>
+              <p className="text-[11px] text-gray-400 truncate tabular-nums">
                 +{getChatNumber()}
-                {selectedContact && !cliente && (
-                  <span className="ml-1 text-green-600">(Contato WhatsApp)</span>
-                )}
               </p>
             </div>
             {getChatNumber() && (
@@ -933,24 +910,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                 <button
                   onClick={() => { setCallMode('phone'); setShowCallRecorder(true) }}
                   title="Ligar (telefone) + gravar"
-                  className="p-2 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                  className="p-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 hover:bg-black/[0.08] transition-colors"
                 >
                   <PhoneIcon className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => { setCallMode('whatsapp'); setShowCallRecorder(true) }}
-                  title="Ligar via WhatsApp + gravar"
-                  className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                  </svg>
                 </button>
                 {selectedContact && !cliente && (
                   <button
                     onClick={() => { setSelectedContact(null); setMessages([]) }}
                     title="Voltar para contatos"
-                    className="p-2 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                    className="p-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-600 hover:bg-black/[0.08] transition-colors"
                   >
                     <XMarkIcon className="h-4 w-4" />
                   </button>
@@ -959,16 +927,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             )}
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ minHeight: compact ? 200 : 300, backgroundColor: '#e5ddd5' }}>
+          {/* Messages — Apple Messages style (Claro e Escuro) */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-[#F5F5F7] dark:bg-[#141416]" style={{ minHeight: compact ? 200 : 300 }}>
             {chatLoading && (
               <div className="text-center py-4">
-                <div className="inline-block animate-spin h-5 w-5 border-2 border-green-600 border-t-transparent rounded-full" />
+                <div className="inline-block animate-spin h-5 w-5 border-2 border-primary-600 border-t-transparent rounded-full" />
               </div>
             )}
             {!chatLoading && messages.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-sm text-gray-600 bg-white bg-opacity-80 inline-block px-4 py-2 rounded-lg shadow-sm">
+                <p className="text-xs text-gray-400">
                   Envie uma mensagem para {getChatName()}
                 </p>
               </div>
@@ -976,18 +944,18 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             {messages.map(msg => (
               <div key={msg.id} className={`flex ${msg.from === 'me' ? 'justify-end' : msg.from === 'them' ? 'justify-start' : 'justify-center'}`}>
                 {msg.from === 'system' ? (
-                  <div className="bg-yellow-100 text-yellow-800 text-xs px-3 py-1.5 rounded-lg max-w-[85%] shadow-sm">
+                  <div className="bg-white dark:bg-[#262629] border border-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-full max-w-[85%] shadow-sm">
                     {msg.text}
                   </div>
                 ) : msg.from === 'them' ? (
-                  <div className="text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm" style={{ backgroundColor: '#ffffff', color: '#111827' }}>
-                    {renderMessageContent(msg)}
-                    <p className="text-[10px] text-right mt-1" style={{ color: '#6b7280' }}>{msg.time}</p>
+                  <div className="text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-bl-sm max-w-[82%] shadow-sm bg-white dark:bg-[#262629] text-gray-900 dark:text-gray-100 border border-black/[0.04] dark:border-white/[0.06]">
+                    {renderMessageContent(msg, false)}
+                    <p className="text-[10px] text-right mt-1 text-gray-400 tabular-nums">{msg.time}</p>
                   </div>
                 ) : (
-                  <div className="text-sm px-3 py-2 rounded-lg max-w-[85%] shadow-sm" style={{ backgroundColor: '#dcf8c6', color: '#111827' }}>
-                    {renderMessageContent(msg)}
-                    <p className="text-[10px] text-right mt-1" style={{ color: '#4b5563' }}>{msg.time} ✓✓</p>
+                  <div className="text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-br-sm max-w-[82%] shadow-sm bg-primary-700 dark:bg-[#2A4380] text-white">
+                    {renderMessageContent(msg, true)}
+                    <p className="text-[10px] text-right mt-1 text-white/70 tabular-nums">{msg.time} · enviada</p>
                   </div>
                 )}
               </div>
@@ -996,60 +964,57 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           </div>
 
           {/* Input */}
-          <div className="p-3 bg-gray-100 border-t border-gray-200 rounded-b-apple">
-            {/* Voice recording preview */}
+          <div className="p-2.5 bg-white dark:bg-[#1C1C1E] border-t border-black/[0.06] dark:border-white/[0.08]">
             {voiceAudioUrl && !isRecordingVoice && (
-              <div className="flex items-center gap-2 mb-2 bg-white rounded-full px-3 py-2 border border-green-200">
+              <div className="flex items-center gap-2 mb-2 bg-[#F5F5F7] dark:bg-[#262629] rounded-full px-3 py-1.5 border border-gray-200">
                 <audio controls src={voiceAudioUrl} className="h-8 flex-1" style={{ minWidth: 0 }} />
-                <button onClick={sendVoiceMessage} disabled={sending} title="Enviar áudio" className="w-8 h-8 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
+                <button onClick={sendVoiceMessage} disabled={sending} title="Enviar áudio" className="w-8 h-8 bg-primary-700 hover:bg-primary-800 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
                   <PaperAirplaneIcon className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={cancelVoiceRecording} title="Descartar áudio" className="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
+                <button onClick={cancelVoiceRecording} title="Descartar áudio" className="w-8 h-8 bg-red-50 hover:bg-red-100 text-red-600 rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
                   <TrashIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
 
-            {/* Voice recording in progress */}
             {isRecordingVoice && (
-              <div className="flex items-center gap-3 mb-2 bg-red-50 rounded-full px-4 py-2.5 border border-red-200">
-                <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-                <span className="text-sm font-mono font-bold text-red-700 flex-shrink-0">
+              <div className="flex items-center gap-3 mb-2 bg-red-50/80 rounded-full px-4 py-2 border border-red-200">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                <span className="text-xs font-semibold text-red-700 flex-shrink-0 tabular-nums">
                   {Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:{(voiceSeconds % 60).toString().padStart(2, '0')}
                 </span>
-                <span className="text-xs text-red-500 flex-1">Gravando...</span>
-                <button onClick={cancelVoiceRecording} title="Cancelar" className="w-8 h-8 bg-white hover:bg-gray-100 text-gray-500 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border border-gray-200">
+                <span className="text-xs text-red-600 flex-1">Gravando...</span>
+                <button onClick={cancelVoiceRecording} title="Cancelar" className="w-7 h-7 bg-white text-gray-500 rounded-full flex items-center justify-center flex-shrink-0 border border-gray-200">
                   <TrashIcon className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={stopVoiceRecording} title="Parar e enviar" className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors">
-                  <StopIcon className="h-4 w-4" />
+                <button onClick={stopVoiceRecording} title="Parar e enviar" className="w-7 h-7 bg-red-600 text-white rounded-full flex items-center justify-center flex-shrink-0">
+                  <StopIcon className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
 
-            {/* Text input row */}
             {!isRecordingVoice && (
-              <div className="flex gap-1.5">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleSuggestText}
                   disabled={sending || suggestingText || !hasChatTarget}
-                  title="Sugerir texto comercial com IA"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-gray-200 text-gray-600 hover:bg-amber-100 hover:text-amber-700 disabled:opacity-40 text-xs font-bold"
+                  title="Sugerir texto comercial"
+                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-[#EFEFF4] dark:bg-[#262629] text-gray-600 hover:text-gray-900 disabled:opacity-40"
                 >
-                  {suggestingText ? '…' : '✨'}
+                  <SparklesIcon className={`h-4 w-4 ${suggestingText ? 'animate-pulse' : ''}`} />
                 </button>
                 <button
                   onClick={() => { setAiMode(!aiMode); if (!aiMode) setAiHistory([]) }}
-                  title={aiMode ? 'Modo IA ativo — clique para desativar' : 'Ativar Assistente IA'}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 text-xs ${aiMode ? 'bg-purple-600 text-white shadow-lg' : 'bg-gray-200 text-gray-600 hover:bg-purple-100'}`}
+                  title={aiMode ? 'Modo assistente ativo — clique para desativar' : 'Ativar assistente no chat'}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 ${aiMode ? 'bg-primary-700 text-white' : 'bg-[#EFEFF4] dark:bg-[#262629] text-gray-600 hover:text-gray-900'}`}
                 >
-                  🤖
+                  <CpuChipIcon className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => imageInputRef.current?.click()}
                   disabled={sending || !getChatNumber()}
                   title="Enviar imagem"
-                  className="w-9 h-9 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-gray-200 text-gray-600 hover:bg-blue-100 hover:text-blue-600 disabled:opacity-40"
+                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-[#EFEFF4] dark:bg-[#262629] text-gray-600 hover:text-gray-900 disabled:opacity-40"
                 >
                   <PhotoIcon className="h-4 w-4" />
                 </button>
@@ -1057,15 +1022,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                   value={chatText}
                   onChange={e => setChatText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={aiMode ? 'Pergunte algo à IA do CRM...' : 'Mensagem...'}
+                  placeholder={aiMode ? 'Pergunte algo ao assistente...' : 'Mensagem...'}
                   rows={1}
-                  className={`flex-1 px-3 py-2 border rounded-full focus:outline-none focus:ring-2 text-sm resize-none ${aiMode ? 'border-purple-300 focus:ring-purple-500 bg-purple-50' : 'border-gray-300 focus:ring-green-500'}`}
+                  className="flex-1 px-3.5 py-2 border border-black/[0.08] dark:border-white/[0.10] bg-[#F5F5F7] dark:bg-[#262629] rounded-full focus:outline-none focus:ring-2 focus:ring-primary-500/25 text-xs resize-none"
                 />
                 {chatText.trim() ? (
                   <button
                     onClick={handleSend}
                     disabled={sending}
-                    className="w-9 h-9 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                    className="w-8 h-8 bg-primary-700 hover:bg-primary-800 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
                   >
                     {sending ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <PaperAirplaneIcon className="h-4 w-4" />}
                   </button>
@@ -1074,7 +1039,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                     onClick={startVoiceRecording}
                     disabled={sending}
                     title="Gravar mensagem de voz"
-                    className="w-9 h-9 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                    className="w-8 h-8 bg-[#EFEFF4] dark:bg-[#262629] hover:bg-black/[0.08] disabled:opacity-40 text-gray-700 dark:text-gray-200 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
                   >
                     <MicrophoneIcon className="h-4 w-4" />
                   </button>
@@ -1084,21 +1049,23 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           </div>
         </>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8">
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F5F5F7]/50 dark:bg-[#141416]">
           <div className="text-center">
-            <div className="text-5xl mb-3">✅</div>
-            <p className="text-gray-700 font-semibold">WhatsApp Business conectado!</p>
-            <p className="text-sm text-gray-500 mt-2">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
+              <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
+            </div>
+            <p className="text-gray-900 font-semibold text-sm">WhatsApp Business conectado</p>
+            <p className="text-xs text-gray-500 mt-1.5 max-w-xs">
               {cliente === null && !selectedContact
-                ? 'Selecione uma tarefa com cliente ou abra seus contatos do WhatsApp.'
+                ? 'Selecione uma tarefa com cliente ou abra seus contatos.'
                 : 'Selecione um contato para enviar mensagens.'}
             </p>
             <button
               onClick={() => { setShowContacts(true); loadContacts() }}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full text-sm font-medium hover:bg-green-700 transition-colors"
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-primary-700 text-white rounded-xl text-xs font-semibold hover:bg-primary-800 transition-colors shadow-apple-sm"
             >
               <UserGroupIcon className="h-4 w-4" />
-              Ver Contatos ({waContacts.length})
+              Ver contatos ({waContacts.length})
             </button>
           </div>
         </div>

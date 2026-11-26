@@ -253,13 +253,12 @@ const IntegracoesView: React.FC = () => {
 
       {/* Bot Status Banner */}
       {!botOnline && !authError && (
-        <div className="bg-yellow-50 rounded-apple border-2 border-yellow-200 p-4">
+        <div className="bg-amber-50/80 rounded-2xl border border-amber-200 p-4">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
             <div>
-              <p className="text-sm font-semibold text-yellow-800">Bot Backend Offline</p>
-              <p className="text-xs text-yellow-700 mt-0.5">
-                Inicie o backend: <code className="bg-yellow-100 px-1.5 py-0.5 rounded text-xs">cd backend && npm run dev</code>
+              <p className="text-sm font-semibold text-amber-900">Servidor backend offline</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Inicie o backend: <code className="bg-amber-100 px-1.5 py-0.5 rounded text-xs">cd backend && npm run dev</code>
               </p>
             </div>
           </div>
@@ -267,26 +266,27 @@ const IntegracoesView: React.FC = () => {
       )}
 
       {/* ═══════════════ WHATSAPP CARD ═══════════════ */}
-      <div className="bg-white rounded-apple shadow-apple-sm border-2 border-green-200 p-6">
+      <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-sm border border-black/[0.06] dark:border-white/[0.08] p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="text-4xl">💬</div>
+          <div className="w-10 h-10 rounded-xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center flex-shrink-0">
+            <span className={`w-2.5 h-2.5 rounded-full ${
+              waStatus.connected ? 'bg-emerald-500' :
+              waStatus.status === 'qr' ? 'bg-amber-400 animate-pulse' :
+              waStatus.status === 'connecting' ? 'bg-blue-500 animate-pulse' :
+              'bg-gray-300'
+            }`} />
+          </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-gray-900">WhatsApp Bot CRM</h3>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-                waStatus.connected ? 'bg-green-500 animate-pulse' :
-                waStatus.status === 'qr' ? 'bg-yellow-400 animate-pulse' :
-                waStatus.status === 'connecting' ? 'bg-blue-400 animate-pulse' :
-                'bg-gray-300'
-              }`} />
-              <span className="text-sm text-gray-600">
-                {waStatus.connected ? `Conectado — ${waStatus.number}` :
+            <h3 className="text-base font-semibold tracking-tight text-gray-900">WhatsApp Bot CRM</h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-gray-500 tabular-nums">
+                {waStatus.connected ? `Conectado · ${waStatus.number}` :
                  waStatus.status === 'qr' ? 'Aguardando escaneamento do QR Code' :
                  waStatus.status === 'connecting' ? 'Conectando...' :
                  'Desconectado'}
               </span>
               {waStatus.connected && (
-                <span className="text-xs text-gray-400 ml-2">Uptime: {formatUptime(waStatus.uptime)}</span>
+                <span className="text-xs text-gray-400 ml-1 tabular-nums">· {formatUptime(waStatus.uptime)}</span>
               )}
             </div>
           </div>

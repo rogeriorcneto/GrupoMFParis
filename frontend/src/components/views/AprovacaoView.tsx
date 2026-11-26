@@ -236,6 +236,15 @@ export default function AprovacaoView({
     }
   }
 
+  const precosTabelaCache = useMemo(() => new Map<string, ReturnType<typeof calcularPrecosTabela>>(), [simParams])
+  const obterPrecoTabelaItem = (nomeProduto: string, prazo: string) => {
+    const key = `${nomeProduto}|${prazo}`
+    if (precosTabelaCache.has(key)) return precosTabelaCache.get(key)
+    const calc = calcularPrecosTabela(nomeProduto, prazo, 'FOB', simParams ?? undefined)
+    precosTabelaCache.set(key, calc)
+    return calc
+  }
+
   const renderPedidoCard = (pedido: Pedido, showActions: boolean) => {
     const cliente = clienteMap.get(pedido.clienteId)
     const vendedor = vendedorMap.get(pedido.vendedorId)
@@ -245,32 +254,33 @@ export default function AprovacaoView({
     const diasEspera = Math.floor((Date.now() - new Date(pedido.dataEnvio || pedido.dataCriacao).getTime()) / 86400000)
 
     return (
-      <div key={pedido.id} className={`bg-white rounded-apple shadow-apple-sm border-2 transition-all ${showActions && diasEspera >= 2 ? 'border-amber-300' : showActions ? 'border-gray-200' : pedido.status === 'confirmado' ? 'border-green-200' : 'border-red-200'}`}>
+      <div key={pedido.id} className={`bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-sm border transition-all ${showActions && diasEspera >= 2 ? 'border-amber-300/80 ring-1 ring-amber-400/20' : 'border-black/[0.06] dark:border-white/[0.08]'}`}>
         <div className="p-5">
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-base font-bold text-gray-900">{pedido.numero}</span>
+                <span className="text-[15px] font-semibold tracking-tight text-gray-900 tabular-nums">{pedido.numero}</span>
                 {pedido.tipo === 'bonificacao' && (
                   pedido.numero.toUpperCase().startsWith('BON-') ? (
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-pink-100 text-pink-800 rounded-full border border-pink-300">
-                      BONIFICAÇÃO
+                    <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-800 rounded-full border border-amber-200/80">
+                      Bonificação
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full border border-purple-200">
+                    <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-800 rounded-full border border-amber-200/80">
                       Amostra
                     </span>
                   )
                 )}
                 {showActions && diasEspera >= 2 && (
-                  <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded-full border border-amber-200 animate-pulse">
-                    ⏰ Aguardando {diasEspera}d
+                  <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-800 rounded-full border border-amber-200/80 tabular-nums">
+                    Aguardando {diasEspera}d
                   </span>
                 )}
                 {!showActions && (
-                  <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${pedido.status === 'confirmado' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
-                    {pedido.status === 'confirmado' ? '✅ Aprovado' : '❌ Não Aprovado'}
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-medium rounded-full border ${pedido.status === 'confirmado' ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80' : 'bg-red-50 text-red-700 border-red-200/80'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${pedido.status === 'confirmado' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                    {pedido.status === 'confirmado' ? 'Aprovado' : 'Não aprovado'}
                   </span>
                 )}
               </div>
@@ -278,28 +288,28 @@ export default function AprovacaoView({
                 {onClickCliente && cliente ? (
                   <button
                     onClick={() => onClickCliente(cliente)}
-                    className="text-sm font-medium text-left text-primary-700 hover:underline"
-                    title="Ver card do cliente"
+                    className="text-sm font-medium text-left text-gray-900 hover:text-primary-700 hover:underline transition-colors"
+                    title="Ver ficha do cliente"
                   >
                     {cliente.razaoSocial}
                   </button>
                 ) : (
                   <p className="text-sm font-medium text-gray-800">{cliente?.razaoSocial || '—'}</p>
                 )}
-                <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
-                  {vendedor && <span>👤 {vendedor.nome}</span>}
+                <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 tabular-nums">
+                  {vendedor && <span>{vendedor.nome}</span>}
                   <span>·</span>
-                  <span>📅 {new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')}</span>
-                  {pedido.dataEnvio && <><span>·</span><span>📤 Enviado: {new Date(pedido.dataEnvio).toLocaleDateString('pt-BR')}</span></>}
-                  {pedido.dataAprovacao && <><span>·</span><span>{pedido.status === 'confirmado' ? '✅' : '❌'} {new Date(pedido.dataAprovacao).toLocaleDateString('pt-BR')}</span></>}
+                  <span>{new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')}</span>
+                  {pedido.dataEnvio && <><span>·</span><span>Enviado {new Date(pedido.dataEnvio).toLocaleDateString('pt-BR')}</span></>}
+                  {pedido.dataAprovacao && <><span>·</span><span>{pedido.status === 'confirmado' ? 'Aprovado em' : 'Recusado em'} {new Date(pedido.dataAprovacao).toLocaleDateString('pt-BR')}</span></>}
                   {cliente && onVerNoFunil && (
                     <>
                       <span>·</span>
                       <button
                         onClick={() => onVerNoFunil(cliente)}
-                        className="text-primary-600 hover:text-primary-700 hover:underline flex items-center gap-0.5"
+                        className="text-gray-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1 font-medium"
                       >
-                        <ArrowTopRightOnSquareIcon className="h-3 w-3" /> Ir para o funil
+                        <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" /> Funil
                       </button>
                     </>
                   )}
@@ -309,12 +319,12 @@ export default function AprovacaoView({
                       <button
                         onClick={() => handleBaixarPDF(pedido, cliente, vendedor)}
                         disabled={pdfLoadingId === pedido.id}
-                        className="text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-0.5 disabled:opacity-50"
+                        className="text-gray-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1 font-medium disabled:opacity-50"
                       >
                         {pdfLoadingId === pedido.id ? (
-                          <ArrowPathIcon className="h-5 w-5 text-red-600 animate-spin" />
+                          <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <DocumentArrowDownIcon className="h-5 w-5 text-red-600" />
+                          <DocumentArrowDownIcon className="h-3.5 w-3.5" />
                         )}
                         PDF
                       </button>
@@ -323,28 +333,28 @@ export default function AprovacaoView({
                 </div>
               </div>
             </div>
-            <div className="text-right flex-shrink-0 ml-4">
-              <p className="text-xl font-bold text-primary-600">R$ {pedido.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+            <div className="text-right flex-shrink-0 ml-4 tabular-nums">
+              <p className="text-lg font-semibold tracking-tight text-gray-900">R$ {pedido.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
               <p className="text-xs text-gray-400">{pedido.itens.length} produto(s)</p>
             </div>
           </div>
 
           {/* Itens */}
-          <div className="border-t border-gray-100 pt-3 space-y-2">
-            <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+          <div className="border-t border-gray-100 pt-3 space-y-1.5 tabular-nums">
+            <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
               <div className="col-span-1">Qtd</div>
               <div className="col-span-6">Descrição</div>
               <div className="col-span-2 text-right">Unit.</div>
               <div className="col-span-3 text-right">Total</div>
             </div>
             {(isExpanded ? pedido.itens : pedido.itens.slice(0, 3)).map((item, idx) => (
-              <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-1 sm:gap-2 text-sm py-1 border-b border-gray-50 last:border-0">
-                <div className="sm:col-span-1 font-semibold text-gray-900">{item.quantidade}</div>
+              <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-1 sm:gap-2 text-[13px] py-1.5 border-b border-gray-100/70 last:border-0">
+                <div className="sm:col-span-1 font-medium text-gray-900">{item.quantidade}</div>
                 <div className="sm:col-span-6 text-gray-700 truncate">
                   {item.nomeProduto}
                   {item.sku && <span className="text-gray-400 text-xs ml-1">({item.sku})</span>}
                 </div>
-                <div className="sm:col-span-2 text-left sm:text-right text-gray-600 text-sm">
+                <div className="sm:col-span-2 text-left sm:text-right text-gray-600">
                   R$ {item.preco.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   <span className="text-xs text-gray-400">/{item.unidade}</span>
                   {(() => {
@@ -352,28 +362,27 @@ export default function AprovacaoView({
                     const prazo = pedido.formaPagamento && resolverTaxaPrazo(pedido.formaPagamento, simParams?.prazos) !== undefined
                       ? pedido.formaPagamento
                       : 'À vista'
-                    const t = calcularPrecosTabela(item.nomeProduto, prazo, 'FOB', simParams ?? undefined)
+                    const t = obterPrecoTabelaItem(item.nomeProduto, prazo)
                     if (!t) return null
                     const diff = item.preco - (tabela === 'B' ? t.precoB : t.precoA)
                     const diffB = item.preco - t.precoB
-                    // Aceitável se está dentro da tabela B mesmo abaixo da A
-                    const cor = diff < -0.005 ? (diffB >= -0.005 ? 'text-amber-500' : 'text-red-600') : 'text-green-600'
+                    const cor = diff < -0.005 ? (diffB >= -0.005 ? 'text-amber-600' : 'text-red-600') : 'text-emerald-600'
                     const ref = tabela === 'B' ? t.precoB : t.precoA
                     return (
-                      <div className={`text-[10px] font-bold ${cor}`} title={`VT (tabela ${tabela} ${prazo} FOB): R$ ${ref.toFixed(2)}/un | tabela B: R$ ${t.precoB.toFixed(2)}/un`}>
+                      <div className={`text-[10px] font-semibold ${cor}`} title={`VT (tabela ${tabela} ${prazo} FOB): R$ ${ref.toFixed(2)}/un | tabela B: R$ ${t.precoB.toFixed(2)}/un`}>
                         VT {diff >= 0 ? '+' : ''}{diff.toFixed(2).replace('.', ',')}
                       </div>
                     )
                   })()}
                 </div>
-                <div className="sm:col-span-3 text-left sm:text-right font-medium text-gray-900">
+                <div className="sm:col-span-3 text-left sm:text-right font-semibold text-gray-900">
                   R$ {(item.preco * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </div>
               </div>
             ))}
             {!isExpanded && pedido.itens.length > 3 && (
-              <button onClick={() => setExpandedId(pedido.id)} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                + {pedido.itens.length - 3} produto(s) a mais...
+              <button onClick={() => setExpandedId(pedido.id)} className="text-xs text-primary-700 hover:underline font-medium">
+                + {pedido.itens.length - 3} produto(s) a mais
               </button>
             )}
             {isExpanded && (
@@ -387,7 +396,7 @@ export default function AprovacaoView({
               </p>
             )}
             {pedido.motivoRecusa && (
-              <div className="mt-2 p-2 bg-red-50 rounded-apple border border-red-200">
+              <div className="mt-2 p-2.5 bg-red-50/70 rounded-xl border border-red-200/80">
                 <p className="text-xs font-semibold text-red-700">Motivo da recusa:</p>
                 <p className="text-xs text-red-600">{pedido.motivoRecusa}</p>
               </div>
@@ -395,33 +404,35 @@ export default function AprovacaoView({
 
             {/* Status Omie */}
             {pedido.status === 'confirmado' && pedido.omieCodigo && (
-              <div className="mt-2 p-2.5 bg-green-50 rounded-apple border border-green-200">
-                <div className="flex items-center gap-2">
-                  <CloudArrowUpIcon className="h-4 w-4 text-green-600 flex-shrink-0" />
-                  <p className="text-xs font-semibold text-green-800">Enviado ao Omie com sucesso</p>
-                </div>
-                <div className="flex flex-wrap gap-3 mt-1 text-xs text-green-700">
-                  <span>Código: <strong>{pedido.omieCodigo}</strong></span>
-                  {pedido.omieNumero && <span>Nº: <strong>{pedido.omieNumero}</strong></span>}
-                  {pedido.omieStatus && <span>Status: <strong>{pedido.omieStatus}</strong></span>}
+              <div className="mt-2 p-3 bg-[#F5F5F7] dark:bg-[#242428] rounded-xl border border-black/[0.05] dark:border-white/[0.07] flex flex-wrap items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                    <p className="text-xs font-semibold text-gray-900">Sincronizado com Omie</p>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-gray-500 tabular-nums">
+                    <span>Código: <strong className="font-medium text-gray-800">{pedido.omieCodigo}</strong></span>
+                    {pedido.omieNumero && <span>Nº: <strong className="font-medium text-gray-800">{pedido.omieNumero}</strong></span>}
+                    {pedido.omieStatus && <span>Status: <strong className="font-medium text-gray-800">{pedido.omieStatus}</strong></span>}
+                  </div>
                 </div>
                 {loggedUser.cargo === 'gerente' && (
                   <button
                     onClick={() => setParamsPedido(pedido)}
-                    className="mt-2 px-2.5 py-1 bg-white border border-green-300 text-green-700 text-[10px] font-bold rounded-lg hover:bg-green-100 transition-colors"
-                    title="Ver e editar todos os parâmetros do pedido no Omie (frete, impostos, parcelas, itens…)"
+                    className="px-2.5 py-1 bg-white dark:bg-[#1C1C1E] border border-gray-200 text-gray-700 text-[11px] font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                    title="Ver e editar parâmetros do pedido no Omie"
                   >
-                    ⚙️ Parâmetros Omie
+                    Parâmetros Omie
                   </button>
                 )}
               </div>
             )}
             {pedido.status === 'confirmado' && !pedido.omieCodigo && pedido.omieErro && (
-              <div className="mt-2 p-2.5 bg-amber-50 rounded-apple border border-amber-300">
+              <div className="mt-2 p-3 bg-amber-50/80 rounded-xl border border-amber-200">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <XCircleIcon className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                    <p className="text-xs font-semibold text-amber-800">Omie rejeitou o pedido</p>
+                    <p className="text-xs font-semibold text-amber-900">Omie rejeitou o pedido</p>
                   </div>
                   {onReenviarOmie && (
                     <button
@@ -429,7 +440,7 @@ export default function AprovacaoView({
                         setReenviandoId(pedido.id)
                         try {
                           await onReenviarOmie(pedido)
-                          showToast('success', `Pedido ${pedido.numero} enviado ao Omie! ✅`)
+                          showToast('success', `Pedido ${pedido.numero} enviado ao Omie.`)
                         } catch {
                           showToast('error', 'Falha ao reenviar ao Omie.')
                         } finally {
@@ -437,16 +448,14 @@ export default function AprovacaoView({
                         }
                       }}
                       disabled={reenviandoId === pedido.id}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[10px] font-bold rounded-lg transition-colors flex-shrink-0"
+                      className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-[11px] font-medium rounded-lg transition-colors flex-shrink-0"
                     >
-                      {reenviandoId === pedido.id
-                        ? <><svg className="animate-spin h-3 w-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Enviando</>
-                        : '🔄 Reenviar ao Omie'
-                      }
+                      <ArrowPathIcon className={`h-3.5 w-3.5 ${reenviandoId === pedido.id ? 'animate-spin' : ''}`} />
+                      {reenviandoId === pedido.id ? 'Enviando...' : 'Reenviar ao Omie'}
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-amber-700 mt-1 break-words">{pedido.omieErro}</p>
+                <p className="text-xs text-amber-800 mt-1 break-words">{pedido.omieErro}</p>
               </div>
             )}
             {pedido.status === 'confirmado' && !pedido.omieCodigo && !pedido.omieErro && (
@@ -489,11 +498,10 @@ export default function AprovacaoView({
           {/* Action buttons */}
           {showActions && !isRecusando && (
             <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
-              {/* Tabela de preço Omie (A/B) — afeta comissões */}
               {pedido.tipo !== 'bonificacao' && (
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-gray-600">Tabela de preço:</span>
-                  <div className="flex rounded-apple border border-gray-300 overflow-hidden">
+                  <span className="text-xs font-medium text-gray-500">Tabela de preço</span>
+                  <div className="inline-flex p-0.5 rounded-lg bg-[#EFEFF4] dark:bg-[#262629]">
                     {(['A', 'B'] as const).map(t => {
                       const ativo = (tabelaPorPedido[pedido.id] ?? pedido.tabelaPreco ?? 'A') === t
                       return (
@@ -501,7 +509,7 @@ export default function AprovacaoView({
                           key={t}
                           onClick={() => setTabelaPorPedido(prev => ({ ...prev, [pedido.id]: t }))}
                           disabled={isLoading}
-                          className={`px-4 py-1.5 text-xs font-bold transition-colors ${ativo ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                          className={`px-3.5 py-1 text-xs font-semibold rounded-md transition-all ${ativo ? 'bg-white dark:bg-[#36363A] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
                           title={`Aprovar com tabela ${t} (afeta comissões no Omie)`}
                         >
                           Tabela {t}
@@ -509,24 +517,23 @@ export default function AprovacaoView({
                       )
                     })}
                   </div>
-                  <span className="text-[10px] text-gray-400">afeta comissões</span>
+                  <span className="text-[11px] text-gray-400">afeta comissões</span>
                 </div>
               )}
-              <div className="flex gap-3">
+              <div className="flex gap-2.5">
                 <button
                   onClick={() => handleAprovar(pedido)}
                   disabled={isLoading}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary-700 hover:bg-primary-800 disabled:opacity-60 text-white text-xs font-semibold rounded-xl shadow-apple-sm transition-colors"
                 >
-                  {isLoading ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <CheckCircleIcon className="h-4 w-4" />}
-                  Aprovar Pedido
+                  {isLoading ? <ArrowPathIcon className="h-4 w-4 animate-spin" /> : <CheckCircleIcon className="h-4 w-4" />}
+                  Aprovar pedido
                 </button>
                 <button
                   onClick={() => { setRecusandoId(pedido.id); setMotivoRecusa('') }}
                   disabled={isLoading}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-50 hover:bg-red-100 disabled:opacity-60 text-red-700 border border-red-200 text-sm font-semibold rounded-apple transition-colors"
+                  className="px-5 flex items-center justify-center gap-1.5 py-2.5 bg-[#EFEFF4] dark:bg-[#262629] hover:bg-red-50 hover:text-red-700 disabled:opacity-60 text-gray-700 text-xs font-semibold rounded-xl transition-colors"
                 >
-                  <XCircleIcon className="h-4 w-4" />
                   Recusar
                 </button>
               </div>
@@ -536,7 +543,7 @@ export default function AprovacaoView({
           {/* Formulário recusa */}
           {showActions && isRecusando && (
             <div className="mt-4 pt-3 border-t border-gray-100 space-y-3">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-xs font-medium text-gray-700">
                 Motivo da recusa <span className="text-red-500">*</span>
               </label>
               <textarea
@@ -545,19 +552,19 @@ export default function AprovacaoView({
                 rows={2}
                 placeholder="Ex: Preço fora da tabela, produto sem estoque, cliente em débito..."
                 autoFocus
-                className="w-full px-3 py-2 border border-red-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-red-400 text-sm resize-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm resize-none"
               />
               <div className="flex gap-2">
                 <button
                   onClick={() => handleRecusar(pedido)}
                   disabled={isLoading || !motivoRecusa.trim()}
-                  className="flex-1 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-semibold rounded-apple transition-colors"
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors"
                 >
-                  {isLoading ? 'Recusando...' : '❌ Confirmar Recusa'}
+                  {isLoading ? 'Recusando...' : 'Confirmar recusa'}
                 </button>
                 <button
                   onClick={() => { setRecusandoId(null); setMotivoRecusa('') }}
-                  className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-sm rounded-apple transition-colors"
+                  className="px-4 py-2 bg-[#EFEFF4] dark:bg-[#262629] hover:bg-gray-200 text-xs font-medium rounded-xl transition-colors"
                 >
                   Cancelar
                 </button>
@@ -570,80 +577,82 @@ export default function AprovacaoView({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header com métricas */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className={`bg-white rounded-apple shadow-apple-sm border-2 p-4 ${totalPendente > 0 ? 'border-amber-300' : 'border-gray-200'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <ClockIcon className="h-5 w-5 text-amber-500" />
-            <p className="text-xs text-gray-500 font-semibold uppercase">Aguardando</p>
+    <div className="space-y-5">
+      {/* Header com métricas (padrão Apple) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 tabular-nums">
+        <div className={`bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-sm border p-4 ${totalPendente > 0 ? 'border-amber-300/80' : 'border-black/[0.06] dark:border-white/[0.08]'}`}>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-500 font-medium">Aguardando</p>
+            <ClockIcon className="h-4 w-4 text-gray-400" />
           </div>
-          <p className={`text-2xl font-bold ${totalPendente > 0 ? 'text-amber-600' : 'text-gray-400'}`}>{totalPendente}</p>
+          <p className="text-2xl font-semibold tracking-tight text-gray-900">{totalPendente}</p>
           <p className="text-xs text-gray-500 mt-0.5">R$ {valorPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircleIcon className="h-5 w-5 text-green-500" />
-            <p className="text-xs text-gray-500 font-semibold uppercase">Aprovados (mês)</p>
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-sm border border-black/[0.06] dark:border-white/[0.08] p-4">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-500 font-medium">Aprovados no mês</p>
+            <CheckCircleIcon className="h-4 w-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-bold text-green-600">{aprovadosMes}</p>
-          <p className="text-xs text-gray-500 mt-0.5">este mês</p>
+          <p className="text-2xl font-semibold tracking-tight text-gray-900">{aprovadosMes}</p>
+          <p className="text-xs text-gray-400 mt-0.5">este mês</p>
         </div>
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <XCircleIcon className="h-5 w-5 text-red-400" />
-            <p className="text-xs text-gray-500 font-semibold uppercase">Recusados (mês)</p>
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-sm border border-black/[0.06] dark:border-white/[0.08] p-4">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-500 font-medium">Recusados no mês</p>
+            <XCircleIcon className="h-4 w-4 text-red-400" />
           </div>
-          <p className="text-2xl font-bold text-red-500">{recusadosMes}</p>
-          <p className="text-xs text-gray-500 mt-0.5">este mês</p>
+          <p className="text-2xl font-semibold tracking-tight text-gray-900">{recusadosMes}</p>
+          <p className="text-xs text-gray-400 mt-0.5">este mês</p>
         </div>
-        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <ShoppingCartIcon className="h-5 w-5 text-primary-500" />
-            <p className="text-xs text-gray-500 font-semibold uppercase">Total pedidos</p>
+        <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple-sm border border-black/[0.06] dark:border-white/[0.08] p-4">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-500 font-medium">Total de pedidos</p>
+            <ShoppingCartIcon className="h-4 w-4 text-gray-400" />
           </div>
-          <p className="text-2xl font-bold text-primary-600">{pedidos.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">no sistema</p>
+          <p className="text-2xl font-semibold tracking-tight text-gray-900">{pedidos.length}</p>
+          <p className="text-xs text-gray-400 mt-0.5">no sistema</p>
         </div>
       </div>
 
-      {/* Tabs + filtros */}
+      {/* Tabs Segmented Control Apple + filtro de vendedor limpo */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex gap-2 flex-wrap">
+        <div className="inline-flex flex-wrap p-1 rounded-xl bg-[#E5E5EA]/80 dark:bg-[#242428] gap-0.5">
           <button
             onClick={() => setActiveTab('pendentes')}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'pendentes' ? 'bg-amber-500 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${activeTab === 'pendentes' ? 'bg-white dark:bg-[#343438] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
           >
-            ⏳ Aguardando {totalPendente > 0 && <span className="ml-1.5 bg-white text-amber-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{totalPendente}</span>}
+            Aguardando
+            {totalPendente > 0 && <span className="bg-amber-500 text-white rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums">{totalPendente}</span>}
           </button>
           <button
             onClick={() => setActiveTab('cancelamentos')}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'cancelamentos' ? 'bg-red-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${activeTab === 'cancelamentos' ? 'bg-white dark:bg-[#343438] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
           >
-            🚫 Cancelamentos {(cancelamentosPendentes.length + amostrasCancelamentoPendentes.length) > 0 && <span className="ml-1.5 bg-white text-red-600 rounded-full px-1.5 py-0.5 text-[10px] font-bold">{cancelamentosPendentes.length + amostrasCancelamentoPendentes.length}</span>}
+            Cancelamentos
+            {(cancelamentosPendentes.length + amostrasCancelamentoPendentes.length) > 0 && <span className="bg-red-500 text-white rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none tabular-nums">{cancelamentosPendentes.length + amostrasCancelamentoPendentes.length}</span>}
           </button>
           <button
             onClick={() => setActiveTab('historico')}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors ${activeTab === 'historico' ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${activeTab === 'historico' ? 'bg-white dark:bg-[#343438] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
           >
-            📋 Histórico
+            Histórico
           </button>
           <button
             onClick={() => setActiveTab('parametros')}
-            className={`px-4 py-2 rounded-apple text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'parametros' ? 'bg-gray-700 text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${activeTab === 'parametros' ? 'bg-white dark:bg-[#343438] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
           >
-            <Cog6ToothIcon className="h-4 w-4" />
+            <Cog6ToothIcon className="h-3.5 w-3.5" />
             Parâmetros
-            {params.ativo && <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" title="Auto-aprovação ativa" />}
+            {params.ativo && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" title="Auto-aprovação ativa" />}
           </button>
         </div>
         {activeTab !== 'parametros' && (
           <select
             value={filtroVendedor}
             onChange={e => setFiltroVendedor(e.target.value ? Number(e.target.value) : '')}
-            className="px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="px-3 py-1.5 border border-black/[0.09] dark:border-white/[0.12] bg-white dark:bg-[#1C1C1E] rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
           >
-            <option value="">👥 Todos os vendedores</option>
+            <option value="">Todos os vendedores</option>
             {vendedores.filter(v => v.ativo && v.cargo !== 'gerente').map(v => (
               <option key={v.id} value={v.id}>{v.nome}</option>
             ))}
@@ -942,17 +951,19 @@ export default function AprovacaoView({
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <p className="text-sm text-gray-500">{historicoList.length} pedido(s) processados{limiteHistorico !== 'todos' ? ` (últimos ${limiteHistorico})` : ' (todos)'}</p>
-                <div className="flex items-center gap-1.5 text-sm">
+                <div className="flex items-center gap-1.5 text-xs">
                   <span className="text-gray-500">Exibir:</span>
-                  {(['50', '100', 'todos'] as const).map(op => (
-                    <button
-                      key={op}
-                      onClick={() => setLimiteHistorico(op)}
-                      className={`px-3 py-1 rounded-apple text-xs font-medium transition-colors ${limiteHistorico === op ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}`}
-                    >
-                      {op === 'todos' ? 'Todos' : op}
-                    </button>
-                  ))}
+                  <div className="inline-flex p-0.5 rounded-lg bg-[#E5E5EA]/80 dark:bg-[#242428]">
+                    {(['50', '100', 'todos'] as const).map(op => (
+                      <button
+                        key={op}
+                        onClick={() => setLimiteHistorico(op)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${limiteHistorico === op ? 'bg-white dark:bg-[#343438] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                      >
+                        {op === 'todos' ? 'Todos' : op}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               {historicoList.map(p => renderPedidoCard(p, false))}
