@@ -417,7 +417,7 @@ export default function DashboardVendedorView({
       tarefasAtrasadas: tarefasPendentes.filter(t => t.data && t.data.slice(0, 10) < hojeISO).length,
       amostrasMais30d: meusClientes.filter(c => c.etapa === 'amostra' && diasDesdeISO(c.dataEnvioAmostra || c.dataEntradaEtapa) > 30).length,
       negociacoesMais3d: meusClientes.filter(c => c.etapa === 'negociacao' && diasDesdeISO(c.dataEntradaEtapa) > 3).length,
-      semCompraMais60d: indOps.semCompra.d60 + indOps.semCompra.d90,
+      semCompraMais60d: indOps.situacaoCompra.em_risco + indOps.situacaoCompra.inativo_recente + indOps.situacaoCompra.inativo_antigo,
     }
   }, [tarefasPendentes, meusClientes, indOps.semCompra, hojeISO])
 
@@ -786,10 +786,10 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
           />
           <MetricCard
-            label="Sem compra 30d"
-            value={String(indOps.semCompra.d30)}
+            label="Em atenção"
+            value={String(indOps.situacaoCompra.em_atencao)}
             meta={0}
-            total={indOps.semCompra.d30}
+            total={indOps.situacaoCompra.em_atencao}
             color="#F97316"
             icon={<UsersIcon className="h-5 w-5" style={{ color: '#F97316' }} />}
           />
@@ -863,9 +863,9 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
               onClick={() => onNavigate?.('clientes')}
               className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
             >
-              <p className="text-[11px] font-medium text-gray-500 uppercase">Sem compra &gt; 60 dias</p>
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Em risco ou inativo</p>
               <p className={`text-xl font-bold mt-0.5 ${gargalos.semCompraMais60d > 0 ? 'text-orange-700' : 'text-green-700'}`}>{gargalos.semCompraMais60d}</p>
-              <p className="text-[11px] text-gray-400">clientes p/ reativação</p>
+              <p className="text-[11px] text-gray-400">sem compra há 61+ dias</p>
             </button>
           </div>
         </div>

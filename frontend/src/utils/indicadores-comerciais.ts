@@ -1,4 +1,5 @@
 import type { Cliente, Pedido, PropostaHistorico } from '../types'
+import { classificarSituacaoCompra, SituacaoCompra } from './situacaoCompra'
 
 export interface PeriodoIndicadores {
   inicio: string
@@ -77,6 +78,7 @@ export function calcularIndicadoresComerciais(
 
 export interface IndicadoresOperacionais {
   semCompra: { d30: number; d60: number; d90: number; nunca: number }
+  situacaoCompra: Record<SituacaoCompra, number>
   pipelineAberto: number
   pipelinePonderado: number
   negociacoesAbertas: number
@@ -149,6 +151,38 @@ export function calcularIndicadoresOperacionais(
     if (d > 90) semCompra.d90++; else if (d > 60) semCompra.d60++; else if (d > 30) semCompra.d30++
   }
 
+  // Item 1: situação oficial pela última venda realmente enviada/aprovada ao Omie.
+  // Bonificações e pedidos não integrados não contam; o campo legado dataUltimaVenda
+  // entra como complemento até a importação geral de vendas.
+  const ultimaOmie = new Map<string, string>()
+  vendas
+    .filter(v => Boolean(v.pedido.omieCodigo || v.pedido.omieNumero || v.pedido.dataEnvioOmie))
+    .map(v => ({ ...v, diaEnvio: dataCalendario(v.pedido.dataEnvioOmie || v.pedido.dataAprovacao || v.pedido.dataEnvio || '') }))
+    .filter((v): v is typeof v & { diaEnvio: string } => !!v.diaEnvio)
+    .forEach(v => { const u = ultimaOmie.get(v.empresa); if (!u || v.diaEnvio > u) ultimaOmie.set(v.empresa, v.diaEnvio) })
+  const ultimaLegada = new Map<string, string>()
+  for (const c of clientes) {
+    const emp = empresas.get(c.id) || `cliente:${c.id}`
+    const dia = c.dataUltimaVenda ? dataCalendario(c.dataUltimaVenda) : null
+    if (!dia) continue
+    const u = ultimaLegada.get(emp)
+    if (!u || dia > u) ultimaLegada.set(emp, dia)
+  }
+  const situacaoCompra: Record<SituacaoCompra, number> = {
+    prospecto: 0,
+    ativo: 0,
+    em_atencao: 0,
+    em_risco: 0,
+    inativo_recente: 0,
+    inativo_antigo: 0,
+  }
+  for (const emp of empresasDaCarteira) {
+    const uOmie = ultimaOmie.get(emp)
+    const uLegada = ultimaLegada.get(emp)
+    const ultimaCompra = uOmie && uLegada ? (uOmie > uLegada ? uOmie : uLegada) : (uOmie || uLegada || null)
+    situacaoCompra[classificarSituacaoCompra(ultimaCompra, new Date(`${hoje}T12:00:00`)).situacao]++
+  }
+
   // Pedidos enviados (em trânsito — venda fechada aguardando confirmação fiscal)
   const enviados = pedidos.filter(p => p.status === 'enviado' && p.tipo !== 'bonificacao'
     && (opcoes.vendedorId === undefined || p.vendedorId === opcoes.vendedorId))
@@ -210,5 +244,5 @@ export function calcularIndicadoresOperacionais(
   const confirmadoPeriodo = noPeriodo.reduce((s, v) => s + v.pedido.totalValor, 0)
   const previsaoFaturamento = Math.round((confirmadoPeriodo + enviadosValor + pipelinePonderado) * 100) / 100
 
-  return { semCompra, pipelineAberto, pipelinePonderado, negociacoesAbertas, cotacoesEnviadas, enviadosCount, enviadosValor, previsaoFaturamento, precoMedioNegociacao, prazoMedioNegociacao, porProduto, porVendedor, porEstado, frequenciaMediaCompra, mixMedioItensPedido }
+  return { semCompra, situacaoCompra, pipelineAberto, pipelinePonderado, negociacoesAbertas, cotacoesEnviadas, enviadosCount, enviadosValor, previsaoFaturamento, precoMedioNegociacao, prazoMedioNegociacao, porProduto, porVendedor, porEstado, frequenciaMediaCompra, mixMedioItensPedido }
 }

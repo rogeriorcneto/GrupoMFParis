@@ -18,6 +18,7 @@ import { existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { registrarTarefaExcluida } from '../utils/exportacaoAuditoria'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
 import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
+import { buildProximaTarefa, validarFinalizacaoTarefa } from '../utils/tarefaFluxo'
 
 interface AppRouterProps {
   activeView: ViewType
@@ -127,6 +128,7 @@ export default function AppRouter({
             } else if (result.omie?.success) {
               omieUpdate.omieCodigo = String(result.omie.omie_codigo || '')
               omieUpdate.omieErro = undefined
+              omieUpdate.dataEnvioOmie = new Date().toISOString()
               addNotificacao('success', 'Pedido aprovado + Omie ✅', `Pedido ${pedido.numero} aprovado e enviado ao Omie com sucesso! (Cód: ${result.omie.omie_codigo})`, pedido.clienteId)
             } else {
               // Omie rejeitou → NÃO confirmar: mantém 'enviado' (pendente) com o erro
@@ -298,7 +300,7 @@ export default function AppRouter({
             const omieCodigo = String(result.omie?.codigo_pedido || result.omie?.omie_codigo || '')
             const omieNumero = String(result.omie?.numero_pedido || result.omie?.omie_numero || '')
             setPedidos(prev => prev.map(p => p.id === pedido.id
-              ? { ...p, omieCodigo: omieCodigo || undefined, omieNumero: omieNumero || undefined, omieStatus: 'enviado', omieErro: undefined }
+              ? { ...p, omieCodigo: omieCodigo || undefined, omieNumero: omieNumero || undefined, omieStatus: 'enviado', omieErro: undefined, dataEnvioOmie: new Date().toISOString() }
               : p
             ))
             addNotificacao('success', 'Omie ✅', `Pedido ${pedido.numero} enviado ao Omie com sucesso!`, pedido.clienteId)
@@ -589,9 +591,43 @@ export default function AppRouter({
               return
             }
             
+            // Finalização disciplinada: antes de concluir, cria o próximo passo
+            // obrigatório e vincula a nova tarefa à tarefa finalizada.
+            let tarefaParaSalvar: Tarefa = t
+            let proximaTarefaCriada: Tarefa | null = null
+            if (foiConcluidaAgora) {
+              if (!t.finalizacao) {
+                showToast('error', 'Para finalizar, informe canal usado, conclusão e próximo passo.')
+                return
+              }
+              const erroValidacao = validarFinalizacaoTarefa(t.finalizacao)
+              if (erroValidacao) {
+                showToast('error', erroValidacao)
+                return
+              }
+              const clienteDaTarefa = t.clienteId ? clientes.find(c => c.id === t.clienteId) : undefined
+              const existente = tarefaAnterior?.proximaTarefaId ? tarefas.find(x => x.id === tarefaAnterior.proximaTarefaId) : undefined
+              if (existente) {
+                proximaTarefaCriada = existente
+                tarefaParaSalvar = { ...t, proximaTarefaId: existente.id }
+              } else {
+                const novaTarefa = buildProximaTarefa(t, t.finalizacao, clienteDaTarefa, loggedUser?.nome || 'Vendedor')
+                proximaTarefaCriada = await db.insertTarefa(novaTarefa)
+                tarefaParaSalvar = { ...t, proximaTarefaId: proximaTarefaCriada.id }
+              }
+            }
+
+            // O campo finalizacao é transitório de UI e não vai para o banco.
+            const { finalizacao: _finalizacaoTransitoria, ...tarefaPersistida } = tarefaParaSalvar
+
             // Atualização otimista: atualiza UI imediatamente antes da resposta do banco
-            setTarefas(prev => prev.map(x => x.id === t.id ? t : x))
-            await db.updateTarefa(t.id, t)
+            setTarefas(prev => {
+              const atualizadas = prev.map(x => x.id === t.id ? { ...tarefaPersistida, id: t.id } as Tarefa : x)
+              return proximaTarefaCriada && !atualizadas.some(x => x.id === proximaTarefaCriada!.id)
+                ? [proximaTarefaCriada, ...atualizadas]
+                : atualizadas
+            })
+            await db.updateTarefa(t.id, tarefaPersistida as Tarefa)
             if (foiConcluidaAgora && t.clienteId && t.titulo.startsWith('Coletar satisfação — ')) {
               const cliAlvo = clientes.find(c => c.id === t.clienteId)
               const targetId = cliAlvo?.arquivadoDuplicata ? cliAlvo.cardPrincipalId : t.clienteId
@@ -645,7 +681,7 @@ export default function AppRouter({
         }}
         onAddTarefa={async (t) => {
           try {
-            const saved = await db.insertTarefa(t)
+            const saved = await db.insertTarefa({ ...t, objetivo: t.objetivo || 'relacionamento', origem: t.origem || 'manual', criadoPor: t.criadoPor || loggedUser?.nome || 'Vendedor' })
             setTarefas(prev => prev.some(existing => existing.id === saved.id) ? prev : [saved, ...prev])
           } catch (err) { logger.error('Erro ao criar tarefa:', err) }
         }}

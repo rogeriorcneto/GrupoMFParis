@@ -6,6 +6,7 @@ import type {
   PropostaHistorico, ChatMensagem,
   ModuloTreinamento, PerfilTreinamento
 } from '../types'
+import { normalizarTipoTarefaNovoFluxo } from '../utils/tarefaFluxo'
 
 // ============================================
 // Helpers: converter snake_case (DB) ↔ camelCase (frontend)
@@ -120,8 +121,12 @@ export function clienteFromDb(row: any): Cliente {
     linkedin: row.linkedin ?? undefined,
     contatoFinanceiroNome: row.contato_financeiro_nome ?? undefined,
     contatoFinanceiroTelefone: row.contato_financeiro_telefone ?? undefined,
+    contatoFinanceiroSetor: row.contato_financeiro_setor ?? undefined,
     contatoComprasNome: row.contato_compras_nome ?? undefined,
     contatoComprasTelefone: row.contato_compras_telefone ?? undefined,
+    contatoComprasSetor: row.contato_compras_setor ?? undefined,
+    emailBoleto: row.email_boleto ?? undefined,
+    cadastroJustificativas: Array.isArray(row.cadastro_justificativas) ? row.cadastro_justificativas : [],
     produtosQuantidadesMensais: row.produtos_quantidades_mensais ?? undefined,
     produtosDenegados: row.produtos_denegados ?? undefined,
     motivoInativacao: row.motivo_inativacao ?? undefined,
@@ -235,8 +240,12 @@ function clienteToDb(c: Partial<Cliente>): any {
   if (c.linkedin !== undefined) row.linkedin = c.linkedin ?? null
   if (c.contatoFinanceiroNome !== undefined) row.contato_financeiro_nome = c.contatoFinanceiroNome ?? null
   if (c.contatoFinanceiroTelefone !== undefined) row.contato_financeiro_telefone = c.contatoFinanceiroTelefone ?? null
+  if (c.contatoFinanceiroSetor !== undefined) row.contato_financeiro_setor = c.contatoFinanceiroSetor ?? null
   if (c.contatoComprasNome !== undefined) row.contato_compras_nome = c.contatoComprasNome ?? null
   if (c.contatoComprasTelefone !== undefined) row.contato_compras_telefone = c.contatoComprasTelefone ?? null
+  if (c.contatoComprasSetor !== undefined) row.contato_compras_setor = c.contatoComprasSetor ?? null
+  if (c.emailBoleto !== undefined) row.email_boleto = c.emailBoleto ?? null
+  if (c.cadastroJustificativas !== undefined) row.cadastro_justificativas = c.cadastroJustificativas ?? []
   if (c.produtosQuantidadesMensais !== undefined) row.produtos_quantidades_mensais = c.produtosQuantidadesMensais ?? null
   if (c.produtosDenegados !== undefined) row.produtos_denegados = c.produtosDenegados ?? null
   if (c.motivoInativacao !== undefined) row.motivo_inativacao = c.motivoInativacao ?? null
@@ -323,7 +332,16 @@ export function tarefaFromDb(row: any): Tarefa {
     clienteId: row.cliente_id,
     vendedorId: row.vendedor_id,
     criadoEm: row.created_at || undefined,
+    criadoPor: row.criado_por || undefined,
+    concluidaEm: row.concluida_em || undefined,
+    concluidaPor: row.concluida_por || undefined,
+    canalUsado: row.canal_usado || undefined,
+    objetivo: row.objetivo || undefined,
+    origem: row.origem || undefined,
+    justificativaPrazoLongo: row.justificativa_prazo_longo || undefined,
+    proximaTarefaId: row.proxima_tarefa_id ?? undefined,
     reagendamentos: row.reagendamentos || undefined,
+    origemAutomacaoId: row.origem_automacao_id ?? undefined,
     missaoId: row.missao_id ?? undefined,
     diaMissao: row.dia_missao ?? undefined,
     chegadaEm: row.chegada_em || undefined,
@@ -360,6 +378,8 @@ export function pedidoFromDb(row: any, itens: any[] = []): Pedido {
     omieNumero: row.omie_numero || undefined,
     omieStatus: row.omie_status || undefined,
     omieErro: row.omie_erro || undefined,
+    dataEnvioOmie: row.data_envio_omie || undefined,
+    dataFaturamento: row.data_faturamento || undefined,
     tipo: row.tipo || 'venda',
     formaPagamento: row.forma_pagamento || 'À vista',
     tipoFrete: row.tipo_frete || undefined,
@@ -1015,13 +1035,77 @@ export async function fetchTarefas(): Promise<Tarefa[]> {
   return allRows.map(tarefaFromDb)
 }
 
+function tarefaToDbRow(t: Partial<Tarefa>): any {
+  const row: any = {}
+  if (t.titulo !== undefined) row.titulo = t.titulo
+  if (t.descricao !== undefined || t.conclusao !== undefined) {
+    const baseDesc = t.descricao || ''
+    row.descricao = t.conclusao ? `${baseDesc}${CONCLUSAO_SEP}${t.conclusao}` : (baseDesc || null)
+  }
+  if (t.data !== undefined) row.data = t.data
+  if (t.hora !== undefined) row.hora = t.hora || null
+  if (t.tipo !== undefined) row.tipo = t.tipo
+  if (t.status !== undefined) row.status = t.status
+  if (t.prioridade !== undefined) row.prioridade = t.prioridade
+  if (t.clienteId !== undefined) row.cliente_id = t.clienteId || null
+  if (t.vendedorId !== undefined) row.vendedor_id = t.vendedorId || null
+  if (t.concluidaEm !== undefined) row.concluida_em = t.concluidaEm || null
+  if (t.concluidaPor !== undefined) row.concluida_por = t.concluidaPor || null
+  if (t.criadoPor !== undefined) row.criado_por = t.criadoPor || null
+  if (t.canalUsado !== undefined) row.canal_usado = t.canalUsado || null
+  if (t.objetivo !== undefined) row.objetivo = t.objetivo || null
+  if (t.origem !== undefined) row.origem = t.origem || null
+  if (t.justificativaPrazoLongo !== undefined) row.justificativa_prazo_longo = t.justificativaPrazoLongo || null
+  if (t.proximaTarefaId !== undefined) row.proxima_tarefa_id = t.proximaTarefaId || null
+  if (t.reagendamentos !== undefined) row.reagendamentos = t.reagendamentos
+  if (t.origemAutomacaoId !== undefined) row.origem_automacao_id = t.origemAutomacaoId || null
+  if (t.missaoId !== undefined) row.missao_id = t.missaoId || null
+  if (t.diaMissao !== undefined) row.dia_missao = t.diaMissao || null
+  if (t.chegadaEm !== undefined) row.chegada_em = t.chegadaEm || null
+  if (t.saidaEm !== undefined) row.saida_em = t.saidaEm || null
+  if (t.resultado !== undefined) row.resultado = t.resultado || null
+  if (t.proximosPassos !== undefined) row.proximos_passos = t.proximosPassos || null
+  if (t.amostrasEntregues !== undefined) row.amostras_entregues = t.amostrasEntregues ?? null
+  if (t.origem === undefined) row.origem = (t.origemAutomacaoId || t.missaoId) ? 'automatica' : 'manual'
+  if (t.status === 'pendente') {
+    row.concluida_em = null
+    row.concluida_por = null
+  }
+  return row
+}
+
+function missingColumnName(error: any): string | null {
+  if (error?.code !== 'PGRST204') return null
+  return /'([^']+)' column/i.exec(error.message || '')?.[1] || null
+}
+
+async function insertTarefaRow(rowIn: any) {
+  const row = { ...rowIn }
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data, error } = await supabase.from('tarefas').insert(row).select().single()
+    if (!error) return data
+    const missing = missingColumnName(error)
+    if (missing && missing in row) { delete row[missing]; continue }
+    throw error
+  }
+  throw new Error('Falha ao inserir tarefa: schema do banco incompatível')
+}
+
+async function updateTarefaRow(id: number, rowIn: any) {
+  const row = { ...rowIn }
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { error } = await supabase.from('tarefas').update(row).eq('id', id)
+    if (!error) return
+    const missing = missingColumnName(error)
+    if (missing && missing in row) { delete row[missing]; continue }
+    throw error
+  }
+  throw new Error('Falha ao atualizar tarefa: schema do banco incompatível')
+}
+
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
-  const { data, error } = await supabase.from('tarefas').insert({
-    titulo: t.titulo, descricao: t.descricao || null, data: t.data, hora: t.hora || null,
-    tipo: t.tipo, status: t.status, prioridade: t.prioridade,
-    cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
-  }).select().single()
-  if (error) throw error
+  const tipo = normalizarTipoTarefaNovoFluxo(t.tipo, `${t.titulo || ''} ${t.descricao || ''}`)
+  const data = await insertTarefaRow(tarefaToDbRow({ ...t, tipo, objetivo: t.objetivo || 'relacionamento' }))
   return tarefaFromDb(data)
 }
 
@@ -1029,25 +1113,19 @@ export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise
   const BATCH_SIZE = 100
   const allSaved: Tarefa[] = []
   const falhas: string[] = []
-  const toRow = (t: Omit<Tarefa, 'id'>) => ({
-    titulo: t.titulo, descricao: t.descricao || null, data: t.data, hora: t.hora || null,
-    tipo: t.tipo, status: t.status, prioridade: t.prioridade,
-    cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
-  })
 
   for (let i = 0; i < tarefas.length; i += BATCH_SIZE) {
     const slice = tarefas.slice(i, i + BATCH_SIZE)
-    const batch = slice.map(toRow)
-    const { data, error } = await supabase.from('tarefas').insert(batch).select()
-    if (!error) {
-      if (data) allSaved.push(...data.map(tarefaFromDb))
-      continue
-    }
-
+    // O insert linha-a-linha com fallback evita perder o lote inteiro quando uma
+    // coluna nova ainda não existe no schema cache do PostgREST.
     for (let j = 0; j < slice.length; j++) {
-      const { data: rowData, error: rowError } = await supabase.from('tarefas').insert(toRow(slice[j])).select().single()
-      if (rowError) falhas.push(`linha ${i + j + 1}: ${rowError.message}`)
-      else if (rowData) allSaved.push(tarefaFromDb(rowData))
+      try {
+        const tNorm = { ...slice[j], tipo: normalizarTipoTarefaNovoFluxo(slice[j].tipo, `${slice[j].titulo || ''} ${slice[j].descricao || ''}`), objetivo: slice[j].objetivo || 'relacionamento' }
+        const rowData = await insertTarefaRow(tarefaToDbRow(tNorm))
+        allSaved.push(tarefaFromDb(rowData))
+      } catch (rowError: any) {
+        falhas.push(`linha ${i + j + 1}: ${rowError?.message || rowError}`)
+      }
     }
   }
 
@@ -1058,24 +1136,7 @@ export async function insertTarefasBatch(tarefas: Omit<Tarefa, 'id'>[]): Promise
 }
 
 export async function updateTarefa(id: number, t: Partial<Tarefa>): Promise<void> {
-  const row: any = {}
-  if (t.titulo !== undefined) row.titulo = t.titulo
-  if (t.descricao !== undefined && t.conclusao !== undefined) {
-    row.descricao = t.conclusao ? `${t.descricao}${CONCLUSAO_SEP}${t.conclusao}` : t.descricao
-  } else if (t.descricao !== undefined) {
-    row.descricao = t.descricao
-  }
-  if (t.data !== undefined) row.data = t.data
-  if (t.hora !== undefined) row.hora = t.hora || null
-  if (t.tipo !== undefined) row.tipo = t.tipo
-  if (t.status !== undefined) row.status = t.status
-  if (t.prioridade !== undefined) row.prioridade = t.prioridade
-  if (t.clienteId !== undefined) row.cliente_id = t.clienteId
-  if (t.vendedorId !== undefined) row.vendedor_id = t.vendedorId
-  if (t.reagendamentos !== undefined) row.reagendamentos = t.reagendamentos
-  // NOTA: tabela 'tarefas' não tem coluna concluida_em — não enviar
-  const { error } = await supabase.from('tarefas').update(row).eq('id', id)
-  if (error) throw error
+  await updateTarefaRow(id, tarefaToDbRow(t))
 }
 
 export async function deleteTarefa(id: number): Promise<void> {
@@ -1769,14 +1830,14 @@ export interface RegraAutomacaoDB {
     diasInatividade?: number
     subStatus?: string
     diasDesdeEvento?: number
-    tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
+    tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'visita' | 'follow-up' | 'outro' | 'qualquer'
     tarefaEspecifica?: string
     etapaCliente?: string
   }
   acao: {
     titulo: string
     descricao: string
-    tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
+    tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'visita' | 'outro'
     prioridade: 'alta' | 'media' | 'baixa'
     diasPrazo: number
     horaPadrao?: string
@@ -2036,7 +2097,7 @@ export async function processarRegrasAutomacao(
       }
       
       const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
-      const tipoTarefa = regra.acao?.tipo || 'outro'
+      const tipoTarefa = normalizarTipoTarefaNovoFluxo(regra.acao?.tipo, `${titulo} ${descricao}`)
 
       // Evitar duplicatas: mesma tarefa pendente já existe em memória ou no banco?
       if (
@@ -2057,7 +2118,11 @@ export async function processarRegrasAutomacao(
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
         clienteId,
-        vendedorId
+        vendedorId,
+        objetivo: inferirObjetivoTarefaAutomatica(titulo, descricao, regra.acao?.objetivo),
+        origem: 'automatica',
+        origemAutomacaoId: regra.id,
+        criadoPor: 'Automação'
       })
 
       tarefasCriadas.push(novaTarefa)
@@ -2067,6 +2132,16 @@ export async function processarRegrasAutomacao(
   }
   
   return tarefasCriadas
+}
+
+function inferirObjetivoTarefaAutomatica(titulo: string, descricao = '', explicito?: string): Tarefa['objetivo'] {
+  if (explicito && ['relacionamento', 'oferta_venda', 'cotacao', 'pos_venda', 'cobranca'].includes(explicito)) return explicito as Tarefa['objetivo']
+  const txt = `${titulo} ${descricao}`.toLowerCase()
+  if (/cobran|boleto|pagamento|inadimpl/.test(txt)) return 'cobranca'
+  if (/cota[çc][ãa]o|cotar/.test(txt)) return 'cotacao'
+  if (/satisfa[çc][ãa]o|p[óo]s-venda|pos-venda|entrega|feedback/.test(txt)) return 'pos_venda'
+  if (/proposta|oferta|venda|pedido|amostra|apresentar/.test(txt)) return 'oferta_venda'
+  return 'relacionamento'
 }
 
 // ============================================
@@ -2132,7 +2207,7 @@ export async function processarRegrasTarefaConcluida(
       const titulo = (regra.acao?.titulo || '').replace(/\{cliente\}/g, nomeCliente)
       const descricao = (regra.acao?.descricao || '').replace(/\{cliente\}/g, nomeCliente)
       const dataTarefa = dataDaqui(regra.acao?.diasPrazo || 7)
-      const tipoTarefa = regra.acao?.tipo || 'outro'
+      const tipoTarefa = normalizarTipoTarefaNovoFluxo(regra.acao?.tipo, `${titulo} ${descricao}`)
 
       if (
         (tarefasExistentes?.length && tarefaPendenteEquivalenteExiste(tarefasExistentes, tarefaConcluida.clienteId, titulo)) ||
@@ -2151,7 +2226,11 @@ export async function processarRegrasTarefaConcluida(
         status: 'pendente',
         prioridade: regra.acao?.prioridade || 'media',
         clienteId: tarefaConcluida.clienteId,
-        vendedorId
+        vendedorId,
+        objetivo: inferirObjetivoTarefaAutomatica(titulo, descricao, regra.acao?.objetivo),
+        origem: 'automatica',
+        origemAutomacaoId: regra.id,
+        criadoPor: 'Automação'
       })
 
       tarefasCriadas.push(novaTarefa)

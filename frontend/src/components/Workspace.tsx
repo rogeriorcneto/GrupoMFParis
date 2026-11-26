@@ -21,6 +21,7 @@ import { sendEmailViaBot } from '../lib/botApi'
 import * as db from '../lib/database'
 import { formatBrazilianPhone } from '../utils/validators'
 import { loadConversationByChannel as loadConversation, saveConversationByChannel as saveConversation, clearConversationByChannel as clearConversation } from '../lib/aiConversations'
+import { CANAIS_TAREFA, CANAL_LABEL, OBJETIVOS_TAREFA, OBJETIVO_LABEL, CanalTarefa, ObjetivoTarefa } from '../utils/tarefaFluxo'
 
 // ── Types ──
 
@@ -145,6 +146,9 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
   // Quick task
   const [quickTaskTitle, setQuickTaskTitle] = useState('')
+  const [quickTaskTipo, setQuickTaskTipo] = useState<CanalTarefa>('ligacao')
+  const [quickTaskObjetivo, setQuickTaskObjetivo] = useState<ObjetivoTarefa>('relacionamento')
+  const [quickTaskData, setQuickTaskData] = useState(() => new Date().toISOString().split('T')[0])
 
   // ─── Init ───
 
@@ -699,12 +703,15 @@ const Workspace: React.FC<WorkspaceProps> = ({
   // ─── Quick Task ───
 
   const handleQuickTask = () => {
-    if (!quickTaskTitle.trim()) return
+    if (!quickTaskTitle.trim() || !quickTaskData) return
     const t: Tarefa = {
       id: Date.now(),
       titulo: quickTaskTitle.trim(),
-      data: new Date().toISOString().split('T')[0],
-      tipo: 'outro',
+      data: quickTaskData,
+      tipo: quickTaskTipo,
+      objetivo: quickTaskObjetivo,
+      origem: 'manual',
+      criadoPor: loggedUser?.nome || 'Vendedor',
       status: 'pendente',
       prioridade: 'media',
       clienteId: selectedCliente?.id,
@@ -1185,12 +1192,27 @@ const Workspace: React.FC<WorkspaceProps> = ({
                     className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                     onKeyDown={e => { if (e.key === 'Enter') handleQuickTask() }}
                   />
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={quickTaskTipo} onChange={e => setQuickTaskTipo(e.target.value as CanalTarefa)} className="px-2 py-2 border border-gray-300 rounded-apple text-xs bg-white" aria-label="Tipo previsto">
+                      {CANAIS_TAREFA.map(t => <option key={t} value={t}>{CANAL_LABEL[t]}</option>)}
+                    </select>
+                    <select value={quickTaskObjetivo} onChange={e => setQuickTaskObjetivo(e.target.value as ObjetivoTarefa)} className="px-2 py-2 border border-gray-300 rounded-apple text-xs bg-white" aria-label="Objetivo">
+                      {OBJETIVOS_TAREFA.map(o => <option key={o} value={o}>{OBJETIVO_LABEL[o]}</option>)}
+                    </select>
+                  </div>
+                  <input
+                    type="date"
+                    value={quickTaskData}
+                    onChange={e => setQuickTaskData(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    aria-label="Data da tarefa"
+                  />
                   {selectedCliente && (
                     <p className="text-xs text-gray-500">Vinculada a: {selectedCliente.razaoSocial}</p>
                   )}
                   <button
                     onClick={handleQuickTask}
-                    disabled={!quickTaskTitle.trim()}
+                    disabled={!quickTaskTitle.trim() || !quickTaskData}
                     className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-apple font-semibold text-sm hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
                   >
                     <PlusIcon className="h-4 w-4" />
@@ -1209,11 +1231,10 @@ const Workspace: React.FC<WorkspaceProps> = ({
                           <div key={t.id} className="flex items-center gap-2 p-2 mb-1 bg-gray-50 border border-gray-200 rounded text-xs">
                             <button
                               onClick={() => {
-                                onUpdateTarefa?.({ ...t, status: 'concluida' })
-                                logAction('tarefa', `Tarefa concluída: ${t.titulo.substring(0, 60)}`, cl?.razaoSocial)
-                                showToast?.('success', 'Tarefa concluída!')
+                                showToast?.('error', 'Finalize pela tela Tarefas: canal, conclusão e próximo passo são obrigatórios.')
                               }}
-                              className="text-green-500 hover:text-green-700 flex-shrink-0"
+                              className="text-gray-400 hover:text-green-700 flex-shrink-0"
+                              title="Finalização disponível na tela Tarefas"
                             >
                               <CheckCircleIcon className="h-4 w-4" />
                             </button>

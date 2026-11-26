@@ -609,10 +609,12 @@ ${Object.entries(catCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<tr><td>
                 <KPICard label="Receita Média / Cliente" value={fmtCurrency(receitaMedia)} sub="valor da carteira" color="text-amber-700" />
                 <KPICard label="Clientes Classe A" value={classeA} sub="80% da receita" color="text-emerald-700" />
                 <KPICard label="Concentração Top 10" value={`${concentracaoTop10.toFixed(1)}%`} sub="do faturamento" color="text-rose-700" />
-                <KPICard label="Sem Compra 30d" value={indOps.semCompra.d30} sub="última compra >30d" color="text-yellow-600" />
-                <KPICard label="Sem Compra 60d" value={indOps.semCompra.d60} sub="última compra >60d" color="text-orange-600" />
-                <KPICard label="Sem Compra 90d" value={indOps.semCompra.d90} sub="última compra >90d" color="text-red-600" />
-                <KPICard label="Nunca Comprou" value={indOps.semCompra.nunca} sub="sem pedido confirmado" color="text-gray-500" />
+                <KPICard label="Ativos na carteira" value={indOps.situacaoCompra.ativo} sub="compra há até 40d" color="text-blue-700" />
+                <KPICard label="Em atenção" value={indOps.situacaoCompra.em_atencao} sub="41–60 dias sem compra" color="text-orange-500" />
+                <KPICard label="Em risco" value={indOps.situacaoCompra.em_risco} sub="61–90 dias sem compra" color="text-orange-700" />
+                <KPICard label="Inativos recentes" value={indOps.situacaoCompra.inativo_recente} sub="91–180 dias sem compra" color="text-gray-600" />
+                <KPICard label="Inativos antigos" value={indOps.situacaoCompra.inativo_antigo} sub="181+ dias sem compra" color="text-gray-800" />
+                <KPICard label="Prospectos" value={indOps.situacaoCompra.prospecto} sub="nunca compraram" color="text-purple-700" />
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">

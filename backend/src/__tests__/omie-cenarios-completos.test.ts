@@ -338,7 +338,7 @@ describe('criarPedidoOmie — Cenários de VENDA', () => {
     expect(pedidoOmie.cabecalho.quantidade_itens).toBe(3)
   })
 
-  it('✅ Venda 3: parcelada 30/60/90 dias — lista explícita com código 999', async () => {
+  it('✅ Venda 3: parcelada 30/60/90 dias — usa código oficial existente no Omie', async () => {
     setupMocks({
       pedido: pedidoBase({ forma_pagamento: '30/60/90 dias', total_valor: 3000 }),
       parcelasOmie: [
@@ -354,8 +354,8 @@ describe('criarPedidoOmie — Cenários de VENDA', () => {
     const incluirCall = mockOmieCall.mock.calls.find(c => c[1] === 'IncluirPedido')!
     const pedidoOmie = incluirCall[2][0]
 
-    // API Omie: lista_parcelas customizada exige codigo_parcela '999' + qtde_parcelas
-    expect(pedidoOmie.cabecalho.codigo_parcela).toBe('999')
+    // A condição 30/60/90 já existe no Omie como P3X; a lista explícita preserva datas/valores exatos.
+    expect(pedidoOmie.cabecalho.codigo_parcela).toBe('P3X')
     expect(pedidoOmie.cabecalho.qtde_parcelas).toBe(3)
     expect(pedidoOmie.lista_parcelas.parcela).toHaveLength(3)
     expect(pedidoOmie.lista_parcelas.parcela.map((p: any) => p.quantidade_dias)).toEqual([30, 60, 90])

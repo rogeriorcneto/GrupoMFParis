@@ -531,7 +531,7 @@ describe('createTarefa', () => {
 describe('completeTarefa', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('vendedor conclui sua própria tarefa', async () => {
+  it('vendedor é orientado a finalizar com próximo passo no CRM', async () => {
     const chain = mockSupabaseChain({ data: { id: 5, titulo: 'Tarefa', vendedor_id: 2 }, error: null })
     vi.mocked(db.updateTarefaStatus).mockResolvedValue({} as any)
     vi.mocked(db.insertAtividade).mockResolvedValue({} as any)
@@ -539,8 +539,9 @@ describe('completeTarefa', () => {
       { name: 'completeTarefa', args: { tarefaId: 5 } },
       makeVendedor({ id: 2 })
     )
-    expect(result.success).toBe(true)
-    expect(db.updateTarefaStatus).toHaveBeenCalledWith(5, 'concluida')
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('próximo passo obrigatório')
+    expect(db.updateTarefaStatus).not.toHaveBeenCalled()
   })
 
   it('vendedor não pode concluir tarefa de outro', async () => {

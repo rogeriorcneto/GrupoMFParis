@@ -493,18 +493,16 @@ describe('4 — Tarefas', () => {
     expect(screen.getByTestId('tarefa-status-301')).toHaveTextContent('pendente')
   })
 
-  it('finalizar tarefa chama updateTarefa com status concluida', async () => {
+  it('finalizar tarefa sem próximo passo não chama updateTarefa', async () => {
     const tarefa = makeTarefa({ id: 301, status: 'pendente' })
     await loginAs('gerente', { tarefas: [tarefa] })
     await userEvent.click(screen.getByRole('button', { name: /^Tarefas$/i }))
     await userEvent.click(screen.getByTestId('tarefa-finalizar-301'))
 
-    await waitFor(() => {
-      expect(db.updateTarefa).toHaveBeenCalledWith(
-        301,
-        expect.objectContaining({ status: 'concluida', id: 301 })
-      )
-    })
+    expect(db.updateTarefa).not.toHaveBeenCalledWith(
+      301,
+      expect.objectContaining({ status: 'concluida', id: 301 })
+    )
   })
 
   it('insertTarefa cria nova tarefa com campos corretos', async () => {

@@ -124,8 +124,12 @@ export interface Cliente {
   // Contatos adicionais
   contatoFinanceiroNome?: string
   contatoFinanceiroTelefone?: string
+  contatoFinanceiroSetor?: string
   contatoComprasNome?: string
   contatoComprasTelefone?: string
+  contatoComprasSetor?: string
+  emailBoleto?: string
+  cadastroJustificativas?: CadastroJustificativa[]
   // Produtos de Interesse — consumo mensal estruturado (kg/mês + metadados) ou legado numérico
   produtosQuantidadesMensais?: ProdutosConsumoMap
   produtosDenegados?: string[]
@@ -138,6 +142,17 @@ export interface Cliente {
   criadoEm?: string
   criadoPorNome?: string
   atualizadoEm?: string
+}
+
+export interface CadastroJustificativa {
+  campo: string
+  justificativa: string
+  autorId?: number
+  autorNome?: string
+  criadoEm: string
+  ativo?: boolean
+  desativadoEm?: string
+  desativadoPor?: string
 }
 
 export interface FormData {
@@ -185,8 +200,12 @@ export interface FormData {
   // Contatos adicionais
   contatoFinanceiroNome?: string
   contatoFinanceiroTelefone?: string
+  contatoFinanceiroSetor?: string
   contatoComprasNome?: string
   contatoComprasTelefone?: string
+  contatoComprasSetor?: string
+  emailBoleto?: string
+  cadastroJustificativas?: CadastroJustificativa[]
   // Quantidade mensal estimada por produto
   produtosQuantidadesMensais?: ProdutosConsumoMap
   descricao?: string
@@ -378,6 +397,13 @@ export interface Tarefa {
   concluidaPor?: string
   criadoEm?: string
   criadoPor?: string
+  canalUsado?: 'ligacao' | 'whatsapp' | 'email' | 'visita' | 'reuniao'
+  objetivo?: 'relacionamento' | 'oferta_venda' | 'cotacao' | 'pos_venda' | 'cobranca'
+  origem?: 'manual' | 'automatica'
+  justificativaPrazoLongo?: string
+  proximaTarefaId?: number
+  // Campo transitório de UI: não é persistido; carrega os dados obrigatórios da finalização com próximo passo.
+  finalizacao?: import('../utils/tarefaFluxo').FinalizacaoTarefaInput
   reagendamentos?: TarefaReagendamento[]
   origemAutomacaoId?: number // ID da regra de automação que criou esta tarefa
   conclusao?: string
@@ -451,6 +477,8 @@ export interface Pedido {
   omieNumero?: string
   omieStatus?: string
   omieErro?: string
+  dataEnvioOmie?: string
+  dataFaturamento?: string
   tipo?: 'venda' | 'bonificacao'
   formaPagamento?: string
   tipoFrete?: 'CIF' | 'FOB' | 'VISITA'

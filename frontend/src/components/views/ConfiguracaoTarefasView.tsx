@@ -133,7 +133,7 @@ interface RegraAutomacao {
     diasInatividade?: number
     subStatus?: string
     diasDesdeEvento?: number
-    tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'follow-up' | 'outro' | 'qualquer'
+    tipoTarefaConcluida?: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'visita' | 'follow-up' | 'outro' | 'qualquer'
     tarefaEspecifica?: string
     tarefaEspecificaId?: number // ID da tarefa específica existente no CRM
     etapaCliente?: string
@@ -141,7 +141,7 @@ interface RegraAutomacao {
   acao: {
     titulo: string
     descricao: string
-    tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'outro'
+    tipo: 'ligacao' | 'email' | 'whatsapp' | 'reuniao' | 'visita' | 'outro'
     prioridade: 'alta' | 'media' | 'baixa'
     diasPrazo: number
     horaPadrao?: string
@@ -302,13 +302,18 @@ const GATILHOS = [
 ]
 
 // Tipos de tarefas
-const TIPOS_TAREFA = [
+const TIPOS_TAREFA_ACAO = [
   { key: 'ligacao', label: 'Ligação', icon: '📞' },
   { key: 'email', label: 'E-mail', icon: '📧' },
   { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
   { key: 'reuniao', label: 'Reunião', icon: '🤝' },
-  { key: 'follow-up', label: 'Follow-up', icon: '🔄' },
-  { key: 'outro', label: 'Outro', icon: '📌' }
+  { key: 'visita', label: 'Visita', icon: '📍' }
+]
+
+const TIPOS_TAREFA = [
+  ...TIPOS_TAREFA_ACAO,
+  { key: 'follow-up', label: 'Follow-up (legado)', icon: '🔄' },
+  { key: 'outro', label: 'Outro (legado)', icon: '📌' }
 ]
 
 interface ConfiguracaoTarefasViewProps {
@@ -910,7 +915,7 @@ const RegraForm: React.FC<RegraFormProps> = ({
                   }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {TIPOS_TAREFA.map(tipo => (
+                  {TIPOS_TAREFA_ACAO.map(tipo => (
                     <option key={tipo.key} value={tipo.key}>
                       {tipo.icon} {tipo.label}
                     </option>

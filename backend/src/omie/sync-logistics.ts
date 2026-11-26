@@ -142,6 +142,11 @@ export async function syncOmieLogistics(): Promise<SyncLogisticsResult> {
         const { error: e1 } = await supabase.from('pedidos').update(pedUpdates).eq('id', pedido.id)
         if (e1) throw new Error(`pedido: ${e1.message}`)
       }
+      // Fase 1: guarda o faturamento no próprio pedido para cálculo de lead time.
+      // Update separado porque a coluna pode ainda não existir antes da migração.
+      if (dataFat) {
+        await supabase.from('pedidos').update({ data_faturamento: dataFat }).eq('id', pedido.id)
+      }
 
       // 2) Atualizar o card do cliente vinculado ao pedido
       if (pedido.cliente_id) {

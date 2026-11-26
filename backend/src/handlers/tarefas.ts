@@ -65,7 +65,7 @@ export async function handleTarefas(senderNumber: string, session: UserSession):
   }
 
   msg += `⏰ Atrasadas: ${atrasadas.length} | Hoje: ${deHoje.length} | Próximas: ${futuras.length}\n\n`
-  msg += `✅ Envie o *número* para marcar como concluída\n`
+  msg += `✅ Para finalizar, use a tela de Tarefas/ficha no CRM (próximo passo obrigatório)\n`
   msg += `🔙 Envie *menu* para voltar`
 
   return msg
@@ -81,14 +81,8 @@ export async function handleTarefaConcluir(senderNumber: string, session: UserSe
   }
 
   const tarefaId = ids[num - 1]
-  try {
-    await db.updateTarefaStatus(tarefaId, 'concluida')
-    updateSession(senderNumber, { state: 'logged_in' })
-    return `✅ Tarefa #${num} marcada como concluída!\n\n` + getMenuText()
-  } catch (err) {
-    log.error({ err }, 'Erro ao concluir tarefa')
-    return '❌ Erro ao concluir tarefa.\n\n' + getMenuText()
-  }
+  updateSession(senderNumber, { state: 'logged_in' })
+  return `⚠️ A finalização de tarefas agora exige canal usado, conclusão e próximo passo obrigatório. Finalize a tarefa #${tarefaId} na tela de Tarefas ou na ficha do cliente no CRM.\n\n` + getMenuText()
 }
 
 function formatDate(d: string): string {

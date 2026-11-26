@@ -153,14 +153,14 @@ describe('handlers/tarefas', () => {
   // ─── handleTarefaConcluir ───
 
   describe('handleTarefaConcluir', () => {
-    it('número válido marca tarefa como concluída', async () => {
+    it('número válido orienta finalização completa no CRM', async () => {
       vi.mocked(db.updateTarefaStatus).mockResolvedValue(undefined)
       const session = createSession(PHONE, vendedor)
       session.clientListIds = [5, 8, 12]
       const reply = await handleTarefaConcluir(PHONE, session, '2')
-      expect(reply).toContain('concluída')
-      expect(reply).toContain('#2')
-      expect(db.updateTarefaStatus).toHaveBeenCalledWith(8, 'concluida')
+      expect(reply).toContain('próximo passo obrigatório')
+      expect(reply).toContain('#8')
+      expect(db.updateTarefaStatus).not.toHaveBeenCalled()
       const s = getSession(PHONE)!
       expect(s.state).toBe('logged_in')
     })
@@ -187,12 +187,12 @@ describe('handlers/tarefas', () => {
       expect(reply).toContain('inválido')
     })
 
-    it('erro no DB retorna mensagem de erro', async () => {
-      vi.mocked(db.updateTarefaStatus).mockRejectedValue(new Error('DB error'))
+    it('não depende mais de atualização direta no banco', async () => {
       const session = createSession(PHONE, vendedor)
       session.clientListIds = [5]
       const reply = await handleTarefaConcluir(PHONE, session, '1')
-      expect(reply).toContain('Erro')
+      expect(reply).toContain('Finalize a tarefa #5')
+      expect(db.updateTarefaStatus).not.toHaveBeenCalled()
     })
   })
 })

@@ -933,6 +933,13 @@ export async function criarPedidoOmie(
     })
     .eq('id', pedidoId)
 
+  // Fase 1: grava a data real de envio ao Omie. Update separado para não impedir
+  // a gravação do omie_codigo enquanto a migração da coluna ainda não foi aplicada.
+  await supabase
+    .from('pedidos')
+    .update({ data_envio_omie: new Date().toISOString() })
+    .eq('id', pedidoId)
+
   return response
 }
 

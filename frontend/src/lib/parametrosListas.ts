@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { authFetch, BOT_URL } from './botApi'
 import { PAYMENT_TERM_GROUPS } from '../constants/paymentTerms'
+import { CAMPOS_CADASTRO_PADRAO, CampoCadastroKey } from '../utils/cadastroCompleto'
 
 export type ListaParametroKey =
   | 'segmento_cliente'
@@ -31,6 +32,8 @@ export interface LogParametro {
 export interface ParametrosState {
   listas: Record<ListaParametroKey, OpcaoParametro[]>
   auditoria: LogParametro[]
+  /** Campos que entram no cálculo de cadastro completo (item 12). */
+  camposCadastroObrigatorios: CampoCadastroKey[]
 }
 
 const STORE_TIPO = 'store:parametros_listas'
@@ -97,6 +100,7 @@ export function buildDefaultParametros(): ParametrosState {
       ],
     },
     auditoria: [],
+    camposCadastroObrigatorios: [...CAMPOS_CADASTRO_PADRAO],
   }
 }
 
@@ -113,9 +117,12 @@ function mergeWithDefaults(raw: any): ParametrosState {
       listas[k] = [...raw.listas[k]].sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
     }
   })
+  const camposRaw = Array.isArray(raw.camposCadastroObrigatorios) ? raw.camposCadastroObrigatorios : CAMPOS_CADASTRO_PADRAO
+  const camposCadastroObrigatorios = camposRaw.filter((c: any) => (CAMPOS_CADASTRO_PADRAO as string[]).includes(c))
   return {
     listas,
     auditoria: Array.isArray(raw.auditoria) ? raw.auditoria.slice(0, 300) : [],
+    camposCadastroObrigatorios: camposCadastroObrigatorios.length > 0 ? camposCadastroObrigatorios : [...CAMPOS_CADASTRO_PADRAO],
   }
 }
 

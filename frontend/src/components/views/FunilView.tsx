@@ -1,10 +1,11 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa, existeCardAtivoNoFunil } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa, transicoesPermitidas } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { PESO_PIPELINE, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import { extractValidSocialLinks } from '../../utils/socialLinks'
+import { familiaDoClienteNoFunil, obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../../utils/situacaoCompra'
 import { fetchAllPropostas } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import { useParametrosListas } from '../../lib/parametrosListas'
@@ -94,6 +95,17 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [lockProcessing, setLockProcessing] = useState(false)
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
   const [syncing, setSyncing] = useState(false)
+  const [seloSituacaoAberto, setSeloSituacaoAberto] = useState<number | null>(null)
+  const situacaoCompraCache = useMemo(() => new Map<string, ReturnType<typeof obterSituacaoCompraCliente>>(), [clientes, pedidos])
+  const situacaoCompraDoCard = (cliente: Cliente) => {
+    const familia = familiaDoClienteNoFunil(cliente, clientes)
+    const key = familia.map(f => f.id).sort((a, b) => a - b).join('|') || String(cliente.id)
+    const cached = situacaoCompraCache.get(key)
+    if (cached) return cached
+    const calculada = obterSituacaoCompraCliente(cliente, clientes, pedidos)
+    situacaoCompraCache.set(key, calculada)
+    return calculada
+  }
   const [showNovosCiclos, setShowNovosCiclos] = useState(false)
   const [novoCicloEscondidos, setNovoCicloEscondidos] = useState<Set<number>>(new Set())
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
@@ -968,6 +980,29 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           </span>
                           {vendedor && <span className="text-[10px] text-primary-500 dark:text-primary-400 font-semibold flex-shrink-0 bg-primary-50 dark:bg-primary-900/30 px-1.5 py-0.5 rounded-full">{vendedor.nome.split(' ')[0]}</span>}
                         </div>
+                        {(() => {
+                          const info = situacaoCompraDoCard(cliente)
+                          const cfg = SITUACAO_COMPRA_CONFIG[info.situacao]
+                          const titulo = info.dias == null ? 'Nunca comprou' : `${info.dias} dia${info.dias === 1 ? '' : 's'} desde a última venda enviada ao Omie`
+                          const aberto = seloSituacaoAberto === cliente.id
+                          return (
+                            <div className="mt-1 relative">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setSeloSituacaoAberto(aberto ? null : cliente.id) }}
+                                className={`inline-flex px-1.5 py-0.5 text-[9px] font-bold rounded-full border cursor-help ${cfg.cor}`}
+                                title={titulo}
+                              >
+                                {cfg.label}{info.dias != null ? ` · ${info.dias}d` : ''}
+                              </button>
+                              {aberto && (
+                                <div className="absolute left-0 top-5 z-30 w-44 rounded-lg border border-gray-200 bg-white p-2 text-[10px] text-gray-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                                  {titulo}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                         {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && (
                           <div className="flex gap-1 mt-2 flex-wrap">
                             {cliente.etapa === 'amostra' && (

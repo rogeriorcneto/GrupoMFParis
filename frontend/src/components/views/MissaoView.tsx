@@ -110,14 +110,34 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
   }
 
   const checkoutComDados = async (t: Tarefa) => {
+    const dados = resultado[t.id] || {}
+    const proximoData = dados.proximosData || ''
+    const proximoTipo = dados.proximosTipo || (['ligacao', 'whatsapp', 'email', 'visita', 'reuniao'].includes(t.tipo) ? t.tipo : 'ligacao')
+    const proximoObjetivo = dados.proximosObjetivo || t.objetivo || 'relacionamento'
+    const diasProximo = proximoData ? Math.ceil((new Date(`${proximoData}T00:00:00`).getTime() - Date.now()) / 86400000) : 0
+    if (!dados.resultado?.trim() || !dados.proximos?.trim() || !proximoData) {
+      showToast?.('error', 'Informe resultado e próximo passo completo para concluir a visita.')
+      return
+    }
+    if (diasProximo > 15 && !dados.justificativaPrazo?.trim()) {
+      showToast?.('error', 'Próximo passo acima de 15 dias exige justificativa.')
+      return
+    }
     navigator.geolocation.getCurrentPosition((pos) => {
       const body = {
         location: { lat: pos.coords.latitude, lon: pos.coords.longitude },
-        resultado: resultado[t.id]?.resultado || '',
-        interesse: resultado[t.id]?.interesse || 'interessado',
-        produtosApresentados: (resultado[t.id]?.produtos || '').split(',').map((s: string) => s.trim()).filter(Boolean),
-        proximosPassos: resultado[t.id]?.proximos || '',
-        amostrasEntregues: Number(resultado[t.id]?.amostras || 0),
+        resultado: dados.resultado || '',
+        interesse: dados.interesse || 'interessado',
+        produtosApresentados: (dados.produtos || '').split(',').map((s: string) => s.trim()).filter(Boolean),
+        proximosPassos: dados.proximos || '',
+        amostrasEntregues: Number(dados.amostras || 0),
+        proximoPasso: {
+          tipo: proximoTipo,
+          objetivo: proximoObjetivo,
+          data: proximoData,
+          descricao: dados.proximos || '',
+          justificativa: dados.justificativaPrazo || '',
+        },
       }
       api(`/api/missoes/tarefas/${t.id}/checkout`, { method: 'POST', body: JSON.stringify(body) })
         .then(() => { showToast?.('success', 'Check-out registrado'); setResultado((r: any) => ({ ...r, [t.id]: undefined })); if (detalhe) abrir(detalhe.missao) })
@@ -225,7 +245,19 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
                         <option value="nao">Não</option>
                       </select>
                       <input placeholder="Produtos apresentados (vírgulas)" value={resultado[t.id]?.produtos || ''} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], produtos: e.target.value } }))} className="w-full border rounded p-2 text-sm" />
-                      <input placeholder="Próximos passos" value={resultado[t.id]?.proximos || ''} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], proximos: e.target.value } }))} className="w-full border rounded p-2 text-sm" />
+                      <input placeholder="Próximo passo (descrição curta)" value={resultado[t.id]?.proximos || ''} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], proximos: e.target.value } }))} className="w-full border rounded p-2 text-sm" />
+                      <div className="grid grid-cols-3 gap-2">
+                        <select value={resultado[t.id]?.proximosTipo || (['ligacao', 'whatsapp', 'email', 'visita', 'reuniao'].includes(t.tipo) ? t.tipo : 'ligacao')} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], proximosTipo: e.target.value } }))} className="border rounded p-2 text-sm">
+                          <option value="ligacao">Ligação</option><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option><option value="visita">Visita</option><option value="reuniao">Reunião</option>
+                        </select>
+                        <select value={resultado[t.id]?.proximosObjetivo || t.objetivo || 'relacionamento'} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], proximosObjetivo: e.target.value } }))} className="border rounded p-2 text-sm">
+                          <option value="relacionamento">Relacionamento</option><option value="oferta_venda">Oferta/Venda</option><option value="cotacao">Cotação</option><option value="pos_venda">Pós-venda</option><option value="cobranca">Cobrança</option>
+                        </select>
+                        <input type="date" value={resultado[t.id]?.proximosData || ''} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], proximosData: e.target.value } }))} className="border rounded p-2 text-sm" />
+                      </div>
+                      {resultado[t.id]?.proximosData && Math.ceil((new Date(`${resultado[t.id].proximosData}T00:00:00`).getTime() - Date.now()) / 86400000) > 15 && (
+                        <input placeholder="Justificativa obrigatória para prazo acima de 15 dias" value={resultado[t.id]?.justificativaPrazo || ''} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], justificativaPrazo: e.target.value } }))} className="w-full border border-amber-300 rounded p-2 text-sm" />
+                      )}
                       <input type="number" placeholder="Amostras entregues" value={resultado[t.id]?.amostras || 0} onChange={e => setResultado((r: any) => ({ ...r, [t.id]: { ...r?.[t.id], amostras: e.target.value } }))} className="w-full border rounded p-2 text-sm" />
                       <button onClick={() => checkoutComDados(t)} className="px-3 py-1.5 bg-green-600 text-white text-xs rounded hover:bg-green-700">Confirmar check-out</button>
                     </div>

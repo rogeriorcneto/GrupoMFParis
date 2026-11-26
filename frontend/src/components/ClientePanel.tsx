@@ -17,6 +17,11 @@ import EmailCenterPanel from './EmailCenterPanel'
 import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from './TimePicker5Min'
 import { DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 import { useParametrosListas } from '../lib/parametrosListas'
+import CadastroCompletoModal from './CadastroCompletoModal'
+import FinalizarTarefaInline from './FinalizarTarefaInline'
+import { avaliarCadastroCliente, SITUACAO_CADASTRO_CONFIG } from '../utils/cadastroCompleto'
+import { obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../utils/situacaoCompra'
+import { buildProximaTarefa, CANAIS_TAREFA, CANAL_LABEL, CanalTarefa, exigeJustificativaPrazoLongo, OBJETIVO_LABEL, OBJETIVOS_TAREFA, ObjetivoTarefa, validarFinalizacaoTarefa, FinalizacaoTarefaInput } from '../utils/tarefaFluxo'
 import { supabase } from '../lib/supabase'
 import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages } from '../lib/botApi'
 
@@ -168,13 +173,15 @@ export default function ClientePanel({
   onVerNoFunil, onVerTarefas, onExcluirCliente, onReativarCliente
 }: ClientePanelProps) {
   const isGerente = loggedUser?.cargo === 'gerente'
-  const { opcoesAtivas, reload: reloadParametros } = useParametrosListas()
+  const { opcoesAtivas, reload: reloadParametros, parametros } = useParametrosListas()
   const prazosAtivos = opcoesAtivas('prazo_pagamento')
   const setoresAtivos = opcoesAtivas('setor_contato')
   const fretesAtivos = opcoesAtivas('tipo_frete')
   const segmentosAtivos = opcoesAtivas('segmento_cliente')
   const [produtoPendenteNome, setProdutoPendenteNome] = useState<string | null>(null)
   const [produtoPendenteKg, setProdutoPendenteKg] = useState('')
+  const [showCadastroCompleto, setShowCadastroCompleto] = useState(false)
+  const [showInfoSituacaoCompra, setShowInfoSituacaoCompra] = useState(false)
 
   useEffect(() => {
     reloadParametros().catch(() => {})
@@ -189,6 +196,7 @@ export default function ClientePanel({
   const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | 'proposta' | 'visita' | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
+  const [panelAtividadeObjetivo, setPanelAtividadeObjetivo] = useState<ObjetivoTarefa>('relacionamento')
   const [panelAtividadePrazo, setPanelAtividadePrazo] = useState(new Date().toISOString().split('T')[0])
   const [panelAtividadeHora, setPanelAtividadeHora] = useState(currentTimeHHMM())
   const [panelAtividadeFocused, setPanelAtividadeFocused] = useState(false)
@@ -241,6 +249,25 @@ export default function ClientePanel({
     return m
   }, [familiaEmpresa])
 
+  const clientesParaCalculo = React.useMemo(() => (todosClientes && todosClientes.length > 0 ? todosClientes : [c]), [todosClientes, c])
+  const situacaoCompraInfo = React.useMemo(() =>
+    obterSituacaoCompraCliente(c, clientesParaCalculo, todosPedidos || [])
+  , [c, clientesParaCalculo, todosPedidos])
+  const avaliacaoCadastro = React.useMemo(() =>
+    avaliarCadastroCliente(c, clientesParaCalculo, (parametros.camposCadastroObrigatorios || []) as any)
+  , [c, clientesParaCalculo, parametros.camposCadastroObrigatorios])
+
+  const salvarCadastroCompleto = useCallback(async (changes: Partial<Cliente>) => {
+    // O cadastro pertence à empresa, não a um ciclo específico. Replica nos cards
+    // ativos da mesma empresa para que ficha, funil e indicadores não diverjam.
+    const alvos = familiaEmpresa.filter(cl => !cl.arquivadoDuplicata)
+    const alvosIds = alvos.length > 0 ? alvos.map(cl => cl.id) : [c.id]
+    await Promise.all(alvosIds.map(id => db.updateCliente(id, changes)))
+    const setIds = new Set(alvosIds)
+    setClientes(prev => prev.map(cl => setIds.has(cl.id) ? { ...cl, ...changes } : cl))
+    showToast?.('success', 'Cadastro atualizado.')
+  }, [c.id, familiaEmpresa, setClientes, showToast])
+
   // Condição 5 + Item 3 Sapori: última venda e última amostra considerando TODOS os pedidos de TODOS os ciclos da empresa
   const ultimaVendaOmieISO = React.useMemo(() => {
     const vendasOmie = (todosPedidos || []).filter(p =>
@@ -258,19 +285,7 @@ export default function ClientePanel({
     return null
   }, [todosPedidos, familiaEmpresaIds])
 
-  const ultimaVendaExibicaoISO = React.useMemo(() => {
-    if (ultimaVendaOmieISO) return ultimaVendaOmieISO
-    const vendasConfirmadas = (todosPedidos || []).filter(p =>
-      familiaEmpresaIds.has(p.clienteId) && p.status === 'confirmado' && p.tipo !== 'bonificacao'
-    )
-    const datas = [
-      ...vendasConfirmadas.map(p => p.dataAprovacao || p.dataCriacao),
-      ...familiaEmpresa.filter(cl => !cl.arquivadoDuplicata).map(cl => cl.dataUltimaVenda || cl.dataUltimoPedido),
-    ].filter(Boolean) as string[]
-    if (datas.length === 0) return null
-    datas.sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-    return datas[datas.length - 1]
-  }, [ultimaVendaOmieISO, todosPedidos, familiaEmpresaIds, familiaEmpresa])
+  const ultimaVendaExibicaoISO = situacaoCompraInfo.ultimaVenda
 
   const ultimaAmostraExibicaoISO = React.useMemo(() => {
     const amostras = (todosPedidos || []).filter(p =>
@@ -341,7 +356,8 @@ export default function ClientePanel({
   const [panelTarefaTitulo, setPanelTarefaTitulo] = useState('')
   const [panelTarefaData, setPanelTarefaData] = useState(new Date().toISOString().split('T')[0])
   const [panelTarefaHora, setPanelTarefaHora] = useState('')
-  const [panelTarefaTipo, setPanelTarefaTipo] = useState<Tarefa['tipo']>('follow-up')
+  const [panelTarefaTipo, setPanelTarefaTipo] = useState<CanalTarefa | ''>('')
+  const [panelTarefaObjetivo, setPanelTarefaObjetivo] = useState<ObjetivoTarefa>('relacionamento')
   const [panelTarefaPrioridade, setPanelTarefaPrioridade] = useState<Tarefa['prioridade']>('media')
   const [panelResponsavelId, setPanelResponsavelId] = useState<number | ''>(c.vendedorId || '')
   const [taskHistorySearch, setTaskHistorySearch] = useState('')
@@ -644,11 +660,13 @@ export default function ClientePanel({
     if (aPinned !== bPinned) return aPinned ? -1 : 1
     return new Date(b.data).getTime() - new Date(a.data).getTime()
   })
-  const clienteTarefas = clienteTarefasBase.sort((a, b) => {
+  const clienteTarefas = [...clienteTarefasBase].sort((a, b) => {
     const aPinned = pinnedInteracoes.includes(-a.id)
     const bPinned = pinnedInteracoes.includes(-b.id)
     if (aPinned !== bPinned) return aPinned ? -1 : 1
-    return new Date(b.data).getTime() - new Date(a.data).getTime()
+    if ((a.status === 'concluida') !== (b.status === 'concluida')) return a.status === 'concluida' ? -1 : 1
+    if (a.status === 'concluida') return (b.concluidaEm || b.data).localeCompare(a.concluidaEm || a.data)
+    return a.data.localeCompare(b.data)
   })
   const taskHistoryQuery = taskHistorySearch.toLowerCase().trim()
   const filteredTaskHistory = taskHistoryQuery
@@ -781,6 +799,14 @@ export default function ClientePanel({
       proposta: 'Proposta', visita: 'Visita', reuniao: 'Reunião',
       ligacao: 'Ligação', email: 'E-mail', whatsapp: 'WhatsApp', nota: 'Nota'
     }
+    const canalDireto = (['ligacao', 'whatsapp', 'email', 'visita', 'reuniao'] as string[]).includes(panelAtividadeTipo as string)
+      ? panelAtividadeTipo as CanalTarefa
+      : null
+    const tipoTarefaPrevisto = canalDireto || panelTarefaTipo
+    if (!isNota && !tipoTarefaPrevisto) {
+      addNotificacao('warning', 'Tipo obrigatório', 'Selecione o tipo previsto da tarefa: Ligação, WhatsApp, E-mail, Visita ou Reunião.', c.id)
+      return
+    }
     try {
       // tipos que não existem em Interacao['tipo'] — salvar como 'nota'
       const tiposExtraComoNota = ['proposta', 'visita']
@@ -788,7 +814,7 @@ export default function ClientePanel({
       const tipoInteracao = (isDescricaoEmpresa || isExtra || semTipo ? 'nota' : panelAtividadeTipo) as Interacao['tipo']
       const labelAtividade = isDescricaoEmpresa
         ? 'Nota'
-        : (semTipo ? 'Tarefa Genérica' : (labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade'))
+        : (semTipo ? 'Tarefa' : (labelMap[panelAtividadeTipo as string] || panelAtividadeTipo || 'Atividade'))
 
       // Upload de anexo se houver
       let anexoUrl: string | null = null
@@ -814,25 +840,24 @@ export default function ClientePanel({
       })
       setInteracoes(prev => [savedI, ...prev])
 
-      // isNota puro (usuário clicou em "Nota") = só salva nota, sem tarefa
-      // semTipo (nenhum tipo selecionado) = gera tarefa genérica
-      // outros tipos = gera tarefa
-      const gerarTarefa = !isNota || semTipo
+      // Nota continua fora da cadência. Qualquer tarefa nova precisa ter um dos
+      // cinco tipos previstos da especificação; Proposta/atividade livre exigem
+      // a escolha explícita desse tipo antes de salvar.
+      const gerarTarefa = !isNota
       if (gerarTarefa) {
-        const tarefaTipo: Tarefa['tipo'] =
-          tipoInteracao === 'email' || tipoInteracao === 'whatsapp' || tipoInteracao === 'ligacao' || tipoInteracao === 'reuniao'
-            ? tipoInteracao
-            : 'outro'
         const savedT = await db.insertTarefa({
           titulo: `Retorno: ${labelAtividade} - ${c.razaoSocial}`,
           descricao: panelAtividadeDesc.trim(),
           data: prazoFinal,
           hora: horaFinal,
-          tipo: tarefaTipo,
+          tipo: tipoTarefaPrevisto as Tarefa['tipo'],
           status: 'pendente',
           prioridade: 'media',
           clienteId: c.id,
           vendedorId: (panelResponsavelId !== '' ? panelResponsavelId : (c.vendedorId || loggedUser?.id)),
+          objetivo: panelAtividadeObjetivo,
+          origem: 'manual',
+          criadoPor: loggedUser?.nome || 'Vendedor',
         })
         setTarefas(prev => [savedT, ...prev])
       }
@@ -850,6 +875,8 @@ export default function ClientePanel({
       addNotificacao('success', 'Atividade registrada', msg, c.id)
       setPanelAtividadeTipo('')
       setPanelAtividadeDesc('')
+      setPanelAtividadeObjetivo('relacionamento')
+      setPanelTarefaTipo('')
       setPanelResponsavelId(c.vendedorId || '')
       setPanelAnexo(null)
       setPanelAtividadeFocused(false)
@@ -928,8 +955,43 @@ export default function ClientePanel({
     addNotificacao('success', 'Tarefa editada', updated.titulo, c.id)
   }
 
+  const handleFinalizarTarefaComProximoPasso = useCallback(async (tarefa: Tarefa, finalizacao: FinalizacaoTarefaInput) => {
+    const erro = validarFinalizacaoTarefa(finalizacao)
+    if (erro) {
+      showToast?.('error', erro)
+      throw new Error(erro)
+    }
+    try {
+      const agora = new Date().toISOString()
+      const proximaTarefa = buildProximaTarefa(tarefa, finalizacao, c, loggedUser?.nome || 'Vendedor')
+      const proximaSalva = await db.insertTarefa(proximaTarefa)
+      const updates: Partial<Tarefa> = {
+        status: 'concluida',
+        concluidaEm: agora,
+        concluidaPor: loggedUser?.nome || 'Vendedor',
+        canalUsado: finalizacao.canalUsado,
+        descricao: tarefa.descricao || '',
+        conclusao: finalizacao.conclusao,
+        justificativaPrazoLongo: finalizacao.proximoPasso.justificativaPrazoLongo,
+        proximaTarefaId: proximaSalva.id,
+      }
+      await db.updateTarefa(tarefa.id, updates)
+      setTarefas(prev => [
+        proximaSalva,
+        ...prev.map(t => t.id === tarefa.id ? { ...t, ...updates } as Tarefa : t),
+      ])
+      setFinalizandoInteracaoId(null)
+      setFinalizandoObs('')
+      addNotificacao('success', 'Tarefa finalizada', `Próximo passo agendado para ${new Date(`${proximaSalva.data}T00:00:00`).toLocaleDateString('pt-BR')}`, c.id)
+    } catch (err: any) {
+      logger.error('Erro ao finalizar tarefa com próximo passo:', err)
+      showToast?.('error', `Erro ao finalizar tarefa: ${err?.message || 'falha de rede'}`)
+      throw err
+    }
+  }, [c, loggedUser?.nome, setTarefas, showToast, addNotificacao])
+
   const handleCriarTarefa = async () => {
-    if (!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora) return
+    if (!panelTarefaTitulo.trim() || !panelTarefaData || !panelTarefaHora || !panelTarefaTipo) return
     const horaNorm = arredondarHora5Min(panelTarefaHora)
     if (isDataHoraNoPassado(panelTarefaData, horaNorm)) {
       showToast?.('error', 'Não é permitido agendar tarefa com data ou horário anterior ao momento atual.')
@@ -939,7 +1001,8 @@ export default function ClientePanel({
       const saved = await db.insertTarefa({
         titulo: panelTarefaTitulo.trim(), data: panelTarefaData,
         hora: horaNorm,
-        tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id
+        tipo: panelTarefaTipo, status: 'pendente', prioridade: panelTarefaPrioridade, clienteId: c.id, vendedorId: c.vendedorId || loggedUser?.id,
+        objetivo: panelTarefaObjetivo, origem: 'manual', criadoPor: loggedUser?.nome || 'Vendedor'
       })
       setTarefas(prev => [saved, ...prev])
     } catch (err) { logger.error('Erro ao criar tarefa:', err) }
@@ -1009,9 +1072,37 @@ export default function ClientePanel({
               <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
               {/* Tag Status do Cliente */}
               {(() => {
-                const statusKey = calcStatusAutomatico(c, ultimaVendaOmieISO)
-                const stb = STATUS_CLIENTE_BADGE[statusKey] || STATUS_CLIENTE_BADGE.prospecto
-                return <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${stb.cls}`} title={stb.title}>{stb.label}</span>
+                const stb = SITUACAO_COMPRA_CONFIG[situacaoCompraInfo.situacao]
+                const titulo = situacaoCompraInfo.dias == null
+                  ? 'Nunca comprou'
+                  : `${situacaoCompraInfo.dias} dia${situacaoCompraInfo.dias === 1 ? '' : 's'} desde a última venda enviada ao Omie`
+                return (
+                  <span className="relative inline-flex">
+                    <button type="button" onClick={() => setShowInfoSituacaoCompra(v => !v)} className={`px-2 py-0.5 text-[10px] font-bold rounded-full border cursor-help ${stb.cor}`} title={titulo}>
+                      {stb.label}{situacaoCompraInfo.dias != null ? ` · ${situacaoCompraInfo.dias}d` : ''}
+                    </button>
+                    {showInfoSituacaoCompra && <span className="absolute left-0 top-6 z-30 w-48 rounded-lg border border-gray-200 bg-white p-2 text-[10px] font-normal text-gray-700 shadow-xl">{titulo}</span>}
+                  </span>
+                )
+              })()}
+              {(['inativado', 'descartado', 'bloqueado'] as const).includes(c.statusCliente as any) && (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full border bg-red-100 text-red-700 border-red-200" title="Status manual excepcional do cadastro">
+                  {STATUS_CLIENTE_BADGE[c.statusCliente as string]?.label || c.statusCliente}
+                </span>
+              )}
+              {(() => {
+                const cfg = SITUACAO_CADASTRO_CONFIG[avaliacaoCadastro.situacao]
+                const qtd = avaliacaoCadastro.faltantes.length
+                const texto = avaliacaoCadastro.situacao === 'completo'
+                  ? 'Cadastro completo'
+                  : avaliacaoCadastro.situacao === 'completo_com_justificativa'
+                    ? 'Cadastro completo c/ justificativa'
+                    : `Cadastro incompleto (${qtd} campo${qtd === 1 ? '' : 's'})`
+                return (
+                  <button type="button" onClick={() => setShowCadastroCompleto(true)} className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${cfg.cor} hover:brightness-95`} title="Ver campos pendentes e completar cadastro">
+                    {texto}
+                  </button>
+                )
               })()}
               {/* Atalhos rápidos inline: Ligação | WhatsApp | E-mail */}
               {(() => {
@@ -2059,7 +2150,7 @@ export default function ClientePanel({
             </div>
             {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <>
               <input value={taskHistorySearch} onChange={e => { setTaskHistorySearch(e.target.value); setTaskHistoryLimit(5) }} placeholder="Buscar tarefa por palavra-chave..." className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-400" />
-              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => { const cicloTar = (tarefa.clienteId ? cicloPorCardId.get(tarefa.clienteId) : undefined) || 1; return (<button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5 flex-wrap"><span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">Ciclo {cicloTar}</span><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p></div></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}</p></button>) })}</div>}
+              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => { const cicloTar = (tarefa.clienteId ? cicloPorCardId.get(tarefa.clienteId) : undefined) || 1; return (<button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors"><div className="flex items-start justify-between gap-2"><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5 flex-wrap"><span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">Ciclo {cicloTar}</span><p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p></div></div><span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span></div>{tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}<p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}{tarefa.concluidaEm ? ` · Concluída em ${new Date(tarefa.concluidaEm).toLocaleString('pt-BR')}` : ''}</p></button>) })}</div>}
               {filteredTaskHistory.length > visibleTaskHistory.length && <button onClick={() => setTaskHistoryLimit(limit => limit + 5)} className="w-full py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-xl">Mostrar mais 5</button>}
             </>}
           </div>
@@ -2594,6 +2685,26 @@ export default function ClientePanel({
             ] as const
             const isNota = panelAtividadeTipo === 'nota'
             const semTipo = !panelAtividadeTipo
+            const canalDiretoUi = (['ligacao', 'whatsapp', 'email', 'visita', 'reuniao'] as string[]).includes(panelAtividadeTipo as string)
+            const precisaTipoPrevisto = !isNota && !canalDiretoUi
+            const tipoPrevistoOk = !precisaTipoPrevisto || !!panelTarefaTipo
+            const seletorTipoPrevisto = precisaTipoPrevisto ? (
+              <div className="flex-1 min-w-[210px]">
+                <label className="block text-xs text-gray-500 mb-1">Tipo previsto da tarefa *</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CANAIS_TAREFA.map(canal => (
+                    <button
+                      key={canal}
+                      type="button"
+                      onClick={() => setPanelTarefaTipo(canal)}
+                      className={`px-2 py-1.5 rounded-lg border text-xs font-semibold ${panelTarefaTipo === canal ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-300'}`}
+                    >
+                      {CANAL_LABEL[canal]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null
             return (
               <div className="bg-white rounded-apple border border-gray-200 shadow-sm overflow-hidden">
                 {/* Abas de tipo */}
@@ -2622,7 +2733,7 @@ export default function ClientePanel({
                       value={panelAtividadeDesc}
                       onChange={(e) => setPanelAtividadeDesc(e.target.value)}
                       placeholder={
-                        semTipo ? 'Digite uma atividade livre para gerar uma tarefa genérica...'
+                        semTipo ? 'Selecione o tipo da tarefa acima e descreva o que precisa ser feito...'
                         : isNota ? 'Digite sua nota...'
                         : `Descreva a ${tipoInteracaoLabel[panelAtividadeTipo as string] || panelAtividadeTipo || 'atividade'}...`
                       }
@@ -2668,6 +2779,19 @@ export default function ClientePanel({
                           <TimePicker5Min value={panelAtividadeHora} onChange={setPanelAtividadeHora} ariaLabelPrefix="Horário da atividade" />
                         </div>
                       )}
+                      {seletorTipoPrevisto}
+                      {!isNota && (
+                        <div className="flex-1 min-w-[150px]">
+                          <label className="block text-xs text-gray-500 mb-1">Objetivo *</label>
+                          <select
+                            value={panelAtividadeObjetivo}
+                            onChange={(e) => setPanelAtividadeObjetivo(e.target.value as ObjetivoTarefa)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                          >
+                            {OBJETIVOS_TAREFA.map(o => <option key={o} value={o}>{OBJETIVO_LABEL[o]}</option>)}
+                          </select>
+                        </div>
+                      )}
                       {!isNota && (
                         <div className="flex-1 min-w-[140px]">
                           <label className="block text-xs text-gray-500 mb-1">Responsável</label>
@@ -2684,7 +2808,7 @@ export default function ClientePanel({
                       )}
                       <button
                         onClick={handleRegistrarAtividade}
-                        disabled={!panelAtividadeDesc.trim()}
+                        disabled={!panelAtividadeDesc.trim() || !tipoPrevistoOk}
                         className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         {isNota ? 'Salvar Nota' : 'Salvar Tarefa'}
@@ -2702,6 +2826,17 @@ export default function ClientePanel({
                         <label className="block text-xs text-gray-500 mb-1">Horário</label>
                         <TimePicker5Min value={panelAtividadeHora} onChange={setPanelAtividadeHora} ariaLabelPrefix="Horário da tarefa" />
                       </div>
+                      {seletorTipoPrevisto}
+                      <div className="flex-1 min-w-[150px]">
+                        <label className="block text-xs text-gray-500 mb-1">Objetivo *</label>
+                        <select
+                          value={panelAtividadeObjetivo}
+                          onChange={(e) => setPanelAtividadeObjetivo(e.target.value as ObjetivoTarefa)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                        >
+                          {OBJETIVOS_TAREFA.map(o => <option key={o} value={o}>{OBJETIVO_LABEL[o]}</option>)}
+                        </select>
+                      </div>
                       <div className="flex-1 min-w-[140px]">
                         <label className="block text-xs text-gray-500 mb-1">Responsável</label>
                         <select
@@ -2716,7 +2851,7 @@ export default function ClientePanel({
                       </div>
                       <button
                         onClick={handleRegistrarAtividade}
-                        disabled={!panelAtividadeDesc.trim()}
+                        disabled={!panelAtividadeDesc.trim() || !tipoPrevistoOk}
                         className="px-5 py-2 bg-primary-600 text-white rounded-apple text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         Salvar Tarefa
@@ -3022,6 +3157,9 @@ export default function ClientePanel({
                                 <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
                                   <p className="text-[10px] font-bold uppercase tracking-wide text-green-700 mb-1">Conclusão</p>
                                   <p className="text-sm text-green-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.conclusao}</p>
+                                  {tarefaVinculada.concluidaEm && (
+                                    <p className="mt-1 text-[10px] font-semibold text-green-700">Concluída em {new Date(tarefaVinculada.concluidaEm).toLocaleString('pt-BR')}{tarefaVinculada.concluidaPor ? ` por ${tarefaVinculada.concluidaPor}` : ''}</p>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -3198,43 +3336,14 @@ export default function ClientePanel({
                               )}
                             </div>
                           </div>
-                          {/* Painel de finalização com observação */}
-                          {finalizandoInteracaoId === inter.id && (
-                            <div className="mx-3 mb-3 p-3 bg-green-50 border border-green-100 rounded-xl space-y-2">
-                              <p className="text-xs font-semibold text-green-700">✓ Conclusão de tarefa</p>
-                              <textarea
-                                value={finalizandoObs}
-                                onChange={e => setFinalizandoObs(e.target.value)}
-                                rows={2}
-                                placeholder="Conclusão de tarefa (ex: cliente confirmou pedido, reunião realizada...)"
-                                className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-300 placeholder:text-gray-400"
+                          {/* Finalização disciplinada: canal, conclusão e próximo passo obrigatório */}
+                          {finalizandoInteracaoId === inter.id && tarefaVinculada && (
+                            <div className="mx-3 mb-3">
+                              <FinalizarTarefaInline
+                                tarefa={tarefaVinculada}
+                                onConfirm={(input) => handleFinalizarTarefaComProximoPasso(tarefaVinculada, input)}
+                                onCancel={() => { setFinalizandoInteracaoId(null); setFinalizandoObs('') }}
                               />
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={async () => {
-                                    const agora = new Date().toISOString()
-                                    const updates: any = { status: 'concluida', concluidaEm: agora }
-                                    if (finalizandoObs.trim()) {
-                                      updates.descricao = tarefaVinculada!.descricao || ''
-                                      updates.conclusao = finalizandoObs.trim()
-                                    }
-                                    await db.updateTarefa(tarefaVinculada!.id, updates)
-                                    setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates, conclusao: finalizandoObs.trim() || t.conclusao } : t))
-                                    setFinalizandoInteracaoId(null)
-                                    setFinalizandoObs('')
-                                  }}
-                                  disabled={!finalizandoObs.trim()}
-                                  className="px-3 py-1.5 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                                >
-                                  Confirmar
-                                </button>
-                                <button
-                                  onClick={() => { setFinalizandoInteracaoId(null); setFinalizandoObs('') }}
-                                  className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
                             </div>
                           )}
                           {/* Painel de reagendamento */}
@@ -3245,7 +3354,7 @@ export default function ClientePanel({
                                 value={reagendandoMotivo}
                                 onChange={e => setReagendandoMotivo(e.target.value)}
                                 rows={2}
-                                placeholder="Motivo do reagendamento (ex: cliente não atendeu)"
+                                placeholder="Motivo/justificativa do reagendamento (ex: cliente não atendeu)"
                                 className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400"
                               />
                               <div className="flex items-center gap-2 flex-wrap">
@@ -3268,11 +3377,13 @@ export default function ClientePanel({
                                       reagendadoEm: new Date().toISOString(),
                                       alteradoPor: loggedUser?.nome || 'Vendedor',
                                     }
+                                    const prazoLongo = exigeJustificativaPrazoLongo(reagendandoData)
                                     const updates = {
                                       data: reagendandoData,
                                       hora: horaNorm,
                                       status: 'pendente' as const,
                                       reagendamentos: mudouData ? [...(tarefaVinculada!.reagendamentos || []), reagendamento] : (tarefaVinculada!.reagendamentos || []),
+                                      justificativaPrazoLongo: prazoLongo ? reagendandoMotivo.trim() : undefined,
                                     }
                                     await db.updateTarefa(tarefaVinculada!.id, updates)
                                     setTarefas(prev => prev.map(t => t.id === tarefaVinculada!.id ? { ...t, ...updates } : t))
@@ -3956,6 +4067,17 @@ export default function ClientePanel({
           </div>
         )
       })()}
+
+      {showCadastroCompleto && (
+        <CadastroCompletoModal
+          cliente={c}
+          clientes={clientesParaCalculo}
+          camposObrigatorios={(parametros.camposCadastroObrigatorios || []) as any}
+          loggedUser={loggedUser}
+          onClose={() => setShowCadastroCompleto(false)}
+          onSave={salvarCadastroCompleto}
+        />
+      )}
 
       {/* Modal: confirmar Excluir Empresa (irreversível) */}
       {showExcluirConfirm && onExcluirCliente && (

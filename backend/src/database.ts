@@ -78,7 +78,14 @@ export interface Tarefa {
   clienteId?: number
   vendedorId?: number
   concluidaEm?: string
+  concluidaPor?: string
   criadoEm?: string
+  criadoPor?: string
+  canalUsado?: string
+  objetivo?: 'relacionamento' | 'oferta_venda' | 'cotacao' | 'pos_venda' | 'cobranca'
+  origem?: 'manual' | 'automatica'
+  justificativaPrazoLongo?: string
+  proximaTarefaId?: number
   reagendamentos?: any[]
   origemAutomacaoId?: number
   conclusao?: string
@@ -263,7 +270,14 @@ function tarefaFromDb(row: any): Tarefa {
     clienteId: row.cliente_id,
     vendedorId: row.vendedor_id,
     concluidaEm: row.concluida_em,
+    concluidaPor: row.concluida_por,
     criadoEm: row.created_at,
+    criadoPor: row.criado_por,
+    canalUsado: row.canal_usado,
+    objetivo: row.objetivo,
+    origem: row.origem,
+    justificativaPrazoLongo: row.justificativa_prazo_longo,
+    proximaTarefaId: row.proxima_tarefa_id,
     reagendamentos: row.reagendamentos || [],
     origemAutomacaoId: row.origem_automacao_id,
     conclusao: row.conclusao,
@@ -584,6 +598,25 @@ export async function updateCliente(id: number, c: Partial<Cliente>): Promise<vo
 // TAREFAS
 // ============================================
 
+function normalizarTipoTarefaNovoFluxo(tipo: string | undefined, texto = ''): string {
+  if (tipo && ['ligacao', 'whatsapp', 'email', 'visita', 'reuniao'].includes(tipo)) return tipo
+  const txt = texto.toLowerCase()
+  if (/whatsapp|whats|zap/.test(txt)) return 'whatsapp'
+  if (/e-mail|email|enviar proposta|enviar cota/.test(txt)) return 'email'
+  if (/visita|visitar/.test(txt)) return 'visita'
+  if (/reuni[aã]o|meeting/.test(txt)) return 'reuniao'
+  return 'ligacao'
+}
+
+function inferirObjetivoTarefa(titulo = '', descricao = ''): NonNullable<Tarefa['objetivo']> {
+  const txt = `${titulo} ${descricao}`.toLowerCase()
+  if (/cobran|boleto|pagamento|inadimpl/.test(txt)) return 'cobranca'
+  if (/cota[çc][ãa]o|cotar/.test(txt)) return 'cotacao'
+  if (/satisfa[çc][ãa]o|p[óo]s-venda|pos-venda|entrega|feedback/.test(txt)) return 'pos_venda'
+  if (/proposta|oferta|venda|pedido|amostra|apresentar/.test(txt)) return 'oferta_venda'
+  return 'relacionamento'
+}
+
 export async function fetchTarefasByVendedor(vendedorId: number): Promise<Tarefa[]> {
   const { data, error } = await supabase.from('tarefas').select('*').eq('vendedor_id', vendedorId).order('data')
   if (error) throw error
@@ -603,10 +636,16 @@ export async function remarcarTarefa(id: number, data: string, hora?: string): P
 }
 
 export async function insertTarefa(t: Omit<Tarefa, 'id'>): Promise<Tarefa> {
+  const tipo = normalizarTipoTarefaNovoFluxo(t.tipo, `${t.titulo || ''} ${t.descricao || ''}`)
   const { data, error } = await supabase.from('tarefas').insert({
     titulo: t.titulo, descricao: t.descricao, data: t.data, hora: t.hora || null,
-    tipo: t.tipo, status: t.status, prioridade: t.prioridade,
+    tipo, status: t.status, prioridade: t.prioridade,
     cliente_id: t.clienteId || null, vendedor_id: t.vendedorId || null,
+    criado_por: t.criadoPor || null,
+    objetivo: t.objetivo || inferirObjetivoTarefa(t.titulo, t.descricao),
+    origem: t.origem || ((t.origemAutomacaoId || t.missaoId) ? 'automatica' : 'manual'),
+    justificativa_prazo_longo: t.justificativaPrazoLongo || null,
+    proxima_tarefa_id: t.proximaTarefaId || null,
     missao_id: t.missaoId || null, dia_missao: t.diaMissao || null, ordem: t.ordem || null,
     chegada_em: t.chegadaEm || null, saida_em: t.saidaEm || null,
     localizacao_chegada: t.localizacaoChegada || null,

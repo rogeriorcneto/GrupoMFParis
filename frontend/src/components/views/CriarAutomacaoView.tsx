@@ -856,7 +856,7 @@ Como posso ajudar você hoje?`
                                     <option value="whatsapp">WhatsApp</option>
                                     <option value="email">E-mail</option>
                                     <option value="reuniao">Reunião</option>
-                                    <option value="outro">Outro</option>
+                                    <option value="visita">Visita</option>
                                   </select>
                                   <select
                                     aria-label="Prioridade da tarefa automática"

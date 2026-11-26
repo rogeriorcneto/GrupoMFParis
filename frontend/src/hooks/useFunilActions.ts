@@ -341,8 +341,10 @@ export function useFunilActions({
       }
     }
 
-    // Matriz oficial (Rodada 3.1 Item 1): entrar/finalizar em Follow-up garante sempre um card ativo aberto em Proposta
-    if (toStage === 'follow_up' && !existeCardAtivo(cliente, ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao'])) {
+    // Matriz oficial (Rodada 3.1 Item 1): entrar/finalizar em Follow-up garante sempre um card ativo aberto em Proposta.
+    // Uma simples atualização de status dentro do Follow-up não cria ciclo novo.
+    const entrouOuFinalizouFollowUp = fromStage !== 'follow_up' || extras.statusFollowUp === 'concluido' || extras.statusEntrega === 'entregue'
+    if (toStage === 'follow_up' && entrouOuFinalizouFollowUp && !existeCardAtivo(cliente, ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao'])) {
       const novoCard = buildNovoCicloCliente(cliente, 'proposta', loggedUser?.id)
       try {
         const cardCriado = await inserirNovoCiclo(cliente, novoCard)
@@ -353,6 +355,33 @@ export function useFunilActions({
         logger.error('Erro ao criar novo ciclo automático:', e)
       }
     }
+    // Item 2: card encerrado não pode reter tarefa pendente. Quando houver card aberto
+    // da mesma empresa, as tarefas pendentes passam para esse card. Nada é apagado.
+    const cardEncerrado = toStage === 'perdido'
+      || toStage === 'amostra_perdida'
+      || (toStage === 'follow_up' && extras.statusFollowUp === 'concluido')
+    if (cardEncerrado) {
+      try {
+        const etapasAbertas = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao']
+        const familiaAtual = clientesRef.current.atuais.filter(c => !c.arquivadoDuplicata && mesmaEmpresaNoFunil(c, cliente))
+        const cardAberto = familiaAtual.find(c => c.id !== clienteId && (
+          etapasAbertas.includes(c.etapa) || (c.etapa === 'follow_up' && c.statusFollowUp !== 'concluido')
+        ))
+        if (cardAberto) {
+          const pendentesNoFechado = tarefas.filter(t => t.clienteId === clienteId && t.status === 'pendente')
+          for (const tarefa of pendentesNoFechado) {
+            await db.updateTarefa(tarefa.id, { clienteId: cardAberto.id })
+          }
+          if (pendentesNoFechado.length > 0) {
+            setTarefas(prev => prev.map(t => t.clienteId === clienteId && t.status === 'pendente' ? { ...t, clienteId: cardAberto.id } : t))
+            addNotificacao('info', 'Tarefas transferidas', `${pendentesNoFechado.length} tarefa(s) pendente(s) passaram para o card aberto de ${cliente.razaoSocial}.`, cardAberto.id)
+          }
+        }
+      } catch (err) {
+        logger.error('Erro ao transferir tarefas de card encerrado:', err)
+      }
+    }
+
     return true
     } finally { movingRef.current = false }
   }
@@ -505,6 +534,27 @@ export function useFunilActions({
         } catch (e) {
           logger.error('Erro ao criar novo ciclo:', e)
         }
+      }
+
+      // Item 2: transferir pendências do card perdido para o card aberto da mesma empresa.
+      try {
+        const etapasAbertas = ['lead', 'prospecção', 'amostra', 'proposta', 'negociacao']
+        const familiaAtual = clientesRef.current.atuais.filter(c => !c.arquivadoDuplicata && mesmaEmpresaNoFunil(c, clienteOriginal))
+        const cardAberto = familiaAtual.find(c => c.id !== clienteOriginal.id && (
+          etapasAbertas.includes(c.etapa) || (c.etapa === 'follow_up' && c.statusFollowUp !== 'concluido')
+        ))
+        if (cardAberto) {
+          const pendentesNoFechado = tarefas.filter(t => t.clienteId === clienteOriginal.id && t.status === 'pendente')
+          for (const tarefa of pendentesNoFechado) {
+            await db.updateTarefa(tarefa.id, { clienteId: cardAberto.id })
+          }
+          if (pendentesNoFechado.length > 0) {
+            setTarefas(prev => prev.map(t => t.clienteId === clienteOriginal.id && t.status === 'pendente' ? { ...t, clienteId: cardAberto.id } : t))
+            addNotificacao('info', 'Tarefas transferidas', `${pendentesNoFechado.length} tarefa(s) pendente(s) passaram para o card aberto de ${clienteOriginal.razaoSocial}.`, cardAberto.id)
+          }
+        }
+      } catch (err) {
+        logger.error('Erro ao transferir tarefas do card perdido:', err)
       }
       } finally { movingRef.current = false }
     }

@@ -476,7 +476,7 @@ describe('useFunilActions', () => {
           etapa: 'proposta',
           novoCiclo: true,
           cicloNumero: 2,
-          cnpj: undefined,
+          cnpj: '12.345.678/0001-95',
           statusFollowUp: undefined,
         })
       )
@@ -497,7 +497,7 @@ describe('useFunilActions', () => {
           etapa: 'proposta',
           novoCiclo: true,
           cicloNumero: 3,
-          cnpj: undefined,
+          cnpj: '12.345.678/0001-95',
           statusEntrega: undefined,
         })
       )
@@ -522,12 +522,12 @@ describe('useFunilActions', () => {
         result.current.confirmPerda()
       })
 
-      // Deve criar novo ciclo em proposta com novoCiclo=true e cnpj limpo
+      // Deve criar novo ciclo em proposta preservando o CNPJ para integração com o Omie
       expect(db.insertCliente).toHaveBeenCalledWith(
         expect.objectContaining({
           etapa: 'proposta',
           novoCiclo: true,
-          cnpj: undefined,
+          cnpj: '12.345.678/0001-95',
           cicloNumero: 2,
         })
       )
@@ -604,7 +604,7 @@ describe('useFunilActions', () => {
       expect(novoCardArg.omieNotaFiscal).toBeUndefined()
       expect(novoCardArg.omieDataFaturamento).toBeUndefined()
       expect(novoCardArg.totalCompras).toBeUndefined()
-      expect(novoCardArg.cnpj).toBeUndefined()
+      expect(novoCardArg.cnpj).toBe('12.345.678/0001-95')
       expect(novoCardArg.cicloNumero).toBe(2)
       expect(novoCardArg.novoCiclo).toBe(true)
     })
@@ -659,7 +659,7 @@ describe('useFunilActions', () => {
         etapaAnterior: 'follow_up',
         novoCiclo: true,
         cicloNumero: 2,
-        cnpj: undefined,
+        cnpj: '12.345.678/0001-95',
         valorProposta: 5000,
         dataProposta: '2025-01-10',
         statusFollowUp: undefined,

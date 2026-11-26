@@ -384,16 +384,59 @@ missoesRouter.post('/tarefas/:id/checkout', async (req: any, res: any) => {
     if (vendedor.cargo !== 'gerente' && tarefa.vendedor_id !== vendedor.id) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
 
     const body = req.body
+    const proximo = body.proximoPasso || {}
+    const proximoTipo = String(proximo.tipo || '').trim()
+    const proximoObjetivo = String(proximo.objetivo || '').trim()
+    const proximoData = String(proximo.data || '').trim()
+    const proximoDescricao = String(proximo.descricao || body.proximosPassos || '').trim()
+    const proximoJustificativa = String(proximo.justificativa || '').trim()
+    if (!body.resultado?.trim() || !proximoTipo || !proximoObjetivo || !proximoData || !proximoDescricao) {
+      res.status(400).json({ success: false, error: 'Para concluir a visita, informe resultado e próximo passo completo (tipo, objetivo, data e descrição).' })
+      return
+    }
+    const diasProximo = Math.ceil((new Date(`${proximoData}T00:00:00`).getTime() - Date.now()) / 86400000)
+    if (diasProximo > 15 && !proximoJustificativa) {
+      res.status(400).json({ success: false, error: 'Próximo passo acima de 15 dias exige justificativa.' })
+      return
+    }
+
+    const tiposValidos = ['ligacao', 'whatsapp', 'email', 'visita', 'reuniao']
+    if (!tiposValidos.includes(proximoTipo)) {
+      res.status(400).json({ success: false, error: 'Tipo do próximo passo inválido.' })
+      return
+    }
+    const labels: Record<string, string> = { ligacao: 'Ligação', whatsapp: 'WhatsApp', email: 'E-mail', visita: 'Visita', reuniao: 'Reunião' }
+    const { error: proxErr } = await supabase.from('tarefas').insert({
+      titulo: `${labels[proximoTipo]}: ${proximoDescricao}`.slice(0, 160),
+      descricao: proximoDescricao,
+      data: proximoData,
+      hora: proximo.hora || '09:00',
+      tipo: proximoTipo,
+      status: 'pendente',
+      prioridade: 'media',
+      cliente_id: tarefa.cliente_id,
+      vendedor_id: tarefa.vendedor_id,
+      objetivo: proximoObjetivo,
+      origem: 'manual',
+      criado_por: vendedor.nome,
+      justificativa_prazo: proximoJustificativa || null,
+    })
+    if (proxErr) { res.status(400).json({ success: false, error: proxErr.message || 'Erro ao criar próximo passo' }); return }
+
+    const agora = new Date().toISOString()
     const { data, error: upd } = await supabase.from('tarefas').update({
-      saida_em: new Date().toISOString(),
+      saida_em: agora,
       localizacao_saida: body.location || null,
       resultado: body.resultado || null,
       interesse: body.interesse || null,
       produtos_apresentados: body.produtosApresentados || [],
-      proximos_passos: body.proximosPassos || null,
+      proximos_passos: proximoDescricao,
       amostras_entregues: body.amostrasEntregues ?? 0,
       status: 'concluida',
       conclusao: body.resultado || null,
+      canal_usado: 'visita',
+      concluida_em: agora,
+      concluida_por: vendedor.nome,
     }).eq('id', id).select().single()
     if (upd || !data) { res.status(400).json({ success: false, error: upd?.message || 'Erro' }); return }
     res.json({ success: true, data: tarefaFromDb(data) })

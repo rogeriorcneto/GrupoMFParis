@@ -145,6 +145,7 @@ async function executarAcoes(a: AutomacaoRow, clienteId: number | null, ctx: any
           tipo: cfg.tipoTarefa || 'outro',
           status: 'pendente', prioridade: cfg.prioridade || 'media',
           clienteId, vendedorId: cliente?.vendedorId || undefined,
+          origem: 'automatica', criadoPor: 'Automação',
         })
       } else if (acao.tipo === 'mover_etapa' && clienteId && cfg.etapa) {
         if (cfg.etapa === 'perdido' && !String(cfg.motivoPerda || cfg.motivo || '').trim()) {

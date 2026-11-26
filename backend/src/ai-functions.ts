@@ -269,17 +269,22 @@ export const FUNCTION_DECLARATIONS = [
         tipo: {
           type: 'STRING',
           description: 'Tipo da tarefa',
-          enum: ['ligacao', 'reuniao', 'email', 'whatsapp', 'follow-up', 'outro'],
+          enum: ['ligacao', 'reuniao', 'email', 'whatsapp', 'visita'],
         },
         prioridade: {
           type: 'STRING',
           description: 'Prioridade da tarefa',
           enum: ['alta', 'media', 'baixa'],
         },
+        objetivo: {
+          type: 'STRING',
+          description: 'Objetivo obrigatório da tarefa',
+          enum: ['relacionamento', 'oferta_venda', 'cotacao', 'pos_venda', 'cobranca'],
+        },
         clienteId: { type: 'INTEGER', description: 'ID do cliente relacionado (opcional)' },
         vendedorId: { type: 'INTEGER', description: 'ID do vendedor responsável (opcional, gerente only)' },
       },
-      required: ['titulo', 'data', 'tipo', 'prioridade'],
+      required: ['titulo', 'data', 'tipo', 'objetivo', 'prioridade'],
     },
   },
   {
@@ -831,6 +836,9 @@ export async function executeFunction(
           prioridade: args.prioridade,
           clienteId: args.clienteId || undefined,
           vendedorId,
+          objetivo: args.objetivo,
+          origem: 'manual',
+          criadoPor: user.nome,
         })
         await db.insertAtividade({ tipo: 'tarefa', descricao: `[IA] Criou tarefa "${args.titulo}" para ${args.data}`, vendedorNome: user.nome })
         return {
@@ -848,12 +856,9 @@ export async function executeFunction(
         if (user.cargo !== 'gerente' && tarefaRow.vendedor_id !== user.id) {
           return { success: false, message: 'Você não pode concluir tarefas de outro vendedor.' }
         }
-        await db.updateTarefaStatus(args.tarefaId, 'concluida')
-        await db.insertAtividade({ tipo: 'tarefa', descricao: `[IA] Concluiu tarefa "${tarefaRow.titulo}"`, vendedorNome: user.nome })
         return {
-          success: true,
-          message: `✅ Tarefa "${tarefaRow.titulo}" marcada como concluída.`,
-          uiAction: { type: 'refreshTarefas' },
+          success: false,
+          message: `A tarefa "${tarefaRow.titulo}" precisa ser finalizada na tela de Tarefas ou na ficha do cliente, informando canal usado, conclusão e próximo passo obrigatório.`,
         }
       }
 
@@ -868,6 +873,10 @@ export async function executeFunction(
         }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(args.novaData || ''))) {
           return { success: false, message: 'Nova data inválida. Use o formato YYYY-MM-DD.' }
+        }
+        const diasAteNovaData = Math.round((new Date(`${args.novaData}T00:00:00`).getTime() - new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime()) / 86400000)
+        if (diasAteNovaData > 15) {
+          return { success: false, message: 'Reagendamento para mais de 15 dias exige justificativa registrada na tela de Tarefas ou na ficha do cliente.' }
         }
         await db.remarcarTarefa(args.tarefaId, args.novaData, args.novaHora)
         await db.insertAtividade({ tipo: 'tarefa', descricao: `[IA] Remarcou tarefa "${tarefaRow.titulo}" para ${args.novaData}`, vendedorNome: user.nome })

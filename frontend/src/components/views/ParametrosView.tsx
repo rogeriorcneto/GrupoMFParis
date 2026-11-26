@@ -7,6 +7,7 @@ import {
   saveParametrosListas,
   useParametrosListas,
 } from '../../lib/parametrosListas'
+import { CADASTRO_CAMPOS, CampoCadastroKey } from '../../utils/cadastroCompleto'
 
 const ORDEM_ABAS: ListaParametroKey[] = [
   'segmento_cliente',
@@ -56,6 +57,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
             ...parametros.listas,
             [abaAtiva]: normalizada,
           },
+          camposCadastroObrigatorios: parametros.camposCadastroObrigatorios,
           auditoria: [
             { data: agora, usuario, lista: abaAtiva, acao, detalhe },
             ...(parametros.auditoria || []),
@@ -146,6 +148,31 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
     copia[idx] = { ...copia[alvo], alteradoPor: usuario, alteradoEm: agora }
     copia[alvo] = { ...temp, alteradoPor: usuario, alteradoEm: agora }
     await persistir(copia, 'reordenar', `Alterada ordem de "${temp.label}"`)
+  }
+
+  const handleToggleCampoCadastro = async (campo: CampoCadastroKey) => {
+    if (salvando) return
+    setSalvando(true)
+    try {
+      const atuais = parametros.camposCadastroObrigatorios || []
+      const novos = atuais.includes(campo) ? atuais.filter(c => c !== campo) : [...atuais, campo]
+      await saveParametrosListas(
+        {
+          listas: parametros.listas,
+          camposCadastroObrigatorios: novos,
+          auditoria: [
+            { data: new Date().toISOString(), usuario, lista: 'segmento_cliente' as ListaParametroKey, acao: (atuais.includes(campo) ? 'desativar' : 'ativar') as 'ativar' | 'desativar', detalhe: `${atuais.includes(campo) ? 'Retirado' : 'Incluído'} campo obrigatório do cadastro: ${campo}` },
+            ...(parametros.auditoria || []),
+          ].slice(0, 300),
+        },
+        usuario
+      )
+      showToast('success', 'Lista de campos do cadastro atualizada. As situações serão recalculadas nas telas.')
+    } catch (err: any) {
+      showToast('error', `Erro ao salvar campos do cadastro: ${err?.message || 'falha de rede'}`)
+    } finally {
+      setSalvando(false)
+    }
   }
 
   return (
@@ -311,6 +338,36 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Campos obrigatórios para cadastro completo (item 12) */}
+      <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 p-4 sm:p-6 space-y-3">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">📋 Campos obrigatórios do cadastro completo</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Ative ou desative campos sem desenvolvimento. Ao salvar, a situação dos cadastros passa a ser recalculada com a nova lista.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {CADASTRO_CAMPOS.map(campo => {
+            const ativo = (parametros.camposCadastroObrigatorios || []).includes(campo.key)
+            return (
+              <label key={campo.key} className={`flex items-start gap-3 border rounded-apple px-3 py-2.5 cursor-pointer ${ativo ? 'border-primary-200 bg-primary-50/50' : 'border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/50 opacity-75'}`}>
+                <input
+                  type="checkbox"
+                  checked={ativo}
+                  disabled={salvando}
+                  onChange={() => handleToggleCampoCadastro(campo.key)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100">{campo.label}</span>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400">{campo.descricao}</span>
+                </span>
+              </label>
+            )
+          })}
         </div>
       </div>
 

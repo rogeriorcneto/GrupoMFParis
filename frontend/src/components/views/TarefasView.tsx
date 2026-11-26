@@ -18,6 +18,8 @@ import TaskCommPanel from '../TaskCommPanel'
 import WhatsAppUserPanel from '../WhatsAppUserPanel'
 import Workspace from '../Workspace'
 import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from '../TimePicker5Min'
+import FinalizarTarefaInline from '../FinalizarTarefaInline'
+import { CANAIS_TAREFA, CANAL_LABEL, OBJETIVO_LABEL, OBJETIVOS_TAREFA, ObjetivoTarefa, inferirOrigemTarefa, validarFinalizacaoTarefa, validarReagendamentoPrazo } from '../../utils/tarefaFluxo'
 import * as XLSX from 'xlsx'
 
 // ─── Sub-componente: TarefaCard ───────────────────────────────────────────────
@@ -26,6 +28,7 @@ const TIPO_CONFIG: Record<string, { icon: string; label: string; color: string; 
   reuniao:   { icon: '🤝', label: 'Reunião',   color: 'bg-blue-50 border-blue-200',    ring: 'ring-blue-400' },
   email:     { icon: '📧', label: 'E-mail',    color: 'bg-sky-50 border-sky-200',      ring: 'ring-sky-400' },
   whatsapp:  { icon: '💬', label: 'WhatsApp',  color: 'bg-green-50 border-green-200',  ring: 'ring-green-400' },
+  visita:    { icon: '🏢', label: 'Visita',    color: 'bg-teal-50 border-teal-200',     ring: 'ring-teal-400' },
   'follow-up':{ icon: '🔄', label: 'Follow-up', color: 'bg-amber-50 border-amber-200', ring: 'ring-amber-400' },
   outro:     { icon: '📋', label: 'Outro',     color: 'bg-gray-50 border-gray-200',    ring: 'ring-gray-400' },
 }
@@ -80,7 +83,6 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
   const [novaHora, setNovaHora] = useState(tarefa.hora || '')
   const [reagendarOpen, setReagendarOpen] = useState(false)
   const [finalizarOpen, setFinalizarOpen] = useState(false)
-  const [obsFinalizacao, setObsFinalizacao] = useState('')
 
   const handleSaveNota = () => {
     if (nota !== (tarefa.descricao || '')) {
@@ -101,18 +103,16 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
   const cfg = TIPO_CONFIG[tarefa.tipo] || TIPO_CONFIG.outro
   const pri = PRIORIDADE_CONFIG[tarefa.prioridade]
   const done = tarefa.status === 'concluida'
+  const origemTarefa = inferirOrigemTarefa(tarefa)
 
-  const handleConfirmFinalizar = () => {
+  const handleConfirmFinalizar = async (finalizacao: import('../../utils/tarefaFluxo').FinalizacaoTarefaInput) => {
     setCompleting(true)
-    const tarefaFinal = obsFinalizacao.trim()
-      ? { ...tarefa, conclusao: obsFinalizacao.trim() }
-      : tarefa
-    setTimeout(() => {
-      onToggle(tarefaFinal)
-      setCompleting(false)
+    try {
+      await onToggle({ ...tarefa, finalizacao })
       setFinalizarOpen(false)
-      setObsFinalizacao('')
-    }, 400)
+    } finally {
+      setCompleting(false)
+    }
   }
 
   const handleToggle = async () => {
@@ -313,6 +313,20 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 </div>
               </div>
             )}
+            {/* Metadados do novo fluxo */}
+            {(tarefa.objetivo || tarefa.canalUsado || origemTarefa) && (
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                {tarefa.objetivo && <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">Objetivo: {OBJETIVO_LABEL[tarefa.objetivo] || tarefa.objetivo}</span>}
+                {tarefa.canalUsado && <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">Canal usado: {CANAL_LABEL[tarefa.canalUsado] || tarefa.canalUsado}</span>}
+                {origemTarefa && <span className={`px-2 py-0.5 rounded-full border ${origemTarefa === 'automatica' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>Origem: {origemTarefa === 'automatica' ? 'Automática' : 'Manual'}</span>}
+              </div>
+            )}
+            {tarefa.justificativaPrazoLongo && (
+              <div className="mt-2 px-2.5 py-1.5 bg-orange-50 border border-orange-100 rounded-lg text-xs text-orange-800">
+                <span className="font-semibold">Justificativa de prazo longo:</span> {tarefa.justificativaPrazoLongo}
+              </div>
+            )}
+
             {/* Conclusão registrada */}
             {done && tarefa.conclusao && (
               <div className="mt-2 px-2.5 py-1.5 bg-green-50 border border-green-100 rounded-lg text-xs text-green-800">
@@ -320,37 +334,14 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
               </div>
             )}
 
-            {/* Caixa de finalização com observação */}
+            {/* Finalização obrigatória com canal, conclusão e próximo passo */}
             {finalizarOpen && !done && (
-              <div className="mt-3 p-3 bg-green-50/80 border border-green-100 rounded-xl space-y-2 animate-in slide-in-from-top-1 duration-200">
-                <p className="text-xs font-semibold text-green-700 flex items-center gap-1">
-                  <CheckCircleIcon className="h-3.5 w-3.5" />
-                  Conclusão de tarefa
-                </p>
-                <textarea
-                  value={obsFinalizacao}
-                  onChange={e => setObsFinalizacao(e.target.value)}
-                  rows={2}
-                  placeholder="Conclusão de tarefa (ex: cliente confirmou pedido, reunião realizada...)"
-                  className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-300 placeholder:text-gray-400"
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleConfirmFinalizar}
-                    disabled={completing || !obsFinalizacao.trim()}
-                    className="px-3 py-1.5 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center gap-1 whitespace-nowrap"
-                  >
-                    <CheckCircleIcon className="h-3.5 w-3.5" />
-                    {completing ? 'Finalizando...' : 'Confirmar'}
-                  </button>
-                  <button
-                    onClick={() => { setFinalizarOpen(false); setObsFinalizacao('') }}
-                    className="px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </div>
+              <FinalizarTarefaInline
+                tarefa={tarefa}
+                loading={completing}
+                onConfirm={handleConfirmFinalizar}
+                onCancel={() => setFinalizarOpen(false)}
+              />
             )}
 
             {/* Caixa de reagendamento */}
@@ -364,7 +355,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                   value={motivo}
                   onChange={e => setMotivo(e.target.value)}
                   rows={2}
-                  placeholder="Motivo do reagendamento (ex: cliente não atendeu)"
+                  placeholder="Motivo/justificativa do reagendamento (ex: cliente não atendeu)"
                   className="w-full text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300 placeholder:text-gray-400"
                 />
                 <div className="flex items-center gap-2">
@@ -448,7 +439,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 >
                   <PencilIcon className="h-4 w-4" />
                 </button>
-                {onDeleteTarefa && (
+                {isGerente && onDeleteTarefa && (
                   <button
                     onClick={() => { if (confirm('Tem certeza que deseja excluir esta tarefa?')) onDeleteTarefa(tarefa) }}
                     className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -953,7 +944,8 @@ const TarefasView: React.FC<{
           if (tl.includes('whatsapp') || tl.includes('whats')) return 'whatsapp'
           if (tl.includes('ligaç') || tl.includes('ligac') || tl.includes('telefone') || tl.includes('ligar')) return 'ligacao'
           if (tl.includes('email') || tl.includes('e-mail')) return 'email'
-          if (tl.includes('reunião') || tl.includes('reuniao') || tl.includes('visita')) return 'reuniao'
+          if (tl.includes('reunião') || tl.includes('reuniao')) return 'reuniao'
+          if (tl.includes('visita')) return 'visita'
           if (tl.includes('follow') || tl.includes('retorno')) return 'follow-up'
           return 'outro'
         }
@@ -1070,12 +1062,14 @@ const TarefasView: React.FC<{
   const [newData, setNewData] = useState(new Date().toISOString().split('T')[0])
   const [newHora, setNewHora] = useState('')
   const [newTipo, setNewTipo] = useState<Tarefa['tipo']>('ligacao')
+  const [newObjetivo, setNewObjetivo] = useState<ObjetivoTarefa>('relacionamento')
   const [newPrioridade, setNewPrioridade] = useState<Tarefa['prioridade']>('media')
   const [newClienteId, setNewClienteId] = useState<number | ''>('')
   const [newVendedorId, setNewVendedorId] = useState<number | ''>(loggedUser?.id ?? '')
   const [clienteSearch, setClienteSearch] = useState('')
   const [showClienteList, setShowClienteList] = useState(false)
   const [filterTipo, setFilterTipo] = useState<string>('todos')
+  const [filtroVendedorId, setFiltroVendedorId] = useState<number | 'todos'>('todos')
   const [showConcluidas, setShowConcluidas] = useState(true)
   const isGerente = loggedUser?.cargo === 'gerente'
 
@@ -1110,8 +1104,12 @@ const TarefasView: React.FC<{
   , [clientes, isGerente, loggedUser?.id])
 
   const minhasTarefas = useMemo(() =>
-    tarefas.filter(t => isGerente || t.vendedorId === loggedUser?.id || !t.vendedorId)
-  , [tarefas, isGerente, loggedUser?.id])
+    tarefas.filter(t => {
+      if (!isGerente) return t.vendedorId === loggedUser?.id || !t.vendedorId
+      if (filtroVendedorId !== 'todos') return t.vendedorId === filtroVendedorId
+      return true
+    })
+  , [tarefas, isGerente, loggedUser?.id, filtroVendedorId])
 
   // Calcular datas da semana
   const inicioSemana = useMemo(() => {
@@ -1226,17 +1224,36 @@ const TarefasView: React.FC<{
 
   const toggleStatus = useCallback((tarefa: Tarefa) => {
     const novoConcluida = tarefa.status === 'pendente'
+    if (!novoConcluida) {
+      onUpdateTarefa({ ...tarefa, status: 'pendente', concluidaEm: undefined, concluidaPor: undefined })
+      return
+    }
+    const finalizacao = tarefa.finalizacao
+    if (!finalizacao) {
+      showToast?.('error', 'Para finalizar, informe canal usado, conclusão e próximo passo.')
+      return
+    }
+    const erro = validarFinalizacaoTarefa(finalizacao)
+    if (erro) {
+      showToast?.('error', erro)
+      return
+    }
     onUpdateTarefa({
       ...tarefa,
-      status: novoConcluida ? 'concluida' : 'pendente',
-      concluidaEm: novoConcluida ? new Date().toISOString() : undefined,
+      status: 'concluida',
+      concluidaEm: new Date().toISOString(),
+      concluidaPor: loggedUser?.nome || 'Vendedor',
+      canalUsado: finalizacao.canalUsado,
+      conclusao: finalizacao.conclusao,
+      justificativaPrazoLongo: finalizacao.proximoPasso.justificativaPrazoLongo,
+      finalizacao,
     })
-  }, [onUpdateTarefa])
+  }, [onUpdateTarefa, showToast, loggedUser?.nome])
 
   const taskCreationRef = useRef(false)
 
   const handleAddTarefa = async () => {
-    if (!newTitulo.trim() || taskCreationRef.current) return
+    if (!newTitulo.trim() || !newObjetivo || taskCreationRef.current) return
     const horaNormalizada = newHora.trim() ? arredondarHora5Min(newHora) : ''
     if (isDataHoraNoPassado(newData, horaNormalizada || undefined)) {
       showToast?.('error', 'Não é permitido agendar tarefa com data ou horário anterior ao momento atual.')
@@ -1251,6 +1268,9 @@ const TarefasView: React.FC<{
         data: newData,
         hora: horaNormalizada || undefined,
         tipo: newTipo,
+        objetivo: newObjetivo,
+        origem: 'manual',
+        criadoPor: loggedUser?.nome || 'Vendedor',
         status: 'pendente',
         prioridade: newPrioridade,
         clienteId: typeof newClienteId === 'number' ? newClienteId : undefined,
@@ -1294,6 +1314,11 @@ const TarefasView: React.FC<{
       showToast?.('error', 'Não é permitido reagendar tarefa para data ou horário no passado.')
       return
     }
+    const erroPrazo = validarReagendamentoPrazo(novaData, motivo)
+    if (erroPrazo && novaData !== tarefa.data) {
+      showToast?.('error', erroPrazo)
+      return
+    }
     // Item 4.6: se a data não mudou, apenas atualiza o horário/nota sem contar como reagendamento
     if (novaData === tarefa.data) {
       onUpdateTarefa({
@@ -1317,6 +1342,7 @@ const TarefasView: React.FC<{
       hora: horaNorm,
       status: 'pendente',
       reagendamentos: [...(tarefa.reagendamentos || []), reagendamento],
+      justificativaPrazoLongo: motivo.trim(),
     })
     showToast?.('success', `Tarefa reagendada para ${new Date(novaData + 'T00:00:00').toLocaleDateString('pt-BR')}`)
   }, [onUpdateTarefa, showToast, loggedUser])
@@ -1398,6 +1424,18 @@ const TarefasView: React.FC<{
 
             {/* Ações */}
             <div className="flex items-center gap-1.5">
+              {isGerente && (
+                <select
+                  value={filtroVendedorId}
+                  onChange={(e) => setFiltroVendedorId(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                  className="hidden md:block px-2.5 py-1.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
+                  title="Filtrar por vendedor"
+                >
+                  <option value="todos">Todos os vendedores</option>
+                  {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                </select>
+              )}
+
               <select
                 value={filterTipo}
                 onChange={(e) => setFilterTipo(e.target.value)}
@@ -1408,6 +1446,7 @@ const TarefasView: React.FC<{
                 <option value="whatsapp">💬 WhatsApp</option>
                 <option value="email">📧 E-mails</option>
                 <option value="reuniao">🤝 Reuniões</option>
+                <option value="visita">🏢 Visitas</option>
                 <option value="follow-up">🔄 Follow-ups</option>
               </select>
 
@@ -1915,8 +1954,8 @@ const TarefasView: React.FC<{
             <button
               onClick={() => {
                 const sugeridas: Tarefa[] = [
-                  { id: Date.now() + 1, clienteId: meusClientes.find(c => c.diasInativo && c.diasInativo > 7)?.id, vendedorId: loggedUser?.id, titulo: 'Follow-up com clientes inativos', descricao: 'Clientes sem interação há mais de 7 dias', data: hoje, hora: '10:00', tipo: 'ligacao', status: 'pendente', prioridade: 'alta' },
-                  { id: Date.now() + 2, clienteId: meusClientes.find(c => c.etapa === 'negociacao')?.id, vendedorId: loggedUser?.id, titulo: 'Enviar proposta comercial', data: hoje, hora: '14:00', tipo: 'email', status: 'pendente', prioridade: 'alta' },
+                  { id: Date.now() + 1, clienteId: meusClientes.find(c => c.diasInativo && c.diasInativo > 7)?.id, vendedorId: loggedUser?.id, titulo: 'Follow-up com clientes inativos', descricao: 'Clientes sem interação há mais de 7 dias', data: hoje, hora: '10:00', tipo: 'ligacao', objetivo: 'relacionamento', origem: 'manual', criadoPor: loggedUser?.nome || 'Vendedor', status: 'pendente', prioridade: 'alta' },
+                  { id: Date.now() + 2, clienteId: meusClientes.find(c => c.etapa === 'negociacao')?.id, vendedorId: loggedUser?.id, titulo: 'Enviar proposta comercial', data: hoje, hora: '14:00', tipo: 'email', objetivo: 'oferta_venda', origem: 'manual', criadoPor: loggedUser?.nome || 'Vendedor', status: 'pendente', prioridade: 'alta' },
                 ]
                 sugeridas.forEach(t => onAddTarefa(t))
                 showToast?.('success', '✨ IA adicionou tarefas sugeridas para hoje!')
@@ -2046,7 +2085,7 @@ const TarefasView: React.FC<{
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Tipo *</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {Object.entries(TIPO_CONFIG).map(([key, cfg]) => (
+                  {Object.entries(TIPO_CONFIG).filter(([key]) => (CANAIS_TAREFA as string[]).includes(key)).map(([key, cfg]) => (
                     <button
                       key={key}
                       type="button"
@@ -2062,6 +2101,13 @@ const TarefasView: React.FC<{
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Objetivo *</label>
+                <select value={newObjetivo} onChange={(e) => setNewObjetivo(e.target.value as ObjetivoTarefa)} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 text-sm">
+                  {OBJETIVOS_TAREFA.map(o => <option key={o} value={o}>{OBJETIVO_LABEL[o]}</option>)}
+                </select>
               </div>
 
               <div>

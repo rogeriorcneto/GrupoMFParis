@@ -621,7 +621,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
                     tarefa = await db.insertTarefa({
                       titulo, clienteId: cliente.id, vendedorId: cliente.vendedorId || loggedUser?.id,
                       descricao: 'Registre a satisfação coletada com o cliente nas anotações e informe o resultado ao concluir a tarefa.',
-                      data: new Date().toISOString().split('T')[0], tipo: 'follow-up', status: 'pendente', prioridade: 'alta',
+                      data: new Date().toISOString().split('T')[0], tipo: 'ligacao', objetivo: 'pos_venda', origem: 'automatica', criadoPor: 'Automação', status: 'pendente', prioridade: 'alta',
                     })
                     setTarefas(prev => [tarefa!, ...prev])
                   }
