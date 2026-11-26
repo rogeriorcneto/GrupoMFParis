@@ -230,23 +230,23 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
         body: JSON.stringify({ clienteId: cid ? Number(cid) : null })
       })
       const r = await resp.json()
-      if (r.success) { alert('✅ Automação executada!'); carregarAutomacoes() }
-      else alert('❌ ' + (r.error || 'Erro ao executar'))
-    } catch (e: any) { alert('❌ ' + (e.message || 'Erro')) }
+      if (r.success) { alert('Automação executada!'); carregarAutomacoes() }
+      else alert( (r.error || 'Erro ao executar'))
+    } catch (e: any) { alert( (e.message || 'Erro')) }
   }
 
   const salvarAutomacao = async () => {
     if (!formData.nome.trim()) {
-      alert('⚠️ Preencha o nome da automação')
+      alert('Preencha o nome da automação')
       return
     }
 
     if (formData.acoes.length === 0) {
-      alert('⚠️ Adicione pelo menos uma ação')
+      alert('Adicione pelo menos uma ação')
       return
     }
     if (formData.acoes.some(a => !a.tipo)) {
-      alert('⚠️ Selecione o tipo de todas as ações adicionadas')
+      alert('Selecione o tipo de todas as ações adicionadas')
       return
     }
 
@@ -290,13 +290,13 @@ const CriarAutomacaoView: React.FC<CriarAutomacaoViewProps> = ({ loggedUser }) =
         setEditando(null)
         setMostrarEditor(false)
         
-        alert(`✅ ${editando ? 'Automação atualizada' : 'Automação criada'} com sucesso no banco de dados!`)
+        alert(`${editando ? 'Automação atualizada' : 'Automação criada'} com sucesso no banco de dados!`)
       } else {
-        alert('❌ Erro ao salvar automação no banco')
+        alert('Erro ao salvar automação no banco')
       }
     } catch (error) {
       console.error('Erro ao salvar automação:', error)
-      alert('❌ Erro ao conectar com o banco de dados. Tente novamente.')
+      alert('Erro ao conectar com o banco de dados. Tente novamente.')
     } finally {
       setCarregando(false)
     }
@@ -392,7 +392,7 @@ Tipos de Gatilho:
 Você é um assistente especialista em automações de vendas para a MF Paris. Ajude o gerente a entender, criar e otimizar automações.
 `
 
-      setMensagensChat(prev => [...prev, { role: 'assistant', content: '🤖 Processando sua pergunta...' }])
+      setMensagensChat(prev => [...prev, { role: 'assistant', content: 'Processando sua pergunta...' }])
 
       const resposta = await callAI([{ role: 'user', content: mensagemUsuario }], contextoAutomacoes)
       
@@ -405,7 +405,7 @@ Você é um assistente especialista em automações de vendas para a MF Paris. A
       console.error('Erro ao enviar mensagem para IA:', error)
       setMensagensChat(prev => {
         const novas = [...prev]
-        novas[novas.length - 1] = { role: 'assistant', content: '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.' }
+        novas[novas.length - 1] = { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.' }
         return novas
       })
     } finally {
@@ -431,12 +431,12 @@ Você é um assistente especialista em automações de vendas para a MF Paris. A
       setMensagensChat([
         { 
           role: 'assistant', 
-          content: `👋 Olá! Sou o assistente de automações da MF Paris. Posso ajudar você a:
+          content: `Olá! Sou o assistente de automações da MF Paris. Posso ajudar você a:
 
-🔧 **Criar automações** - Explicar passo a passo como configurar
-📊 **Analisar performance** - Avaliar suas automações atuais
-💡 **Sugerir melhorias** - Otimizar processos existentes
-❓ **Tirar dúvidas** - Esclarecer qualquer questão sobre automações
+**Criar automações** - Explicar passo a passo como configurar
+**Analisar performance** - Avaliar suas automações atuais
+**Sugerir melhorias** - Otimizar processos existentes
+**Tirar dúvidas** - Esclarecer qualquer questão sobre automações
 
 Como posso ajudar você hoje?` 
         }
@@ -472,7 +472,7 @@ Como posso ajudar você hoje?`
           </div>
           <button
             onClick={() => abrirChatComContexto()}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-700 hover:bg-primary-800 text-white rounded-xl transition-colors shadow-apple-sm"
             title="Converse com o assistente de automações"
           >
             <SparklesIcon className="h-5 w-5" />
@@ -993,7 +993,7 @@ Como posso ajudar você hoje?`
                     <button
                       onClick={salvarAutomacao}
                       disabled={carregando}
-                      className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg font-medium"
+                      className="px-8 py-3 bg-primary-700 hover:bg-primary-800 text-white rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2 shadow-apple-sm font-medium"
                     >
                       {carregando ? (
                         <>
@@ -1134,7 +1134,7 @@ Como posso ajudar você hoje?`
             {/* Header do Chat */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg">
+                <div className="p-2 bg-primary-700 rounded-xl">
                   <SparklesIcon className="h-5 w-5 text-white" />
                 </div>
                 <div>

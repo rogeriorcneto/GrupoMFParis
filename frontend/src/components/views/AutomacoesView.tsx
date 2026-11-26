@@ -185,11 +185,11 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Automações de Vendas</h1>
           <p className="mt-1 text-sm text-gray-600">Disparo em massa de emails e WhatsApp + ações individuais rápidas</p>
         </div>
-        <div className="flex gap-2">
+        <div className="inline-flex p-0.5 rounded-xl bg-[#EFEFF4] dark:bg-[#262629] border border-black/[0.04] dark:border-white/[0.06]">
           {(['massa', 'individual', 'historico'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-apple transition-all ${tab === t ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>
-              {t === 'massa' ? '📨 Disparo em Massa' : t === 'individual' ? '👤 Individual' : '📋 Histórico'}
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-[10px] transition-all ${tab === t ? 'bg-white dark:bg-[#3A3A3C] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
+              {t === 'massa' ? 'Disparo em Massa' : t === 'individual' ? 'Individual' : 'Histórico'}
             </button>
           ))}
         </div>
@@ -213,7 +213,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-primary-500 to-primary-600" style={{ width: `${pct}%` }} />
+                <div className="h-full rounded-full transition-all duration-500 bg-primary-600" style={{ width: `${pct}%` }} />
               </div>
               <div className="flex items-center justify-between mt-2">
                 <span className="text-xs text-gray-500">{pct}%</span>
@@ -248,7 +248,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                 <div className="flex gap-2">
                   <button onClick={() => setCanal('email')}
                     className={`flex-1 px-3 py-2 text-sm font-medium rounded-apple transition-all ${canal === 'email' ? 'bg-primary-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                    📧 Email
+                    Email
                   </button>
                   <button onClick={() => setCanal('whatsapp')}
                     className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-apple transition-all ${canal === 'whatsapp' ? 'bg-green-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
@@ -365,7 +365,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
 
                 {canal === 'whatsapp' && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-apple p-3 text-xs text-yellow-800">
-                    ⚠️ <strong>Atenção:</strong> WhatsApp tem limite de envio. Disparos muito grandes podem resultar em bloqueio temporário.
+                    <strong>Atenção:</strong> WhatsApp tem limite de envio. Disparos muito grandes podem resultar em bloqueio temporário.
                     Recomendamos máximo 100 mensagens por lote com intervalo de 3s entre envios.
                   </div>
                 )}
@@ -401,7 +401,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                   }`}>
                   {sending
                     ? `Enviando... (${batchStatus?.sent || 0}/${batchStatus?.total || selectedIds.size})`
-                    : `🚀 Disparar ${selectedIds.size} ${canal === 'email' ? 'email(s)' : 'mensagem(ns) WhatsApp'}`}
+                    : `Disparar ${selectedIds.size} ${canal === 'email' ? 'email(s)' : 'mensagem(ns) WhatsApp'}`}
                 </button>
               </div>
             </div>
@@ -434,7 +434,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
             <div className="lg:col-span-2 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="rounded-apple border border-gray-200 p-4">
-                  <div className="text-sm font-semibold text-gray-900">📢 Propaganda</div>
+                  <div className="text-sm font-semibold text-gray-900">Propaganda</div>
                   <div className="text-xs text-gray-600 mt-1">Disparo rápido (registrado no histórico).</div>
                   <div className="flex flex-wrap gap-2 mt-3">
                     <button disabled={!indCliente} onClick={() => indCliente && onAction(indCliente, 'whatsapp', 'propaganda')} className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-apple hover:bg-green-700 disabled:opacity-50">WhatsApp</button>
@@ -444,7 +444,7 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                   </div>
                 </div>
                 <div className="rounded-apple border border-gray-200 p-4">
-                  <div className="text-sm font-semibold text-gray-900">📞 Contato</div>
+                  <div className="text-sm font-semibold text-gray-900">Contato</div>
                   <div className="text-xs text-gray-600 mt-1">Ação de contato (registrada no histórico).</div>
                   <div className="flex flex-wrap gap-2 mt-3">
                     <button disabled={!indCliente} onClick={() => indCliente && onAction(indCliente, 'whatsapp', 'contato')} className="px-3 py-1.5 text-xs bg-white text-gray-800 border border-gray-300 rounded-apple hover:bg-gray-50 disabled:opacity-50">WhatsApp</button>
@@ -471,7 +471,6 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                 <div key={b.batchId} className="border border-gray-200 rounded-apple p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm">{b.canal === 'email' ? '📧' : '💬'}</span>
                       <span className="text-sm font-medium text-gray-900">
                         {b.canal === 'email' ? 'Email' : 'WhatsApp'} — {b.total} destinatários
                       </span>
@@ -483,10 +482,10 @@ const AutomacoesView: React.FC<AutomacoesViewProps> = ({
                     }`}>{b.status === 'done' ? 'Concluído' : b.status === 'running' ? 'Enviando' : 'Cancelado'}</span>
                   </div>
                   <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
-                    <span>✅ {b.sent} enviados</span>
-                    <span>❌ {b.failed} falhas</span>
-                    <span>📅 {new Date(b.startedAt).toLocaleString('pt-BR')}</span>
-                    {b.finishedAt && <span>⏱ {Math.round((new Date(b.finishedAt).getTime() - new Date(b.startedAt).getTime()) / 1000)}s</span>}
+                    <span className="text-green-600 dark:text-green-400 font-medium">{b.sent} enviados</span>
+                    <span className={b.failed > 0 ? "text-red-600 dark:text-red-400 font-medium" : ""}>{b.failed} falhas</span>
+                    <span>{new Date(b.startedAt).toLocaleString('pt-BR')}</span>
+                    {b.finishedAt && <span>{Math.round((new Date(b.finishedAt).getTime() - new Date(b.startedAt).getTime()) / 1000)}s</span>}
                   </div>
                   {b.errors.length > 0 && (
                     <details className="mt-2">

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, PieChart, Pie } from 'recharts'
 import WhatsAppIcon from '../icons/WhatsAppIcon'
+import { PhoneIcon, EnvelopeIcon, UserGroupIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor, Interacao, DashboardMetrics, Atividade, Produto, Tarefa, Pedido } from '../../types'
 import { stageLabels } from '../../utils/constants'
 import { calcularDuracoesEtapas } from '../../utils/etapas'
@@ -9,16 +10,16 @@ import { calcularDuracoesEtapas } from '../../utils/etapas'
 type PeriodoTipo = 'hoje' | 'mes' | 'ano'
 type TabKey = 'saude' | 'crescimento' | 'produtos' | 'mercado' | 'clientes' | 'funil' | 'equipe' | 'competitiva' | 'comercial'
 
-const TAB_LIST: { key: TabKey; label: string; icon: string }[] = [
-  { key: 'saude', label: 'Saúde', icon: '💊' },
-  { key: 'crescimento', label: 'Crescimento', icon: '📈' },
-  { key: 'produtos', label: 'Produtos', icon: '📦' },
-  { key: 'mercado', label: 'Mercado', icon: '🌍' },
-  { key: 'clientes', label: 'Clientes', icon: '👥' },
-  { key: 'funil', label: 'Funil', icon: '🔽' },
-  { key: 'equipe', label: 'Equipe', icon: '🏆' },
-  { key: 'competitiva', label: 'Competitiva', icon: '⚔️' },
-  { key: 'comercial', label: 'Comercial', icon: '📊' },
+const TAB_LIST: { key: TabKey; label: string }[] = [
+  { key: 'saude', label: 'Saúde' },
+  { key: 'crescimento', label: 'Crescimento' },
+  { key: 'produtos', label: 'Produtos' },
+  { key: 'mercado', label: 'Mercado' },
+  { key: 'clientes', label: 'Clientes' },
+  { key: 'funil', label: 'Funil' },
+  { key: 'equipe', label: 'Equipe' },
+  { key: 'competitiva', label: 'Competitiva' },
+  { key: 'comercial', label: 'Comercial' },
 ]
 
 const MONTHS_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -54,7 +55,7 @@ function getDateRange(tipo: PeriodoTipo, selMonth: number, selYear: number): { s
 
 const fmt = (v: number) => v > 0 ? `R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}` : 'R$ 0'
 const fmtK = (v: number) => `${(v / 1000).toFixed(0)}k`
-const medals = ['🥇', '🥈', '🥉']
+const posTons = ['bg-amber-100 text-amber-700', 'bg-gray-200 text-gray-600', 'bg-orange-100 text-orange-700']
 
 // ── KPI Card ──
 const KPI: React.FC<{ label: string; value: string | number; sub?: string; color?: string }> = ({ label, value, sub, color }) => (
@@ -68,7 +69,7 @@ const KPI: React.FC<{ label: string; value: string | number; sub?: string; color
 // ── Ranking Row ──
 const RankRow: React.FC<{ i: number; nome: string; value: string; pct: number; barColor: string; sub?: string }> = ({ i, nome, value, pct, barColor, sub }) => (
   <div className="flex items-center gap-3">
-    <span className="text-lg w-8 text-center flex-shrink-0 font-bold">{medals[i] || `${i + 1}.`}</span>
+    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${posTons[i] || 'bg-gray-100 text-gray-400'}`}>{i + 1}</span>
     <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-semibold text-gray-900 truncate">{nome}</span>
@@ -240,13 +241,13 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📈 Receita Mensal (12 meses)</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Receita Mensal (12 meses)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={monthlyRev}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="mes" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} /><Tooltip formatter={(v: number) => [fmt(v), 'Receita']} /><Line type="monotone" dataKey="receita" stroke="#22C55E" strokeWidth={2.5} dot={{ r: 3 }} /></LineChart>
             </ResponsiveContainer>
           </div>
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">🏆 Top 10 Clientes (Receita)</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top 10 Clientes (Receita)</h3>
             {topClientes.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem pedidos confirmados no período</p> : (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={topClientes.map(c => ({ name: c.nome.length > 20 ? c.nome.slice(0, 20) + '…' : c.nome, valor: c.valor }))} layout="vertical">
@@ -295,13 +296,13 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Faturamento por Vendedor (Atual vs Anterior)</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Faturamento por Vendedor (Atual vs Anterior)</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={vendGrowth}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} /><Tooltip formatter={(v: number) => [fmt(v)]} /><Bar dataKey="atual" fill="#22C55E" name="Atual" radius={[4, 4, 0, 0]} /><Bar dataKey="anterior" fill="#D1D5DB" name="Anterior" radius={[4, 4, 0, 0]} /><Legend /></BarChart>
             </ResponsiveContainer>
           </div>
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">👤 Novos Clientes por Mês</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Novos Clientes por Mês</h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={newByMonth}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="mes" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 10 }} allowDecimals={false} /><Tooltip /><Bar dataKey="novos" fill="#3B82F6" name="Novos" radius={[6, 6, 0, 0]} /></BarChart>
             </ResponsiveContainer>
@@ -337,7 +338,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Receita por Produto</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Receita por Produto</h3>
             {prodArr.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={prodArr.slice(0, 10).map(p => ({ name: p.nome.length > 18 ? p.nome.slice(0, 18) + '…' : p.nome, receita: p.receita }))} layout="vertical">
@@ -347,7 +348,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
             )}
           </div>
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">🥧 Participação no Faturamento</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Participação no Faturamento</h3>
             {pieData.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : (
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart><Pie data={pieData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>{pieData.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip formatter={(v: number) => [fmt(v), 'Receita']} /></PieChart>
@@ -386,7 +387,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">🗺️ Receita por Estado</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">️ Receita por Estado</h3>
             {stateArr.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={stateArr}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} /><Tooltip formatter={(v: number) => [fmt(v), 'Receita']} /><Bar dataKey="receita" fill="#6366F1" radius={[6, 6, 0, 0]} /></BarChart>
@@ -394,7 +395,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
             )}
           </div>
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">🏙️ Top Cidades (Receita)</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">️ Top Cidades (Receita)</h3>
             {cityArr.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={cityArr} layout="vertical"><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={fmtK} /><YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={100} /><Tooltip formatter={(v: number) => [fmt(v), 'Receita']} /><Bar dataKey="receita" fill="#14B8A6" radius={[0, 6, 6, 0]} /></BarChart>
@@ -444,7 +445,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Classificação ABC</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Classificação ABC</h3>
             {abcData.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem pedidos confirmados</p> : (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={abcData}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 10 }} allowDecimals={false} /><Tooltip /><Bar dataKey="qtd" name="Clientes" radius={[6, 6, 0, 0]}>{abcData.map((e, i) => <Cell key={i} fill={e.fill} />)}</Bar></BarChart>
@@ -452,11 +453,11 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
             )}
           </div>
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Concentração de Receita</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Concentração de Receita</h3>
             <div className="flex flex-col items-center justify-center py-8">
               <p className="text-5xl font-bold text-gray-900">{concentracao}%</p>
               <p className="text-sm text-gray-500 mt-2">da receita vem dos Top 10 clientes</p>
-              {Number(concentracao) > 50 && <p className="text-xs text-orange-600 mt-1 font-medium">⚠️ Alta concentração — diversifique a carteira</p>}
+              {Number(concentracao) > 50 && <p className="text-xs text-orange-600 mt-1 font-medium">Alta concentração — diversifique a carteira</p>}
             </div>
           </div>
         </div>
@@ -490,7 +491,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
           <KPI label="Tempo Médio Fechamento" value={tempoMedio > 0 ? `${tempoMedio} dias` : '—'} />
         </div>
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">🔽 Funil de Conversão</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Funil de Conversão</h3>
           <div className="space-y-3">
             {funilData.map((d, i) => (
               <div key={d.name} className="flex items-center gap-3">
@@ -547,11 +548,11 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
       <div className="space-y-6">
         {/* Faturamento ranking — BIG */}
         <div className={`bg-gradient-to-br from-gray-900 to-gray-800 rounded-apple shadow-lg p-6 ${tvMode ? 'p-10' : ''}`}>
-          <h3 className={`font-bold text-white mb-6 ${tvMode ? 'text-3xl' : 'text-xl'}`}>🏆 Ranking Faturamento — {periodoLabel}</h3>
+          <h3 className={`font-bold text-white mb-6 ${tvMode ? 'text-3xl' : 'text-xl'}`}>Ranking Faturamento — {periodoLabel}</h3>
           <div className="space-y-4">
             {rankFaturamento.filter(v => v.valor > 0).slice(0, 8).map((v, i) => (
               <div key={v.id} className="flex items-center gap-4">
-                <span className={`flex-shrink-0 font-bold ${tvMode ? 'text-4xl' : 'text-2xl'}`}>{medals[i] || <span className="text-gray-400 text-lg">{i + 1}.</span>}</span>
+                <span className={`flex-shrink-0 rounded-full flex items-center justify-center font-bold ${tvMode ? 'w-12 h-12 text-xl' : 'w-9 h-9 text-sm'} ${i === 0 ? 'bg-amber-400/90 text-gray-900' : i === 1 ? 'bg-gray-300/80 text-gray-800' : i === 2 ? 'bg-orange-300/80 text-gray-800' : 'bg-white/10 text-gray-300'}`}>{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1">
                     <span className={`font-bold text-white truncate ${tvMode ? 'text-2xl' : 'text-base'}`}>{v.nome}</span>
@@ -567,15 +568,15 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
 
         {/* Activity rankings grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <RankSection title="Ligações" icon="📞" data={rankLigacoes} color="#3B82F6" />
-          <RankSection title="Emails" icon="📧" data={rankEmails} color="#8B5CF6" />
+          <RankSection title="Ligações" icon={<PhoneIcon className="h-4 w-4 text-gray-400" />} data={rankLigacoes} color="#3B82F6" />
+          <RankSection title="Emails" icon={<EnvelopeIcon className="h-4 w-4 text-gray-400" />} data={rankEmails} color="#8B5CF6" />
           <RankSection title="WhatsApp" icon={<WhatsAppIcon variant="filled" className="h-4 w-4" />} data={rankWhatsapp} color="#22C55E" />
-          <RankSection title="Reuniões" icon="🤝" data={rankReunioes} color="#F59E0B" />
+          <RankSection title="Reuniões" icon={<UserGroupIcon className="h-4 w-4 text-gray-400" />} data={rankReunioes} color="#F59E0B" />
         </div>
 
         {/* Conversão por vendedor */}
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Conversão por Vendedor</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Conversão por Vendedor</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={activeVendedores.map(v => {
               const leads = fc.filter(c => c.vendedorId === v.id).length
@@ -611,7 +612,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">🥧 Motivos de Perda</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Motivos de Perda</h3>
             {porCategoria.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Nenhum cliente perdido</p> : (
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart><Pie data={porCategoria} cx="50%" cy="50%" outerRadius={95} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>{porCategoria.map((e, i) => <Cell key={i} fill={e.fill} />)}</Pie><Tooltip /></PieChart>
@@ -619,7 +620,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
             )}
           </div>
           <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Perdas por Motivo</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Perdas por Motivo</h3>
             {porCategoria.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center">Sem dados</p> : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={porCategoria}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 10 }} allowDecimals={false} /><Tooltip /><Bar dataKey="value" name="Perdas" radius={[6, 6, 0, 0]}>{porCategoria.map((e, i) => <Cell key={i} fill={e.fill} />)}</Bar></BarChart>
@@ -885,7 +886,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
             </select>
           )}
           <button onClick={() => setTvMode(v => !v)} className={`px-3 py-1.5 text-xs font-medium rounded-apple border transition-all ${tvMode ? 'bg-red-600 text-white border-red-600' : 'bg-gray-900 text-white border-gray-900 hover:bg-gray-800'}`} data-testid="btn-tv">
-            {tvMode ? '✕ Sair TV' : '📺 Modo TV'}
+            {tvMode ? 'Sair TV' : 'Modo TV'}
           </button>
         </div>
       </div>
@@ -899,7 +900,7 @@ const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesPro
                 ? tvMode ? 'bg-white text-gray-900 shadow' : 'bg-primary-600 text-white shadow-sm'
                 : tvMode ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'
             }`}>
-            <span>{t.icon}</span>{t.label}
+            {t.label}
           </button>
         ))}
       </div>

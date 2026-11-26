@@ -156,7 +156,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
     const nome = loggedUser?.nome?.split(' ')[0] || 'Vendedor'
     const welcome: ChatMessage = {
       id: '0', role: 'assistant',
-      text: `Fala, ${nome}! 🚀\n\nEsse é o seu **Workspace**. Aqui você tem tudo na mão:\n- 🔍 Buscar clientes na barra lateral\n- 📱 Enviar WhatsApp\n- 📧 Enviar email\n- 📝 Adicionar observações\n- ✅ Criar tarefas rápidas\n\nTodas as ações ficam registradas no seu **histórico**. Me pergunte qualquer coisa sobre os dados do CRM!`,
+      text: `Fala, ${nome}!\n\nEsse é o seu **Workspace**. Aqui você tem tudo na mão:\n- 🔍 Buscar clientes na barra lateral\n- 📱 Enviar WhatsApp\n- 📧 Enviar email\n- 📝 Adicionar observações\n- ✅ Criar tarefas rápidas\n\nTodas as ações ficam registradas no seu **histórico**. Me pergunte qualquer coisa sobre os dados do CRM!`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     }
     loadConversation('workspace').then(saved => {
@@ -367,7 +367,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
     setWaSending(true)
     const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     const dur = `${Math.floor(voiceSeconds / 60).toString().padStart(2, '0')}:${(voiceSeconds % 60).toString().padStart(2, '0')}`
-    setWaMessages(prev => [...prev, { id: Date.now(), text: `🎙️ Áudio (${dur})`, from: 'me', time: now }])
+    setWaMessages(prev => [...prev, { id: Date.now(), text: `Áudio (${dur})`, from: 'me', time: now }])
     try {
       const reader = new FileReader()
       const b64 = await new Promise<string>((resolve, reject) => {
@@ -395,7 +395,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
         reader.readAsDataURL(file)
       })
       const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      setWaMessages(prev => [...prev, { id: Date.now(), text: `📷 [Imagem] ${file.name}`, from: 'me', time: now }])
+      setWaMessages(prev => [...prev, { id: Date.now(), text: `[Imagem] ${file.name}`, from: 'me', time: now }])
       const result = await sendUserWhatsAppImage(num, b64, file.type, undefined, selectedCliente?.id)
       if (!result.success) showToast?.('error', 'Falha ao enviar imagem')
       else { showToast?.('success', 'Imagem enviada!'); logAction('whatsapp', `Imagem WA para ${selectedCliente?.razaoSocial}`, selectedCliente?.razaoSocial) }
@@ -620,7 +620,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
             case 'startCall':
               if (action.payload?.phone) {
                 window.open(`tel:${action.payload.phone}`, '_self')
-                showToast?.('success', `📞 Ligação para ${action.payload.clienteNome || action.payload.phone}`)
+                showToast?.('success', `Ligação para ${action.payload.clienteNome || action.payload.phone}`)
               }
               break
           }
@@ -652,7 +652,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
     if (result.success) {
       logAction('whatsapp', `WhatsApp para ${selectedCliente.razaoSocial}: ${msg.substring(0, 60)}`, selectedCliente.razaoSocial)
     } else {
-      setWaMessages(prev => [...prev, { id: Date.now() + 1, text: '❌ ' + (result.error || 'Erro ao enviar'), from: 'system', time: now }])
+      setWaMessages(prev => [...prev, { id: Date.now() + 1, text: (result.error || 'Erro ao enviar'), from: 'system', time: now }])
       showToast?.('error', result.error || 'Erro ao enviar')
     }
     setWaSending(false)
@@ -752,9 +752,9 @@ const Workspace: React.FC<WorkspaceProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-gray-100 flex flex-col">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-purple-700 to-blue-700 shadow-lg flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 bg-primary-700 shadow-lg flex-shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-xl">🚀</span>
+          
           <div>
             <h1 className="text-sm font-bold text-white">Workspace — {loggedUser?.nome || 'Vendedor'}</h1>
             {selectedCliente && (
@@ -867,7 +867,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                   ) : !waConnected ? (
                     <div className="text-center py-6">
                       <p className="text-sm text-orange-600 mb-2">WhatsApp não conectado</p>
-                      <p className="text-xs text-gray-500">Conecte seu WhatsApp em Tarefas → 📱 Meu WhatsApp</p>
+                      <p className="text-xs text-gray-500">Conecte seu WhatsApp em Tarefas → Meu WhatsApp</p>
                     </div>
                   ) : (
                     <>
@@ -907,7 +907,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                             {/* Call info */}
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-gray-900">
-                                {callStatus === 'recording' ? '🔴 Gravando ligação...' :
+                                {callStatus === 'recording' ? 'Gravando ligação...' :
                                  callStatus === 'ended' ? 'Ligação encerrada' :
                                  'Erro na gravação'}
                               </p>
@@ -919,7 +919,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                               {callStatus === 'ended' && callDuration > 0 && (
                                 <p className="text-[10px] text-gray-500">
                                   Duração: {Math.floor(callDuration / 60)}m {callDuration % 60}s
-                                  {callSaving ? ' • Salvando...' : callRecordingUrl ? ' • Gravação salva ✅' : ''}
+                                  {callSaving ? ' • Salvando...' : callRecordingUrl ? ' • Gravação salva' : ''}
                                 </p>
                               )}
                               {callStatus === 'error' && callError && (
@@ -984,10 +984,10 @@ const Workspace: React.FC<WorkspaceProps> = ({
                                   {m.type === 'image' && m.mediaUrl ? (
                                     <div>
                                       <img src={m.mediaUrl} alt="Imagem" className="max-w-full rounded-md max-h-[240px] object-contain cursor-pointer" onClick={() => window.open(m.mediaUrl, '_blank')} />
-                                      {m.text && m.text !== '📷 Imagem' && <p className="whitespace-pre-wrap break-words leading-relaxed mt-1">{m.text}</p>}
+                                      {m.text && m.text !== '[Imagem]' && <p className="whitespace-pre-wrap break-words leading-relaxed mt-1">{m.text}</p>}
                                     </div>
                                   ) : m.type === 'image' ? (
-                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '📷 Imagem'}</p>
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '[Imagem]'}</p>
                                   ) : null}
                                   {/* Audio */}
                                   {m.type === 'audio' && m.mediaUrl ? (
@@ -997,7 +997,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                                       </audio>
                                     </div>
                                   ) : m.type === 'audio' ? (
-                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '🎤 Áudio'}</p>
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '[Áudio]'}</p>
                                   ) : null}
                                   {/* Video */}
                                   {m.type === 'video' && m.mediaUrl ? (
@@ -1005,16 +1005,16 @@ const Workspace: React.FC<WorkspaceProps> = ({
                                       <video controls preload="none" className="max-w-full rounded-md max-h-[200px]">
                                         <source src={m.mediaUrl} type={m.mimetype || 'video/mp4'} />
                                       </video>
-                                      {m.text && m.text !== '🎥 Vídeo' && <p className="whitespace-pre-wrap break-words leading-relaxed mt-1">{m.text}</p>}
+                                      {m.text && m.text !== '[Vídeo]' && <p className="whitespace-pre-wrap break-words leading-relaxed mt-1">{m.text}</p>}
                                     </div>
                                   ) : m.type === 'video' ? (
-                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '🎥 Vídeo'}</p>
+                                    <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text || '[Vídeo]'}</p>
                                   ) : null}
                                   {/* Document */}
                                   {m.type === 'document' ? (
                                     m.mediaUrl ? (
                                       <a href={m.mediaUrl} download className="flex items-center gap-1.5 text-blue-600 hover:underline">
-                                        <span>📎</span><span>{m.text}</span>
+                                        <span>{m.text}</span>
                                       </a>
                                     ) : (
                                       <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-500 italic">{m.text}</p>
@@ -1293,10 +1293,10 @@ const Workspace: React.FC<WorkspaceProps> = ({
         {/* Center — AI Chat */}
         <div className="flex-1 flex flex-col bg-white overflow-hidden">
           {/* Chat header */}
-          <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-blue-600 flex-shrink-0">
+          <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-200 bg-primary-700 flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-sm">🤖</span>
+                <span className="text-sm text-white font-bold">IA</span>
               </div>
               <p className="text-sm font-semibold text-white">Assistente IA — Workspace</p>
             </div>
@@ -1304,7 +1304,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
               onClick={() => {
                 setMessages([{
                   id: '0', role: 'assistant',
-                  text: `Conversa limpa! 🔄 Os dados continuam carregados. Manda aí, ${loggedUser?.nome?.split(' ')[0] || ''}!`,
+                  text: `Conversa limpa! Os dados continuam carregados. Manda aí, ${loggedUser?.nome?.split(' ')[0] || ''}!`,
                   timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                 }])
                 clearConversation('workspace').catch(() => {})
@@ -1321,8 +1321,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
             {messages.map(msg => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'assistant' && (
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
-                    <span className="text-sm">🤖</span>
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
+                    <span className="text-sm text-white font-bold">IA</span>
                   </div>
                 )}
                 <div className={`max-w-[80%] group relative`}>
@@ -1351,7 +1351,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 </div>
                 {msg.role === 'user' && (
                   <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 ml-2 mt-1">
-                    <span className="text-sm">👤</span>
+                    <span className="text-xs text-gray-500 font-bold">EU</span>
                   </div>
                 )}
               </div>
@@ -1359,8 +1359,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
             {aiLoading && (
               <div className="flex justify-start">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
-                  <span className="text-sm">🤖</span>
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
+                  <span className="text-sm text-white font-bold">IA</span>
                 </div>
                 <div className="bg-gray-50 border border-gray-200 rounded-apple rounded-bl-none px-4 py-3">
                   <div className="flex items-center gap-1.5">
@@ -1374,7 +1374,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
 
             {aiError && (
               <div className="mx-auto max-w-md bg-red-50 border border-red-200 rounded-apple px-4 py-3 text-center">
-                <p className="text-sm text-red-700">⚠️ {aiError}</p>
+                <p className="text-sm text-red-700">{aiError}</p>
                 <button onClick={() => setAiError(null)} className="text-xs text-red-500 underline mt-1">Fechar</button>
               </div>
             )}
@@ -1438,7 +1438,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
               <button
                 onClick={() => sendAIMessage(aiInput)}
                 disabled={!aiInput.trim() || aiLoading}
-                className="flex-shrink-0 w-11 h-11 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
+                className="flex-shrink-0 w-11 h-11 bg-primary-700 hover:bg-primary-800 disabled:opacity-40 text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
               >
                 <PaperAirplaneIcon className="h-5 w-5" />
               </button>
@@ -1456,13 +1456,13 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 <p className="text-sm font-bold text-gray-900">{selectedCliente.razaoSocial}</p>
                 {selectedCliente.nomeFantasia && <p className="text-xs text-gray-500">{selectedCliente.nomeFantasia}</p>}
                 <div className="mt-2 space-y-1">
-                  <p className="text-xs text-gray-600">📍 {selectedCliente.etapa}</p>
+                  <p className="text-xs text-gray-600">{selectedCliente.etapa}</p>
                   <p className="text-xs text-gray-600">⭐ Score: {selectedCliente.score || 0}</p>
-                  <p className="text-xs text-gray-600">📅 Inativo: {selectedCliente.diasInativo || 0} dias</p>
-                  {selectedCliente.contatoNome && <p className="text-xs text-gray-600">👤 {selectedCliente.contatoNome}</p>}
-                  {selectedCliente.contatoTelefone && <p className="text-xs text-gray-600">📞 {selectedCliente.contatoTelefone}</p>}
-                  {selectedCliente.contatoEmail && <p className="text-xs text-gray-600">📧 {selectedCliente.contatoEmail}</p>}
-                  {selectedCliente.valorEstimado && <p className="text-xs text-gray-600">💰 R$ {selectedCliente.valorEstimado.toLocaleString('pt-BR')}</p>}
+                  <p className="text-xs text-gray-600">Inativo: {selectedCliente.diasInativo || 0} dias</p>
+                  {selectedCliente.contatoNome && <p className="text-xs text-gray-600">{selectedCliente.contatoNome}</p>}
+                  {selectedCliente.contatoTelefone && <p className="text-xs text-gray-600">{selectedCliente.contatoTelefone}</p>}
+                  {selectedCliente.contatoEmail && <p className="text-xs text-gray-600">{selectedCliente.contatoEmail}</p>}
+                  {selectedCliente.valorEstimado && <p className="text-xs text-gray-600">R$ {selectedCliente.valorEstimado.toLocaleString('pt-BR')}</p>}
                 </div>
                 <div className="flex gap-1 mt-3">
                   <button onClick={() => setActiveTool('whatsapp')} className="flex-1 px-2 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100 inline-flex items-center justify-center gap-1"><WhatsAppIcon variant="outline" className="h-3 w-3" /> WA</button>
@@ -1507,13 +1507,13 @@ const Workspace: React.FC<WorkspaceProps> = ({
           <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-1 flex-shrink-0">
             <p className="text-[10px] text-gray-400 font-semibold uppercase">Dados CRM</p>
             <div className="flex justify-between text-xs text-gray-600">
-              <span>👥 Clientes</span><span className="font-bold">{clientes.length}</span>
+              <span>Clientes</span><span className="font-bold">{clientes.length}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-600">
-              <span>📋 Tarefas</span><span className="font-bold">{tarefas.filter(t => t.status === 'pendente').length} pendentes</span>
+              <span>Tarefas</span><span className="font-bold">{tarefas.filter(t => t.status === 'pendente').length} pendentes</span>
             </div>
             <div className="flex justify-between text-xs text-gray-600">
-              <span>🛒 Pedidos</span><span className="font-bold">{pedidos.length}</span>
+              <span>Pedidos</span><span className="font-bold">{pedidos.length}</span>
             </div>
           </div>
         </div>

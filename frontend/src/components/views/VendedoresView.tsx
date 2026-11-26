@@ -1,5 +1,5 @@
 import React from 'react'
-import { PlusIcon, XMarkIcon, ClockIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, ClockIcon, EnvelopeIcon, PhoneIcon, PencilIcon, ChatBubbleLeftIcon, DocumentTextIcon, CheckCircleIcon, SparklesIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import type { Vendedor, Cliente } from '../../types'
 import { fetchVendedorHistorico, updateVendedorCredentials, type VendedorHistoricoItem } from '../../lib/botApi'
 import { formatTelefone } from '../../utils/validators'
@@ -219,8 +219,8 @@ const VendedoresView: React.FC<{
                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${selectedVendedor.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{selectedVendedor.ativo ? 'Ativo' : 'Inativo'}</span>
               </div>
               <div className="flex flex-col sm:flex-row gap-1 sm:gap-6 mt-3 text-sm text-gray-600">
-                <span className="truncate">📧 {selectedVendedor.email}</span>
-                <span>📞 {selectedVendedor.telefone}</span>
+                <span className="truncate inline-flex items-center gap-1.5"><EnvelopeIcon className="h-3.5 w-3.5 text-gray-400" /> {selectedVendedor.email}</span>
+                <span className="inline-flex items-center gap-1.5"><PhoneIcon className="h-3.5 w-3.5 text-gray-400" /> {selectedVendedor.telefone}</span>
               </div>
             </div>
             <button onClick={() => onUpdateVendedor({ ...selectedVendedor, ativo: !selectedVendedor.ativo })} className={`px-4 py-2 rounded-apple text-sm font-semibold self-start ${selectedVendedor.ativo ? 'bg-red-50 text-red-700 border-2 border-red-200 hover:bg-red-100' : 'bg-green-600 text-white hover:bg-green-700'}`}>
@@ -259,18 +259,18 @@ const VendedoresView: React.FC<{
 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">🔐 Credenciais de Acesso</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Credenciais de Acesso</h3>
             {isGerente && !editingCredenciais && (
               <button
                 onClick={() => { setEditingCredenciais(true); setEditEmail(selectedVendedor.email); setEditSenha(''); setCredenciaisError('') }}
                 className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"
-              >✏️ Editar Login/Senha</button>
+              ><span className="inline-flex items-center gap-1.5"><PencilIcon className="h-3.5 w-3.5" /> Editar Login/Senha</span></button>
             )}
           </div>
 
           {credenciaisSuccess && (
             <div className="mb-4 p-3 rounded-apple bg-green-50 border border-green-200 text-sm text-green-700 font-medium">
-              ✅ {credenciaisSuccess}
+              {credenciaisSuccess}
             </div>
           )}
 
@@ -309,9 +309,9 @@ const VendedoresView: React.FC<{
 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">🎯 Metas Individuais</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Metas Individuais</h3>
             {!editingMetas ? (
-              <button onClick={() => { setEditingMetas(true); setEditMetaVendas(String(selectedVendedor.metaVendas)); setEditMetaLeads(String(selectedVendedor.metaLeads)); setEditMetaConversao(String(selectedVendedor.metaConversao)) }} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium">✏️ Editar Metas</button>
+              <button onClick={() => { setEditingMetas(true); setEditMetaVendas(String(selectedVendedor.metaVendas)); setEditMetaLeads(String(selectedVendedor.metaLeads)); setEditMetaConversao(String(selectedVendedor.metaConversao)) }} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"><span className="inline-flex items-center gap-1.5"><PencilIcon className="h-3.5 w-3.5" /> Editar Metas</span></button>
             ) : (
               <div className="flex gap-2">
                 <button onClick={() => setEditingMetas(false)} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50">Cancelar</button>
@@ -378,8 +378,8 @@ const VendedoresView: React.FC<{
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {historico.map(a => (
                   <div key={a.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-apple border border-gray-200">
-                    <span className="text-lg flex-shrink-0 mt-0.5">
-                      {a.tipo === 'whatsapp' ? '📱' : a.tipo === 'email' ? '📧' : a.tipo === 'nota' ? '📝' : a.tipo === 'tarefa' ? '✅' : a.tipo === 'ia' ? '🤖' : a.tipo === 'ligacao' ? '📞' : '📋'}
+                    <span className="flex-shrink-0 mt-0.5 text-gray-400">
+                      {a.tipo === 'whatsapp' ? <ChatBubbleLeftIcon className="h-4 w-4" /> : a.tipo === 'email' ? <EnvelopeIcon className="h-4 w-4" /> : a.tipo === 'nota' ? <DocumentTextIcon className="h-4 w-4" /> : a.tipo === 'tarefa' ? <CheckCircleIcon className="h-4 w-4" /> : a.tipo === 'ia' ? <SparklesIcon className="h-4 w-4" /> : a.tipo === 'ligacao' ? <PhoneIcon className="h-4 w-4" /> : <ClipboardDocumentListIcon className="h-4 w-4" />}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-800">{a.descricao}</p>
@@ -453,14 +453,14 @@ const VendedoresView: React.FC<{
       </div>
 
       <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200"><h3 className="text-lg font-semibold text-gray-900">🏆 Ranking da Equipe</h3></div>
+        <div className="px-6 py-4 border-b border-gray-200"><h3 className="text-lg font-semibold text-gray-900">Ranking da Equipe</h3></div>
         <div className="p-6">
           <div className="space-y-3">
             {ranking.map((v, index) => {
-              const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}º`
+              const pos = index + 1
               return (
-                <div key={v.id} className={`flex items-center gap-4 p-4 rounded-apple border-2 transition-all ${index === 0 ? 'bg-yellow-50 border-yellow-200' : index === 1 ? 'bg-gray-50 border-gray-300' : index === 2 ? 'bg-orange-50 border-orange-200' : 'bg-white border-gray-200'}`}>
-                  <div className="text-2xl w-10 text-center font-bold">{medal}</div>
+                <div key={v.id} className="flex items-center gap-4 p-4 rounded-apple border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-transparent transition-all hover:shadow-apple-sm">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${index === 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400' : index === 1 ? 'bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-gray-300' : index === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400' : 'bg-gray-100 text-gray-400 dark:bg-white/5 dark:text-gray-500'}`}>{pos}</div>
                   <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center"><span className="text-sm font-bold text-primary-700">{v.avatar}</span></div>
                   <div className="flex-1"><p className="font-semibold text-gray-900">{v.nome}</p><p className="text-xs text-gray-500">{getCargoLabel(v.cargo)} • {v.metrics.totalLeads} clientes</p></div>
                   <div className="text-right"><p className="text-lg font-bold text-gray-900">R$ {v.metrics.valorPipeline.toLocaleString('pt-BR')}</p><p className="text-xs text-gray-500">Conversão: {v.metrics.taxaConversao.toFixed(1)}%</p></div>
@@ -486,7 +486,7 @@ const VendedoresView: React.FC<{
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Cargo</label><select value={newCargo} onChange={(e) => setNewCargo(e.target.value as Vendedor['cargo'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="vendedor">Vendedor</option><option value="sdr">SDR</option><option value="gerente">Gerente</option></select></div>
               <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm font-semibold text-gray-700 mb-3">🔐 Credenciais de Acesso</p>
+                <p className="text-sm font-semibold text-gray-700 mb-3">Credenciais de Acesso</p>
                 <p className="text-xs text-gray-500 mb-3">O email acima será o login. Defina a senha abaixo (mínimo 6 caracteres).</p>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Senha *</label>

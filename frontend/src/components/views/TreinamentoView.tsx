@@ -536,9 +536,6 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                 <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 shadow-sm rounded-bl-sm'}`}>
                   {m.content}
                 </div>
-                {m.role === 'user' && (
-                  <span className="text-xl ml-2 flex-shrink-0 mt-1">🧑‍💼</span>
-                )}
               </div>
             ))}
             {loading && (
@@ -665,9 +662,9 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             </div>
             <div className="p-6 space-y-4">
               {[
-                { label: '💰 Preço Referência', value: produtoVer.preco },
-                { label: '🍳 Aplicações', value: produtoVer.aplicacao },
-                { label: '⭐ Diferencial de Venda', value: produtoVer.dif },
+                { label: 'Preço Referência', value: produtoVer.preco },
+                { label: 'Aplicações', value: produtoVer.aplicacao },
+                { label: 'Diferencial de Venda', value: produtoVer.dif },
               ].map(row => (
                 <div key={row.label} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
                   <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">{row.label}</p>
@@ -675,7 +672,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                 </div>
               ))}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-                <p className="text-xs font-bold text-blue-700 dark:text-blue-300 mb-1">💡 Argumento de Venda Sugerido</p>
+                <p className="text-xs font-bold text-blue-700 dark:text-blue-300 mb-1">Argumento de Venda Sugerido</p>
                 <p className="text-sm text-blue-800 dark:text-blue-200">"Nosso {produtoVer.nome.split(' ').slice(0,3).join(' ')} tem {produtoVer.dif.toLowerCase()}, o que garante {produtoVer.destaque.toLowerCase()} para o seu negócio."</p>
               </div>
               <button
@@ -772,7 +769,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${notaColor(s.nota)}`}>{s.nota ?? '?'}</div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{m?.emoji} {m?.titulo}</p>
-                          <p className="text-xs text-gray-400">{isGerente && (s as any).vendedorNome ? `👤 ${(s as any).vendedorNome} · ` : ''}{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · Início {new Date(new Date(s.createdAt).getTime() - s.duracao * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs text-gray-400">{isGerente && (s as any).vendedorNome ? `${(s as any).vendedorNome} · ` : ''}{p?.emoji} {p?.nome} · {Math.floor(s.duracao / 60)}min · Início {new Date(new Date(s.createdAt).getTime() - s.duracao * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                       </div>
                       <ChevronRightIcon className="h-4 w-4 text-gray-300 group-hover:text-primary-500 transition-colors" />
@@ -818,7 +815,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                     <div className="max-h-64 overflow-y-auto space-y-2 border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-gray-50 dark:bg-gray-900">
                       {sessaoHistoricoVer.msgs.map((msg, i) => (
                         <p key={i} className={`text-xs ${msg.role === 'user' ? 'text-primary-700 dark:text-primary-300' : 'text-gray-600 dark:text-gray-400'}`}>
-                          <span className="font-bold">{msg.role === 'user' ? '🧑‍💼 Você' : `${p?.emoji} ${p?.nome?.split(' ')[0]}`}:</span> {msg.content}
+                          <span className="font-bold">{msg.role === 'user' ? 'Você' : `${p?.emoji} ${p?.nome?.split(' ')[0]}`}:</span> {msg.content}
                         </p>
                       ))}
                     </div>
@@ -1150,7 +1147,7 @@ REGRAS PARA A NOTA FINAL:
       {callStatus === 'idle' && (
         <>
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full mb-3">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500 rounded-full mb-3">
               <PhoneIcon className="h-8 w-8 text-white" />
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Simulação de Ligação</h2>
@@ -1243,7 +1240,7 @@ REGRAS PARA A NOTA FINAL:
                 <span className="text-xl font-mono font-bold">{fmt(duracao)}</span>
               </div>
               <p className="text-green-200 text-xs mt-1">
-                {conversation.isSpeaking ? '🗣️ Cliente falando...' : '🎙️ Ouvindo você...'}
+                {conversation.isSpeaking ? 'Cliente falando...' : 'Ouvindo você...'}
               </p>
             </div>
           </div>
@@ -1272,7 +1269,7 @@ REGRAS PARA A NOTA FINAL:
                 <div className={`max-w-[80%] px-3 py-2 rounded-xl text-sm ${msg.role === 'user'
                   ? 'bg-primary-600 text-white'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'}`}>
-                  <p className="text-[10px] font-medium opacity-70 mb-0.5">{msg.role === 'user' ? '🎙️ Você' : `${perfilAtual?.emoji} ${perfilAtual?.nome}`}</p>
+                  <p className="text-[10px] font-medium opacity-70 mb-0.5">{msg.role === 'user' ? 'Você' : `${perfilAtual?.emoji} ${perfilAtual?.nome}`}</p>
                   {msg.text}
                 </div>
               </div>
@@ -1385,7 +1382,7 @@ REGRAS PARA A NOTA FINAL:
                     {transcript.map((msg, i) => (
                       <div key={i} className="text-sm">
                         <span className={`font-medium ${msg.role === 'user' ? 'text-primary-600' : 'text-gray-600 dark:text-gray-400'}`}>
-                          {msg.role === 'user' ? '🎙️ Você: ' : `${perfilAtual?.emoji} ${perfilAtual?.nome}: `}
+                          {msg.role === 'user' ? 'Você: ' : `${perfilAtual?.emoji} ${perfilAtual?.nome}: `}
                         </span>
                         <span className="text-gray-700 dark:text-gray-300">{msg.text}</span>
                       </div>

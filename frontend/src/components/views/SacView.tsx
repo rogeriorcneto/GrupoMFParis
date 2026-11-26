@@ -15,10 +15,10 @@ interface Props {
 }
 
 const statusLabel: Record<SacStatus['status'], string> = {
-  connected: '✅ Conectado',
-  connecting: '🔄 Conectando...',
-  qr: '📷 Aguardando leitura do QR',
-  disconnected: '⚫ Desconectado',
+  connected: 'Conectado',
+  connecting: 'Conectando...',
+  qr: 'Aguardando leitura do QR',
+  disconnected: 'Desconectado',
 }
 
 export default function SacView({ loggedUser, showToast }: Props) {
@@ -106,7 +106,7 @@ export default function SacView({ loggedUser, showToast }: Props) {
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">💬 SAC — Pesquisa de Satisfação</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">SAC — Pesquisa de Satisfação</h1>
         <p className="text-sm text-gray-500 mt-1">
           Quando um pedido muda para <b>entregue</b> no Omie, o número do SAC envia automaticamente
           a mensagem abaixo ao WhatsApp do cliente. A resposta (nota 1 a 5) é registrada no pedido.
@@ -117,7 +117,10 @@ export default function SacView({ loggedUser, showToast }: Props) {
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-gray-900 dark:text-gray-100">WhatsApp do SAC</h2>
-          <span className="text-sm">{statusLabel[status?.status ?? 'disconnected']}</span>
+          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+            <span className={`w-2 h-2 rounded-full ${status?.status === 'connected' ? 'bg-green-500' : status?.status === 'connecting' || status?.status === 'qr' ? 'bg-amber-400' : 'bg-gray-300'}`} />
+            {statusLabel[status?.status ?? 'disconnected']}
+          </span>
         </div>
 
         {status?.connected && (
@@ -194,16 +197,16 @@ export default function SacView({ loggedUser, showToast }: Props) {
           <button
             onClick={salvarConfig}
             disabled={saving || !template.trim()}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium disabled:opacity-50"
+            className="px-4 py-2 rounded-xl bg-primary-700 text-white hover:bg-primary-800 text-sm font-medium disabled:opacity-50 transition-colors"
           >
-            {saving ? 'Salvando...' : '💾 Salvar configuração'}
+            {saving ? 'Salvando...' : 'Salvar configuração'}
           </button>
         )}
       </div>
 
       {!ativo && isGerente && (
         <p className="text-sm text-amber-600 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
-          ⚠️ O SAC está <b>inativo</b> — pedidos entregues não receberão a pesquisa até você ativar.
+          O SAC está <b>inativo</b> — pedidos entregues não receberão a pesquisa até você ativar.
         </p>
       )}
     </div>

@@ -389,7 +389,7 @@ function PedidosView({ pedidos, clientes, produtos, vendedores, loggedUser, onAd
               </button>
               <div className="flex gap-1.5">
                 <button onClick={handleGerarProposta} disabled={!selectedClienteId || itensPedido.length === 0}
-                  className="flex-1 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5">
+                  className="flex-1 py-2 bg-primary-700 hover:bg-primary-800 disabled:opacity-40 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors">
                   <DocumentTextIcon className="h-3.5 w-3.5" /> Proposta PDF
                 </button>
                 <button onClick={() => handleEnviarPedido('rascunho')} disabled={!selectedClienteId || itensPedido.length === 0 || isSaving}

@@ -6,7 +6,7 @@ import {
   CheckCircleIcon, ClockIcon, FireIcon, CalendarDaysIcon,
   ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, FunnelIcon, BoltIcon,
   ExclamationTriangleIcon, ArrowPathIcon, BuildingOfficeIcon,
-  EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon,
+  EllipsisHorizontalIcon, InboxIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, UserGroupIcon, UserIcon, MapPinIcon, LinkIcon,
   ArrowUturnRightIcon, ClipboardDocumentListIcon, ArrowTopRightOnSquareIcon, PencilIcon, TrashIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
@@ -38,14 +38,14 @@ import {
 import * as XLSX from 'xlsx'
 
 // ─── Sub-componente: TarefaCard ───────────────────────────────────────────────
-const TIPO_CONFIG: Record<string, { icon: string; label: string; color: string; ring: string }> = {
-  ligacao:   { icon: '📞', label: 'Ligação',   color: 'bg-violet-50 border-violet-200', ring: 'ring-violet-400' },
-  reuniao:   { icon: '🤝', label: 'Reunião',   color: 'bg-blue-50 border-blue-200',    ring: 'ring-blue-400' },
-  email:     { icon: '📧', label: 'E-mail',    color: 'bg-sky-50 border-sky-200',      ring: 'ring-sky-400' },
-  whatsapp:  { icon: '💬', label: 'WhatsApp',  color: 'bg-green-50 border-green-200',  ring: 'ring-green-400' },
-  visita:    { icon: '🏢', label: 'Visita',    color: 'bg-teal-50 border-teal-200',     ring: 'ring-teal-400' },
-  'follow-up':{ icon: '🔄', label: 'Follow-up', color: 'bg-amber-50 border-amber-200', ring: 'ring-amber-400' },
-  outro:     { icon: '📋', label: 'Outro',     color: 'bg-gray-50 border-gray-200',    ring: 'ring-gray-400' },
+const TIPO_CONFIG: Record<string, { Icon: React.ComponentType<{ className?: string }>; label: string; color: string; ring: string }> = {
+  ligacao:   { Icon: PhoneIcon,                label: 'Ligação',   color: 'bg-violet-50 border-violet-200', ring: 'ring-violet-400' },
+  reuniao:   { Icon: UserGroupIcon,            label: 'Reunião',   color: 'bg-blue-50 border-blue-200',    ring: 'ring-blue-400' },
+  email:     { Icon: EnvelopeIcon,             label: 'E-mail',    color: 'bg-sky-50 border-sky-200',      ring: 'ring-sky-400' },
+  whatsapp:  { Icon: ChatBubbleLeftIcon,       label: 'WhatsApp',  color: 'bg-green-50 border-green-200',  ring: 'ring-green-400' },
+  visita:    { Icon: BuildingOfficeIcon,       label: 'Visita',    color: 'bg-teal-50 border-teal-200',     ring: 'ring-teal-400' },
+  'follow-up':{ Icon: ArrowPathIcon,           label: 'Follow-up', color: 'bg-amber-50 border-amber-200', ring: 'ring-amber-400' },
+  outro:     { Icon: ClipboardDocumentListIcon, label: 'Outro',    color: 'bg-gray-50 border-gray-200',    ring: 'ring-gray-400' },
 }
 
 const PRIORIDADE_CONFIG = {
@@ -187,9 +187,9 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 <BuildingOfficeIcon className="h-3.5 w-3.5 flex-shrink-0" />
                 {cliente.razaoSocial}
                 {tarefa.clienteId ? (
-                  <span className="text-green-600" title="Tarefa vinculada ao card">🔗</span>
+                  <LinkIcon className="h-3 w-3 text-green-600" />
                 ) : (
-                  <span className="text-amber-500" title="Tarefa não vinculada ao card">⚠️</span>
+                  <ExclamationTriangleIcon className="h-3 w-3 text-amber-500" />
                 )}
               </button>
             )}
@@ -252,7 +252,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                   onClick={() => cliente && onOpenClientePanel?.(cliente)}
                   title={cliente ? 'Abrir card do cliente' : ''}
                 >
-                  <span className="text-base">{cfg.icon}</span>
+                  <cfg.Icon className="h-4 w-4 text-gray-500 flex-shrink-0" />
                   <h4 className={`font-semibold text-gray-900 leading-snug ${done ? 'text-gray-500' : ''}`}>
                     {(() => {
                       const titulo = tarefa.titulo
@@ -300,7 +300,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                     <div className="space-y-1.5">
                       {tarefa.reagendamentos.map((r, i) => (
                         <div key={i} className="bg-orange-50 border border-orange-100 rounded-lg px-2.5 py-1.5 text-xs">
-                          <p className="font-semibold text-orange-700">❌ {r.motivo}</p>
+                          <p className="font-semibold text-orange-700">{r.motivo}</p>
                           <p className="text-gray-400 mt-0.5">
                             Era: {r.dataOriginal}{r.horaOriginal ? ` às ${r.horaOriginal}` : ''} · Registrado em {new Date(r.reagendadoEm).toLocaleDateString('pt-BR')}
                           </p>
@@ -311,13 +311,13 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 )}
                 {cliente && (
                   <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                    {cliente.contatoNome && <span>👤 {cliente.contatoNome}</span>}
+                    {cliente.contatoNome && <span className="inline-flex items-center gap-1"><UserIcon className="h-3 w-3 text-gray-400" /> {cliente.contatoNome}</span>}
                     {(cliente.contatoTelefone || cliente.contatoCelular) && (
-                      <span>📱 {cliente.contatoTelefone || cliente.contatoCelular}</span>
+                      <span className="inline-flex items-center gap-1"><PhoneIcon className="h-3 w-3 text-gray-400" /> {cliente.contatoTelefone || cliente.contatoCelular}</span>
                     )}
-                    {cliente.contatoEmail && <span className="col-span-2">✉️ {cliente.contatoEmail}</span>}
+                    {cliente.contatoEmail && <span className="col-span-2 inline-flex items-center gap-1"><EnvelopeIcon className="h-3 w-3 text-gray-400" /> {cliente.contatoEmail}</span>}
                     {cliente.etapa && (
-                      <span className="col-span-2">📍 Etapa: <strong>{cliente.etapa}</strong></span>
+                      <span className="col-span-2 inline-flex items-center gap-1"><MapPinIcon className="h-3 w-3 text-gray-400" /> Etapa: <strong>{cliente.etapa}</strong></span>
                     )}
                   </div>
                 )}
@@ -692,7 +692,7 @@ const CalendarioView: React.FC<CalendarioViewProps> = ({ tarefas, clientes, onTa
                   className="w-full text-left p-3 rounded-xl border border-gray-200 hover:border-primary-300 hover:bg-primary-50/50 transition-all"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-lg">{cfg.icon}</span>
+                    <cfg.Icon className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900 truncate">{(() => {
                         const titulo = tarefa.titulo
@@ -700,8 +700,8 @@ const CalendarioView: React.FC<CalendarioViewProps> = ({ tarefas, clientes, onTa
                         return titulo
                       })()}</p>
                       <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        {tarefa.hora && <span>🕐 {tarefa.hora}</span>}
-                        {cliente && <span>👤 {cliente.razaoSocial}</span>}
+                        {tarefa.hora && <span className="inline-flex items-center gap-1"><ClockIcon className="h-3 w-3 text-gray-400" /> {tarefa.hora}</span>}
+                        {cliente && <span className="inline-flex items-center gap-1"><BuildingOfficeIcon className="h-3 w-3 text-gray-400" /> {cliente.razaoSocial}</span>}
                         <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
                           tarefa.prioridade === 'alta' ? 'bg-red-100 text-red-700' :
                           tarefa.prioridade === 'media' ? 'bg-amber-100 text-amber-700' :
@@ -1072,7 +1072,7 @@ const TarefasView: React.FC<{
         setDateFilter('todas')
         setDateRange(null)
         setStatusFilter('todos')
-        setImportStatus(`✅ ${saved.length} de ${novasTarefas.length} tarefas salvas · ${comCliente} com cliente (${semCliente} sem) · ${comVendedor} com vendedor · ${concluidas} concluídas / ${pendentes} pendentes`)
+        setImportStatus(`${saved.length} de ${novasTarefas.length} tarefas salvas · ${comCliente} com cliente (${semCliente} sem) · ${comVendedor} com vendedor · ${concluidas} concluídas / ${pendentes} pendentes`)
         setTimeout(() => setImportStatus(null), 8000)
       } catch (err) {
         logger.error('Erro ao importar tarefas:', err)
@@ -1495,12 +1495,12 @@ const TarefasView: React.FC<{
                 className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
               >
                 <option value="todos">Todos os tipos</option>
-                <option value="ligacao">📞 Ligações</option>
-                <option value="whatsapp">💬 WhatsApp</option>
-                <option value="email">📧 E-mails</option>
-                <option value="reuniao">🤝 Reuniões</option>
-                <option value="visita">🏢 Visitas</option>
-                <option value="follow-up">🔄 Follow-ups</option>
+                <option value="ligacao">Ligações</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">E-mails</option>
+                <option value="reuniao">Reuniões</option>
+                <option value="visita">Visitas</option>
+                <option value="follow-up">Follow-ups</option>
               </select>
 
               <button
@@ -1513,7 +1513,7 @@ const TarefasView: React.FC<{
 
               <button
                 onClick={() => { setShowWorkspace(true); setWsCliente(null) }}
-                className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-xl shadow-sm hover:shadow-md transition-all"
+                className="p-2 bg-primary-700 hover:bg-primary-800 text-white rounded-xl shadow-sm transition-all"
                 title="Workspace"
               >
                 <RocketLaunchIcon className="h-5 w-5" />
@@ -1945,7 +1945,7 @@ const TarefasView: React.FC<{
                 <div className="flex items-center gap-2">
                   <div className="w-28 h-2 bg-gray-200 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-700"
+                      className="h-full bg-green-500 rounded-full transition-all duration-700"
                       style={{ width: `${progressoHoje}%` }}
                     />
                   </div>
@@ -2040,9 +2040,9 @@ const TarefasView: React.FC<{
                   { id: Date.now() + 2, clienteId: meusClientes.find(c => c.etapa === 'negociacao')?.id, vendedorId: loggedUser?.id, titulo: 'Enviar proposta comercial', data: hoje, hora: '14:00', tipo: 'email', objetivo: 'oferta_venda', origem: 'manual', criadoPor: loggedUser?.nome || 'Vendedor', status: 'pendente', prioridade: 'alta' },
                 ]
                 sugeridas.forEach(t => onAddTarefa(t))
-                showToast?.('success', '✨ IA adicionou tarefas sugeridas para hoje!')
+                showToast?.('success', 'IA adicionou tarefas sugeridas para hoje!')
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-xl border border-purple-200 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-xl border border-primary-200 transition-colors"
             >
               <SparklesIcon className="h-3.5 w-3.5" />
               Sugerir com IA
@@ -2187,7 +2187,7 @@ const TarefasView: React.FC<{
                           : 'border-gray-200 text-gray-600 hover:border-gray-300'
                       }`}
                     >
-                      <span className="text-lg">{cfg.icon}</span>
+                      <cfg.Icon className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
                       {cfg.label}
                     </button>
                   ))}
@@ -2241,7 +2241,7 @@ const TarefasView: React.FC<{
                           : 'border-gray-200 text-gray-500 hover:border-gray-300'
                       }`}
                     >
-                      {p === 'alta' ? '🔴 Urgente' : p === 'media' ? '🟡 Normal' : '⚪ Baixa'}
+                      <span className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${p === 'alta' ? 'bg-red-500' : p === 'media' ? 'bg-amber-400' : 'bg-gray-300'}`} />{p === 'alta' ? 'Urgente' : p === 'media' ? 'Normal' : 'Baixa'}</span>
                     </button>
                   ))}
                 </div>

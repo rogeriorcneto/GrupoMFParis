@@ -1,5 +1,5 @@
 import React from 'react'
-import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon, PencilIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, MagnifyingGlassIcon, EllipsisVerticalIcon, FunnelIcon, ArrowsUpDownIcon, ViewColumnsIcon, CheckIcon, PencilIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, DocumentTextIcon, TrashIcon, ExclamationTriangleIcon, XMarkIcon, ClipboardDocumentListIcon } from '@heroicons/react/24/outline'
 import type { ClientesViewProps, Cliente } from '../../types'
 import { useDebounce } from '../../hooks/useDebounce'
 import { obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../../utils/situacaoCompra'
@@ -721,27 +721,27 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       }
 
       // Montar mensagem de resultado com base no que REALMENTE foi salvo no banco
-      let mensagem = `✅ Importação concluída!\n\n`
+      let mensagem = `Importação concluída!\n\n`
       if (resultado) {
-        mensagem += `📥 ${resultado.inserted} cliente(s) novo(s) salvo(s) no banco\n`
+        mensagem += `• ${resultado.inserted} cliente(s) novo(s) salvo(s) no banco\n`
         if (resultado.updated > 0) {
-          mensagem += `🔄 ${resultado.updated} cliente(s) atualizado(s)\n`
+          mensagem += `• ${resultado.updated} cliente(s) atualizado(s)\n`
         }
         if (resultado.errors.length > 0) {
-          mensagem += `\n❌ ${resultado.errors.length} cliente(s) NÃO foram salvos. Motivo:\n`
+          mensagem += `\n• ${resultado.errors.length} cliente(s) NÃO foram salvos. Motivo:\n`
           resultado.errors.slice(0, 3).forEach(e => { mensagem += `• ${e}\n` })
           if (resultado.errors.length > 3) {
             mensagem += `• ... e mais ${resultado.errors.length - 3}\n`
           }
         }
       } else if (novos.length > 0) {
-        mensagem += `📥 ${novos.length} cliente(s) novo(s) importado(s)\n`
+        mensagem += `• ${novos.length} cliente(s) novo(s) importado(s)\n`
       }
       if (atualizados.length > 0) {
-        mensagem += `🔄 ${atualizados.length} cliente(s) atualizado(s) (duplicados)\n`
+        mensagem += `• ${atualizados.length} cliente(s) atualizado(s) (duplicados)\n`
       }
       if (duplicados.length > 0) {
-        mensagem += `\n📋 Clientes duplicados encontrados:\n`
+        mensagem += `\nClientes duplicados encontrados:\n`
         duplicados.slice(0, 5).forEach(d => {
           mensagem += `• ${d.razaoSocial} (${d.cnpj})\n`
         })
@@ -751,7 +751,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       }
       
       if (isAgendor) {
-        mensagem += `\n📋 Formato Agendor detectado automaticamente.`
+        mensagem += `\nFormato Agendor detectado automaticamente.`
       }
 
       alert(mensagem)
@@ -955,21 +955,21 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
               <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
               <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-apple shadow-lg border border-gray-200 z-40 py-1">
                 <button onClick={() => { importRef.current?.click(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                  <span className="text-base">📥</span> Importar CSV
+                  <ArrowUpTrayIcon className="h-4 w-4 text-gray-400" /> Importar CSV
                 </button>
                 {isGerente && (
                   <button onClick={() => { setShowExportModal(true); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                    <span className="text-base">📊</span> Exportar (.xlsx)
+                    <ArrowDownTrayIcon className="h-4 w-4 text-gray-400" /> Exportar (.xlsx)
                   </button>
                 )}
                 <button onClick={() => { handleDownloadModelo(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                  <span className="text-base">📋</span> Baixar modelo CSV
+                  <DocumentTextIcon className="h-4 w-4 text-gray-400" /> Baixar modelo CSV
                 </button>
                 {isGerente && onDeleteAll && clientes.length > 0 && (
                   <>
                     <div className="border-t border-gray-100 my-1" />
                     <button onClick={() => { setShowDeleteAllModal(true); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
-                      <span className="text-base">🗑️</span> Apagar todos
+                      <TrashIcon className="h-4 w-4 text-red-400" /> Apagar todos
                     </button>
                   </>
                 )}
@@ -1114,7 +1114,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       {/* Empty state */}
       {filteredClientes.length === 0 && (
         <div className="bg-white rounded-apple border border-gray-200 py-16 text-center">
-          <div className="text-4xl mb-3">{scopedClientes.length === 0 ? '📋' : '🔍'}</div>
+          <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center">{scopedClientes.length === 0 ? <ClipboardDocumentListIcon className="h-6 w-6 text-gray-400" /> : <MagnifyingGlassIcon className="h-6 w-6 text-gray-400" />}</div>
           <p className="text-gray-600 font-medium">{scopedClientes.length === 0 ? 'Nenhum cliente cadastrado ainda' : 'Nenhum cliente encontrado'}</p>
           <p className="text-sm text-gray-400 mt-1">{scopedClientes.length === 0 ? 'Clique em "Novo Cliente" ou importe um CSV para começar.' : 'Tente ajustar os filtros ou o termo de busca.'}</p>
         </div>
@@ -1237,10 +1237,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                         </button>
                         <button
                           onClick={() => setDeleteClienteModal(cliente)}
-                          className="text-gray-300 hover:text-red-500 transition-colors p-1 rounded-apple text-sm"
+                          className="text-gray-300 hover:text-red-500 transition-colors p-1 rounded-apple"
                           title="Excluir"
                         >
-                          🗑️
+                          <TrashIcon className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -1296,10 +1296,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                           <div className="fixed inset-0 z-30" onClick={() => setOpenCardMenu(null)} />
                           <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-apple shadow-lg border border-gray-200 z-40 py-1">
                             <button onClick={() => { onEditCliente(cliente); setOpenCardMenu(null) }} className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                              ✏️ Editar
+                              <span className="inline-flex items-center gap-2"><PencilIcon className="h-4 w-4 text-gray-400" /> Editar</span>
                             </button>
                             <button onClick={() => { setDeleteClienteModal(cliente); setOpenCardMenu(null) }} className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left">
-                              🗑️ Excluir
+                              <span className="inline-flex items-center gap-2"><TrashIcon className="h-4 w-4 text-red-400" /> Excluir</span>
                             </button>
                           </div>
                         </>
@@ -1363,7 +1363,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-4">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-3xl">⚠️</span>
+                <ExclamationTriangleIcon className="h-8 w-8 text-red-500" />
               </div>
               <h3 className="text-lg font-bold text-gray-900">Apagar TODOS os clientes?</h3>
               <p className="text-sm text-gray-500 mt-2">
@@ -1409,7 +1409,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                 disabled={deleteConfirmText !== 'APAGAR' || isDeleting}
                 className={`flex-1 px-4 py-2.5 rounded-apple font-medium transition-colors ${deleteConfirmText === 'APAGAR' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
               >
-                {isDeleting ? '⏳ Apagando...' : '🗑️ Apagar Tudo'}
+                {isDeleting ? 'Apagando...' : 'Apagar Tudo'}
               </button>
             </div>
           </div>
@@ -1422,7 +1422,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           <div className="bg-white rounded-apple shadow-apple-lg max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-4">
               <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl">🗑️</span>
+                <TrashIcon className="h-6 w-6 text-red-500" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Excluir Cliente</h3>
               <p className="text-sm text-gray-600 mt-2">Tem certeza que deseja excluir <strong>{deleteClienteModal.razaoSocial}</strong>?</p>
@@ -1442,10 +1442,10 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-2">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">📊 Exportação Completa (.xlsx)</h3>
+                <h3 className="text-lg font-bold text-gray-900">Exportação Completa (.xlsx)</h3>
                 <p className="text-xs text-gray-500 mt-0.5">Selecione vendedor(es) e período para exportar Cadastro único ou Tarefas com Auditoria.</p>
               </div>
-              <button onClick={() => setShowExportModal(false)} className="text-gray-400 hover:text-gray-600 font-bold">✕</button>
+              <button onClick={() => setShowExportModal(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-5 w-5" /></button>
             </div>
 
             {isGerente && (
@@ -1520,7 +1520,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                 }}
                 className="w-full py-2.5 px-4 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-sm font-semibold flex items-center justify-between transition-colors disabled:opacity-50"
               >
-                <span>📋 Exportar Cadastro Completo (.xlsx)</span>
+                <span>Exportar Cadastro Completo (.xlsx)</span>
                 <span className="text-xs opacity-85">1 linha por CNPJ/CPF</span>
               </button>
 
@@ -1554,9 +1554,9 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                     setExpLoading(false)
                   }
                 }}
-                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-apple text-sm font-semibold flex items-center justify-between transition-colors disabled:opacity-50"
+                className="w-full py-2.5 px-4 bg-[#1D1D1F] hover:bg-black dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white rounded-apple text-sm font-semibold flex items-center justify-between transition-colors disabled:opacity-50"
               >
-                <span>✅ {expLoading ? 'Gerando...' : 'Exportar Tarefas + Auditoria (.xlsx)'}</span>
+                <span>{expLoading ? 'Gerando...' : 'Exportar Tarefas + Auditoria (.xlsx)'}</span>
                 <span className="text-xs opacity-85">Tarefas + Excluídas/Reagendadas</span>
               </button>
             </div>

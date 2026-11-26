@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon, PhoneIcon, StopIcon } from '@heroicons/react/24/outline'
+import { PaperAirplaneIcon, ArrowPathIcon, ClipboardDocumentIcon, PhotoIcon, MicrophoneIcon, XMarkIcon, PencilIcon, TrashIcon, PlusIcon, ChatBubbleLeftRightIcon, PhoneIcon, StopIcon, SparklesIcon, UserIcon } from '@heroicons/react/24/outline'
 import VoiceCallModal from '../VoiceCallModal'
 import type { Cliente, Pedido, Vendedor, Interacao, Produto } from '../../types'
 import type { Tarefa } from '../../types'
@@ -34,7 +34,7 @@ interface AssistenteIAViewProps {
 
 const PROMPT_CATEGORIES = [
   {
-    label: '📊 Relatórios',
+    label: 'Relatórios',
     prompts: [
       'Gere um relatório 360° completo: funil, WhatsApp, ligações, pedidos e sugestões',
       'Quais são os clientes mais valiosos em carteira?',
@@ -43,7 +43,7 @@ const PROMPT_CATEGORIES = [
     ],
   },
   {
-    label: '📱 WhatsApp',
+    label: 'WhatsApp',
     prompts: [
       'Analise as mensagens de WhatsApp recentes e identifique oportunidades',
       'Quais clientes responderam no WhatsApp mas não tiveram follow-up?',
@@ -52,7 +52,7 @@ const PROMPT_CATEGORIES = [
     ],
   },
   {
-    label: '📞 Ligações',
+    label: 'Ligações',
     prompts: [
       'Resuma as ligações gravadas recentes e extraia insights',
       'Quais foram as principais objeções identificadas nas ligações?',
@@ -61,7 +61,7 @@ const PROMPT_CATEGORIES = [
     ],
   },
   {
-    label: '🎯 Estratégia',
+    label: 'Estratégia',
     prompts: [
       'Quais são os 5 clientes mais próximos de fechar negócio?',
       'Sugira uma estratégia de follow-up baseada nos dados de WhatsApp e ligações',
@@ -104,7 +104,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
   const makeWelcome = (): ChatMessage => ({
     id: '0',
     role: 'assistant',
-    text: `E aí, ${loggedUser.nome.split(' ')[0]}! 👋\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos**, **${vendedores.length} vendedores** + mensagens de WhatsApp, ligações e produtos.\n\nPode perguntar qualquer coisa: relatórios, análise de WhatsApp, transcrições de ligações, estratégias baseadas em dados reais.`,
+    text: `E aí, ${loggedUser.nome.split(' ')[0]}!\n\nTenho aqui os dados completos do CRM — **${clientes.length} clientes**, **${pedidos.length} pedidos**, **${vendedores.length} vendedores** + mensagens de WhatsApp, ligações e produtos.\n\nPode perguntar qualquer coisa: relatórios, análise de WhatsApp, transcrições de ligações, estratégias baseadas em dados reais.`,
     timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
   })
 
@@ -221,7 +221,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
         case 'startCall':
           if (action.payload?.phone) {
             window.open(`tel:${action.payload.phone}`, '_self')
-            showToast?.('success', `📞 Ligação iniciada para ${action.payload.clienteNome || action.payload.phone}`)
+            showToast?.('success', `Ligação iniciada para ${action.payload.clienteNome || action.payload.phone}`)
           }
           break
         case 'navigateTo':
@@ -410,13 +410,13 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setShowHistory(false)}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${!showHistory ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors ${!showHistory ? 'bg-primary-700 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
           >
-            💡 Prompts
+            Prompts
           </button>
           <button
             onClick={() => setShowHistory(true)}
-            className={`flex-1 py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${showHistory ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            className={`flex-1 py-2.5 text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${showHistory ? 'bg-primary-700 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
           >
             <ChatBubbleLeftRightIcon className="h-3.5 w-3.5" />
             Histórico {conversations.length > 0 && <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${showHistory ? 'bg-white/20' : 'bg-purple-100 text-purple-700'}`}>{conversations.length}</span>}
@@ -485,9 +485,9 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
             {/* Stats mini */}
             <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-1">
               <p className="text-[10px] text-gray-400 font-semibold uppercase">Dados carregados</p>
-              <div className="flex justify-between text-xs text-gray-600"><span>👥 Clientes</span><span className="font-bold">{clientes.length}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>🛒 Pedidos</span><span className="font-bold">{pedidos.length}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>📱 Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Clientes</span><span className="font-bold">{clientes.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Pedidos</span><span className="font-bold">{pedidos.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span></div>
             </div>
           </div>
         ) : (
@@ -513,12 +513,12 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
             </div>
             <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-1">
               <p className="text-[10px] text-gray-400 font-semibold uppercase">Dados carregados</p>
-              <div className="flex justify-between text-xs text-gray-600"><span>👥 Clientes</span><span className="font-bold">{clientes.length}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>🛒 Pedidos</span><span className="font-bold">{pedidos.length}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>👤 Vendedores</span><span className="font-bold">{vendedores.length}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>📱 Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>📞 Ligações</span><span className="font-bold">{extraData?.callRecordings?.length || '...'}</span></div>
-              <div className="flex justify-between text-xs text-gray-600"><span>📦 Produtos</span><span className="font-bold">{(extraData?.produtos || produtos).length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Clientes</span><span className="font-bold">{clientes.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Pedidos</span><span className="font-bold">{pedidos.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Vendedores</span><span className="font-bold">{vendedores.length}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Msgs WA</span><span className="font-bold">{extraData?.whatsappMessages?.length || '...'}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Ligações</span><span className="font-bold">{extraData?.callRecordings?.length || '...'}</span></div>
+              <div className="flex justify-between text-xs text-gray-600"><span>Produtos</span><span className="font-bold">{(extraData?.produtos || produtos).length}</span></div>
             </div>
           </>
         )}
@@ -527,10 +527,10 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
       {/* Chat area */}
       <div className="flex-1 flex flex-col bg-white rounded-apple shadow-apple-sm border border-gray-200 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gradient-to-r from-purple-600 to-blue-600">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-primary-700">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-              <span className="text-lg">🤖</span>
+              <SparklesIcon className="h-4 w-4 text-white" />
             </div>
             <div>
               <p className="text-sm font-semibold text-white">Assistente IA — Grupo MF Paris</p>
@@ -564,8 +564,8 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
           {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.role === 'assistant' && (
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
-                  <span className="text-sm">🤖</span>
+                <div className="w-7 h-7 rounded-full bg-primary-700 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
+                  <SparklesIcon className="h-3.5 w-3.5 text-white" />
                 </div>
               )}
               <div className={`max-w-[75%] group relative ${msg.role === 'user' ? 'order-last' : ''}`}>
@@ -578,7 +578,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
                           <img key={ai} src={`data:${att.mimeType};base64,${att.data}`} alt="" className="max-w-[200px] max-h-[150px] rounded-lg object-cover border border-white/20" />
                         ) : att.mimeType.startsWith('audio') ? (
                           <div key={ai} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${msg.role === 'user' ? 'bg-white/20 text-white' : 'bg-purple-50 text-purple-700 border border-purple-200'}`}>
-                            🎤 {att.name || 'Áudio'}
+                            {att.name || 'Áudio'}
                           </div>
                         ) : null
                       ))}
@@ -606,7 +606,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
               </div>
               {msg.role === 'user' && (
                 <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0 ml-2 mt-1">
-                  <span className="text-sm">👤</span>
+                  <UserIcon className="h-3.5 w-3.5 text-gray-500 dark:text-gray-300" />
                 </div>
               )}
             </div>
@@ -614,8 +614,8 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
 
           {loading && (
             <div className="flex justify-start">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
-                <span className="text-sm">🤖</span>
+              <div className="w-7 h-7 rounded-full bg-primary-700 flex items-center justify-center flex-shrink-0 mr-2 mt-1">
+                <SparklesIcon className="h-3.5 w-3.5 text-white" />
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-apple rounded-bl-none px-4 py-3">
                 <div className="flex items-center gap-1.5">
@@ -629,7 +629,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
 
           {error && (
             <div className="mx-auto max-w-md bg-red-50 border border-red-200 rounded-apple px-4 py-3 text-center">
-              <p className="text-sm text-red-700">⚠️ {error}</p>
+              <p className="text-sm text-red-700">{error}</p>
               <button onClick={() => setError(null)} className="text-xs text-red-500 underline mt-1">Fechar</button>
             </div>
           )}
@@ -666,7 +666,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
                     <img src={`data:${att.mimeType};base64,${att.data}`} alt="" className="h-16 w-16 rounded-lg object-cover border border-gray-300" />
                   ) : (
                     <div className="h-16 px-3 flex items-center gap-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 text-xs font-medium">
-                      🎤 {att.name || 'Áudio'}
+                      {att.name || 'Áudio'}
                     </div>
                   )}
                   <button
@@ -742,7 +742,7 @@ export default function AssistenteIAView({ clientes, pedidos, vendedores, intera
               <button
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() && pendingAttachments.length === 0}
-                className="flex-shrink-0 w-11 h-11 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
+                className="flex-shrink-0 w-11 h-11 bg-primary-700 hover:bg-primary-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-apple transition-all flex items-center justify-center shadow-sm"
               >
                 <PaperAirplaneIcon className="h-5 w-5" />
               </button>
