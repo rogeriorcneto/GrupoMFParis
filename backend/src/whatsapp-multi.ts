@@ -143,14 +143,14 @@ export async function restoreSavedUserSessions(): Promise<{ restored: number[]; 
     const { data, error } = await supabase
       .from('whatsapp_session')
       .select('key')
-      .like('key', 'user_%:creds')
+      .like('key', 'v2_user_%:creds')
     if (error || !data) return { restored: [], failed: [] }
 
     const restored: number[] = []
     const failed: number[] = []
 
     for (const row of data) {
-      const match = /^user_(\d+):creds$/.exec(row.key)
+      const match = /^v2_user_(\d+):creds$/.exec(row.key)
       if (!match) continue
       const vendedorId = Number(match[1])
       const existing = sessions.get(vendedorId)
@@ -256,7 +256,7 @@ export async function disconnectUserWhatsApp(vendedorId: number): Promise<void> 
 
   // Clear session from Supabase
   try {
-    const { clearSession } = await useSupabaseAuthState(`user_${vendedorId}`)
+    const { clearSession } = await useSupabaseAuthState(`v2_user_${vendedorId}`)
     await clearSession()
   } catch {
     // Ignore
@@ -800,8 +800,8 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
   let saveLidMap: ((map: Map<string, string>) => Promise<void>) | undefined
 
   try {
-    // Tentar restaurar sessão existente; se não houver, gerar creds frescas (QR novo)
-    const { state, saveCreds, clearSession, saveLidMap: persistLidMap, loadLidMap } = await useSupabaseAuthState(`user_${vendedorId}`)
+    // Tentar restaurar sessão existente (namespace v2 isolado de instâncias antigas de teste)
+    const { state, saveCreds, clearSession, saveLidMap: persistLidMap, loadLidMap } = await useSupabaseAuthState(`v2_user_${vendedorId}`)
     const hasSavedCreds = !!state.creds.registered
     log.info(`🔑 Vendedor ${vendedorId}: sessão salva=${hasSavedCreds}`)
 
