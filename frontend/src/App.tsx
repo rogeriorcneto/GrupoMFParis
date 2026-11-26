@@ -18,7 +18,7 @@ import { useFunilActions } from './hooks/useFunilActions'
 import { mesmaEmpresaNoFunil } from './utils/funil-logic'
 import { registrarTarefaExcluida } from './utils/exportacaoAuditoria'
 import { logger } from './utils/logger'
-import { disconnectUserWhatsApp, sendTempoTelaBeat } from './lib/botApi'
+import { disconnectUserWhatsApp, sendTempoTelaBeat, getUserWavoipToken, syncWavoipWebphone } from './lib/botApi'
 import LoginScreen from './components/LoginScreen'
 import Sidebar, { viewsPermitidas } from './components/Sidebar'
 import TopBar from './components/TopBar'
@@ -293,6 +293,17 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   useEffect(() => {
     if (loggedUser && activeView) loadSecondaryForView(activeView)
   }, [activeView, loggedUser, loadSecondaryForView])
+
+  // Sincroniza Webphone de chamadas WhatsApp (Wavoip) do usuário logado em background (para também receber chamadas em qualquer tela)
+  useEffect(() => {
+    if (!loggedUser) {
+      syncWavoipWebphone('', dark).catch(() => {})
+      return
+    }
+    getUserWavoipToken().then(tok => {
+      if (tok) syncWavoipWebphone(tok, dark).catch(() => {})
+    }).catch(() => {})
+  }, [loggedUser?.id, dark])
 
   // Verificar sessão existente ao montar o componente
   // Se preloadedUser é um Vendedor real, sessão já está verificada — pular checkSession

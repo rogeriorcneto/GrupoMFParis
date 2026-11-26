@@ -1047,6 +1047,43 @@ app.post('/api/whatsapp/user/send-document', requireAuth, rateLimit(10, 60_000),
   }
 })
 
+// ─── Token Wavoip por vendedor (persistido em whatsapp_session para funcionar em qualquer PC) ───
+app.get('/api/whatsapp/user/wavoip-token', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ error: 'Vendedor não encontrado' }); return }
+    const { data } = await supabase
+      .from('whatsapp_session')
+      .select('value')
+      .eq('key', `wavoip_token:user_${me.id}`)
+      .maybeSingle()
+    res.json({ token: data?.value ? String(data.value) : '' })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro ao buscar token Wavoip' })
+  }
+})
+
+app.post('/api/whatsapp/user/wavoip-token', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ error: 'Vendedor não encontrado' }); return }
+    const token = String(req.body?.token || '').trim()
+    const key = `wavoip_token:user_${me.id}`
+    if (!token) {
+      await supabase.from('whatsapp_session').delete().eq('key', key)
+      res.json({ success: true, token: '' })
+      return
+    }
+    const { error } = await supabase
+      .from('whatsapp_session')
+      .upsert({ key, value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    if (error) throw error
+    res.json({ success: true, token })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao salvar token Wavoip' })
+  }
+})
+
 // IA no WhatsApp pessoal do vendedor
 app.post('/api/whatsapp/user/ai', requireAuth, rateLimit(30, 60_000), async (req, res) => {
   const userId = (req as any).userId

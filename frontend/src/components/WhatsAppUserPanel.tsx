@@ -8,6 +8,7 @@ import {
   queryWhatsAppAI, getUserWhatsAppContacts,
   sendUserWhatsAppAudio, sendUserWhatsAppImage, sendUserWhatsAppDocument,
   validateWhatsAppContacts, suggestSalesMessage,
+  getUserWavoipToken, saveUserWavoipToken, syncWavoipWebphone, iniciarLigacaoWhatsAppWavoip,
   type UserWAStatus, type WAContactItem,
 } from '../lib/botApi'
 import CallRecorder, { type CallMode } from './CallRecorder'
@@ -578,9 +579,14 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const chatEndRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Call & voice recorder state
+  // Call & voice recorder + Wavoip WhatsApp Voice state
   const [showCallRecorder, setShowCallRecorder] = useState(false)
   const [callMode, setCallMode] = useState<CallMode>('phone')
+  const [wavoipToken, setWavoipToken] = useState('')
+  const [wavoipDraft, setWavoipDraft] = useState('')
+  const [showWavoipConfig, setShowWavoipConfig] = useState(false)
+  const [savingWavoip, setSavingWavoip] = useState(false)
+  const [callingWavoip, setCallingWavoip] = useState(false)
   const [isRecordingVoice, setIsRecordingVoice] = useState(false)
   const [voiceSeconds, setVoiceSeconds] = useState(0)
   const [voiceAudioUrl, setVoiceAudioUrl] = useState<string | null>(null)
@@ -1072,6 +1078,49 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       fromMe: m.from === 'me',
     }))
   ), [messages])
+
+  useEffect(() => {
+    getUserWavoipToken().then(tok => {
+      setWavoipToken(tok)
+      setWavoipDraft(tok)
+      if (tok) syncWavoipWebphone(tok, document.documentElement.classList.contains('dark')).catch(() => {})
+    }).catch(() => {})
+  }, [loggedUser?.id])
+
+  const handleSalvarWavoipToken = async () => {
+    setSavingWavoip(true)
+    const res = await saveUserWavoipToken(wavoipDraft.trim())
+    setSavingWavoip(false)
+    if (res.success) {
+      const novo = wavoipDraft.trim()
+      setWavoipToken(novo)
+      await syncWavoipWebphone(novo, document.documentElement.classList.contains('dark'))
+      setShowWavoipConfig(false)
+      showToast?.('success', novo ? 'Voz WhatsApp (Wavoip) ativada!' : 'Token Wavoip removido.')
+    } else {
+      showToast?.('error', res.error || 'Erro ao salvar token Wavoip.')
+    }
+  }
+
+  const handleLigarWhatsApp = async () => {
+    const num = getChatNumber()
+    if (!num) { showToast?.('error', 'Sem número para ligar.'); return }
+    if (!wavoipToken) {
+      setShowWavoipConfig(true)
+      return
+    }
+    setCallingWavoip(true)
+    const res = await iniciarLigacaoWhatsAppWavoip({
+      token: wavoipToken,
+      numero: num,
+      displayName: getChatName(),
+      isDark: document.documentElement.classList.contains('dark'),
+    })
+    setCallingWavoip(false)
+    if (!res.success) {
+      showToast?.('error', 'Falha na chamada WhatsApp: ' + (res.error || 'verifique se o dispositivo está conectado no Wavoip.'))
+    }
+  }
 
   const handleConnect = async () => {
     await startConnect()
@@ -1627,11 +1676,26 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                   <MagnifyingGlassIcon className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => { setCallMode('phone'); setShowCallRecorder(true) }}
-                  title="Ligar (telefone) + gravar"
-                  className="p-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 hover:bg-black/[0.08] transition-colors"
+                  type="button"
+                  onClick={handleLigarWhatsApp}
+                  disabled={callingWavoip}
+                  title={wavoipToken ? 'Ligar pelo WhatsApp (Wavoip)' : 'Configurar ligação pelo WhatsApp (Wavoip)'}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                    wavoipToken
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08]'
+                  }`}
                 >
-                  <PhoneIcon className="h-4 w-4" />
+                  <PhoneIcon className="h-3.5 w-3.5" />
+                  <span>{callingWavoip ? 'Chamando...' : 'Ligar WhatsApp'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWavoipConfig(v => !v)}
+                  title="Configurar token de voz Wavoip"
+                  className="px-2 py-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-[10px] font-semibold text-gray-600 dark:text-gray-300 hover:bg-black/[0.08] cursor-pointer"
+                >
+                  {wavoipToken ? 'Voz ativa' : 'Token Voz'}
                 </button>
                 {selectedContact && !cliente && (
                   <button
@@ -1645,6 +1709,49 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
               </div>
             )}
           </div>
+
+          {/* Configuração rápida do Token de Voz WhatsApp (Wavoip) por usuário */}
+          {showWavoipConfig && (
+            <div className="px-4 py-3 bg-white dark:bg-[#1C1C1E] border-b border-black/[0.06] dark:border-white/[0.08] space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Ligação de Voz pelo WhatsApp (Wavoip)</p>
+                  <p className="text-[11px] text-gray-500">Cole abaixo o Token do seu Dispositivo criado em app.wavoip.com → Dispositivos</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowWavoipConfig(false); setCallMode('phone'); setShowCallRecorder(true) }}
+                  className="text-[11px] text-primary-700 hover:underline font-medium whitespace-nowrap cursor-pointer"
+                >
+                  Usar gravador comum
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="password"
+                  value={wavoipDraft}
+                  onChange={e => setWavoipDraft(e.target.value)}
+                  placeholder="Cole aqui o Token do Dispositivo Wavoip..."
+                  className="flex-1 px-3 py-1.5 text-xs bg-[#F5F5F7] dark:bg-[#262629] border border-black/[0.08] dark:border-white/[0.10] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                />
+                <button
+                  type="button"
+                  disabled={savingWavoip}
+                  onClick={handleSalvarWavoipToken}
+                  className="px-3 py-1.5 rounded-lg bg-primary-700 hover:bg-primary-800 text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {savingWavoip ? 'Salvando...' : 'Salvar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWavoipConfig(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Barra de busca dentro da conversa */}
           {chatSearchOpen && (

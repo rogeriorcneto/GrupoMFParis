@@ -297,6 +297,101 @@ export async function sendUserWhatsAppDocument(
   }
 }
 
+/** Busca o token Wavoip salvo para o usuário logado */
+export async function getUserWavoipToken(): Promise<string> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/wavoip-token`)
+    const json = await res.json()
+    return String(json?.token || '')
+  } catch {
+    return ''
+  }
+}
+
+/** Salva (ou limpa) o token Wavoip do usuário logado */
+export async function saveUserWavoipToken(token: string): Promise<{ success: boolean; token?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/wavoip-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+let _wavoipInitPromise: Promise<any> | null = null
+let _wavoipListenerBound = false
+
+/** Inicializa o Webphone Wavoip silenciosamente e sincroniza APENAS o token do usuário logado */
+export async function syncWavoipWebphone(token: string, isDark = false): Promise<any | null> {
+  try {
+    const mod = await import('@wavoip/wavoip-webphone')
+    const webphone = mod.default
+    if (!_wavoipInitPromise) {
+      _wavoipInitPromise = webphone.render()
+    }
+    const api = await _wavoipInitPromise
+    if (!api) return null
+
+    api.settings.setShowWidgetButton(false)
+    api.theme.set(isDark ? 'dark' : 'light')
+
+    if (!_wavoipListenerBound) {
+      _wavoipListenerBound = true
+      api.on('offer:received', () => {
+        try { api.widget.open() } catch { /* ignore */ }
+      })
+    }
+
+    // Garante isolamento por usuário: remove qualquer token diferente e ativa só o do usuário atual (sem persistir em localStorage compartilhado)
+    const clean = token.trim()
+    const current = api.device.get() || []
+    for (const d of current) {
+      if (d?.token && d.token !== clean) {
+        try { api.device.remove(d.token) } catch { /* ignore */ }
+      }
+    }
+    if (clean) {
+      if (!current.some((d: any) => d?.token === clean)) {
+        api.device.add(clean, false)
+      }
+      api.device.enable(clean)
+    }
+    return api
+  } catch {
+    return null
+  }
+}
+
+/** Inicia chamada de voz WhatsApp pelo navegador via Wavoip */
+export async function iniciarLigacaoWhatsAppWavoip(params: {
+  token: string
+  numero: string
+  displayName?: string
+  isDark?: boolean
+}): Promise<{ success: boolean; error?: string }> {
+  const digits = String(params.numero || '').replace(/\D/g, '')
+  if (digits.length < 8) return { success: false, error: 'Número de telefone inválido.' }
+  const to = digits.startsWith('55') && digits.length >= 12 ? digits : `55${digits}`
+  const api = await syncWavoipWebphone(params.token, params.isDark)
+  if (!api) return { success: false, error: 'Não foi possível carregar o discador Wavoip.' }
+
+  api.widget.open()
+  api.call.setInput(to)
+  const res = await api.call.start(to, {
+    fromTokens: [params.token.trim()],
+    displayName: params.displayName,
+  })
+  if (res?.err) {
+    const devReason = res.err.devices?.[0]?.reason
+    return { success: false, error: devReason ? `${res.err.message} (${devReason})` : res.err.message }
+  }
+  return { success: true }
+}
+
 /** Query CRM AI from vendedor's WhatsApp chat panel */
 export async function queryWhatsAppAI(
   message: string, history?: { role: string; content: string }[]
