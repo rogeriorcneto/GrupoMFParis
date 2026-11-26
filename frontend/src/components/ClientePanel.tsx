@@ -394,28 +394,41 @@ export default function ClientePanel({
     return Math.max(...base.map(cl => cl.score ?? 0))
   }, [familiaEmpresa, c])
 
-  // Histórico WhatsApp completo do cliente em todos os ciclos (tab "Ver WhatsApp")
+  // Histórico WhatsApp completo do cliente — ESTRITAMENTE isolado ao vendedor dono do card (c.vendedorId)
+  // para que conversas do WhatsApp pessoal de outro usuário com o mesmo telefone NUNCA se misturem neste card!
   useEffect(() => {
+    setWaHistorico([])
     if (activeTab !== 'whatsapp' || !c.id) return
     let cancelled = false
     setWaHistoricoLoading(true)
     const ids = Array.from(familiaEmpresaIds)
     const numRef = (c.whatsapp || c.contatoCelular || c.contatoTelefone || '').replace(/\D/g, '')
+    const digitsLocal = numRef.startsWith('55') && numRef.length >= 12 ? numRef.slice(4) : numRef.slice(-8)
+    const isFakePhone = numRef.length < 8 || /^(\d)\1{7,}$/.test(digitsLocal)
+    const donoCardVendedorId = c.vendedorId || loggedUser?.id || undefined
+
     Promise.all([
-      ...ids.map(cid => fetchWhatsAppMessages({ clienteId: cid, limit: 200 }).catch(() => [])),
-      numRef.length >= 8 ? fetchWhatsAppMessages({ numero: numRef, limit: 200 }).catch(() => []) : Promise.resolve([]),
+      ...ids.map(cid => fetchWhatsAppMessages({ clienteId: cid, vendedorId: donoCardVendedorId, limit: 200 }).catch(() => [])),
+      !isFakePhone && donoCardVendedorId
+        ? fetchWhatsAppMessages({ numero: numRef, vendedorId: donoCardVendedorId, limit: 200 }).catch(() => [])
+        : Promise.resolve([]),
     ])
       .then(listas => {
         if (cancelled) return
         const unicos = new Map<string | number, any>()
-        listas.flat().forEach(m => { if (m && m.id != null) unicos.set(m.id, m) })
+        listas.flat().forEach(m => {
+          if (!m || m.id == null) return
+          // Dupla trava no cliente: nunca aceita mensagem gravada pela sessão WhatsApp de outro vendedor!
+          if (donoCardVendedorId && m.vendedorId != null && Number(m.vendedorId) !== Number(donoCardVendedorId)) return
+          unicos.set(m.id, m)
+        })
         const ordenadas = Array.from(unicos.values()).sort((a, b) => String(a.createdAt || a.created_at || '').localeCompare(String(b.createdAt || b.created_at || '')))
         setWaHistorico(ordenadas)
       })
       .catch(() => { if (!cancelled) setWaHistorico([]) })
       .finally(() => { if (!cancelled) setWaHistoricoLoading(false) })
     return () => { cancelled = true }
-  }, [activeTab, c.id, familiaKeyStr])
+  }, [activeTab, c.id, c.vendedorId, loggedUser?.id, familiaKeyStr])
   React.useEffect(() => {
     if (!editingInfoAdicional) {
       setPanelInfoAdicional(notasEmpresa.info)

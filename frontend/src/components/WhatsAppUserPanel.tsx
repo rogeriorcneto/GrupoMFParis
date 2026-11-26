@@ -844,14 +844,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         return
       }
       const dbPromise = cliente?.id
-        ? fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
+        ? fetchWhatsAppMessages({ clienteId: cliente.id, vendedorId: loggedUser?.id, limit: 100 })
         : !isFakePhone
-          ? fetchWhatsAppMessages({ numero: chatNumber, limit: 100 })
+          ? fetchWhatsAppMessages({ numero: chatNumber, vendedorId: loggedUser?.id, limit: 100 })
           : Promise.resolve([])
 
       dbPromise.then(dbMsgs => {
         if (cancelled) return
-        setMessages((dbMsgs || []).map((m: any) => ({
+        const somenteMinhas = (dbMsgs || []).filter((m: any) => !loggedUser?.id || m.vendedorId == null || Number(m.vendedorId) === Number(loggedUser.id))
+        setMessages(somenteMinhas.map((m: any) => ({
           id: m.id || `${m.createdAt}-${m.mensagem}`,
           text: m.mensagem,
           mediaUrl: m.mediaUrl,
@@ -916,9 +917,10 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             return next
           })
         } else if (cliente?.id) {
-          fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 }).then(dbMsgs => {
+          fetchWhatsAppMessages({ clienteId: cliente.id, vendedorId: loggedUser?.id, limit: 100 }).then(dbMsgs => {
             if (cancelled || !dbMsgs || dbMsgs.length === 0) return
-            const incoming: Message[] = dbMsgs.map((m: any) => ({
+            const somenteMinhas = dbMsgs.filter((m: any) => !loggedUser?.id || m.vendedorId == null || Number(m.vendedorId) === Number(loggedUser.id))
+            const incoming: Message[] = somenteMinhas.map((m: any) => ({
               id: m.id || `${m.createdAt}-${m.mensagem}`,
               text: m.mensagem,
               mediaUrl: m.mediaUrl,

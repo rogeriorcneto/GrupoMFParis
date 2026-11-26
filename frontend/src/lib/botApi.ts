@@ -49,12 +49,13 @@ export async function sendWhatsApp(number: string, text: string, clienteId?: num
   }
 }
 
-/** Fetch WhatsApp message history */
-export async function fetchWhatsAppMessages(params: { numero?: string; clienteId?: number; limit?: number }): Promise<any[]> {
+/** Fetch WhatsApp message history (isolado por vendedorId dono do card/sessão) */
+export async function fetchWhatsAppMessages(params: { numero?: string; clienteId?: number; vendedorId?: number; limit?: number }): Promise<any[]> {
   try {
     const query = new URLSearchParams()
     if (params.clienteId) query.set('clienteId', String(params.clienteId))
     else if (params.numero) query.set('numero', params.numero)
+    if (params.vendedorId) query.set('vendedorId', String(params.vendedorId))
     if (params.limit) query.set('limit', String(params.limit))
     const res = await authFetch(`${BOT_URL}/api/whatsapp/messages?${query.toString()}`)
     return await res.json()

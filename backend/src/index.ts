@@ -538,11 +538,15 @@ app.post('/api/whatsapp/send', requireAuth, rateLimit(20, 60_000), async (req, r
 })
 
 app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
-  const { numero, clienteId, limit } = req.query
+  const { numero, clienteId, vendedorId: qVendedorId, limit } = req.query
   try {
-    // Vendedor só pode ler mensagens de clientes da própria carteira
+    // Isolamento estrito:
+    // - Vendedor comum: SEMPRE filtra por me.id (só enxerga mensagens da própria sessão/carteira).
+    // - Gerente: quando consulta um card/número, filtra pelo vendedorId do dono do card (ou do próprio gerente logado),
+    //   NUNCA misturando mensagens do WhatsApp pessoal de todos os vendedores num único número!
     const me = reqVendedor(req)
-    if (!reqIsGerente(req)) {
+    const isGerente = reqIsGerente(req)
+    if (!isGerente) {
       if (clienteId) {
         const ok = me ? await clientePertenceAoVendedor(Number(clienteId), me.id) : false
         if (!ok) { res.status(403).json({ error: 'Cliente fora da sua carteira' }); return }
@@ -552,11 +556,18 @@ app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
       }
     }
     const db = await import('./database.js')
+    const targetVendedorId = !isGerente
+      ? me?.id
+      : (qVendedorId ? Number(qVendedorId) : me?.id)
+
     let messages
     if (clienteId) {
-      messages = await db.fetchWhatsAppMessagesByCliente(Number(clienteId), Number(limit) || 100)
+      const allCliMsgs = await db.fetchWhatsAppMessagesByCliente(Number(clienteId), Number(limit) || 100)
+      messages = targetVendedorId
+        ? allCliMsgs.filter(m => m.vendedorId == null || m.vendedorId === targetVendedorId)
+        : allCliMsgs
     } else if (numero) {
-      messages = await db.fetchWhatsAppMessages(String(numero), Number(limit) || 100, !reqIsGerente(req) ? me?.id : undefined)
+      messages = await db.fetchWhatsAppMessages(String(numero), Number(limit) || 100, targetVendedorId)
     } else {
       res.status(400).json({ error: 'Informe numero ou clienteId' })
       return
@@ -824,7 +835,11 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
             ? db.fetchWhatsAppMessagesByCliente(Number(clienteId), lim)
             : Promise.resolve([]),
         ])
-        const dbCombined = [...byNum, ...byCli.filter(m => m.vendedorId == null || m.vendedorId === vendedor.id)]
+        // Estrito: no chat WhatsApp pessoal do usuário logado, só traz do banco mensagens pertencentes a ESTE vendedor.id!
+        const dbCombined = [
+          ...byNum.filter(m => m.vendedorId === vendedor.id),
+          ...byCli.filter(m => m.vendedorId === vendedor.id),
+        ]
         const seenDbIds = new Set<number>()
         for (const m of dbCombined) {
           if (m.id && seenDbIds.has(m.id)) continue
