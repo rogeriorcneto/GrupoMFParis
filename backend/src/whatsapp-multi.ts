@@ -134,6 +134,10 @@ export function stopSessionCleanup(): void {
  * conectadas/conectando. Chamada no boot e periodicamente pelo watchdog.
  */
 export async function restoreSavedUserSessions(): Promise<{ restored: number[]; failed: number[] }> {
+  if (process.env.WHATSAPP_DISABLED === 'true') {
+    log.info('⏸️ WHATSAPP_DISABLED=true — restauração de sessões WhatsApp desativada nesta instância')
+    return { restored: [], failed: [] }
+  }
   try {
     const { supabase } = await import('./supabase.js')
     const { data, error } = await supabase
@@ -921,6 +925,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         log.info(`🔴 WhatsApp do vendedor ${vendedorId} desconectou (reason: ${reason}, msg: ${errorMsg})`)
 
         const isLoggedOut = reason === DisconnectReason.loggedOut
+        const isReplaced = reason === DisconnectReason.connectionReplaced || reason === 440
         const isRestartRequired = reason === DisconnectReason.restartRequired
 
         if (isLoggedOut) {
@@ -931,6 +936,17 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
           session.connectedNumber = null
           session.startTime = null
           session.reconnectAttempts = 0
+          if (session.sock) {
+            try { session.sock.end(undefined) } catch { /* ignore */ }
+            session.sock = null
+          }
+          sessions.delete(vendedorId)
+        } else if (isReplaced) {
+          // Outra instância assumiu a mesma sessão (440 conflict/replaced): NÃO reconectar em loop de 2s!
+          log.warn(`⚠️ Vendedor ${vendedorId}: sessão substituída por outra instância (440 conflict) — pausando reconexão imediata para evitar loop`)
+          session.status = 'disconnected'
+          session.connectedNumber = null
+          session.startTime = null
           if (session.sock) {
             try { session.sock.end(undefined) } catch { /* ignore */ }
             session.sock = null
