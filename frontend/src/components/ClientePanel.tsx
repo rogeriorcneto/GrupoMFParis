@@ -10,7 +10,7 @@ import { formatCNPJ, formatBrazilianPhone } from '../utils/validators'
 import { isMobileDevice } from '../utils/device'
 import { mesmaEmpresaNoFunil, existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { parseRedesSociaisMap } from '../utils/socialLinks'
-import WhatsAppUserPanel, { WhatsAppImageLightbox } from './WhatsAppUserPanel'
+import WhatsAppUserPanel, { WhatsAppImageLightbox, WhatsAppMediaGallery, extrairItensGaleriaWhatsApp } from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
@@ -208,6 +208,7 @@ export default function ClientePanel({
   const [showInfoSituacaoCompra, setShowInfoSituacaoCompra] = useState(false)
   const [waLightbox, setWaLightbox] = useState<{ url: string; caption?: string } | null>(null)
   const [waHistSearch, setWaHistSearch] = useState('')
+  const [waHistModo, setWaHistModo] = useState<'conversa' | 'arquivos'>('conversa')
   const [mapReady, setMapReady] = useState(false)
   const [auditoriasIA, setAuditoriasIA] = useState<Map<string, RegistroAuditoriaIA>>(
     () => (_auditoriasIACache && Date.now() - _auditoriasIACache.ts < 60_000 ? _auditoriasIACache.map : new Map())
@@ -2483,27 +2484,68 @@ export default function ClientePanel({
             </div>
           </div>
 
-          {/* ===== ABA WHATSAPP — conversa estilo Apple Messages (Claro e Escuro) ===== */}
-          {activeTab === 'whatsapp' && (
+          {/* ===== ABA WHATSAPP — conversa + Mídia, Áudios, Arquivos e Links no card ===== */}
+          {activeTab === 'whatsapp' && (() => {
+            const itensGaleriaCard = extrairItensGaleriaWhatsApp(
+              waHistorico.map(m => ({
+                id: m.id,
+                text: m.mensagem || '',
+                mediaUrl: m.mediaUrl,
+                tipo: m.tipo,
+                fileName: m.fileName,
+                timeLabel: m.createdAt ? new Date(m.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '',
+                fromMe: m.direcao === 'enviada',
+              }))
+            )
+            return (
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <MagnifyingGlassIcon className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={waHistSearch}
-                    onChange={e => setWaHistSearch(e.target.value)}
-                    placeholder="Buscar na conversa..."
-                    className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-[#1C1C1E] border border-black/[0.08] dark:border-white/[0.10] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/25"
-                  />
-                  {waHistSearch && (
+                <div className="flex items-center gap-2 flex-wrap flex-1">
+                  <div className="inline-flex p-0.5 rounded-xl bg-[#EFEFF4] dark:bg-[#2C2C30]">
                     <button
                       type="button"
-                      onClick={() => setWaHistSearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 cursor-pointer"
+                      onClick={() => setWaHistModo('conversa')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        waHistModo === 'conversa'
+                          ? 'bg-white dark:bg-[#1C1C1E] text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                      }`}
                     >
-                      <XMarkIcon className="h-3.5 w-3.5" />
+                      Conversa ({waHistorico.length})
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setWaHistModo('arquivos')}
+                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                        waHistModo === 'arquivos'
+                          ? 'bg-white dark:bg-[#1C1C1E] text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                      }`}
+                    >
+                      Mídia, áudios e arquivos ({itensGaleriaCard.length})
+                    </button>
+                  </div>
+
+                  {waHistModo === 'conversa' && (
+                    <div className="relative flex-1 min-w-[180px] max-w-xs">
+                      <MagnifyingGlassIcon className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={waHistSearch}
+                        onChange={e => setWaHistSearch(e.target.value)}
+                        placeholder="Buscar na conversa..."
+                        className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-[#1C1C1E] border border-black/[0.08] dark:border-white/[0.10] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                      />
+                      {waHistSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setWaHistSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 cursor-pointer"
+                        >
+                          <XMarkIcon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
                 <button
@@ -2514,6 +2556,15 @@ export default function ClientePanel({
                   Abrir chat WhatsApp
                 </button>
               </div>
+
+              {waHistModo === 'arquivos' ? (
+                <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm min-h-[400px] max-h-[60vh] overflow-hidden">
+                  <WhatsAppMediaGallery
+                    items={itensGaleriaCard}
+                    onOpenImage={(url, caption) => setWaLightbox({ url, caption })}
+                  />
+                </div>
+              ) : (
               <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm min-h-[400px] max-h-[60vh] overflow-y-auto p-4 space-y-2.5">
                 {waHistoricoLoading && (
                   <div className="text-center py-8">
@@ -2570,8 +2621,10 @@ export default function ClientePanel({
                   )
                 })}
               </div>
+              )}
             </div>
-          )}
+            )
+          })()}
 
           {/* ===== ABA NEGÓCIOS ===== */}
           {activeTab === 'negocios' && (() => {

@@ -10,7 +10,7 @@ import {
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
   startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone, isPlaceholderPhone,
   getUserWhatsAppContacts, getUserWhatsAppChats, getUserWhatsAppChatMessages,
-  sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
+  sendUserWhatsAppAudio, sendUserWhatsAppImage, sendUserWhatsAppDocument, checkNumberOnWhatsApp,
   validateContactsOnWhatsApp, cacheMessage, getUserWhatsAppSession,
   restoreSavedUserSessions,
 } from './whatsapp-multi.js'
@@ -1003,6 +1003,45 @@ app.post('/api/whatsapp/user/send-image', requireAuth, rateLimit(10, 60_000), as
       } catch { /* non-critical */ }
     }
     res.json({ ...result, mediaUrl: uploadedMediaUrl })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
+  }
+})
+
+// Enviar documento/arquivo (PDF, planilha, etc.) via WhatsApp do vendedor
+app.post('/api/whatsapp/user/send-document', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  const userId = (req as any).userId
+  const { number, fileBase64, fileName, mimetype, caption, clienteId } = req.body || {}
+  if (!number || !fileBase64) {
+    res.status(400).json({ success: false, error: 'Campos obrigatórios: number, fileBase64' })
+    return
+  }
+  try {
+    const db = await import('./database.js')
+    const vendedor = await db.getVendedorByAuthId(userId)
+    if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    const mime = mimetype || 'application/octet-stream'
+    const safeName = fileName || 'arquivo'
+    const result = await sendUserWhatsAppDocument(vendedor.id, number, fileBase64, safeName, mime, caption)
+    let uploadedMediaUrl: string | undefined
+    if (result.success) {
+      try {
+        const mediaUrl = await db.uploadWhatsAppMedia(Buffer.from(fileBase64, 'base64'), mime, safeName)
+        uploadedMediaUrl = mediaUrl || undefined
+        await db.insertWhatsAppMessage({
+          numero: result.resolvedNumber || formatBrazilianPhone(number),
+          clienteId: clienteId || undefined,
+          vendedorId: vendedor.id,
+          direcao: 'enviada',
+          mensagem: caption ? `📎 ${safeName} — ${caption}` : `📎 ${safeName}`,
+          tipo: 'document',
+          mediaUrl: uploadedMediaUrl,
+          fileName: safeName,
+          mimetype: mime,
+        })
+      } catch { /* non-critical */ }
+    }
+    res.json({ ...result, mediaUrl: uploadedMediaUrl, fileName: safeName })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
   }

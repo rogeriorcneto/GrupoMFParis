@@ -811,6 +811,46 @@ export async function sendUserWhatsAppImage(
   }
 }
 
+/** Envia documento/arquivo (PDF, planilha, etc.) via WhatsApp do vendedor */
+export async function sendUserWhatsAppDocument(
+  vendedorId: number,
+  number: string,
+  fileBase64: string,
+  fileName: string,
+  mimetype: string = 'application/pdf',
+  caption?: string
+): Promise<{ success: boolean; messageId?: string; jid?: string; resolvedNumber?: string; error?: string }> {
+  const session = sessions.get(vendedorId)
+  if (!session || !session.sock || session.status !== 'connected') {
+    return { success: false, error: 'WhatsApp não está conectado para este usuário' }
+  }
+  if (isPlaceholderPhone(number)) {
+    return { success: false, error: 'Telefone do cliente é inválido/fictício.' }
+  }
+  try {
+    const target = await resolveJidForSending(session, number)
+    if (!target) {
+      return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
+    }
+    const buffer = Buffer.from(fileBase64, 'base64')
+    const sent = await withTimeout(
+      session.sock.sendMessage(target.jid, {
+        document: buffer,
+        mimetype: mimetype || 'application/octet-stream',
+        fileName: fileName || 'arquivo',
+        caption: caption || undefined,
+      }),
+      30_000,
+      `sendDocument(${target.jid})`
+    )
+    rememberSentRawMessage(session, sent, { documentMessage: { mimetype, fileName, caption: caption || '' } })
+    return { success: true, messageId: sent?.key?.id || undefined, jid: target.jid, resolvedNumber: target.resolvedNumber }
+  } catch (err: any) {
+    log.error({ err, number }, `❌ Falha ao enviar documento para ${number}`)
+    return { success: false, error: err?.message || 'Erro ao enviar documento' }
+  }
+}
+
 export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
   const existing = sessions.get(vendedorId)
   if (existing && (existing.status === 'connected' || existing.status === 'connecting' || existing.status === 'qr')) {

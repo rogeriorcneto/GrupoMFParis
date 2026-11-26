@@ -281,6 +281,22 @@ export async function sendUserWhatsAppImage(
   }
 }
 
+/** Send document/file via the logged user's WhatsApp */
+export async function sendUserWhatsAppDocument(
+  number: string, fileBase64: string, fileName: string, mimetype?: string, caption?: string, clienteId?: number
+): Promise<{ success: boolean; mediaUrl?: string; messageId?: string; fileName?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/send-document`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number, fileBase64, fileName, mimetype, caption, clienteId }),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
 /** Query CRM AI from vendedor's WhatsApp chat panel */
 export async function queryWhatsAppAI(
   message: string, history?: { role: string; content: string }[]

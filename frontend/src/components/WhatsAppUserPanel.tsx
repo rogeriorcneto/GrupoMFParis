@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon, ShareIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon, ShareIcon, ChevronUpIcon, ChevronDownIcon, FolderOpenIcon, PaperClipIcon, DocumentTextIcon, LinkIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
   connectUserWhatsApp, disconnectUserWhatsApp,
   sendUserWhatsApp, fetchWhatsAppMessages, fetchWhatsAppChatMessages,
   queryWhatsAppAI, getUserWhatsAppContacts,
-  sendUserWhatsAppAudio, sendUserWhatsAppImage,
+  sendUserWhatsAppAudio, sendUserWhatsAppImage, sendUserWhatsAppDocument,
   validateWhatsAppContacts, suggestSalesMessage,
   type UserWAStatus, type WAContactItem,
 } from '../lib/botApi'
@@ -284,6 +284,220 @@ export const WhatsAppImageLightbox: React.FC<{
   )
 }
 
+export interface WhatsAppMediaEntry {
+  id: string | number
+  tipo: 'image' | 'video' | 'audio' | 'document' | 'link'
+  mediaUrl?: string
+  url?: string
+  text: string
+  fileName?: string
+  timeLabel: string
+  fromMe: boolean
+}
+
+/** Galeria estilo WhatsApp real (Mídia, Áudios, Arquivos e Links) reutilizada no chat e no histórico do card */
+export const WhatsAppMediaGallery: React.FC<{
+  items: WhatsAppMediaEntry[]
+  onOpenImage: (url: string, caption?: string) => void
+  onClose?: () => void
+}> = ({ items, onOpenImage, onClose }) => {
+  const [subTab, setSubTab] = useState<'midia' | 'audios' | 'docs' | 'links'>('midia')
+
+  const midias = useMemo(() => items.filter(i => (i.tipo === 'image' || i.tipo === 'video') && !!i.mediaUrl), [items])
+  const audios = useMemo(() => items.filter(i => i.tipo === 'audio' && !!i.mediaUrl), [items])
+  const docs = useMemo(() => items.filter(i => i.tipo === 'document'), [items])
+  const links = useMemo(() => items.filter(i => i.tipo === 'link' && !!i.url), [items])
+
+  return (
+    <div className="flex flex-col h-full bg-[#F5F5F7] dark:bg-[#141416]">
+      <div className="px-4 py-2.5 bg-white dark:bg-[#1C1C1E] border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between gap-2 flex-wrap">
+        <div className="inline-flex p-0.5 rounded-xl bg-[#EFEFF4] dark:bg-[#2C2C30]">
+          {([
+            { id: 'midia', label: `Mídia (${midias.length})` },
+            { id: 'audios', label: `Áudios (${audios.length})` },
+            { id: 'docs', label: `Arquivos (${docs.length})` },
+            { id: 'links', label: `Links (${links.length})` },
+          ] as const).map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setSubTab(t.id)}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                subTab === t.id
+                  ? 'bg-white dark:bg-[#1C1C1E] text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] cursor-pointer"
+          >
+            <XMarkIcon className="h-3.5 w-3.5" /> Voltar à conversa
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {subTab === 'midia' && (
+          midias.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-12">Nenhuma foto ou vídeo nesta conversa.</p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {midias.map(m => (
+                <div key={String(m.id)} className="relative aspect-square rounded-xl overflow-hidden bg-white dark:bg-[#262629] border border-black/[0.06] group">
+                  {m.tipo === 'video' ? (
+                    <video controls src={m.mediaUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onOpenImage(m.mediaUrl!, m.text)}
+                      className="w-full h-full block cursor-pointer focus:outline-none"
+                      title="Clique para ampliar, baixar ou compartilhar"
+                    >
+                      <img src={m.mediaUrl} alt={m.text} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px] tabular-nums">
+                        {m.timeLabel}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {subTab === 'audios' && (
+          audios.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-12">Nenhum áudio enviado ou recebido nesta conversa.</p>
+          ) : (
+            <div className="space-y-2">
+              {audios.map(a => (
+                <div key={String(a.id)} className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-black/[0.06] dark:border-white/[0.08] p-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 flex-1 min-w-[220px]">
+                    <audio controls src={a.mediaUrl} className="h-9 flex-1 max-w-xs" />
+                    <div className="text-[11px] text-gray-500 tabular-nums">
+                      <span className={`font-semibold ${a.fromMe ? 'text-primary-700' : 'text-gray-700'}`}>
+                        {a.fromMe ? 'Enviado' : 'Recebido'}
+                      </span>
+                      {' · '}
+                      {a.timeLabel}
+                    </div>
+                  </div>
+                  <a
+                    href={a.mediaUrl}
+                    download={`audio-${a.id}.ogg`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-xs font-medium text-gray-700 hover:bg-black/[0.08]"
+                  >
+                    <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Baixar
+                  </a>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {subTab === 'docs' && (
+          docs.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-12">Nenhum arquivo ou documento nesta conversa.</p>
+          ) : (
+            <div className="space-y-2">
+              {docs.map(d => {
+                const nomeDoc = d.fileName || d.text.replace(/^📎\s*/, '') || 'Documento'
+                return (
+                  <div key={String(d.id)} className="bg-white dark:bg-[#1C1C1E] rounded-xl border border-black/[0.06] dark:border-white/[0.08] p-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-[#EFEFF4] dark:bg-[#2C2C30] flex items-center justify-center flex-shrink-0">
+                        <DocumentTextIcon className="h-5 w-5 text-primary-700" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{nomeDoc}</p>
+                        <p className="text-[11px] text-gray-400 tabular-nums">
+                          {d.fromMe ? 'Enviado' : 'Recebido'} · {d.timeLabel}
+                        </p>
+                      </div>
+                    </div>
+                    {d.mediaUrl ? (
+                      <a
+                        href={d.mediaUrl}
+                        download={nomeDoc}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary-700 text-white text-xs font-semibold hover:bg-primary-800 flex-shrink-0"
+                      >
+                        <ArrowDownTrayIcon className="h-3.5 w-3.5" /> Abrir / Baixar
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 flex-shrink-0">Registrado</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        )}
+
+        {subTab === 'links' && (
+          links.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-12">Nenhum link compartilhado nesta conversa.</p>
+          ) : (
+            <div className="space-y-2">
+              {links.map(l => (
+                <a
+                  key={String(l.id)}
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-white dark:bg-[#1C1C1E] hover:bg-gray-50 rounded-xl border border-black/[0.06] dark:border-white/[0.08] p-3 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <LinkIcon className="h-4 w-4 text-primary-700 flex-shrink-0" />
+                    <p className="text-xs font-semibold text-primary-700 truncate">{l.url}</p>
+                  </div>
+                  <p className="text-[11px] text-gray-500 truncate mt-1">{l.text}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5 tabular-nums">{l.fromMe ? 'Enviado' : 'Recebido'} · {l.timeLabel}</p>
+                </a>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function extrairItensGaleriaWhatsApp(
+  rawList: { id: string | number; text: string; mediaUrl?: string; tipo?: string; fileName?: string; timeLabel: string; fromMe: boolean }[]
+): WhatsAppMediaEntry[] {
+  const out: WhatsAppMediaEntry[] = []
+  const urlRegex = /https?:\/\/[^\s<>")]+/gi
+  for (const m of rawList) {
+    if (m.tipo === 'image' && m.mediaUrl) {
+      out.push({ id: m.id, tipo: 'image', mediaUrl: m.mediaUrl, text: m.text, timeLabel: m.timeLabel, fromMe: m.fromMe })
+    } else if (m.tipo === 'video' && m.mediaUrl) {
+      out.push({ id: m.id, tipo: 'video', mediaUrl: m.mediaUrl, text: m.text, timeLabel: m.timeLabel, fromMe: m.fromMe })
+    } else if (m.tipo === 'audio' && m.mediaUrl) {
+      out.push({ id: m.id, tipo: 'audio', mediaUrl: m.mediaUrl, text: m.text, timeLabel: m.timeLabel, fromMe: m.fromMe })
+    } else if (m.tipo === 'document' || m.text?.startsWith('📎')) {
+      out.push({ id: m.id, tipo: 'document', mediaUrl: m.mediaUrl, fileName: m.fileName, text: m.text, timeLabel: m.timeLabel, fromMe: m.fromMe })
+    }
+    const foundUrls = (m.text || '').match(urlRegex)
+    if (foundUrls) {
+      foundUrls.forEach((u, idx) => {
+        out.push({ id: `${m.id}-link-${idx}`, tipo: 'link', url: u, text: m.text, timeLabel: m.timeLabel, fromMe: m.fromMe })
+      })
+    }
+  }
+  return out.reverse()
+}
+
 function highlightQueryText(text: string, query: string, isMine: boolean): React.ReactNode {
   const q = query.trim()
   if (!q) return text
@@ -383,9 +597,11 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const [contactSearch, setContactSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<WAContactItem | null>(null)
 
-  // Image attachment + Lightbox + Smart scroll + In-chat search state
+  // Image/Document attachment + Lightbox + Media Gallery + Smart scroll + In-chat search state
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
   const [lightboxImage, setLightboxImage] = useState<{ url: string; caption?: string } | null>(null)
+  const [showMediaGallery, setShowMediaGallery] = useState(false)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const isNearBottomRef = useRef(true)
   const forceScrollBottomRef = useRef(true)
@@ -580,6 +796,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     setChatSearchOpen(false)
     setChatSearchQuery('')
     setChatSearchIdx(0)
+    setShowMediaGallery(false)
 
     if (!waStatus.connected) {
       setChatLoading(false)
@@ -807,6 +1024,54 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     }
     setSending(false)
   }, [getChatNumber, cliente?.id, showToast])
+
+  // Handle document/file send
+  const handleDocumentSend = useCallback(async (file: File) => {
+    const num = getChatNumber()
+    if (!num) { showToast?.('error', 'Sem número para enviar.'); return }
+    setSending(true)
+    try {
+      const reader = new FileReader()
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const base64 = dataUrl.split(',')[1]
+      const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const tempId = Date.now()
+      forceScrollBottomRef.current = true
+      setMessages(prev => [...prev, { id: tempId, text: `📎 ${file.name}`, fileName: file.name, tipo: 'document', from: 'me', time: now }])
+      const result = await sendUserWhatsAppDocument(num, base64, file.name, file.type || 'application/octet-stream', undefined, cliente?.id)
+      if (!result.success) {
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+        showToast?.('error', 'Falha ao enviar arquivo: ' + (result.error || ''))
+      } else {
+        setMessages(prev => prev.map(m => m.id === tempId ? {
+          ...m,
+          id: result.messageId || m.id,
+          mediaUrl: result.mediaUrl || m.mediaUrl,
+          fileName: result.fileName || file.name,
+        } : m))
+        showToast?.('success', 'Arquivo enviado!')
+      }
+    } catch (err: any) {
+      showToast?.('error', 'Erro ao enviar arquivo: ' + (err?.message || ''))
+    }
+    setSending(false)
+  }, [getChatNumber, cliente?.id, showToast])
+
+  const galleryItems = useMemo(() => extrairItensGaleriaWhatsApp(
+    messages.filter(m => m.from !== 'system').map(m => ({
+      id: m.id,
+      text: m.text,
+      mediaUrl: m.mediaUrl,
+      tipo: m.tipo,
+      fileName: m.fileName,
+      timeLabel: m.time,
+      fromMe: m.from === 'me',
+    }))
+  ), [messages])
 
   const handleConnect = async () => {
     await startConnect()
@@ -1110,7 +1375,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   // ─── Connected (Apple Messages / macOS Sonoma style — Light & Dark) ───
   return (
     <div className={`bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-apple border border-black/[0.07] dark:border-white/[0.10] flex flex-col overflow-hidden ${compact ? '' : 'h-[600px]'}`}>
-      {/* Hidden file input for images */}
+      {/* Hidden file input for images and documents */}
       <input
         ref={imageInputRef}
         type="file"
@@ -1119,6 +1384,17 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         onChange={e => {
           const file = e.target.files?.[0]
           if (file) handleImageSend(file)
+          e.target.value = ''
+        }}
+      />
+      <input
+        ref={docInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.xml,.txt,.zip"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0]
+          if (file) handleDocumentSend(file)
           e.target.value = ''
         }}
       />
@@ -1315,6 +1591,24 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   type="button"
+                  onClick={() => setShowMediaGallery(v => !v)}
+                  title="Mídia, áudios, arquivos e links desta conversa"
+                  className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                    showMediaGallery
+                      ? 'bg-primary-700 text-white'
+                      : 'bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08]'
+                  }`}
+                >
+                  <FolderOpenIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Mídia e arquivos</span>
+                  {galleryItems.length > 0 && (
+                    <span className={`px-1 rounded-full text-[10px] tabular-nums ${showMediaGallery ? 'bg-white/20 text-white' : 'bg-black/[0.07] text-gray-700'}`}>
+                      {galleryItems.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setChatSearchOpen(v => {
                       const next = !v
@@ -1409,7 +1703,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             </div>
           )}
 
-          {/* Messages — Apple Messages style (Claro e Escuro) com rolagem livre sem puxar para baixo */}
+          {showMediaGallery ? (
+            <div className="flex-1 overflow-hidden" style={{ minHeight: compact ? 240 : 340 }}>
+              <WhatsAppMediaGallery
+                items={galleryItems}
+                onOpenImage={(url, caption) => setLightboxImage({ url, caption })}
+                onClose={() => setShowMediaGallery(false)}
+              />
+            </div>
+          ) : (
+            /* Messages — Apple Messages style (Claro e Escuro) com rolagem livre sem puxar para baixo */
           <div
             ref={messagesContainerRef}
             onScroll={() => {
@@ -1477,6 +1780,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             )}
             <div ref={chatEndRef} />
           </div>
+          )}
 
           {/* Input */}
           <div className="p-2.5 bg-white dark:bg-[#1C1C1E] border-t border-black/[0.06] dark:border-white/[0.08]">
@@ -1532,6 +1836,14 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                   className="w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-[#EFEFF4] dark:bg-[#262629] text-gray-600 hover:text-gray-900 disabled:opacity-40"
                 >
                   <PhotoIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => docInputRef.current?.click()}
+                  disabled={sending || !getChatNumber()}
+                  title="Enviar arquivo / PDF / documento"
+                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-[#EFEFF4] dark:bg-[#262629] text-gray-600 hover:text-gray-900 disabled:opacity-40"
+                >
+                  <PaperClipIcon className="h-4 w-4" />
                 </button>
                 <textarea
                   value={chatText}
