@@ -1,11 +1,18 @@
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   fetchLatestBaileysVersion,
   fetchLatestWaWebVersion,
   downloadMediaMessage,
+  getBinaryNodeChild,
+  jidNormalizedUser,
+  S_WHATSAPP_NET,
+  USyncQuery,
+  USyncUser,
 } from 'baileys'
 import { Boom } from '@hapi/boom'
 import { spawn } from 'child_process'
+import { io as socketIoClient, type Socket as IoSocket } from 'socket.io-client'
 import pino from 'pino'
 import * as QRCode from 'qrcode'
 import { log } from './logger.js'
@@ -52,6 +59,8 @@ export interface UserWhatsAppSession {
   /** Maps @lid JIDs to @s.whatsapp.net JIDs */
   lidMap: Map<string, string>
   outgoingMessageIds: Set<string>
+  wavoipSocket?: IoSocket | null
+  wavoipToken?: string | null
 }
 
 export interface UserWhatsAppStatus {
@@ -851,6 +860,288 @@ export async function sendUserWhatsAppDocument(
   }
 }
 
+// ============================================
+// Ponte nativa ESM Wavoip + Provisionamento Automático por Vendedor
+// ============================================
+
+const WAVOIP_API_BASE = 'https://api.wavoip.com'
+
+export async function getMasterWavoipJwt(): Promise<string> {
+  if (process.env.WAVOIP_MASTER_JWT) return process.env.WAVOIP_MASTER_JWT.trim()
+  const { supabase } = await import('./supabase.js')
+  const { data } = await supabase
+    .from('whatsapp_session')
+    .select('value')
+    .eq('key', 'wavoip_master:jwt')
+    .maybeSingle()
+  return data?.value ? String(data.value).trim() : ''
+}
+
+export async function saveMasterWavoipJwt(jwt: string): Promise<void> {
+  const { supabase } = await import('./supabase.js')
+  const clean = jwt.trim()
+  if (!clean) {
+    await supabase.from('whatsapp_session').delete().eq('key', 'wavoip_master:jwt')
+    return
+  }
+  await supabase
+    .from('whatsapp_session')
+    .upsert({ key: 'wavoip_master:jwt', value: clean, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+}
+
+export async function loginWavoipMasterAccount(email: string, password: string): Promise<{ success: boolean; jwt?: string; error?: string }> {
+  try {
+    const res = await fetch(`${WAVOIP_API_BASE}/v2/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+    })
+    const json: any = await res.json().catch(() => ({}))
+    const token = json?.data?.token
+    if (!res.ok || !token) {
+      return { success: false, error: json?.message || json?.code || 'Credenciais Wavoip inválidas' }
+    }
+    await saveMasterWavoipJwt(token)
+    return { success: true, jwt: token }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha ao conectar na API Wavoip' }
+  }
+}
+
+/** Conecta a sessão Baileys ativa do próprio vendedor ao canal de voz Wavoip dele */
+export function attachWavoipBridgeToSession(vendedorId: number, wavoipToken: string): boolean {
+  const session = sessions.get(vendedorId)
+  const baileysSock: any = session?.sock
+  if (!session || !baileysSock || session.status !== 'connected' || !wavoipToken) return false
+
+  if (session.wavoipSocket && session.wavoipToken === wavoipToken && session.wavoipSocket.connected) {
+    return true
+  }
+  if (session.wavoipSocket) {
+    try { session.wavoipSocket.disconnect() } catch { /* ignore */ }
+    session.wavoipSocket = null
+  }
+
+  session.wavoipToken = wavoipToken
+  let deviceInfo = { isCoex: false, devicesConnected: 1 }
+  const extractNum = (jid: string) => String(jid || '').split('@')[0].split(':')[0]
+
+  const refreshDeviceInfo = async () => {
+    try {
+      const me = baileysSock.authState?.creds?.me
+      const wppID = me?.id ?? ''
+      const phone = wppID.includes('lid') ? extractNum(me?.phoneNumber ?? '') : extractNum(wppID)
+      if (!phone || typeof baileysSock.getUSyncDevices !== 'function') return
+      const devices = await baileysSock.getUSyncDevices([`${phone}@s.whatsapp.net`], false, false)
+      deviceInfo = {
+        isCoex: Array.isArray(devices) && devices.some((d: any) => d.device === 99),
+        devicesConnected: Array.isArray(devices) ? devices.length : 1,
+      }
+    } catch { /* ignore */ }
+  }
+
+  const wSock = socketIoClient('https://devices.wavoip.com/baileys', {
+    transports: ['websocket'],
+    path: `/${wavoipToken}/websocket`,
+  })
+  session.wavoipSocket = wSock
+
+  wSock.on('connect', async () => {
+    log.info(`📞 [Wavoip] Ponte de voz conectada para vendedor ${vendedorId}`)
+    await refreshDeviceInfo()
+    wSock.emit(
+      'init',
+      baileysSock.authState?.creds?.me,
+      baileysSock.authState?.creds?.account,
+      'open',
+      'CRM MF Paris',
+      deviceInfo.isCoex,
+      deviceInfo.devicesConnected
+    )
+  })
+
+  wSock.on('onWhatsApp', async (jid: string, cb: any) => {
+    try {
+      const q = new USyncQuery().withContactProtocol().withLIDProtocol()
+      const phone = `+${String(jid || '').replace('+', '').split('@')[0].split(':')[0]}`
+      q.withUser(new USyncUser().withPhone(phone))
+      const results = await baileysSock.executeUSyncQuery(q)
+      const contacts = (results?.list ?? [])
+        .filter((e: any) => !!e.contact)
+        .map((e: any) => ({ id: e.id, jid: e.id, lid: e.lid ?? null }))
+      cb(contacts)
+    } catch (error) {
+      cb({ wavoipStatus: 'error', result: error })
+    }
+  })
+
+  wSock.on('profilePictureUrl', async (jid: string, type: string, timeoutMs: number, cb: any) => {
+    try {
+      const result = await baileysSock.query({
+        tag: 'iq',
+        attrs: { target: jidNormalizedUser(jid), to: S_WHATSAPP_NET, type: 'get', xmlns: 'w:profile:picture' },
+        content: [{ tag: 'picture', attrs: { type, query: 'url' } }],
+      }, timeoutMs)
+      const pic = getBinaryNodeChild(result, 'picture')
+      cb(pic?.attrs?.url)
+    } catch (error) {
+      cb({ wavoipStatus: 'error', result: error })
+    }
+  })
+
+  wSock.on('assertSessions', (jids: string[], force: boolean, cb: any) => {
+    baileysSock.assertSessions(jids, force).then(cb).catch((error: any) => cb({ wavoipStatus: 'error', result: error }))
+  })
+
+  wSock.on('createParticipantNodes', (jids: string[], message: any, extraAttrs: any, cb: any) => {
+    baileysSock.createParticipantNodes(jids, message, extraAttrs)
+      .then((r: any) => cb(r.nodes, r.shouldIncludeDeviceIdentity))
+      .catch((error: any) => cb({ wavoipStatus: 'error', result: error }))
+  })
+
+  wSock.on('getUSyncDevices', (jids: string[], useCache: boolean, ignoreZeroDevices: boolean, cb: any) => {
+    baileysSock.getUSyncDevices(jids, useCache, ignoreZeroDevices).then(cb).catch((error: any) => cb({ wavoipStatus: 'error', result: error }))
+  })
+
+  wSock.on('generateMessageTag', (cb: any) => cb(baileysSock.generateMessageTag()))
+
+  wSock.on('sendNode', (stanza: any, cb: any) => {
+    baileysSock.sendNode(stanza).then(() => cb(true)).catch((error: any) => cb({ wavoipStatus: 'error', result: error }))
+  })
+
+  wSock.on('signalRepository:decryptMessage', (jid: string, type: any, ciphertext: any, cb: any) => {
+    baileysSock.signalRepository.decryptMessage({ jid, type, ciphertext }).then(cb).catch((error: any) => cb({ wavoipStatus: 'error', result: error }))
+  })
+
+  wSock.on('getTcToken', async (jid: string, cb: any) => {
+    try {
+      const tc = await baileysSock.authState.keys.get('tctoken', [jid])
+      cb(tc?.[jid]?.token ?? null)
+    } catch (error) {
+      cb({ wavoipStatus: 'error', result: error })
+    }
+  })
+
+  wSock.on('getTimelockInfo', async (cb: any) => {
+    try {
+      if (!baileysSock.authState?.creds?.me?.id || typeof baileysSock.fetchAccountReachoutTimelock !== 'function') {
+        cb({})
+        return
+      }
+      cb(await baileysSock.fetchAccountReachoutTimelock())
+    } catch (error) {
+      cb({ wavoipStatus: 'error', result: error })
+    }
+  })
+
+  try {
+    baileysSock.ws?.on?.('CB:call', (packet: any) => {
+      wSock.volatile.timeout(1000).emit('CB:call', packet)
+    })
+    baileysSock.ws?.on?.('CB:ack,class:call', (packet: any) => {
+      wSock.volatile.timeout(1000).emit('CB:ack,class:call', packet)
+    })
+  } catch { /* ignore */ }
+
+  return true
+}
+
+/** Garante automaticamente que o vendedor tenha seu próprio canal na Wavoip e conecta a ponte ao WhatsApp dele */
+export async function ensureAndAttachSellerWavoip(vendedorId: number, vendedorNome?: string): Promise<{ token: string; error?: string }> {
+  const { supabase } = await import('./supabase.js')
+  const key = `wavoip_token:user_${vendedorId}`
+
+  const { data: existing } = await supabase.from('whatsapp_session').select('value').eq('key', key).maybeSingle()
+  if (existing?.value) {
+    const tok = String(existing.value).trim()
+    if (tok) {
+      attachWavoipBridgeToSession(vendedorId, tok)
+      return { token: tok }
+    }
+  }
+
+  const masterJwt = await getMasterWavoipJwt()
+  if (!masterJwt) {
+    return { token: '', error: 'Conta mestre da Wavoip ainda não conectada pelo gestor.' }
+  }
+
+  try {
+    // 1) Buscar dispositivos já existentes na conta Wavoip e tokens já atribuídos a outros vendedores no CRM
+    const [{ data: assignedRows }, devRes] = await Promise.all([
+      supabase.from('whatsapp_session').select('key, value').like('key', 'wavoip_token:user_%'),
+      fetch(`${WAVOIP_API_BASE}/v2/devices`, { headers: { Authorization: `Bearer ${masterJwt}` } }),
+    ])
+    const assignedTokens = new Set((assignedRows || []).map((r: any) => String(r.value || '').trim()).filter(Boolean))
+    const devJson: any = devRes.ok ? await devRes.json().catch(() => ({})) : {}
+    const devices: any[] = Array.isArray(devJson?.data) ? devJson.data : []
+
+    const session = sessions.get(vendedorId)
+    const connPhone = session?.connectedNumber || ''
+    const expectedTag = `#${vendedorId}`
+
+    // Reutilizar se já existe um dispositivo para este vendedor ou um dispositivo livre sem número
+    let chosen = devices.find(d => d?.token && !assignedTokens.has(d.token) && (
+      (d.name && String(d.name).includes(expectedTag)) ||
+      (connPhone && d.phone && String(d.phone).includes(connPhone))
+    ))
+    if (!chosen) {
+      chosen = devices.find(d => d?.token && !assignedTokens.has(d.token) && !d.phone && !d.disabled)
+    }
+
+    let token = chosen?.token ? String(chosen.token) : ''
+
+    // 2) Se não houver canal livre na conta, criar automaticamente um novo dispositivo para este vendedor!
+    if (!token) {
+      const label = `CRM ${expectedTag} - ${vendedorNome || 'Vendedor'}`.slice(0, 48)
+      const buyRes = await fetch(`${WAVOIP_API_BASE}/v2/sales/buy-device`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${masterJwt}`,
+        },
+        body: JSON.stringify({
+          type: 'FREE',
+          callType: 'UNOFFICIAL',
+          deviceProps: { name: label, channels: 1 },
+        }),
+      })
+      const buyJson: any = await buyRes.json().catch(() => ({}))
+      if (Array.isArray(buyJson?.data?.deviceTokens) && buyJson.data.deviceTokens[0]) {
+        token = String(buyJson.data.deviceTokens[0])
+      } else if (buyJson?.data?.deviceId) {
+        const detRes = await fetch(`${WAVOIP_API_BASE}/v2/devices/${buyJson.data.deviceId}`, {
+          headers: { Authorization: `Bearer ${masterJwt}` },
+        })
+        const detJson: any = await detRes.json().catch(() => ({}))
+        if (detJson?.data?.token) token = String(detJson.data.token)
+      }
+      if (!token) {
+        return { token: '', error: buyJson?.message || buyJson?.code || 'Não foi possível criar canal automático na Wavoip.' }
+      }
+    }
+
+    await supabase
+      .from('whatsapp_session')
+      .upsert({ key, value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    attachWavoipBridgeToSession(vendedorId, token)
+    log.info(`✅ [Wavoip] Canal provisionado e vinculado automaticamente para vendedor ${vendedorId}`)
+    return { token }
+  } catch (err: any) {
+    return { token: '', error: err?.message || 'Erro ao provisionar canal Wavoip' }
+  }
+}
+
+export async function attachWavoipAllConnectedSessions(): Promise<number> {
+  let count = 0
+  for (const [vid, sess] of sessions.entries()) {
+    if (sess.status === 'connected') {
+      const r = await ensureAndAttachSellerWavoip(vid).catch(() => ({ token: '' }))
+      if (r.token) count++
+    }
+  }
+  return count
+}
+
 export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
   const existing = sessions.get(vendedorId)
   if (existing && (existing.status === 'connected' || existing.status === 'connecting' || existing.status === 'qr')) {
@@ -961,7 +1252,7 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         keys: state.keys,
       },
       logger: baileysLogger,
-      browser: ['Chrome (Linux)', 'Chrome', '131.0.0.0'],
+      browser: Browsers.windows('UWP'),
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
       connectTimeoutMs: 30_000,
@@ -995,6 +1286,10 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
       if (connection === 'close') {
         if (sessions.get(vendedorId) !== session || session.sock !== sock) return
+        if (session.wavoipSocket) {
+          try { session.wavoipSocket.disconnect() } catch { /* ignore */ }
+          session.wavoipSocket = null
+        }
 
         session.qrDataUrl = null
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode
@@ -1091,6 +1386,9 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
 
         // Persist credentials as soon as the connection opens to ensure the
         // session survives container restarts / reconnects.
+        ensureAndAttachSellerWavoip(vendedorId).catch(err => {
+          log.warn({ err, vendedorId }, 'Aviso ao conectar ponte Wavoip automática na abertura da sessão')
+        })
         try {
           await saveCreds()
         } catch (credsErr) {

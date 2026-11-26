@@ -298,7 +298,7 @@ export async function sendUserWhatsAppDocument(
   }
 }
 
-/** Busca o token Wavoip salvo para o usuário logado */
+/** Busca (e auto-provisiona via conta mestre se necessário) o canal Wavoip do vendedor logado */
 export async function getUserWavoipToken(): Promise<string> {
   try {
     const res = await authFetch(`${BOT_URL}/api/whatsapp/user/wavoip-token`)
@@ -306,6 +306,34 @@ export async function getUserWavoipToken(): Promise<string> {
     return String(json?.token || '')
   } catch {
     return ''
+  }
+}
+
+export async function getUserWavoipInfo(): Promise<{ token: string; masterConfigured: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/user/wavoip-token`)
+    const json = await res.json()
+    return {
+      token: String(json?.token || ''),
+      masterConfigured: !!json?.masterConfigured,
+      error: json?.error,
+    }
+  } catch (err: any) {
+    return { token: '', masterConfigured: false, error: err?.message }
+  }
+}
+
+/** Conecta a conta mestre da empresa na Wavoip uma única vez (só Gestor) */
+export async function connectMasterWavoipAccount(params: { email: string; password: string }): Promise<{ success: boolean; attachedSessions?: number; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/whatsapp/wavoip-master`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
   }
 }
 

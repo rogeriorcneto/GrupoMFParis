@@ -13,6 +13,8 @@ import {
   sendUserWhatsAppAudio, sendUserWhatsAppImage, sendUserWhatsAppDocument, checkNumberOnWhatsApp,
   validateContactsOnWhatsApp, cacheMessage, getUserWhatsAppSession,
   restoreSavedUserSessions,
+  getMasterWavoipJwt, saveMasterWavoipJwt, loginWavoipMasterAccount,
+  ensureAndAttachSellerWavoip, attachWavoipBridgeToSession, attachWavoipAllConnectedSessions,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection, fetchInboxEmails } from './email.js'
 import { getActiveSessions } from './session.js'
@@ -1062,17 +1064,48 @@ app.post('/api/whatsapp/user/send-document', requireAuth, rateLimit(10, 60_000),
   }
 })
 
-// ─── Token Wavoip por vendedor (persistido em whatsapp_session para funcionar em qualquer PC) ───
+// ─── Voz WhatsApp (Wavoip): conta mestre única da empresa + provisionamento 100% automático por vendedor ───
+app.get('/api/whatsapp/wavoip-master/status', requireAuth, requireGerente, async (_req, res) => {
+  try {
+    const jwt = await getMasterWavoipJwt()
+    res.json({ configured: !!jwt })
+  } catch (err: any) {
+    res.status(500).json({ configured: false, error: err?.message })
+  }
+})
+
+app.post('/api/whatsapp/wavoip-master', requireAuth, requireGerente, async (req, res) => {
+  try {
+    const { email, password, jwt } = req.body || {}
+    if (jwt && String(jwt).trim()) {
+      await saveMasterWavoipJwt(String(jwt).trim())
+      const attached = await attachWavoipAllConnectedSessions()
+      res.json({ success: true, configured: true, attachedSessions: attached })
+      return
+    }
+    if (!email || !password) {
+      res.status(400).json({ success: false, error: 'Informe o e-mail e a senha da conta Wavoip.' })
+      return
+    }
+    const loginRes = await loginWavoipMasterAccount(String(email), String(password))
+    if (!loginRes.success) {
+      res.status(400).json(loginRes)
+      return
+    }
+    const attached = await attachWavoipAllConnectedSessions()
+    res.json({ success: true, configured: true, attachedSessions: attached })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao conectar conta Wavoip' })
+  }
+})
+
 app.get('/api/whatsapp/user/wavoip-token', requireAuth, async (req, res) => {
   try {
     const me = reqVendedor(req)
     if (!me) { res.status(403).json({ error: 'Vendedor não encontrado' }); return }
-    const { data } = await supabase
-      .from('whatsapp_session')
-      .select('value')
-      .eq('key', `wavoip_token:user_${me.id}`)
-      .maybeSingle()
-    res.json({ token: data?.value ? String(data.value) : '' })
+    const result = await ensureAndAttachSellerWavoip(me.id, me.nome)
+    const masterConfigured = !!(await getMasterWavoipJwt())
+    res.json({ token: result.token || '', masterConfigured, error: result.error })
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Erro ao buscar token Wavoip' })
   }
@@ -1093,6 +1126,7 @@ app.post('/api/whatsapp/user/wavoip-token', requireAuth, async (req, res) => {
       .from('whatsapp_session')
       .upsert({ key, value: token, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     if (error) throw error
+    attachWavoipBridgeToSession(me.id, token)
     res.json({ success: true, token })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro ao salvar token Wavoip' })

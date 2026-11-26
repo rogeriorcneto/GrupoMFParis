@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && node node_modules/voice-calls-baileys/scripts/apply-baileys-patch.js
 
 COPY --from=builder /app/dist ./dist
 
