@@ -735,6 +735,8 @@ export async function criarTarefasAutomaticasNovoCliente(clienteOuRow: any): Pro
   const clienteId = Number(clienteOuRow?.id)
   if (!clienteId) return
   const vendedorId = clienteOuRow?.vendedorId ?? clienteOuRow?.vendedor_id ?? null
+  // Cliente nos Bancos (sem vendedor) não gera tarefa para ninguém até ser redistribuído
+  if (!vendedorId) return
 
   let tituloProdutos = 'Incluir produtos de interesse do cliente'
   let tituloCadastro = 'Completar cadastro'

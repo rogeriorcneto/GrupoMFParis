@@ -2010,6 +2010,19 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
       return
     }
 
+    if (novoCliente?.id && (vendedorId || vendedor?.id)) {
+      const { criarTarefasAutomaticasNovoCliente } = await import('./database.js')
+      await criarTarefasAutomaticasNovoCliente({
+        id: novoCliente.id,
+        vendedor_id: vendedorId || vendedor?.id,
+        razao_social: place.name || '',
+        contato_telefone: place.formatted_phone_number || '',
+        endereco_rua: endereco,
+        endereco_cidade: cidade,
+        endereco_estado: estado,
+      }).catch(e => log.warn({ err: e, clienteId: novoCliente.id }, 'Falha ao criar tarefas automaticas no importar-lead'))
+    }
+
     // Registrar atividade
     await supabase.from('atividades').insert({
       vendedor_id: vendedor?.id,

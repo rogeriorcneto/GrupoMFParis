@@ -1,4 +1,4 @@
-import type { CadastroJustificativa, Cliente, Pedido, PropostaHistorico, Tarefa, Vendedor } from '../types'
+import type { CadastroJustificativa, Cliente, Interacao, Pedido, PropostaHistorico, Tarefa, Vendedor } from '../types'
 import { avaliarCadastroCliente, CADASTRO_CAMPO_LABEL, CampoCadastroKey, CAMPOS_CADASTRO_PADRAO, justificativasAtivas, SituacaoCadastro } from './cadastroCompleto'
 import { classificarSituacaoCompra, diasDesdeData, situacaoContaNaCarteiraAte180, SituacaoCompra } from './situacaoCompra'
 import { CANAL_LABEL, CanalTarefa, inferirOrigemTarefa, OBJETIVO_LABEL, ObjetivoTarefa } from './tarefaFluxo'
@@ -853,5 +853,180 @@ export function calcularIndicadoresGrupo(params: {
     leadTimeMaxDias,
     tempoAtivoSegundos: params.tempoAtivoSegundos || 0,
     sinaisIrregulares: params.sinaisIrregulares || [],
+  }
+}
+
+export interface ItemTempoBanco {
+  empresa: EmpresaConsolidada
+  diasNoBanco: number
+  entradaISO: string
+}
+
+export interface RedistribuicaoBancoItem {
+  interacaoId: number
+  dataISO: string
+  bancoOrigem: 'clientes' | 'prospectos'
+  vendedorDestinoNome: string
+  empresa?: EmpresaConsolidada
+  clienteId: number
+}
+
+export interface BlocoBancoResumo {
+  tipo: 'clientes' | 'prospectos'
+  nome: string
+  empresas: EmpresaConsolidada[]
+  porSituacaoCompra: {
+    ativo: EmpresaConsolidada[]
+    em_atencao: EmpresaConsolidada[]
+    em_risco: EmpresaConsolidada[]
+    inativo_recente: EmpresaConsolidada[]
+    inativo_antigo: EmpresaConsolidada[]
+  }
+  tempoNoBanco: {
+    ate30d: ItemTempoBanco[]
+    de31a90d: ItemTempoBanco[]
+    mais90d: ItemTempoBanco[]
+  }
+  tarefasNosCards: Tarefa[]
+  redistribuidosNoPeriodo: {
+    total: RedistribuicaoBancoItem[]
+    porVendedor: { vendedorNome: string; itens: RedistribuicaoBancoItem[] }[]
+  }
+}
+
+function extrairDataISODeMovimentacao(inter: Interacao): string {
+  const raw = String(inter.data || '').trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10)
+  const m = String(inter.descricao || '').match(/Data:\s*(\d{2})\/(\d{2})\/(\d{4})/)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return ''
+}
+
+export function calcularResumoBancosFase2(params: {
+  empresas: EmpresaConsolidada[]
+  empresaPorCardId: Map<number, EmpresaConsolidada>
+  interacoes: Interacao[]
+  tarefas: Tarefa[]
+  inicioISO: string
+  fimISO: string
+  agora?: Date
+}): { bancoClientes: BlocoBancoResumo; bancoProspectos: BlocoBancoResumo } {
+  const agora = params.agora || new Date()
+  const hojeISO = dataLocalISO(agora)
+
+  // Mapear última entrada em Banco por empresa (chave) e redistribuições no período
+  const entradaBancoPorChave = new Map<string, string>()
+  const redistribClientes: RedistribuicaoBancoItem[] = []
+  const redistribProspectos: RedistribuicaoBancoItem[] = []
+
+  for (const inter of params.interacoes) {
+    const desc = String(inter.descricao || '')
+    if (!desc.includes('[MOVIMENTACAO_CARTEIRA]')) continue
+    const dtISO = extrairDataISODeMovimentacao(inter)
+    const emp = params.empresaPorCardId.get(inter.clienteId)
+
+    // Entrada no Banco: "... → Para: Banco de Clientes | ..." ou "Banco de Prospectos"
+    if (/→\s*Para:\s*Banco de (Clientes|Prospectos)/i.test(desc) && emp && dtISO) {
+      const atual = entradaBancoPorChave.get(emp.chave)
+      if (!atual || dtISO > atual) entradaBancoPorChave.set(emp.chave, dtISO)
+    }
+
+    // Redistribuição saindo do Banco para um vendedor: "De: Banco de Clientes → Para: Nome | ..."
+    const mRedist = desc.match(/De:\s*Banco de (Clientes|Prospectos)\s*→\s*Para:\s*([^|]+)/i)
+    if (mRedist) {
+      const destinoNome = mRedist[2].trim()
+      if (!/^Banco de /i.test(destinoNome)) {
+        const noPeriodo =
+          !dtISO ||
+          ((params.inicioISO === '0001-01-01' || dtISO >= params.inicioISO) &&
+            (!params.fimISO || dtISO <= params.fimISO))
+        if (noPeriodo) {
+          const bancoOrigem: 'clientes' | 'prospectos' =
+            mRedist[1].toLowerCase().startsWith('cliente') ? 'clientes' : 'prospectos'
+          const item: RedistribuicaoBancoItem = {
+            interacaoId: inter.id,
+            dataISO: dtISO || hojeISO,
+            bancoOrigem,
+            vendedorDestinoNome: destinoNome,
+            empresa: emp,
+            clienteId: inter.clienteId,
+          }
+          if (bancoOrigem === 'clientes') redistribClientes.push(item)
+          else redistribProspectos.push(item)
+        }
+      }
+    }
+  }
+
+  // Tarefas pendentes vinculadas a cards de cada empresa
+  const tarefasPendentesPorChave = new Map<string, Tarefa[]>()
+  for (const t of params.tarefas) {
+    if (t.status !== 'pendente' || !t.clienteId) continue
+    const emp = params.empresaPorCardId.get(t.clienteId)
+    if (!emp || !emp.banco) continue
+    const arr = tarefasPendentesPorChave.get(emp.chave) || []
+    arr.push(t)
+    tarefasPendentesPorChave.set(emp.chave, arr)
+  }
+
+  const montarBloco = (
+    tipo: 'clientes' | 'prospectos',
+    nome: string,
+    redistribuidosLista: RedistribuicaoBancoItem[],
+  ): BlocoBancoResumo => {
+    const empresasBanco = params.empresas.filter(e => e.banco === tipo)
+    const porSituacaoCompra = {
+      ativo: empresasBanco.filter(e => e.situacaoCompra === 'ativo'),
+      em_atencao: empresasBanco.filter(e => e.situacaoCompra === 'em_atencao'),
+      em_risco: empresasBanco.filter(e => e.situacaoCompra === 'em_risco'),
+      inativo_recente: empresasBanco.filter(e => e.situacaoCompra === 'inativo_recente'),
+      inativo_antigo: empresasBanco.filter(e => e.situacaoCompra === 'inativo_antigo'),
+    }
+
+    const ate30d: ItemTempoBanco[] = []
+    const de31a90d: ItemTempoBanco[] = []
+    const mais90d: ItemTempoBanco[] = []
+    const tarefasNosCards: Tarefa[] = []
+
+    for (const emp of empresasBanco) {
+      const fallbackISO = (emp.cardPrincipal.dataEntradaEtapa || emp.cardPrincipal.criadoEm || hojeISO).slice(0, 10)
+      const entradaISO = entradaBancoPorChave.get(emp.chave) || fallbackISO
+      const dias = Math.max(0, diasDesdeData(entradaISO, agora))
+      const item: ItemTempoBanco = { empresa: emp, diasNoBanco: dias, entradaISO }
+      if (dias <= 30) ate30d.push(item)
+      else if (dias <= 90) de31a90d.push(item)
+      else mais90d.push(item)
+
+      const ts = tarefasPendentesPorChave.get(emp.chave)
+      if (ts && ts.length > 0) tarefasNosCards.push(...ts)
+    }
+
+    const porVendMap = new Map<string, RedistribuicaoBancoItem[]>()
+    for (const r of redistribuidosLista) {
+      const arr = porVendMap.get(r.vendedorDestinoNome) || []
+      arr.push(r)
+      porVendMap.set(r.vendedorDestinoNome, arr)
+    }
+    const porVendedor = Array.from(porVendMap.entries())
+      .map(([vendedorNome, itens]) => ({ vendedorNome, itens }))
+      .sort((a, b) => b.itens.length - a.itens.length)
+
+    return {
+      tipo,
+      nome,
+      empresas: empresasBanco,
+      porSituacaoCompra,
+      tempoNoBanco: { ate30d, de31a90d, mais90d },
+      tarefasNosCards,
+      redistribuidosNoPeriodo: {
+        total: redistribuidosLista,
+        porVendedor,
+      },
+    }
+  }
+
+  return {
+    bancoClientes: montarBloco('clientes', 'Banco de Clientes', redistribClientes),
+    bancoProspectos: montarBloco('prospectos', 'Banco de Prospectos', redistribProspectos),
   }
 }

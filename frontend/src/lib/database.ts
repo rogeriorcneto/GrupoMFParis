@@ -1149,7 +1149,8 @@ export async function criarTarefasAutomaticasNovosClientes(
   novosClientes: Cliente[],
   todosClientes?: Cliente[],
 ): Promise<Tarefa[]> {
-  const validos = novosClientes.filter(c => !c.novoCiclo && !c.arquivadoDuplicata)
+  // Regra dos Bancos (Item 1 / Item 10): cliente nos Bancos (sem vendedor) NÃO gera tarefa para ninguém!
+  const validos = novosClientes.filter(c => !c.novoCiclo && !c.arquivadoDuplicata && !!c.vendedorId)
   if (validos.length === 0) return []
   const parametros = await loadParametrosListas().catch(() => null)
   const aCriar: Omit<Tarefa, 'id'>[] = []
@@ -1244,7 +1245,7 @@ export async function moverEmpresasEntreCarteiras(params: {
   novoVendedorId: number | null
   interacoesCriadas: Interacao[]
   tarefasAtualizadasIds: number[]
-   novoVendedorTarefasId: number
+  novoVendedorTarefasId: number | null
   tarefasCriadas: Tarefa[]
 }> {
   if (params.gestor.cargo !== 'gerente') {
@@ -1256,7 +1257,9 @@ export async function moverEmpresasEntreCarteiras(params: {
   }
 
   const novoVendedorId = params.destino.tipo === 'vendedor' ? params.destino.vendedorId : null
-  const responsavelTarefasId = novoVendedorId ?? params.gestor.id
+  // Regra dos Bancos: em Banco as tarefas pendentes ficam no card SEM responsável (null);
+  // ao redistribuir para um vendedor, as tarefas pendentes vão junto para esse vendedor!
+  const responsavelTarefasId: number | null = novoVendedorId
   const agoraISO = new Date().toISOString()
   const dataFmt = new Date(agoraISO).toLocaleString('pt-BR')
 

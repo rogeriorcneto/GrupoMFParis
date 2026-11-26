@@ -1094,7 +1094,7 @@ const TarefasView: React.FC<{
   const [clienteSearch, setClienteSearch] = useState('')
   const [showClienteList, setShowClienteList] = useState(false)
   const [filterTipo, setFilterTipo] = useState<string>('todos')
-  const [filtroVendedorId, setFiltroVendedorId] = useState<number | 'todos'>('todos')
+  const [filtroVendedorId, setFiltroVendedorId] = useState<number | 'todos' | 'bancos'>('todos')
   const [showConcluidas, setShowConcluidas] = useState(true)
   const [limiteAtrasadas, setLimiteAtrasadas] = useState(50)
   const [limiteFuturas, setLimiteFuturas] = useState(60)
@@ -1132,9 +1132,11 @@ const TarefasView: React.FC<{
 
   const minhasTarefas = useMemo(() =>
     tarefas.filter(t => {
-      if (!isGerente) return t.vendedorId === loggedUser?.id || !t.vendedorId
+      // Tarefas sem responsável pertencem aos cards nos Bancos e não entram na fila de nenhum vendedor nem do gestor
+      if (!isGerente) return t.vendedorId === loggedUser?.id
+      if (filtroVendedorId === 'bancos') return !t.vendedorId
       if (filtroVendedorId !== 'todos') return t.vendedorId === filtroVendedorId
-      return true
+      return Boolean(t.vendedorId)
     })
   , [tarefas, isGerente, loggedUser?.id, filtroVendedorId])
 
@@ -1476,12 +1478,13 @@ const TarefasView: React.FC<{
               {isGerente && (
                 <select
                   value={filtroVendedorId}
-                  onChange={(e) => setFiltroVendedorId(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                  onChange={(e) => setFiltroVendedorId(e.target.value === 'todos' ? 'todos' : e.target.value === 'bancos' ? 'bancos' : Number(e.target.value))}
                   className="px-2.5 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50"
                   title="Filtrar por vendedor"
                 >
                   <option value="todos">Todos os vendedores</option>
                   {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                  <option value="bancos">Bancos (sem responsável)</option>
                 </select>
               )}
 
@@ -1914,7 +1917,9 @@ const TarefasView: React.FC<{
                     {isGerente
                       ? (filtroVendedorId === 'todos'
                         ? '· todos os vendedores'
-                        : `para ${vendedores.find(v => v.id === filtroVendedorId)?.nome.split(' ')[0] || 'vendedor'}`)
+                        : filtroVendedorId === 'bancos'
+                          ? '· nos Bancos (sem responsável)'
+                          : `para ${vendedores.find(v => v.id === filtroVendedorId)?.nome.split(' ')[0] || 'vendedor'}`)
                       : `para ${loggedUser?.nome.split(' ')[0] || 'Mim'}`}
                   </span>
                 </div>

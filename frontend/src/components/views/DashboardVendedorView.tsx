@@ -27,8 +27,8 @@ import { fetchAllPropostas } from '../../lib/database'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
 import { useParametrosListas } from '../../lib/parametrosListas'
-import { consolidarEmpresasFase2 } from '../../utils/relatoriosFase2'
-import { situacaoContaNaCarteiraAte180 } from '../../utils/situacaoCompra'
+import { BlocoBancoResumo, calcularResumoBancosFase2, consolidarEmpresasFase2 } from '../../utils/relatoriosFase2'
+import { SITUACAO_COMPRA_CONFIG, situacaoContaNaCarteiraAte180 } from '../../utils/situacaoCompra'
 import type { ClientePanelFocus } from '../ClientePanel'
 import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao, PropostaHistorico, ViewType } from '../../types'
 
@@ -194,16 +194,19 @@ export default function DashboardVendedorView({
   // ─── Tempo de tela + academia (gerente) + propostas ativas ──────────────────
   const [tempoTelaData, setTempoTelaData] = useState<{ nome: string; totalSegundos: number }[]>([])
 
-  // Item 7: "Minha carteira hoje" — vermelhos → amarelos → sem tarefa aberta → cadastro incompleto vencido + tarefas do dia
-  const minhaCarteiraHoje = useMemo(() => {
-    if (!userId) return null
-    const { empresas } = consolidarEmpresasFase2(
+  const consolidadoFase2 = useMemo(() => {
+    return consolidarEmpresasFase2(
       clientes,
       pedidos,
       tarefas,
       parametros.camposCadastroObrigatorios
     )
-    const minhasEmpresas = empresas.filter(e => e.vendedorId === userId)
+  }, [clientes, pedidos, tarefas, parametros.camposCadastroObrigatorios])
+
+  // Item 7: "Minha carteira hoje" — vermelhos → amarelos → sem tarefa aberta → cadastro incompleto vencido + tarefas do dia
+  const minhaCarteiraHoje = useMemo(() => {
+    if (!userId) return null
+    const minhasEmpresas = consolidadoFase2.empresas.filter(e => e.vendedorId === userId)
     const carteira180 = minhasEmpresas.filter(e => situacaoContaNaCarteiraAte180(e.situacaoCompra))
     const vermelhos = [...carteira180.filter(e => e.cadencia === 'vermelho')].sort(
       (a, b) => (b.diasSemContato ?? 999999) - (a.diasSemContato ?? 999999)
@@ -224,7 +227,26 @@ export default function DashboardVendedorView({
       cadastroIncompletoVencido,
       tarefasDoDia,
     }
-  }, [userId, clientes, pedidos, tarefas, parametros.camposCadastroObrigatorios, hojeISO])
+  }, [userId, consolidadoFase2, tarefas, hojeISO])
+
+  // Item 1 da devolutiva: Blocos próprios dos Bancos no Dashboard do gestor
+  const resumoBancosDashboard = useMemo(() => {
+    if (!isGerente) return null
+    return calcularResumoBancosFase2({
+      empresas: consolidadoFase2.empresas,
+      empresaPorCardId: consolidadoFase2.empresaPorCardId,
+      interacoes,
+      tarefas,
+      inicioISO: periodoInicio || '0001-01-01',
+      fimISO: periodoFim || hojeISO,
+    })
+  }, [isGerente, consolidadoFase2, interacoes, tarefas, periodoInicio, periodoFim, hojeISO])
+
+  const [listaBancoDrill, setListaBancoDrill] = useState<{
+    titulo: string
+    itens: { key: string; cliente?: Cliente; razao: string; cnpj: string; extra: string; situacaoLabel?: string; situacaoCor?: string; focus?: ClientePanelFocus }[]
+  } | null>(null)
+  const [listaBancoPage, setListaBancoPage] = useState(1)
   const [abaPrioridadeHoje, setAbaPrioridadeHoje] = useState<'vermelhos' | 'amarelos' | 'sem_tarefa' | 'cadastro_vencido' | 'tarefas_dia'>('vermelhos')
   const [academiaData, setAcademiaData] = useState<{ nome: string; treinos: number; minutos: number; notaMedia: number }[]>([])
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
@@ -264,8 +286,8 @@ export default function DashboardVendedorView({
     }).catch(() => {})
   }, [isGerente, periodoInicio, periodoFim, vendedores])
 
-  // ─── Data derivada (unificada com Relatórios e Funil — exclui bonificação/amostra e agrupa por empresa única) ──
-  const meusClientes = useMemo(() => clientes.filter(c => !c.arquivadoDuplicata && (isGerente || c.vendedorId === userId)), [clientes, userId, isGerente])
+  // ─── Data derivada (unificada com Relatórios e Funil — exclui bonificação/amostra e agrupa por empresa única; Bancos ficam nos seus blocos próprios) ──
+  const meusClientes = useMemo(() => clientes.filter(c => !c.arquivadoDuplicata && (isGerente ? !!c.vendedorId : c.vendedorId === userId)), [clientes, userId, isGerente])
   const meusClientesIds = useMemo(() => new Set(meusClientes.map(c => c.id)), [meusClientes])
   const meusPedidos = useMemo(() => isGerente ? pedidos : pedidos.filter(p => p.vendedorId === userId), [pedidos, userId, isGerente])
   const indiceEmpresas = useMemo(() => criarIndiceEmpresas(clientes), [clientes])
@@ -369,7 +391,7 @@ export default function DashboardVendedorView({
 
   const tarefasHoje = useMemo(() => {
     const base = (isGerente
-      ? tarefas.filter(t => isHoje(t.data))
+      ? tarefas.filter(t => !!t.vendedorId && isHoje(t.data))
       : tarefas.filter(t => t.vendedorId === userId && isHoje(t.data))
     ).sort((a, b) => formatHoraAgenda(a.hora).localeCompare(formatHoraAgenda(b.hora)))
     // Deduplicação defensiva por empresa + título normalizado
@@ -386,7 +408,7 @@ export default function DashboardVendedorView({
   }, [tarefas, clientes, userId, isGerente])
   const tarefasPendentes = useMemo(
     () => (isGerente
-      ? tarefas.filter(t => t.status !== 'concluida')
+      ? tarefas.filter(t => !!t.vendedorId && t.status !== 'concluida')
       : tarefas.filter(t => t.vendedorId === userId && t.status !== 'concluida')
     ).sort((a, b) => (a.data || '').localeCompare(b.data || '')),
     [tarefas, userId, isGerente]
@@ -956,6 +978,250 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
           />
         </div>
+
+        {/* Item 1 da devolutiva: Blocos próprios dos dois Bancos no Dashboard do gestor */}
+        {isGerente && resumoBancosDashboard && (() => {
+          const abrirDrillEmpresas = (titulo: string, lista: typeof resumoBancosDashboard.bancoClientes.empresas, extraFn?: (e: typeof lista[number]) => string) => {
+            setListaBancoPage(1)
+            setListaBancoDrill({
+              titulo,
+              itens: lista.map(e => ({
+                key: e.chave,
+                cliente: e.cardPrincipal,
+                razao: e.cardPrincipal.razaoSocial,
+                cnpj: e.cardPrincipal.cnpj || e.cardPrincipal.cpf || '—',
+                extra: extraFn ? extraFn(e) : (e.diasSemCompra != null ? `Últ. venda há ${e.diasSemCompra}d` : 'Prospecto'),
+                situacaoLabel: SITUACAO_COMPRA_CONFIG[e.situacaoCompra]?.label,
+                situacaoCor: SITUACAO_COMPRA_CONFIG[e.situacaoCompra]?.cor,
+              })),
+            })
+          }
+          const renderBloco = (bloco: BlocoBancoResumo) => (
+            <div key={bloco.tipo} className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-apple-sm p-4 space-y-3 tabular-nums">
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => abrirDrillEmpresas(`${bloco.nome} · Total`, bloco.empresas)}
+                  className="text-left group cursor-pointer"
+                >
+                  <p className="text-xs font-semibold text-gray-500 group-hover:text-primary-700">{bloco.nome}</p>
+                  <p className="text-2xl font-semibold tracking-tight text-gray-900 group-hover:underline">
+                    {bloco.empresas.length}{' '}
+                    <span className="text-xs font-normal text-gray-400">{bloco.tipo === 'clientes' ? 'clientes' : 'empresas'}</span>
+                  </p>
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setListaBancoPage(1)
+                      setListaBancoDrill({
+                        titulo: `${bloco.nome} · Tarefas nos cards (sem responsável)`,
+                        itens: bloco.tarefasNosCards.map(t => {
+                          const emp = t.clienteId ? consolidadoFase2.empresaPorCardId.get(t.clienteId) : undefined
+                          return {
+                            key: `tb-${t.id}`,
+                            cliente: emp?.cardPrincipal,
+                            razao: emp?.cardPrincipal.razaoSocial || 'Cliente',
+                            cnpj: emp?.cardPrincipal.cnpj || emp?.cardPrincipal.cpf || '—',
+                            extra: `${t.titulo} · prazo ${t.data.split('-').reverse().join('/')}`,
+                            focus: { section: 'tarefas', tarefaId: t.id },
+                          }
+                        }),
+                      })
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-[#F5F5F7] dark:bg-[#262629] hover:bg-black/[0.07] text-[11px] font-medium text-gray-700 cursor-pointer"
+                    title="Tarefas pendentes mantidas nos cards deste banco sem responsável"
+                  >
+                    {bloco.tarefasNosCards.length} tarefa(s) nos cards
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate?.('relatorios')}
+                    className="px-2.5 py-1 rounded-lg bg-[#EFEFF4] dark:bg-[#262629] hover:bg-black/[0.08] text-[11px] font-semibold text-gray-800 cursor-pointer"
+                  >
+                    Redistribuir
+                  </button>
+                </div>
+              </div>
+
+              {bloco.tipo === 'clientes' && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Situação de compra</p>
+                  <div className="grid grid-cols-5 gap-1.5 text-center">
+                    {([
+                      { label: 'Ativo', lista: bloco.porSituacaoCompra.ativo },
+                      { label: 'Em atenção', lista: bloco.porSituacaoCompra.em_atencao },
+                      { label: 'Em risco', lista: bloco.porSituacaoCompra.em_risco },
+                      { label: 'Inat. recente', lista: bloco.porSituacaoCompra.inativo_recente },
+                      { label: 'Inat. antigo', lista: bloco.porSituacaoCompra.inativo_antigo },
+                    ] as const).map(s => (
+                      <button
+                        key={s.label}
+                        type="button"
+                        onClick={() => abrirDrillEmpresas(`${bloco.nome} · ${s.label}`, s.lista)}
+                        className="bg-[#F5F5F7] dark:bg-[#262629] hover:bg-black/[0.07] rounded-xl px-1.5 py-1.5 cursor-pointer transition-colors"
+                      >
+                        <p className="text-sm font-semibold text-gray-900">{s.lista.length}</p>
+                        <p className="text-[10px] text-gray-500 truncate">{s.label}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Tempo no banco</p>
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  {([
+                    { label: 'Até 30 dias', itens: bloco.tempoNoBanco.ate30d },
+                    { label: '31–90 dias', itens: bloco.tempoNoBanco.de31a90d },
+                    { label: 'Mais de 90 dias', itens: bloco.tempoNoBanco.mais90d },
+                  ] as const).map(f => (
+                    <button
+                      key={f.label}
+                      type="button"
+                      onClick={() => {
+                        setListaBancoPage(1)
+                        setListaBancoDrill({
+                          titulo: `${bloco.nome} · Tempo no banco: ${f.label}`,
+                          itens: f.itens.map(x => ({
+                            key: x.empresa.chave,
+                            cliente: x.empresa.cardPrincipal,
+                            razao: x.empresa.cardPrincipal.razaoSocial,
+                            cnpj: x.empresa.cardPrincipal.cnpj || x.empresa.cardPrincipal.cpf || '—',
+                            extra: `${x.diasNoBanco}d no banco (desde ${x.entradaISO.split('-').reverse().join('/')})`,
+                            situacaoLabel: SITUACAO_COMPRA_CONFIG[x.empresa.situacaoCompra]?.label,
+                            situacaoCor: SITUACAO_COMPRA_CONFIG[x.empresa.situacaoCompra]?.cor,
+                          })),
+                        })
+                      }}
+                      className="bg-[#F5F5F7] dark:bg-[#262629] hover:bg-black/[0.07] rounded-xl px-2 py-1.5 cursor-pointer transition-colors"
+                    >
+                      <p className="text-sm font-semibold text-gray-900">{f.itens.length}</p>
+                      <p className="text-[10px] text-gray-500">{f.label}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setListaBancoPage(1)
+                    setListaBancoDrill({
+                      titulo: `${bloco.nome} · Redistribuídos no período`,
+                      itens: bloco.redistribuidosNoPeriodo.total.map(r => {
+                        const cli = r.empresa?.cardPrincipal || clientes.find(c => c.id === r.clienteId)
+                        return {
+                          key: `red-${r.interacaoId}`,
+                          cliente: cli,
+                          razao: cli?.razaoSocial || 'Cliente',
+                          cnpj: cli?.cnpj || cli?.cpf || '—',
+                          extra: `Para ${r.vendedorDestinoNome} em ${r.dataISO.split('-').reverse().join('/')}`,
+                        }
+                      }),
+                    })
+                  }}
+                  className="text-xs font-semibold text-gray-800 hover:text-primary-700 hover:underline cursor-pointer"
+                >
+                  Redistribuídos no período: <span className="text-primary-700">{bloco.redistribuidosNoPeriodo.total.length}</span>
+                </button>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {bloco.redistribuidosNoPeriodo.porVendedor.length === 0 ? (
+                    <span className="text-[11px] text-gray-400">Nenhuma redistribuição no período</span>
+                  ) : (
+                    bloco.redistribuidosNoPeriodo.porVendedor.map(pv => (
+                      <button
+                        key={pv.vendedorNome}
+                        type="button"
+                        onClick={() => {
+                          setListaBancoPage(1)
+                          setListaBancoDrill({
+                            titulo: `${bloco.nome} → ${pv.vendedorNome}`,
+                            itens: pv.itens.map(r => {
+                              const cli = r.empresa?.cardPrincipal || clientes.find(c => c.id === r.clienteId)
+                              return {
+                                key: `redv-${r.interacaoId}`,
+                                cliente: cli,
+                                razao: cli?.razaoSocial || 'Cliente',
+                                cnpj: cli?.cnpj || cli?.cpf || '—',
+                                extra: `Redistribuído em ${r.dataISO.split('-').reverse().join('/')}`,
+                              }
+                            }),
+                          })
+                        }}
+                        className="px-2 py-0.5 rounded-full bg-[#EFEFF4] dark:bg-[#262629] hover:bg-black/[0.08] text-[11px] font-medium text-gray-700 cursor-pointer"
+                      >
+                        {pv.vendedorNome.split(' ')[0]}: <strong>{pv.itens.length}</strong>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+          return (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {renderBloco(resumoBancosDashboard.bancoClientes)}
+                {renderBloco(resumoBancosDashboard.bancoProspectos)}
+              </div>
+              {listaBancoDrill && (
+                <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-black/[0.08] dark:border-white/[0.10] shadow-apple p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold text-gray-900">
+                      {listaBancoDrill.titulo} ({listaBancoDrill.itens.length})
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setListaBancoDrill(null)}
+                      className="text-xs text-gray-400 hover:text-gray-700 cursor-pointer"
+                    >
+                      Fechar lista
+                    </button>
+                  </div>
+                  {listaBancoDrill.itens.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-4 text-center">Nenhum registro encontrado para este filtro.</p>
+                  ) : (
+                    <>
+                      <div className="divide-y divide-gray-100 text-xs max-h-80 overflow-y-auto">
+                        {listaBancoDrill.itens.slice((listaBancoPage - 1) * 20, listaBancoPage * 20).map(item => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => item.cliente && onOpenCliente?.(item.cliente, item.focus)}
+                            className="w-full text-left py-2 px-2 hover:bg-gray-50 flex items-center justify-between gap-2 cursor-pointer"
+                          >
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 truncate">{item.razao}</p>
+                              <p className="text-[11px] text-gray-400 truncate tabular-nums">{item.cnpj} · {item.extra}</p>
+                            </div>
+                            {item.situacaoLabel && (
+                              <span className={`px-2 py-0.5 rounded-full border text-[10px] font-medium whitespace-nowrap ${item.situacaoCor || ''}`}>
+                                {item.situacaoLabel}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                      {listaBancoDrill.itens.length > 20 && (
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-[11px] text-gray-500 tabular-nums">
+                          <span>Pág. {listaBancoPage}/{Math.ceil(listaBancoDrill.itens.length / 20)}</span>
+                          <div className="flex gap-1">
+                            <button type="button" disabled={listaBancoPage <= 1} onClick={() => setListaBancoPage(p => p - 1)} className="px-2 py-0.5 border rounded disabled:opacity-40 cursor-pointer">Anterior</button>
+                            <button type="button" disabled={listaBancoPage >= Math.ceil(listaBancoDrill.itens.length / 20)} onClick={() => setListaBancoPage(p => p + 1)} className="px-2 py-0.5 border rounded disabled:opacity-40 cursor-pointer">Próxima</button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Painel Acionável: Gargalos de Atenção */}
         <div className="bg-amber-50/60 rounded-apple border border-amber-200 p-4">

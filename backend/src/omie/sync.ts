@@ -195,10 +195,13 @@ export async function syncPullClientes(vendedorIdPadrao?: number, credentials?: 
     if (c.omie_codigo) crmByOmie.set(String(c.omie_codigo), c)
   }
 
-  // Buscar o primeiro vendedor se não informado
-  if (!vendedorIdPadrao) {
-    const { data: vendedores } = await supabase.from('vendedores').select('id').limit(1)
-    vendedorIdPadrao = vendedores?.[0]?.id || 1
+  // Mapear codigo_vendedor do Omie para vendedor ativo no CRM; se não houver vendedor ativo (ou for inativo como Ursulla), entra sem vendedor (Banco) salvo se vendedorIdPadrao foi informado explicitamente
+  const { data: vendedoresCrm } = await supabase.from('vendedores').select('id, ativo, omie_codigo')
+  const vendAtivoPorOmie = new Map<string, number>()
+  for (const v of vendedoresCrm || []) {
+    if (v.ativo !== false && v.omie_codigo) {
+      vendAtivoPorOmie.set(String(v.omie_codigo).trim(), Number(v.id))
+    }
   }
 
   let inseridos = 0
@@ -223,12 +226,14 @@ export async function syncPullClientes(vendedorIdPadrao?: number, credentials?: 
         atualizados++
       } else {
         // Insert
+        const omieVendCode = String((omie as any)?.recomendacoes?.codigo_vendedor || '').trim()
+        const vendedorResolvido = (omieVendCode && vendAtivoPorOmie.get(omieVendCode)) || vendedorIdPadrao || null
         const { data: insertedCli, error } = await supabase
           .from('clientes')
           .insert({
             ...dbRow,
             etapa: 'prospecção',
-            vendedor_id: vendedorIdPadrao,
+            vendedor_id: vendedorResolvido,
             data_entrada_etapa: new Date().toISOString().split('T')[0],
           })
           .select('*')

@@ -50,8 +50,10 @@ import { stageLabels } from '../../utils/constants'
 import { diasEtapaAtual } from '../../utils/etapas'
 import { criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import {
+  BlocoBancoResumo,
   CADENCIA_CONFIG,
   calcularIndicadoresGrupo,
+  calcularResumoBancosFase2,
   CANAL_RELATORIO_LABEL,
   canalEfetivoTarefa,
   CanalRelatorio,
@@ -163,7 +165,7 @@ const BarraHorizontalItem: React.FC<{
 const RelatoriosView: React.FC<RelatoriosViewProps> = ({
   clientes: clientesProp,
   vendedores,
-  interacoes: _interacoes,
+  interacoes = [],
   pedidos = [],
   tarefas = [],
   loggedUser = null,
@@ -498,6 +500,22 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
     })
   }, [todasEmpresasBrutas, filtros.segmento, filtros.uf, tarefas, pedidos, propostasLoaded, empresaPorCardId, inicioISO, fimISO])
 
+  const resumoBancos = useMemo(() => {
+    const empresasParaBanco = todasEmpresasBrutas.filter(e => {
+      if (filtros.segmento !== 'todos' && e.segmento !== filtros.segmento) return false
+      if (filtros.uf !== 'todos' && e.uf !== filtros.uf) return false
+      return true
+    })
+    return calcularResumoBancosFase2({
+      empresas: empresasParaBanco,
+      empresaPorCardId,
+      interacoes,
+      tarefas,
+      inicioISO,
+      fimISO,
+    })
+  }, [todasEmpresasBrutas, filtros.segmento, filtros.uf, empresaPorCardId, interacoes, tarefas, inicioISO, fimISO])
+
   // Totais da equipe ativa (Item 7: só usuários com cadastro ativo e clientes na carteira; bancos de fora)
   const indTotalAtivos = useMemo(() => {
     if (filtros.vendedorId === 'banco_clientes') return linhaBancoClientes
@@ -758,7 +776,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
         const tSet = new Set(res.tarefasAtualizadasIds)
         setTarefas?.(prev => [
           ...res.tarefasCriadas,
-          ...prev.map(t => tSet.has(t.id) ? { ...t, vendedorId: res.novoVendedorTarefasId } : t),
+          ...prev.map(t => tSet.has(t.id) ? { ...t, vendedorId: res.novoVendedorTarefasId ?? undefined } : t),
         ])
       }
       setSelecionadosChaves(new Set())
@@ -982,6 +1000,173 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
       ]
 
   const coresLinhas = ['#2563EB', '#7C3AED', '#0891B2', '#EA580C', '#0D9488', '#4F46E5', '#DB2777', '#65A30D']
+
+  const renderBlocosBancosRelatorios = () => {
+    const renderCardBanco = (bloco: BlocoBancoResumo) => (
+      <div key={bloco.tipo} className="bg-white dark:bg-[#1C1C1E] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-apple-sm p-3.5 space-y-2.5 tabular-nums">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <button
+              type="button"
+              onClick={() => abrirListaEmpresas(`${bloco.nome} · Total`, bloco.empresas)}
+              className="text-left group cursor-pointer"
+            >
+              <h4 className="text-xs font-semibold text-gray-500 group-hover:text-primary-700">{bloco.nome}</h4>
+              <p className="text-xl font-semibold tracking-tight text-gray-900 group-hover:underline">
+                {bloco.empresas.length}{' '}
+                <span className="text-xs font-normal text-gray-400">
+                  {bloco.tipo === 'clientes' ? 'clientes' : 'empresas'}
+                </span>
+              </p>
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                abrirListaCustom(
+                  `${bloco.nome} · Tarefas nos cards (sem responsável)`,
+                  bloco.tarefasNosCards.map(t => ({
+                    key: `tb-${t.id}`,
+                    empresa: t.clienteId ? empresaPorCardId.get(t.clienteId) : undefined,
+                    focus: { section: 'tarefas', tarefaId: t.id },
+                    extraInfo: `${t.titulo} · prazo ${fmtDataCurta(t.data)}`,
+                  })),
+                  'tarefas'
+                )
+              }
+              className="px-2.5 py-1 rounded-lg bg-[#F5F5F7] dark:bg-[#262629] hover:bg-black/[0.07] text-[11px] font-medium text-gray-700 cursor-pointer"
+              title="Tarefas pendentes guardadas nos cards deste banco (sem responsável até redistribuir)"
+            >
+              {bloco.tarefasNosCards.length} tarefa(s) nos cards
+            </button>
+            <button
+              type="button"
+              onClick={() => { setBancoSubAba(bloco.tipo); setAba('bancos') }}
+              className="px-2.5 py-1 rounded-lg bg-primary-700 hover:bg-primary-800 text-[11px] font-semibold text-white cursor-pointer"
+            >
+              Gerenciar
+            </button>
+          </div>
+        </div>
+
+        {/* Situação de compra (Banco de Clientes) */}
+        {bloco.tipo === 'clientes' && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Situação de compra</p>
+            <div className="grid grid-cols-5 gap-1.5 text-center">
+              {([
+                { key: 'ativo', label: 'Ativo', lista: bloco.porSituacaoCompra.ativo },
+                { key: 'em_atencao', label: 'Em atenção', lista: bloco.porSituacaoCompra.em_atencao },
+                { key: 'em_risco', label: 'Em risco', lista: bloco.porSituacaoCompra.em_risco },
+                { key: 'inativo_recente', label: 'Inat. recente', lista: bloco.porSituacaoCompra.inativo_recente },
+                { key: 'inativo_antigo', label: 'Inat. antigo', lista: bloco.porSituacaoCompra.inativo_antigo },
+              ] as const).map(s => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => abrirListaEmpresas(`${bloco.nome} · ${s.label}`, s.lista)}
+                  className="bg-[#F5F5F7] dark:bg-[#262629] hover:bg-black/[0.07] rounded-xl px-1.5 py-1.5 cursor-pointer transition-colors"
+                >
+                  <p className="text-sm font-semibold text-gray-900">{s.lista.length}</p>
+                  <p className="text-[10px] text-gray-500 truncate">{s.label}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tempo no banco */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Tempo no banco</p>
+          <div className="grid grid-cols-3 gap-1.5 text-center">
+            {([
+              { label: 'Até 30 dias', itens: bloco.tempoNoBanco.ate30d },
+              { label: '31–90 dias', itens: bloco.tempoNoBanco.de31a90d },
+              { label: 'Mais de 90 dias', itens: bloco.tempoNoBanco.mais90d },
+            ] as const).map(f => (
+              <button
+                key={f.label}
+                type="button"
+                onClick={() =>
+                  abrirListaCustom(
+                    `${bloco.nome} · Tempo no banco: ${f.label}`,
+                    f.itens.map(x => ({
+                      key: `tmp-${x.empresa.chave}`,
+                      empresa: x.empresa,
+                      extraInfo: `${x.diasNoBanco}d no banco (desde ${fmtDataCurta(x.entradaISO)})`,
+                      diasOrdenacao: x.diasNoBanco,
+                    })),
+                    bloco.tipo === 'clientes' ? 'clientes' : 'prospectos'
+                  )
+                }
+                className="bg-[#F5F5F7] dark:bg-[#262629] hover:bg-black/[0.07] rounded-xl px-2 py-1.5 cursor-pointer transition-colors"
+              >
+                <p className="text-sm font-semibold text-gray-900">{f.itens.length}</p>
+                <p className="text-[10px] text-gray-500">{f.label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Redistribuídos no período e para qual vendedor */}
+        <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() =>
+              abrirListaCustom(
+                `${bloco.nome} · Redistribuídos no período`,
+                bloco.redistribuidosNoPeriodo.total.map(r => ({
+                  key: `red-${r.interacaoId}`,
+                  empresa: r.empresa,
+                  clienteCard: r.empresa?.cardPrincipal || clientesProp.find(c => c.id === r.clienteId),
+                  extraInfo: `Para ${r.vendedorDestinoNome} em ${fmtDataCurta(r.dataISO)}`,
+                })),
+                'redistribuídos'
+              )
+            }
+            className="text-xs font-semibold text-gray-800 hover:text-primary-700 hover:underline cursor-pointer"
+          >
+            Redistribuídos no período: <span className="text-primary-700">{bloco.redistribuidosNoPeriodo.total.length}</span>
+          </button>
+          <div className="flex items-center gap-1 flex-wrap">
+            {bloco.redistribuidosNoPeriodo.porVendedor.length === 0 ? (
+              <span className="text-[11px] text-gray-400">Nenhuma redistribuição no período</span>
+            ) : (
+              bloco.redistribuidosNoPeriodo.porVendedor.map(pv => (
+                <button
+                  key={pv.vendedorNome}
+                  type="button"
+                  onClick={() =>
+                    abrirListaCustom(
+                      `${bloco.nome} → ${pv.vendedorNome}`,
+                      pv.itens.map(r => ({
+                        key: `redv-${r.interacaoId}`,
+                        empresa: r.empresa,
+                        clienteCard: r.empresa?.cardPrincipal || clientesProp.find(c => c.id === r.clienteId),
+                        extraInfo: `Redistribuído em ${fmtDataCurta(r.dataISO)}`,
+                      })),
+                      'redistribuídos'
+                    )
+                  }
+                  className="px-2 py-0.5 rounded-full bg-[#EFEFF4] dark:bg-[#262629] hover:bg-black/[0.08] text-[11px] font-medium text-gray-700 cursor-pointer"
+                >
+                  {pv.vendedorNome.split(' ')[0]}: <strong>{pv.itens.length}</strong>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    )
+
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {renderCardBanco(resumoBancos.bancoClientes)}
+        {renderCardBanco(resumoBancos.bancoProspectos)}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3 pb-10">
@@ -1582,6 +1767,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
               </tbody>
             </table>
           </div>
+
+          {/* Blocos próprios dos dois Bancos (Item 1 da devolutiva: Banco de Clientes + Banco de Prospectos) */}
+          {isGerente && renderBlocosBancosRelatorios()}
 
           {/* Grade de 3 gráficos por linha, altura máx ~240px, sem pizza e sem legenda sobreposta */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -2255,7 +2443,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
         const selecionadasObj = todasEmpresasBrutas.filter(e => selecionadosChaves.has(e.chave))
 
         return (
-          <div className="bg-white border border-gray-200 rounded-xl p-3.5 space-y-3">
+          <div className="space-y-3">
+            {renderBlocosBancosRelatorios()}
+            <div className="bg-white border border-gray-200 rounded-xl p-3.5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <button
@@ -2395,6 +2585,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                 </div>
               </div>
             )}
+            </div>
           </div>
         )
       })()}
