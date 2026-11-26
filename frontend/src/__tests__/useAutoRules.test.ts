@@ -106,8 +106,8 @@ describe('useAutoRules', () => {
     })
   })
 
-  describe('auto-atribuir clientes órfãos', () => {
-    it('atribui clientes sem vendedor ao gerente', () => {
+  describe('proteção de carteira e bancos (Fase 2)', () => {
+    it('NÃO atribui clientes sem vendedor (Banco de Clientes/Prospectos) ao gerente automaticamente', () => {
       const params = defaultParams()
       params.clientes = [
         sampleCliente({ id: 1, vendedorId: undefined as any }),
@@ -115,12 +115,12 @@ describe('useAutoRules', () => {
       ]
 
       renderHook(() => useAutoRules(params))
-
-      // updateClientesBatch deve ser chamado para órfãos
-      // (assíncrono, pode levar um tick)
       vi.advanceTimersByTime(100)
 
-      expect(db.updateClientesBatch).toHaveBeenCalled()
+      const orphanCalls = vi.mocked(db.updateClientesBatch).mock.calls.filter(
+        call => Array.isArray(call[0]) && call[0].some((item: any) => item.changes && 'vendedorId' in item.changes)
+      )
+      expect(orphanCalls.length).toBe(0)
     })
 
     it('não reatribui clientes que já têm vendedor', () => {
@@ -132,17 +132,13 @@ describe('useAutoRules', () => {
       renderHook(() => useAutoRules(params))
       vi.advanceTimersByTime(100)
 
-      // updateClientesBatch NÃO deve ser chamado for orphan fix
-      // (may be called for diasInativo/score, but not with vendedorId)
       const orphanCalls = vi.mocked(db.updateClientesBatch).mock.calls.filter(
         call => Array.isArray(call[0]) && call[0].some((item: any) => item.changes && 'vendedorId' in item.changes)
       )
       expect(orphanCalls.length).toBe(0)
     })
-  })
 
-  describe('auto-move por prazo vencido', () => {
-    it('move cliente em amostra com > 45 dias para perdido', () => {
+    it('NÃO move etapa automaticamente no navegador por prazo vencido', () => {
       const params = defaultParams()
       const dataAntiga = new Date(Date.now() - 50 * 86400000).toISOString()
       params.clientes = [
@@ -151,30 +147,6 @@ describe('useAutoRules', () => {
 
       renderHook(() => useAutoRules(params))
 
-      // getClientsToAutoMove should detect this
-      expect(getClientsToAutoMove).toHaveBeenCalled()
-
-      // Should trigger setClientes with perdido update
-      const setClientesCalls = params.setClientes.mock.calls
-      const autoMoveCall = setClientesCalls.find(call => {
-        if (typeof call[0] !== 'function') return false
-        const result = call[0](params.clientes)
-        return result !== params.clientes && result.some((c: any) => c.etapa === 'perdido')
-      })
-
-      expect(autoMoveCall).toBeTruthy()
-    })
-
-    it('não move cliente em amostra com < 45 dias', () => {
-      const params = defaultParams()
-      const dataRecente = new Date(Date.now() - 10 * 86400000).toISOString()
-      params.clientes = [
-        sampleCliente({ id: 10, etapa: 'amostra', dataEntradaEtapa: dataRecente, diasInativo: 2 }),
-      ]
-
-      renderHook(() => useAutoRules(params))
-
-      // No auto-move should happen
       const setClientesCalls = params.setClientes.mock.calls
       const autoMoveCall = setClientesCalls.find(call => {
         if (typeof call[0] !== 'function') return false

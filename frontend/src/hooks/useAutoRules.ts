@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { Cliente, Interacao, Atividade, Vendedor, HistoricoEtapa, Pedido } from '../types'
+import type { Cliente, Interacao, Atividade, Vendedor, Pedido } from '../types'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
-import { calcScore, getClientsToAutoMove, getClientsToAutoInativo, calcDiasInativo, getProspeccaoToReturn, getLeadsNeedingAssignment, getPedidosPendingApproval, getNegociacaoStaleAlert } from '../utils/business-rules'
+import { calcScore, calcDiasInativo, getLeadsNeedingAssignment, getPedidosPendingApproval, getNegociacaoStaleAlert } from '../utils/business-rules'
 import { chaveClienteFunil } from '../utils/funil-logic'
 
 interface UseAutoRulesParams {
@@ -65,138 +65,14 @@ export function useAutoRules({
     return () => clearInterval(interval)
   }, [recalcDiasInativo])
 
-  // Auto-atribuir clientes órfãos ao gerente (usuário master)
-  const orphanFixRef = useRef(false)
-  useEffect(() => {
-    if (orphanFixRef.current) return
-    const clientes = clientesRef.current
-    const vendedores = vendedoresRef.current
-    const loggedUser = loggedUserRef.current
-    if (!loggedUser || clientes.length === 0 || vendedores.length === 0) return
-    const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo) || loggedUser
-    const orfaos = clientes.filter(c => !c.vendedorId)
-    if (orfaos.length === 0) { orphanFixRef.current = true; return }
-    orphanFixRef.current = true
-    setClientes(prev => prev.map(c => !c.vendedorId ? { ...c, vendedorId: gerente.id } : c))
-    const persistOrphan = async () => {
-      try {
-        await db.updateClientesBatch(orfaos.map(c => ({ id: c.id, changes: { vendedorId: gerente.id } })))
-        logger.log(`✅ ${orfaos.length} cliente(s) sem vendedor atribuído(s) a ${gerente.nome} (gerente)`)
-      } catch (err) { logger.error('Erro ao atribuir clientes órfãos batch:', err) }
-    }
-    persistOrphan()
-  }, [setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Item 2: Movimentação automática pelo sistema (prazos vencidos)
-  const autoMovedIds = useRef<Set<number>>(new Set())
-  const autoMoveRunRef = useRef(false)
-  useEffect(() => {
-    if (autoMoveRunRef.current) return
-    const clientes = clientesRef.current
-    if (clientes.length === 0) return
-    autoMoveRunRef.current = true
-    setTimeout(() => { autoMoveRunRef.current = false }, 3600000) // re-check a cada 1h
-
-    const clientesParaMover = getClientsToAutoMove(clientes, autoMovedIds.current)
-    if (clientesParaMover.length > 0) {
-      clientesParaMover.forEach(m => autoMovedIds.current.add(m.id))
-      const nowStr = new Date().toISOString()
-      // Update local state immediately
-      setClientes(prev => prev.map(c => {
-        const match = clientesParaMover.find(m => m.id === c.id)
-        if (!match) return c
-        const dest = match.destino
-        const hist: HistoricoEtapa = { etapa: dest, data: nowStr, de: c.etapa }
-        const extras: Partial<Cliente> = {
-          etapa: dest, etapaAnterior: c.etapa, dataEntradaEtapa: nowStr,
-          historicoEtapas: [...(c.historicoEtapas || []), hist],
-        }
-        if (dest === 'perdido') {
-          extras.categoriaPerda = 'sem_resposta' as const
-          extras.dataPerda = nowStr.split('T')[0]
-          extras.motivoPerda = `[Sistema] Prazo de ${match.dias}d na etapa "${match.etapa}" vencido — movido automaticamente`
-        }
-        return { ...c, ...extras }
-      }))
-      const moveInfo = clientesParaMover.map(m => {
-        const cl = clientesRef.current.find(c => c.id === m.id)
-        return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', fromStage: m.etapa }
-      })
-      const persistAutoMoves = async () => {
-        for (const m of moveInfo) {
-          const dest = m.destino
-          const updates: Record<string, any> = { etapa: dest, etapaAnterior: m.fromStage, dataEntradaEtapa: nowStr }
-          if (dest === 'perdido') {
-            updates.categoriaPerda = 'sem_resposta'
-            updates.dataPerda = nowStr.split('T')[0]
-            updates.motivoPerda = `[Sistema] Prazo de ${m.dias}d na etapa "${m.etapa}" vencido — movido automaticamente`
-          }
-          try {
-            await db.updateCliente(m.id, updates)
-            await db.insertHistoricoEtapa(m.id, { etapa: dest, data: nowStr, de: m.fromStage })
-            const destLabel = dest === 'inativo' ? 'Inativos' : 'Perdido'
-            const savedAtiv = await db.insertAtividade({
-              tipo: 'moveu',
-              descricao: `${m.razaoSocial} movido para ${destLabel} automaticamente (prazo ${m.dias}d vencido)`,
-              vendedorNome: 'Sistema', timestamp: nowStr
-            })
-            setAtividades(prev => [savedAtiv, ...prev])
-          } catch (err) { logger.error('Erro auto-move Supabase:', err) }
-          const destLabel = dest === 'inativo' ? 'Inativos' : 'Perdido'
-          addNotificacao('error', 'Movido automaticamente', `${m.razaoSocial} → ${destLabel} (prazo ${m.dias}d vencido)`, m.id)
-        }
-      }
-      persistAutoMoves()
-    }
-  }, [addNotificacao, setClientes, setAtividades]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-move para "inativo" — clientes com 90+ dias sem atividade
-  const autoInativoIds = useRef<Set<number>>(new Set())
-  const autoInativoRunRef = useRef(false)
-  useEffect(() => {
-    if (autoInativoRunRef.current) return
-    const clientes = clientesRef.current
-    if (clientes.length === 0) return
-    autoInativoRunRef.current = true
-    setTimeout(() => { autoInativoRunRef.current = false }, 3600000)
-
-    const clientesParaInativar = getClientsToAutoInativo(clientes, autoInativoIds.current)
-    if (clientesParaInativar.length > 0) {
-      clientesParaInativar.forEach(m => autoInativoIds.current.add(m.id))
-      const nowStr = new Date().toISOString()
-      setClientes(prev => prev.map(c => {
-        const match = clientesParaInativar.find(m => m.id === c.id)
-        if (!match) return c
-        const hist: HistoricoEtapa = { etapa: 'inativo', data: nowStr, de: c.etapa }
-        return {
-          ...c, etapa: 'inativo', etapaAnterior: c.etapa, dataEntradaEtapa: nowStr,
-          historicoEtapas: [...(c.historicoEtapas || []), hist],
-        }
-      }))
-      const moveInfo = clientesParaInativar.map(m => {
-        const cl = clientesRef.current.find(c => c.id === m.id)
-        return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente' }
-      })
-      const persistAutoInativo = async () => {
-        for (const m of moveInfo) {
-          try {
-            await db.updateCliente(m.id, {
-              etapa: 'inativo', etapaAnterior: m.etapa, dataEntradaEtapa: nowStr,
-            })
-            await db.insertHistoricoEtapa(m.id, { etapa: 'inativo', data: nowStr, de: m.etapa })
-            const savedAtiv = await db.insertAtividade({
-              tipo: 'moveu',
-              descricao: `${m.razaoSocial} movido para Inativos automaticamente (${m.dias}d sem atividade)`,
-              vendedorNome: 'Sistema', timestamp: nowStr
-            })
-            setAtividades(prev => [savedAtiv, ...prev])
-          } catch (err) { logger.error('Erro auto-inativo Supabase:', err) }
-          addNotificacao('warning', 'Cliente inativado', `${m.razaoSocial} → Inativos (${m.dias}d sem atividade)`, m.id)
-        }
-      }
-      persistAutoInativo()
-    }
-  }, [addNotificacao, setClientes, setAtividades]) // eslint-disable-line react-hooks/exhaustive-deps
+  // IMPORTANTE (Fase 2 — Item 10):
+  // As antigas regras automáticas de navegador que:
+  //   1) atribuíam clientes sem vendedor (vendedorId = null) ao primeiro gerente ativo (Rafael),
+  //   2) devolviam cards de Prospecção (>5d / >60d) para o primeiro gerente ativo (Rafael), e
+  //   3) moviam cards sozinhos de etapa para 'inativo'/'perdido' ao abrir o navegador
+  // foram DESATIVADAS permanentemente porque:
+  //   - Clientes sem vendedor pertencem ao Banco de Clientes / Banco de Prospectos (vendedor_id = null);
+  //   - A cadência de 15 dias e a situação de compra são controladas pelos indicadores/selos sem roubar carteira nem mover etapas silenciosamente no navegador.
 
   // Item 4: Score dinâmico — recalcula automaticamente e persiste (debounced, threshold 5pts)
   // Deps: apenas interacoes. clientes é lido via setClientes funcional para evitar o ciclo
@@ -247,52 +123,8 @@ export function useAutoRules({
     })
   }, [interacoes, setClientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Prospecção: devolver lead ao gerente (5d sem contato ou 60d sem amostra) ───
-  const returnedIds = useRef<Set<number>>(new Set())
-  const returnRunRef = useRef(false)
-  useEffect(() => {
-    if (returnRunRef.current) return
-    const clientes = clientesRef.current
-    const vendedores = vendedoresRef.current
-    if (clientes.length === 0 || vendedores.length === 0) return
-    returnRunRef.current = true
-    setTimeout(() => { returnRunRef.current = false }, 3600000)
-
-    const gerente = vendedores.find(v => v.cargo === 'gerente' && v.ativo)
-    if (!gerente) return
-
-    const toReturn = getProspeccaoToReturn(clientes, gerente.id, returnedIds.current)
-    if (toReturn.length === 0) return
-    toReturn.forEach(m => returnedIds.current.add(m.id))
-
-    const nowStr = new Date().toISOString()
-    setClientes(prev => prev.map(c => {
-      const match = toReturn.find(m => m.id === c.id)
-      if (!match) return c
-      return { ...c, vendedorId: gerente.id }
-    }))
-
-    const returnInfo = toReturn.map(m => {
-      const cl = clientesRef.current.find(c => c.id === m.id)
-      return { ...m, razaoSocial: cl?.razaoSocial || 'Cliente', vendedorAnterior: cl?.vendedorId }
-    })
-    const persistReturns = async () => {
-      for (const m of returnInfo) {
-        const motivoLabel = m.motivo === 'sem_contato_5d' ? 'sem contato em 5 dias' : 'sem envio de amostra em 60 dias'
-        try {
-          await db.updateCliente(m.id, { vendedorId: gerente.id })
-          const savedAtiv = await db.insertAtividade({
-            tipo: 'moveu',
-            descricao: `${m.razaoSocial} devolvido ao gerente (${motivoLabel})`,
-            vendedorNome: 'Sistema', timestamp: nowStr
-          })
-          setAtividades(prev => [savedAtiv, ...prev])
-        } catch (err) { logger.error('Erro ao devolver lead:', err) }
-        addNotificacao('warning', 'Lead devolvido', `${m.razaoSocial} devolvido ao gerente (${motivoLabel})`, m.id)
-      }
-    }
-    persistReturns()
-  }, [addNotificacao, setClientes, setAtividades]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Regra legada de devolver Prospecção (>5d / >60d) ao primeiro gerente ativo (Rafael)
+  // desativada permanentemente — ver comentário acima.
 
   // ─── Lead: notificar gerente se lead sem vendedor há 3+ dias ───
   const leadNotifRef = useRef(false)
