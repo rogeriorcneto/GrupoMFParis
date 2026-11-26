@@ -303,7 +303,7 @@ export function useClienteForm({ loggedUser, clientes = [], vendedores = [], set
             clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),
             assunto: 'Novo cliente', descricao: `Cliente cadastrado por ${loggedUser?.nome || 'Sistema'}: ${formData.razaoSocial}`, automatico: true
           })
-          setInteracoes(prev => [savedI, ...prev])
+          setInteracoes(prev => prev.some(i => i.id === savedI.id) ? prev : [savedI, ...prev])
         } catch (err) {
           logger.error('Cliente cadastrado, mas não foi possível registrar a interação:', err)
         }
@@ -313,7 +313,7 @@ export function useClienteForm({ loggedUser, clientes = [], vendedores = [], set
               clienteId: savedC.id, tipo: 'nota', data: new Date().toISOString(),
               assunto: 'Dados da empresa', descricao: descricao.trim(), automatico: true
             })
-            setInteracoes(prev => [savedNota, ...prev])
+            setInteracoes(prev => prev.some(i => i.id === savedNota.id) ? prev : [savedNota, ...prev])
           } catch (err) {
             logger.error('Não foi possível registrar nota com dados da empresa:', err)
           }

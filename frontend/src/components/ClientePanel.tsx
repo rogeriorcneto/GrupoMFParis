@@ -10,7 +10,7 @@ import { formatCNPJ, formatBrazilianPhone } from '../utils/validators'
 import { isMobileDevice } from '../utils/device'
 import { mesmaEmpresaNoFunil, existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { parseRedesSociaisMap } from '../utils/socialLinks'
-import WhatsAppUserPanel from './WhatsAppUserPanel'
+import WhatsAppUserPanel, { WhatsAppImageLightbox } from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
 import EmailCenterPanel from './EmailCenterPanel'
@@ -206,6 +206,7 @@ export default function ClientePanel({
   const [produtoPendenteKg, setProdutoPendenteKg] = useState('')
   const [showCadastroCompleto, setShowCadastroCompleto] = useState(false)
   const [showInfoSituacaoCompra, setShowInfoSituacaoCompra] = useState(false)
+  const [waLightbox, setWaLightbox] = useState<{ url: string; caption?: string } | null>(null)
   const [mapReady, setMapReady] = useState(false)
   const [auditoriasIA, setAuditoriasIA] = useState<Map<string, RegistroAuditoriaIA>>(
     () => (_auditoriasIACache && Date.now() - _auditoriasIACache.ts < 60_000 ? _auditoriasIACache.map : new Map())
@@ -682,8 +683,33 @@ export default function ClientePanel({
 
   type InteracaoGlobal = Interacao & { cicloOrigem?: number; anexoNome?: string }
 
+  // Filtra mensagens soltas do chat WhatsApp (ficam apenas na aba WhatsApp) e deduplica notas repetidas
+  const clienteInteracoesFiltradas = React.useMemo(() => {
+    const vistos = new Set<string>()
+    const vistasTextoMinuto = new Set<string>()
+    const out: Interacao[] = []
+    for (const i of clienteInteracoesBase) {
+      // Mensagens avulsas enviadas pelo chat WhatsApp ficam salvas só no histórico da aba WhatsApp (não viram tarefa/card aqui)
+      if (i.tipo === 'whatsapp' && (i.assunto === 'Mensagem WhatsApp' || i.assunto === 'WhatsApp recebido')) continue
+      const idKey = `id:${i.id}`
+      if (vistos.has(idKey)) continue
+      vistos.add(idKey)
+      const minuto = Math.floor(new Date(i.data).getTime() / 60000)
+      const txtKey = `${i.tipo}|${(i.assunto || '').trim()}|${(i.descricao || '').trim()}|${minuto}`
+      if (vistasTextoMinuto.has(txtKey)) continue
+      vistasTextoMinuto.add(txtKey)
+      out.push(i)
+    }
+    return out
+  }, [clienteInteracoesBase])
+
+  const descricoesInteracaoExistentes = React.useMemo(
+    () => new Set(clienteInteracoesFiltradas.map(i => (i.descricao || '').trim().toLowerCase()).filter(Boolean)),
+    [clienteInteracoesFiltradas]
+  )
+
   const clienteInteracoes: InteracaoGlobal[] = [
-    ...clienteInteracoesBase.map(i => ({
+    ...clienteInteracoesFiltradas.map(i => ({
       ...i,
       cicloOrigem: cicloPorCardId.get(i.clienteId) || 1,
     })),
@@ -748,7 +774,11 @@ export default function ClientePanel({
       automatico: true,
     } as InteracaoGlobal)),
     ...atividadesDoCliente
-      .filter(a => a.tipo !== 'moveu') // mudanças de etapa já vêm com ciclo exato via historico_etapas
+      .filter(a =>
+        a.tipo !== 'moveu' &&
+        a.tipo !== 'whatsapp' &&
+        !descricoesInteracaoExistentes.has(String(a.descricao || '').trim().toLowerCase())
+      )
       .map(a => ({
         id: -(a.id + ATIVIDADE_ID_OFFSET),
         clienteId: c.id,
@@ -2489,9 +2519,14 @@ export default function ClientePanel({
                           <audio controls src={m.mediaUrl} className="w-full max-w-[240px] h-9" />
                         )}
                         {m.mediaUrl && m.tipo === 'image' && (
-                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={m.mediaUrl} alt={m.mensagem} className="rounded-xl max-w-[240px] max-h-[240px] object-cover mb-1" />
-                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setWaLightbox({ url: m.mediaUrl!, caption: m.mensagem })}
+                            className="block text-left cursor-pointer focus:outline-none"
+                            title="Clique para ampliar, baixar ou compartilhar"
+                          >
+                            <img src={m.mediaUrl} alt={m.mensagem} className="rounded-xl max-w-[240px] max-h-[240px] object-cover mb-1 hover:opacity-95 transition-opacity" />
+                          </button>
                         )}
                         {m.mediaUrl && m.tipo === 'video' && (
                           <video controls src={m.mediaUrl} className="rounded-xl max-w-[240px] max-h-[240px] mb-1" />
@@ -3472,10 +3507,9 @@ export default function ClientePanel({
                                   Editar
                                 </button>
                               )}
-                              {labelReal !== 'Nota' && (() => {
+                              {labelReal !== 'Nota' && !!tarefaVinculada && (() => {
                                 const temTarefaPendente = tarefaVinculada?.status === 'pendente'
                                 const jaFinalizada = tarefaVinculada?.status === 'concluida'
-                                const semTarefa = !tarefaVinculada
                                 const ativo = temTarefaPendente
                                 return (
                                   <>
@@ -3495,7 +3529,7 @@ export default function ClientePanel({
                                             ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer'
                                             : 'border-gray-200 bg-gray-50 text-gray-400 cursor-default'
                                       }`}
-                                      title={jaFinalizada ? 'Já finalizada' : semTarefa ? 'Sem tarefa vinculada' : 'Finalizar tarefa'}
+                                      title={jaFinalizada ? 'Já finalizada' : 'Finalizar tarefa'}
                                     >
                                       {jaFinalizada ? '✓ Finalizada' : '✓ Finalizar'}
                                     </button>
@@ -3682,6 +3716,14 @@ export default function ClientePanel({
                 </div>
               </div>
             </div>
+          )}
+          {waLightbox && (
+            <WhatsAppImageLightbox
+              mediaUrl={waLightbox.url}
+              caption={waLightbox.caption}
+              onClose={() => setWaLightbox(null)}
+              showToast={showToast}
+            />
           )}
 
           </div>

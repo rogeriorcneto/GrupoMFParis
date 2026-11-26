@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon, ShareIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
@@ -31,17 +31,275 @@ interface Message {
   fileName?: string
 }
 
-/** Renderiza o corpo da mensagem — mídia (áudio, imagem, vídeo, doc) ou texto */
-function renderMessageContent(msg: Message, isMine = false) {
+/** Lightbox Apple para visualizar imagem ampliada, fazer download e compartilhar APENAS com os contatos do próprio usuário */
+export const WhatsAppImageLightbox: React.FC<{
+  mediaUrl: string
+  caption?: string
+  onClose: () => void
+  showToast?: (tipo: 'success' | 'error', texto: string) => void
+}> = ({ mediaUrl, caption, onClose, showToast }) => {
+  const [shareOpen, setShareOpen] = useState(false)
+  const [contacts, setContacts] = useState<WAContactItem[]>([])
+  const [loadingContacts, setLoadingContacts] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedNums, setSelectedNums] = useState<string[]>([])
+  const [shareCaption, setShareCaption] = useState('')
+  const [sharing, setSharing] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const abrirCompartilhar = async () => {
+    setShareOpen(true)
+    if (contacts.length === 0) {
+      setLoadingContacts(true)
+      try {
+        const list = await getUserWhatsAppContacts()
+        setContacts(list || [])
+      } catch {
+        setContacts([])
+      } finally {
+        setLoadingContacts(false)
+      }
+    }
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      const res = await fetch(mediaUrl)
+      const blob = await res.blob()
+      const ext = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg'
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objUrl
+      a.download = `whatsapp-imagem-${Date.now()}.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(objUrl), 5000)
+    } catch {
+      const a = document.createElement('a')
+      a.href = mediaUrl
+      a.target = '_blank'
+      a.download = `whatsapp-imagem-${Date.now()}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const toggleContact = (num: string) => {
+    setSelectedNums(prev => prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num])
+  }
+
+  const handleConfirmShare = async () => {
+    if (selectedNums.length === 0 || sharing) return
+    setSharing(true)
+    try {
+      let base64 = ''
+      let mime = 'image/jpeg'
+      if (mediaUrl.startsWith('data:')) {
+        const [meta, b64] = mediaUrl.split(',')
+        base64 = b64 || ''
+        const m = meta?.match(/^data:([^;]+)/)
+        if (m?.[1]) mime = m[1]
+      } else {
+        const res = await fetch(mediaUrl)
+        const blob = await res.blob()
+        mime = blob.type || 'image/jpeg'
+        base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '')
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+      }
+      let ok = 0
+      for (const num of selectedNums) {
+        const r = await sendUserWhatsAppImage(num, base64, mime, shareCaption.trim() || undefined)
+        if (r.success) ok++
+      }
+      if (ok > 0) {
+        showToast?.('success', `Imagem compartilhada com ${ok} contato(s)!`)
+        setShareOpen(false)
+        setSelectedNums([])
+        setShareCaption('')
+      } else {
+        showToast?.('error', 'Não foi possível enviar a imagem para os contatos selecionados.')
+      }
+    } catch (err: any) {
+      showToast?.('error', 'Erro ao compartilhar imagem: ' + (err?.message || ''))
+    } finally {
+      setSharing(false)
+    }
+  }
+
+  const filtered = contacts.filter(c => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return c.name.toLowerCase().includes(q) || c.number.includes(q) || (c.notify || '').toLowerCase().includes(q)
+  })
+
+  return (
+    <div
+      className="fixed inset-0 z-[320] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex flex-col items-center max-w-4xl w-full max-h-[92vh]"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Barra superior de ações */}
+        <div className="w-full flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-2xl bg-white/95 dark:bg-[#1C1C1E]/95 border border-black/[0.08] shadow-lg">
+          <p className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+            {caption && !caption.startsWith('📷') ? caption : 'Visualização da imagem'}
+          </p>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEFF4] dark:bg-[#2C2C30] hover:bg-black/[0.08] text-gray-800 dark:text-gray-100 text-xs font-semibold transition-colors cursor-pointer"
+              title="Baixar imagem"
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" />
+              {downloading ? 'Baixando...' : 'Download'}
+            </button>
+            <button
+              type="button"
+              onClick={abrirCompartilhar}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-700 hover:bg-primary-800 text-white text-xs font-semibold transition-colors cursor-pointer"
+              title="Compartilhar apenas com os seus contatos"
+            >
+              <ShareIcon className="h-4 w-4" />
+              Compartilhar
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+              title="Fechar"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Imagem ampliada */}
+        <div className="flex-1 flex items-center justify-center overflow-hidden">
+          <img
+            src={mediaUrl}
+            alt={caption || 'Imagem WhatsApp'}
+            className="max-w-full max-h-[76vh] object-contain rounded-2xl shadow-2xl bg-black/20"
+          />
+        </div>
+
+        {/* Painel de compartilhamento (restrito aos contatos do próprio usuário) */}
+        {shareOpen && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-2xl p-4">
+            <div className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.10] w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Compartilhar imagem</h4>
+                  <p className="text-[11px] text-gray-500">Exibindo apenas os seus contatos</p>
+                </div>
+                <button type="button" onClick={() => setShareOpen(false)} className="p-1 text-gray-400 hover:text-gray-700 rounded-lg cursor-pointer">
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="p-3 border-b border-gray-100 space-y-2">
+                <div className="relative">
+                  <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Buscar nos seus contatos..."
+                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#F5F5F7] dark:bg-[#262629] rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                  />
+                </div>
+                <input
+                  type="text"
+                  value={shareCaption}
+                  onChange={e => setShareCaption(e.target.value)}
+                  placeholder="Legenda opcional..."
+                  className="w-full px-3 py-1.5 text-xs bg-[#F5F5F7] dark:bg-[#262629] rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-gray-100 min-h-[180px] max-h-[280px]">
+                {loadingContacts ? (
+                  <p className="text-xs text-gray-400 py-8 text-center">Carregando seus contatos...</p>
+                ) : filtered.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-8 text-center">Nenhum contato encontrado na sua carteira/WhatsApp.</p>
+                ) : (
+                  filtered.map(ct => {
+                    const checked = selectedNums.includes(ct.number)
+                    return (
+                      <button
+                        key={ct.jid}
+                        type="button"
+                        onClick={() => toggleContact(ct.number)}
+                        className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 text-xs hover:bg-gray-50 cursor-pointer ${checked ? 'bg-primary-50/70' : ''}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{ct.name}</p>
+                          <p className="text-[11px] text-gray-400 tabular-nums">+{ct.number}</p>
+                        </div>
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ${checked ? 'bg-primary-700 border-primary-700 text-white' : 'border-gray-300'}`}>
+                          {checked ? '✓' : ''}
+                        </span>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+              <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-500">{selectedNums.length} selecionado(s)</span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setShareOpen(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer">
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedNums.length === 0 || sharing}
+                    onClick={handleConfirmShare}
+                    className="px-4 py-1.5 text-xs font-semibold bg-primary-700 hover:bg-primary-800 disabled:bg-gray-300 text-white rounded-xl cursor-pointer"
+                  >
+                    {sharing ? 'Enviando...' : 'Enviar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Renderiza o corpo da mensagem — mídia (áudio, imagem clicável, vídeo, doc) ou texto */
+function renderMessageContent(msg: Message, isMine = false, onOpenImage?: (url: string, caption?: string) => void) {
   if (msg.mediaUrl) {
     switch (msg.tipo) {
       case 'audio':
         return <audio controls src={msg.mediaUrl} className="w-full max-w-[240px] h-9" />
       case 'image':
         return (
-          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
-            <img src={msg.mediaUrl} alt={msg.text} className="rounded-xl max-w-[240px] max-h-[240px] object-cover mb-1" />
-          </a>
+          <button
+            type="button"
+            onClick={() => onOpenImage ? onOpenImage(msg.mediaUrl!, msg.text) : window.open(msg.mediaUrl, '_blank')}
+            className="block text-left group cursor-pointer focus:outline-none"
+            title="Clique para ampliar, baixar ou compartilhar"
+          >
+            <img src={msg.mediaUrl} alt={msg.text} className="rounded-xl max-w-[240px] max-h-[240px] object-cover mb-1 group-hover:opacity-95 transition-opacity" />
+          </button>
         )
       case 'video':
         return <video controls src={msg.mediaUrl} className="rounded-xl max-w-[240px] max-h-[240px] mb-1" />
@@ -99,8 +357,9 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const [contactSearch, setContactSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<WAContactItem | null>(null)
 
-  // Image attachment
+  // Image attachment + Lightbox state
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; caption?: string } | null>(null)
 
   // Validation state
   const [validating, setValidating] = useState(false)
@@ -416,20 +675,25 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     setSending(true)
     try {
       const reader = new FileReader()
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => {
-          const result = reader.result as string
-          resolve(result.split(',')[1]) // strip data:...;base64,
-        }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string)
         reader.onerror = reject
         reader.readAsDataURL(file)
       })
+      const base64 = dataUrl.split(',')[1]
       const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      setMessages(prev => [...prev, { id: Date.now(), text: `📷 [Imagem] ${file.name}`, from: 'me', time: now }])
+      const tempId = Date.now()
+      setMessages(prev => [...prev, { id: tempId, text: `📷 [Imagem] ${file.name}`, mediaUrl: dataUrl, tipo: 'image', from: 'me', time: now }])
       const result = await sendUserWhatsAppImage(num, base64, file.type, undefined, cliente?.id)
       if (!result.success) {
+        setMessages(prev => prev.filter(m => m.id !== tempId))
         showToast?.('error', 'Falha ao enviar imagem: ' + (result.error || ''))
       } else {
+        setMessages(prev => prev.map(m => m.id === tempId ? {
+          ...m,
+          id: (result as any).messageId || m.id,
+          mediaUrl: (result as any).mediaUrl || m.mediaUrl,
+        } : m))
         showToast?.('success', 'Imagem enviada!')
       }
     } catch (err: any) {
@@ -984,12 +1248,12 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                   </div>
                 ) : msg.from === 'them' ? (
                   <div className="text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-bl-sm max-w-[82%] shadow-sm bg-white dark:bg-[#262629] text-gray-900 dark:text-gray-100 border border-black/[0.04] dark:border-white/[0.06]">
-                    {renderMessageContent(msg, false)}
+                    {renderMessageContent(msg, false, (url, caption) => setLightboxImage({ url, caption }))}
                     <p className="text-[10px] text-right mt-1 text-gray-400 tabular-nums">{msg.time}</p>
                   </div>
                 ) : (
                   <div className="text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-br-sm max-w-[82%] shadow-sm bg-primary-700 dark:bg-[#2A4380] text-white">
-                    {renderMessageContent(msg, true)}
+                    {renderMessageContent(msg, true, (url, caption) => setLightboxImage({ url, caption }))}
                     <p className="text-[10px] text-right mt-1 text-white/70 tabular-nums">{msg.time} · enviada</p>
                   </div>
                 )}
@@ -1114,6 +1378,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           contactName={getChatName()}
           callMode={callMode}
           onClose={() => setShowCallRecorder(false)}
+        />
+      )}
+      {/* Lightbox de imagem ampliada + download + compartilhar apenas com contatos do usuário */}
+      {lightboxImage && (
+        <WhatsAppImageLightbox
+          mediaUrl={lightboxImage.url}
+          caption={lightboxImage.caption}
+          onClose={() => setLightboxImage(null)}
+          showToast={showToast}
         />
       )}
     </div>

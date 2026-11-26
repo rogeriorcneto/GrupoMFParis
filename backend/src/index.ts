@@ -557,18 +557,8 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
           tipo: 'text',
         })
         if (clienteId) {
-          await db.insertInteracao({
-            clienteId, tipo: 'whatsapp', data: new Date().toISOString(),
-            assunto: 'Mensagem WhatsApp', descricao: text.substring(0, 200),
-            automatico: false
-          })
           await db.updateCliente(clienteId, { ultimaInteracao: new Date().toISOString().split('T')[0] })
         }
-        await db.insertAtividade({
-          tipo: 'whatsapp',
-          descricao: `WhatsApp para ${number}: ${text.substring(0, 80)}`,
-          vendedorNome: vendedor.nome,
-        })
       } catch (err) {
         log.error({ err }, 'Erro ao registrar mensagem/interação WhatsApp (user)')
       }
@@ -579,14 +569,14 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
   }
 })
 
-// Contatos do WhatsApp do vendedor
+// Contatos do WhatsApp do vendedor (estritamente isolados aos contatos do próprio usuário logado!)
 app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
   const userId = (req as any).userId
   try {
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
-    const contacts = await getUserWhatsAppContacts(vendedor.id, vendedor.cargo === 'gerente')
+    const contacts = await getUserWhatsAppContacts(vendedor.id, false)
     const chats = getUserWhatsAppChats(vendedor.id)
     // Merge: enrich contacts with chat data (last message time, unread count)
     const merged = contacts
@@ -887,9 +877,11 @@ app.post('/api/whatsapp/user/send-image', requireAuth, rateLimit(10, 60_000), as
     if (!vendedor) { res.status(404).json({ success: false, error: 'Vendedor não encontrado' }); return }
     const mime = mimetype || 'image/jpeg'
     const result = await sendUserWhatsAppImage(vendedor.id, number, imageBase64, mime, caption)
+    let uploadedMediaUrl: string | undefined
     if (result.success) {
       try {
         const mediaUrl = await db.uploadWhatsAppMedia(Buffer.from(imageBase64, 'base64'), mime)
+        uploadedMediaUrl = mediaUrl || undefined
         await db.insertWhatsAppMessage({
           numero: result.resolvedNumber || formatBrazilianPhone(number),
           clienteId: clienteId || undefined,
@@ -897,12 +889,12 @@ app.post('/api/whatsapp/user/send-image', requireAuth, rateLimit(10, 60_000), as
           direcao: 'enviada',
           mensagem: caption ? `📷 [Imagem] ${caption}` : '📷 [Imagem]',
           tipo: 'image',
-          mediaUrl: mediaUrl || undefined,
+          mediaUrl: uploadedMediaUrl,
           mimetype: mime,
         })
       } catch { /* non-critical */ }
     }
-    res.json(result)
+    res.json({ ...result, mediaUrl: uploadedMediaUrl })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err?.message || 'Erro interno' })
   }

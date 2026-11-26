@@ -578,41 +578,39 @@ export async function sendUserWhatsAppMessage(
 /** Busca contatos do WhatsApp do vendedor (Baileys + DB fallback) */
 export async function getUserWhatsAppContacts(vendedorId: number, isGerente = false): Promise<WAContact[]> {
   const session = sessions.get(vendedorId)
-  if (!session || session.status !== 'connected') return []
+  const baileysContacts = session && session.status === 'connected' ? [...session.contacts] : []
 
-  const baileysContacts = session.contacts
-
-  // If Baileys has enough contacts, return them directly
-  if (baileysContacts.length >= 5) return baileysContacts
-
-  // Fallback: also include validated CRM clients from DB —
-  // vendedor só vê os clientes da própria carteira
+  // Mescla sempre os clientes da PRÓPRIA carteira do usuário logado (nunca de outros vendedores!)
   try {
     const { supabase } = await import('./supabase.js')
     let query = supabase
       .from('clientes')
       .select('razao_social, contato_nome, whatsapp_jid, contato_celular, contato_telefone, whatsapp')
-      .eq('whatsapp_valido', true)
-      .not('whatsapp_jid', 'is', null)
+      .eq('arquivado_duplicata', false)
       .limit(500)
     if (!isGerente) query = query.eq('vendedor_id', vendedorId)
     const { data: dbClients } = await query
 
     if (dbClients && dbClients.length > 0) {
-      const existingJids = new Set(baileysContacts.map(c => c.jid))
+      const existingNums = new Set(baileysContacts.map(c => formatBrazilianPhone(c.number || c.jid.split('@')[0])))
       for (const c of dbClients) {
-        if (!c.whatsapp_jid || existingJids.has(c.whatsapp_jid)) continue
-        const num = c.whatsapp_jid.replace('@s.whatsapp.net', '')
+        const rawPhone = c.whatsapp_jid
+          ? c.whatsapp_jid.replace('@s.whatsapp.net', '')
+          : (c.whatsapp || c.contato_celular || c.contato_telefone || '').replace(/\D/g, '')
+        if (!rawPhone || isPlaceholderPhone(rawPhone)) continue
+        const cleanNum = formatBrazilianPhone(rawPhone)
+        if (!cleanNum || existingNums.has(cleanNum)) continue
+        const jid = `${cleanNum}@s.whatsapp.net`
         baileysContacts.push({
-          jid: c.whatsapp_jid,
-          name: c.contato_nome || c.razao_social || num,
-          number: num,
+          jid,
+          name: c.razao_social || c.contato_nome || cleanNum,
+          number: cleanNum,
         })
-        existingJids.add(c.whatsapp_jid)
+        existingNums.add(cleanNum)
       }
     }
   } catch (err) {
-    log.warn({ err }, 'Falha ao buscar contatos validados do DB')
+    log.warn({ err }, 'Falha ao buscar contatos da carteira do vendedor no DB')
   }
 
   return baileysContacts
