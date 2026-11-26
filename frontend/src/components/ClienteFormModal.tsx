@@ -215,7 +215,7 @@ export default function ClienteFormModal({
                         <button type="button" onClick={() => buscarCnpj(formData.cnpj)}
                           disabled={isLoadingCnpj || !formData.cnpj}
                           className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-xs font-medium disabled:opacity-50 whitespace-nowrap">
-                          {isLoadingCnpj ? '⏳' : '🔍 Buscar'}
+                          {isLoadingCnpj ? '⏳' : 'Buscar'}
                         </button>
                       </div>
                     </div>
@@ -248,7 +248,7 @@ export default function ClienteFormModal({
                         </div>
                         {grupoSearchResult ? (
                           <div className="flex items-center gap-2 px-3 py-2 border border-green-300 bg-green-50 rounded-apple">
-                            <span className="text-xs font-medium text-green-800 flex-1 truncate">🔗 {grupoSearchResult.razaoSocial}</span>
+                            <span className="text-xs font-medium text-green-800 flex-1 truncate">{grupoSearchResult.razaoSocial}</span>
                             <button type="button" onClick={removerGrupo} className="text-gray-400 hover:text-red-500 text-xs font-bold">✕</button>
                           </div>
                         ) : (
@@ -262,7 +262,7 @@ export default function ClienteFormModal({
                               placeholder="CNPJ do cliente matriz/filial" />
                             <button type="button" onClick={buscarClientePorCnpj} disabled={isSearchingGrupo}
                               className="px-3 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-apple text-xs font-medium disabled:opacity-50 whitespace-nowrap">
-                              {isSearchingGrupo ? '⏳' : '🔗 Linkar'}
+                              {isSearchingGrupo ? '⏳' : 'Linkar'}
                             </button>
                           </div>
                         )}
@@ -397,7 +397,7 @@ export default function ClienteFormModal({
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Contatos fixos (Comprador e Financeiro)</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="border border-gray-200 rounded-apple p-3 bg-gray-50/40">
-                    <p className="text-xs font-semibold text-gray-700 mb-2">🛒 Contato Comprador</p>
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Contato Comprador</p>
                     <div className="space-y-2">
                       <input type="text" name="contatoComprasNome" value={formData.contatoComprasNome || ''} onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
@@ -411,7 +411,7 @@ export default function ClienteFormModal({
                     </div>
                   </div>
                   <div className="border border-gray-200 rounded-apple p-3 bg-gray-50/40">
-                    <p className="text-xs font-semibold text-gray-700 mb-2">💰 Contato Financeiro</p>
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Contato Financeiro</p>
                     <div className="space-y-2">
                       <input type="text" name="contatoFinanceiroNome" value={formData.contatoFinanceiroNome || ''} onChange={handleInputChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
@@ -621,7 +621,7 @@ export default function ClienteFormModal({
                     </div>
                     {homologados.length === 0 ? (
                       <div className="border border-dashed border-gray-200 rounded-apple p-4 text-center bg-green-50/30">
-                        <p className="text-sm text-gray-500">✅ Nenhum produto homologado ainda.</p>
+                        <p className="text-sm text-gray-500">Nenhum produto homologado ainda.</p>
                         <p className="text-xs text-gray-400 mt-1">Itens aparecem aqui automaticamente quando há compras ou amostras aprovadas.</p>
                       </div>
                     ) : (
@@ -655,7 +655,7 @@ export default function ClienteFormModal({
                     className="px-4 py-2 text-gray-600 bg-gray-100 border border-gray-300 rounded-apple hover:bg-gray-200 hover:text-gray-800 transition-colors duration-200 text-sm font-medium"
                     title="Mover cliente para etapa Inativo (com motivo)"
                   >
-                    💤 Inativar
+                    Inativar
                   </button>
                 )}
                 {/* Menu Mais Opções (Reativar — só para Gestor, se cliente está inativo) */}
@@ -684,7 +684,7 @@ export default function ClienteFormModal({
                               }}
                               className="w-full px-3 py-2 text-sm text-green-700 hover:bg-green-50 text-left flex items-center gap-2"
                             >
-                              ♻️ Reativar Cliente
+                              Reativar Cliente
                             </button>
                           ) : (
                             <p className="px-3 py-2 text-xs text-gray-400">Nenhuma ação disponível.</p>

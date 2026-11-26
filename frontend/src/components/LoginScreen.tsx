@@ -127,7 +127,7 @@ export default function LoginScreen({
         {showForgot && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setShowForgot(false)}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">🔑 Recuperar senha</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">Recuperar senha</h3>
               <p className="text-sm text-gray-500 mb-4">Informe seu e-mail para receber o link de redefinição.</p>
               <input
                 type="email"

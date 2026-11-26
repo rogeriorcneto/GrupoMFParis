@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { PhoneIcon, GlobeAltIcon, MapPinIcon, StarIcon, MagnifyingGlassIcon, EnvelopeIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../../types'
 import * as db from '../../lib/database'
 import { authFetch } from '../../lib/botApi'
@@ -8,11 +9,11 @@ import { PlacesEnrich } from '../PlacesEnrich'
 const BOT_URL = import.meta.env.VITE_BOT_URL || 'http://localhost:3001'
 
 const SEGMENTOS = [
-  { label: '🍦 Sorveterias', cnae: '1053800', desc: 'Fabricação de sorvetes' },
-  { label: '🥛 Laticínios', cnae: '1052000', desc: 'Fabricação de laticínios' },
-  { label: '🏪 Atacado Sorvete', cnae: '4637106', desc: 'Comércio atacadista de sorvetes' },
-  { label: '🏭 Atacado Outros', cnae: '4637199', desc: 'Atacado alimentício - outros' },
-  { label: '🛒 Varejo Alim.', cnae: '4729699', desc: 'Varejo de produtos alimentícios' },
+  { label: 'Sorveterias', cnae: '1053800', desc: 'Fabricação de sorvetes' },
+  { label: 'Laticínios', cnae: '1052000', desc: 'Fabricação de laticínios' },
+  { label: 'Atacado Sorvete', cnae: '4637106', desc: 'Comércio atacadista de sorvetes' },
+  { label: 'Atacado Outros', cnae: '4637199', desc: 'Atacado alimentício - outros' },
+  { label: 'Varejo Alim.', cnae: '4729699', desc: 'Varejo de produtos alimentícios' },
 ]
 
 const UFS = [
@@ -92,8 +93,8 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
   return (
     <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2" onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between">
-        <p className="text-xs font-bold text-blue-700">🔍 Google Places</p>
-        <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600">✕ Fechar</button>
+        <p className="text-xs font-bold text-blue-700">Google Places</p>
+        <button onClick={onClose} className="text-xs text-gray-400 hover:text-gray-600">Fechar</button>
       </div>
 
       {(step === 'searching') && (
@@ -131,7 +132,7 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
           <div className="grid grid-cols-2 gap-1.5 text-xs">
             {details.phone && (
               <div className="flex items-center gap-1.5 p-2 bg-green-50 rounded-lg border border-green-200">
-                <span className="text-green-600">📞</span>
+                <PhoneIcon className="h-4 w-4 text-green-600 flex-shrink-0" />
                 <div>
                   <p className="font-bold text-green-700">Telefone</p>
                   <a href={`tel:${details.phone}`} className="text-green-900 font-semibold">{details.phone}</a>
@@ -142,7 +143,7 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
             )}
             {details.website && (
               <div className="flex items-center gap-1.5 p-2 bg-blue-50 rounded-lg border border-blue-200">
-                <span>🌐</span>
+                <GlobeAltIcon className="h-4 w-4 text-blue-500 flex-shrink-0" />
                 <div className="min-w-0">
                   <p className="font-bold text-blue-700">Site</p>
                   <a href={details.website} target="_blank" rel="noopener noreferrer"
@@ -154,7 +155,7 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
             )}
             {details.website?.includes('instagram.com') && (
               <div className="flex items-center gap-1.5 p-2 bg-pink-50 rounded-lg border border-pink-200">
-                <span>📸</span>
+                <GlobeAltIcon className="h-4 w-4 text-pink-500 flex-shrink-0" />
                 <div className="min-w-0">
                   <p className="font-bold text-pink-700">Instagram</p>
                   <a href={details.website} target="_blank" rel="noopener noreferrer"
@@ -166,7 +167,7 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
             )}
             {details.rating && (
               <div className="flex items-center gap-1.5 p-2 bg-amber-50 rounded-lg border border-amber-200">
-                <span>⭐</span>
+                <StarIcon className="h-4 w-4 text-amber-500 flex-shrink-0" />
                 <div>
                   <p className="font-bold text-amber-700">Google</p>
                   <p className="text-amber-900 font-semibold">{details.rating} <span className="font-normal text-amber-600">({details.totalRatings?.toLocaleString('pt-BR')})</span></p>
@@ -177,7 +178,7 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
               <div className={`flex items-center gap-1.5 p-2 rounded-lg border ${
                 details.isOpen ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
               }`}>
-                <span>{details.isOpen ? '✅' : '❌'}</span>
+                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${details.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
                 <div>
                   <p className={`font-bold ${details.isOpen ? 'text-green-700' : 'text-red-600'}`}>
                     {details.isOpen ? 'Aberto agora' : 'Fechado agora'}
@@ -187,7 +188,7 @@ const LeadGooglePanel: React.FC<{ lead: LeadRf; onClose: () => void }> = ({ lead
             )}
             {details.googleMapsUrl && (
               <div className="flex items-center gap-1.5 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                <span>🗺️</span>
+                <MapPinIcon className="h-4 w-4 text-gray-500 flex-shrink-0" />
                 <div>
                   <p className="font-bold text-gray-600">Maps</p>
                   <a href={details.googleMapsUrl} target="_blank" rel="noopener noreferrer"
@@ -301,7 +302,7 @@ const LeadDetailModal: React.FC<{
           {/* Status badges */}
           <div className="flex flex-wrap gap-2">
             {jaNoCrm && (
-              <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold">✅ Já no CRM</span>
+              <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold">Já no CRM</span>
             )}
             <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-mono">
               {SEGMENTOS.find(s => s.cnae === lead.cnae)?.label || lead.cnae}
@@ -313,7 +314,7 @@ const LeadDetailModal: React.FC<{
           <div className="grid grid-cols-1 gap-2">
             {/* Localização */}
             <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-              <span className="text-lg flex-shrink-0">📍</span>
+              <MapPinIcon className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-gray-700">
                 <p className="font-semibold text-gray-900">{lead.municipio} — {lead.uf}</p>
                 {lead.logradouro && <p className="text-gray-500 text-xs mt-0.5">{lead.logradouro}{lead.bairro ? `, ${lead.bairro}` : ''}{cepFmt ? ` — CEP ${cepFmt}` : ''}</p>}
@@ -323,12 +324,12 @@ const LeadDetailModal: React.FC<{
             {/* Contato RF */}
             {(lead.telefone || lead.email) && (
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
-                <span className="text-lg flex-shrink-0">📋</span>
+                <PhoneIcon className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
                 <div className="text-sm space-y-1">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dados da Receita Federal</p>
                   {lead.telefone && (
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-600">📞</span>
+                      <PhoneIcon className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                       <a href={`tel:${lead.telefone}`} className="text-gray-800 font-medium hover:text-blue-600">{lead.telefone}</a>
                       <a href={`https://wa.me/55${lead.telefone.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
                         className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-lg hover:bg-green-600">WA</a>
@@ -336,7 +337,7 @@ const LeadDetailModal: React.FC<{
                   )}
                   {lead.email && (
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-600">✉️</span>
+                      <EnvelopeIcon className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                       <a href={`mailto:${lead.email}`} className="text-gray-800 hover:text-blue-600 text-xs break-all">{lead.email}</a>
                     </div>
                   )}
@@ -347,12 +348,12 @@ const LeadDetailModal: React.FC<{
             {/* Enriquecido */}
             {enriched && (
               <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                <span className="text-lg flex-shrink-0">✨</span>
+                <StarIcon className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
                 <div className="text-sm space-y-1">
                   <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Dados enriquecidos (Google)</p>
                   {enriched.phone && (
                     <div className="flex items-center gap-2">
-                      <span>📞</span>
+                      <PhoneIcon className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                       <span className="font-semibold text-gray-900">{enriched.phone}</span>
                       <a href={`https://wa.me/${enriched.phone.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
                         className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-lg">WA</a>
@@ -360,14 +361,14 @@ const LeadDetailModal: React.FC<{
                   )}
                   {enriched.website && (
                     <div className="flex items-center gap-2">
-                      <span>🌐</span>
+                      <GlobeAltIcon className="h-4 w-4 text-blue-500 flex-shrink-0" />
                       <a href={enriched.website} target="_blank" rel="noopener noreferrer"
                         className="text-blue-600 hover:underline text-xs truncate max-w-xs">{enriched.website.replace(/^https?:\/\//, '')}</a>
                     </div>
                   )}
                   {enriched.googleMapsUrl && (
                     <a href={enriched.googleMapsUrl} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-blue-600">🗺️ Ver no Google Maps</a>
+                      className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-blue-600">Ver no Google Maps</a>
                   )}
                 </div>
               </div>
@@ -539,7 +540,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">🍦 Base de Leads — Receita Federal</h1>
+            <h1 className="text-xl font-bold text-gray-900">Base de Leads — Receita Federal</h1>
             <p className="text-sm text-gray-500 mt-0.5">
               235.519 empresas ativas do setor alimentício • Filtradas por CNAE
             </p>
@@ -551,7 +552,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
                 title="Baixar lista em Excel/CSV"
               >
-                📥 Excel
+                Excel
               </button>
             )}
             {selecionados.size > 0 && (
@@ -657,7 +658,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
         {/* Estado vazio */}
         {!loading && leads.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="text-6xl mb-4">🍦</div>
+            <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center"><MagnifyingGlassIcon className="h-7 w-7 text-gray-400" /></div>
             <p className="text-lg font-medium text-gray-700">Selecione um segmento ou estado para começar</p>
             <p className="text-sm text-gray-500 mt-1">Ex: clique em "Sorveterias" e escolha o estado SP</p>
           </div>
@@ -733,7 +734,7 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {(lead.importado || jaNoCrm) && (
                             <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                              ✅ No CRM
+                              No CRM
                             </span>
                           )}
                           <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full font-mono">
@@ -744,11 +745,11 @@ export default function BaseLeadsView({ loggedUser, clientes, setClientes, showT
 
                       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
                         <span className="font-mono text-gray-400">{cnpjFmt}</span>
-                        <span>📍 {lead.municipio} — {lead.uf}</span>
-                        {lead.telefone && <span>📞 {lead.telefone}</span>}
+                        <span>{lead.municipio} — {lead.uf}</span>
+                        {lead.telefone && <span>{lead.telefone}</span>}
                         {lead.email && (
                           <span className="truncate max-w-[200px]" title={lead.email}>
-                            ✉️ {lead.email}
+                            {lead.email}
                           </span>
                         )}
                         {lead.logradouro && (

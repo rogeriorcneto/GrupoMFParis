@@ -51,22 +51,22 @@ export interface SessaoTreinamento {
 type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config' | 'ligar' | 'candidatos'
 
 const DEFAULT_MODULES: ModuloTreinamento[] = [
-  { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '📞', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 2, ordem: 1, ativo: true, titulo: 'Qualificação BANT', descricao: 'Descobrir orçamento, autoridade, necessidade e timing', objetivo: 'Objetivo: entender o perfil completo antes de propor.', emoji: '🔍', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 3, ordem: 2, ativo: true, titulo: 'Objeção: Preço', descricao: 'Lidar com "está caro" e "o concorrente é mais barato"', objetivo: 'Objetivo: reverter objeção de preço e avançar.', emoji: '💸', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 4, ordem: 3, ativo: true, titulo: 'Objeção: Prazo & Frete', descricao: 'Negociar prazos de pagamento e condições CIF/FOB', objetivo: 'Objetivo: fechar condições logísticas favoráveis.', emoji: '🚚', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 5, ordem: 4, ativo: true, titulo: 'Solicitação de Amostra', descricao: 'Converter interesse em amostra física com data de retorno', objetivo: 'Objetivo: cliente aceita receber amostra com prazo de feedback.', emoji: '🧪', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 6, ordem: 5, ativo: true, titulo: 'Fechamento & Próximo Passo', descricao: 'Propor ação concreta sem ser agressivo', objetivo: 'Objetivo: cliente confirma pedido ou agenda próxima etapa.', emoji: '🤝', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 7, ordem: 6, ativo: true, titulo: 'Pós-Venda & Fidelização', descricao: 'Garantir satisfação e abrir oportunidade de recompra', objetivo: 'Objetivo: cliente satisfeito e nova compra agendada.', emoji: '🌟', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 8, ordem: 7, ativo: true, titulo: 'Roleplay Livre', descricao: 'Simule uma call completa do zero ao fechamento', objetivo: 'Objetivo: conduzir toda a jornada comercial.', emoji: '🎯', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 2, ordem: 1, ativo: true, titulo: 'Qualificação BANT', descricao: 'Descobrir orçamento, autoridade, necessidade e timing', objetivo: 'Objetivo: entender o perfil completo antes de propor.', emoji: '', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 3, ordem: 2, ativo: true, titulo: 'Objeção: Preço', descricao: 'Lidar com "está caro" e "o concorrente é mais barato"', objetivo: 'Objetivo: reverter objeção de preço e avançar.', emoji: '', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 4, ordem: 3, ativo: true, titulo: 'Objeção: Prazo & Frete', descricao: 'Negociar prazos de pagamento e condições CIF/FOB', objetivo: 'Objetivo: fechar condições logísticas favoráveis.', emoji: '', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 5, ordem: 4, ativo: true, titulo: 'Solicitação de Amostra', descricao: 'Converter interesse em amostra física com data de retorno', objetivo: 'Objetivo: cliente aceita receber amostra com prazo de feedback.', emoji: '', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 6, ordem: 5, ativo: true, titulo: 'Fechamento & Próximo Passo', descricao: 'Propor ação concreta sem ser agressivo', objetivo: 'Objetivo: cliente confirma pedido ou agenda próxima etapa.', emoji: '', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 7, ordem: 6, ativo: true, titulo: 'Pós-Venda & Fidelização', descricao: 'Garantir satisfação e abrir oportunidade de recompra', objetivo: 'Objetivo: cliente satisfeito e nova compra agendada.', emoji: '', dificuldade: 'Médio', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 8, ordem: 7, ativo: true, titulo: 'Roleplay Livre', descricao: 'Simule uma call completa do zero ao fechamento', objetivo: 'Objetivo: conduzir toda a jornada comercial.', emoji: '', dificuldade: 'Avançado', promptInstrucoes: '', createdAt: '', updatedAt: '' },
 ]
 
 const DEFAULT_PROFILES: PerfilTreinamento[] = [
-  { id: 1, ordem: 0, ativo: true, nome: 'João da Silva', negocio: 'Panificadora Estrela', emoji: '🥖', dor: 'custo de insumos alto e falta de tempo', estilo: 'direto, impaciente, foco total em preço e prazo de entrega', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 2, ordem: 1, ativo: true, nome: 'Carlos Mendes', negocio: 'Sorveteria Gelada', emoji: '🍦', dor: 'qualidade inconsistente dos fornecedores atuais', estilo: 'técnico, detalhista, compara ingredientes e laudos', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 3, ordem: 2, ativo: true, nome: 'Márcio Ferreira', negocio: 'Indústria FrioPar', emoji: '🏭', dor: 'processo de compra burocrático e múltiplos aprovadores', estilo: 'corporativo, frio, pede cotação formal e prazo de entrega garantido', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 4, ordem: 3, ativo: true, nome: 'Ana Lima', negocio: 'Confeitaria Premium Belle', emoji: '🧁', dor: 'clientes exigentes que pedem produtos especiais', estilo: 'sofisticada, exige excelência, pergunta sobre origem e diferenciais', promptInstrucoes: '', createdAt: '', updatedAt: '' },
-  { id: 5, ordem: 4, ativo: true, nome: 'Roberto Costa', negocio: 'Restaurante Sabor Mineiro', emoji: '🍽️', dor: 'volume alto mas margem apertada', estilo: 'negociador nato, sempre pede desconto e prazo maior', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 1, ordem: 0, ativo: true, nome: 'João da Silva', negocio: 'Panificadora Estrela', emoji: '', dor: 'custo de insumos alto e falta de tempo', estilo: 'direto, impaciente, foco total em preço e prazo de entrega', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 2, ordem: 1, ativo: true, nome: 'Carlos Mendes', negocio: 'Sorveteria Gelada', emoji: '', dor: 'qualidade inconsistente dos fornecedores atuais', estilo: 'técnico, detalhista, compara ingredientes e laudos', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 3, ordem: 2, ativo: true, nome: 'Márcio Ferreira', negocio: 'Indústria FrioPar', emoji: '', dor: 'processo de compra burocrático e múltiplos aprovadores', estilo: 'corporativo, frio, pede cotação formal e prazo de entrega garantido', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 4, ordem: 3, ativo: true, nome: 'Ana Lima', negocio: 'Confeitaria Premium Belle', emoji: '', dor: 'clientes exigentes que pedem produtos especiais', estilo: 'sofisticada, exige excelência, pergunta sobre origem e diferenciais', promptInstrucoes: '', createdAt: '', updatedAt: '' },
+  { id: 5, ordem: 4, ativo: true, nome: 'Roberto Costa', negocio: 'Restaurante Sabor Mineiro', emoji: '', dor: 'volume alto mas margem apertada', estilo: 'negociador nato, sempre pede desconto e prazo maior', promptInstrucoes: '', createdAt: '', updatedAt: '' },
 ]
 
 const PRODUTOS_MF_PARIS = CATALOGO_PRODUTOS.map(p => ({
@@ -1180,9 +1180,9 @@ REGRAS PARA A NOTA FINAL:
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{p.nome}</p>
                         {p.nome?.toLowerCase().includes('ana') ? (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded-full">♀ voz feminina</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded-full">voz feminina</span>
                         ) : (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">♂ voz masculina</span>
+                          <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">voz masculina</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-500 truncate">{p.negocio} · {p.dor}</p>

@@ -30,7 +30,7 @@ const STEPS: SyncStep[] = [
     id: 'clientes',
     titulo: 'Clientes',
     descricao: 'Insere/atualiza clientes do Omie no CRM (razão social, CNPJ, endereço, contatos).',
-    icone: '🏢',
+    icone: '',
     cor: 'from-blue-500 to-cyan-500',
     fn: syncClientesOmie,
   },
@@ -38,7 +38,7 @@ const STEPS: SyncStep[] = [
     id: 'associar',
     titulo: 'Associar Clientes ↔ Omie',
     descricao: 'Vincula clientes existentes do CRM ao Omie via CNPJ (popula `omie_codigo`).',
-    icone: '🔗',
+    icone: '',
     cor: 'from-cyan-500 to-teal-500',
     fn: syncAssociarClientesPorCnpj,
   },
@@ -46,7 +46,7 @@ const STEPS: SyncStep[] = [
     id: 'produtos',
     titulo: 'Produtos',
     descricao: 'Sincroniza catálogo de produtos do Omie (código, descrição, preço, unidade).',
-    icone: '📦',
+    icone: '',
     cor: 'from-purple-500 to-indigo-500',
     fn: syncProdutosOmie,
   },
@@ -54,7 +54,7 @@ const STEPS: SyncStep[] = [
     id: 'numeros-pedido',
     titulo: 'Números de Pedido',
     descricao: 'Sincroniza códigos/números de pedido entre CRM e Omie.',
-    icone: '🔢',
+    icone: '',
     cor: 'from-indigo-500 to-blue-600',
     fn: syncNumerosPedidoOmie,
   },
@@ -62,7 +62,7 @@ const STEPS: SyncStep[] = [
     id: 'logistica',
     titulo: 'Logística & Rastreio',
     descricao: 'Atualiza status logístico, NF, código de rastreio e data de faturamento dos clientes em follow-up.',
-    icone: '🚚',
+    icone: '',
     cor: 'from-orange-500 to-red-500',
     fn: syncLogisticaOmie,
   },
@@ -70,7 +70,7 @@ const STEPS: SyncStep[] = [
     id: 'transportadoras',
     titulo: 'Transportadoras',
     descricao: 'Importa transportadoras cadastradas no Omie (filtra por CNAE/tag).',
-    icone: '🏭',
+    icone: '',
     cor: 'from-amber-500 to-orange-500',
     fn: syncTransportadorasOmie,
   },
@@ -78,7 +78,7 @@ const STEPS: SyncStep[] = [
     id: 'vendedores',
     titulo: 'Vendedores / Funcionários',
     descricao: 'Importa vendedores do Omie para a tabela de funcionários.',
-    icone: '👥',
+    icone: '',
     cor: 'from-pink-500 to-rose-500',
     fn: syncFuncionariosOmie,
   },
@@ -86,7 +86,7 @@ const STEPS: SyncStep[] = [
     id: 'contas',
     titulo: 'Contas Bancárias',
     descricao: 'Sincroniza contas correntes/bancárias do Omie.',
-    icone: '🏦',
+    icone: '',
     cor: 'from-emerald-500 to-green-500',
     fn: syncContasBancariasOmie,
   },
@@ -94,7 +94,7 @@ const STEPS: SyncStep[] = [
     id: 'categorias',
     titulo: 'Categorias Financeiras',
     descricao: 'Sincroniza categorias de receita e despesa do Omie.',
-    icone: '🗂️',
+    icone: '',
     cor: 'from-green-500 to-lime-500',
     fn: syncCategoriasOmie,
   },
@@ -102,7 +102,7 @@ const STEPS: SyncStep[] = [
     id: 'lancamentos',
     titulo: 'Contas a Pagar / Receber',
     descricao: 'Sincroniza lançamentos financeiros (contas a pagar e receber) do Omie.',
-    icone: '💰',
+    icone: '',
     cor: 'from-yellow-500 to-amber-500',
     fn: syncLancamentosOmie,
   },
@@ -149,9 +149,9 @@ export default function SyncOmieView() {
         [step.id]: { status, result, startedAt: prev[step.id]?.startedAt, finishedAt: Date.now() },
       }))
       if (status === 'success') {
-        log('success', `✅ ${step.titulo}: ${result.inseridos} inseridos · ${result.atualizados} atualizados${result.detalhes ? ` (${result.detalhes})` : ''}`)
+        log('success', `${step.titulo}: ${result.inseridos} inseridos · ${result.atualizados} atualizados${result.detalhes ? ` (${result.detalhes})` : ''}`)
       } else {
-        log('error', `⚠️ ${step.titulo}: concluiu com ${result.erros.length} erro(s)`)
+        log('error', `${step.titulo}: concluiu com ${result.erros.length} erro(s)`)
       }
       return result
     } catch (err: any) {
@@ -161,7 +161,7 @@ export default function SyncOmieView() {
         ...prev,
         [step.id]: { status: 'error', result, startedAt: prev[step.id]?.startedAt, finishedAt: Date.now() },
       }))
-      log('error', `❌ ${step.titulo}: ${err?.message || err}`)
+      log('error', `${step.titulo}: ${err?.message || err}`)
       return result
     }
   }
@@ -170,7 +170,7 @@ export default function SyncOmieView() {
     if (runningAll) return
     setRunningAll(true)
     setLogEntries([])
-    log('info', '🚀 Iniciando sincronização COMPLETA do Omie…')
+    log('info', 'Iniciando sincronização COMPLETA do Omie…')
     const inicio = Date.now()
     let totalInseridos = 0
     let totalAtualizados = 0
@@ -182,7 +182,7 @@ export default function SyncOmieView() {
       totalErros += result.erros.length
     }
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1)
-    log('info', `🏁 Sincronização finalizada em ${duracao}s · ${totalInseridos} inseridos · ${totalAtualizados} atualizados · ${totalErros} erro(s)`)
+    log('info', `Sincronização finalizada em ${duracao}s · ${totalInseridos} inseridos · ${totalAtualizados} atualizados · ${totalErros} erro(s)`)
     setRunningAll(false)
   }
 
@@ -211,7 +211,7 @@ export default function SyncOmieView() {
             disabled={runningAll}
             className="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium disabled:opacity-50"
           >
-            🔄 Resetar
+            Resetar
           </button>
           <button
             onClick={runAll}
@@ -220,11 +220,11 @@ export default function SyncOmieView() {
           >
             {runningAll ? (
               <>
-                <span className="animate-spin">⚙️</span>
+                <span className="animate-spin"></span>
                 Sincronizando…
               </>
             ) : (
-              <>⚡ Sincronizar TUDO do Omie</>
+              <>Sincronizar TUDO do Omie</>
             )}
           </button>
         </div>
@@ -278,7 +278,7 @@ export default function SyncOmieView() {
                 <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 text-sm">
                   {state.status === 'success' && (
                     <div className="text-green-700 dark:text-green-400 space-y-0.5">
-                      <p>📥 <strong>{state.result.inseridos}</strong> inseridos · 🔄 <strong>{state.result.atualizados}</strong> atualizados</p>
+                      <p><strong>{state.result.inseridos}</strong> inseridos · <strong>{state.result.atualizados}</strong> atualizados</p>
                       {state.result.detalhes && (
                         <p className="text-xs text-gray-500 dark:text-gray-400">{state.result.detalhes}</p>
                       )}
@@ -315,7 +315,7 @@ export default function SyncOmieView() {
       {logEntries.length > 0 && (
         <div className="bg-gray-900 rounded-xl shadow-lg p-4 max-h-80 overflow-y-auto">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-white text-sm">📋 Log de Execução</h3>
+            <h3 className="font-bold text-white text-sm">Log de Execução</h3>
             <button onClick={() => setLogEntries([])} className="text-xs text-gray-400 hover:text-white">Limpar</button>
           </div>
           <div className="space-y-1 font-mono text-xs">
@@ -358,8 +358,8 @@ function StatusBadge({ status }: { status: StepStatus }) {
   const config = {
     idle: { label: 'Aguardando', cor: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
     running: { label: '⏳ Em andamento', cor: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 animate-pulse' },
-    success: { label: '✅ Concluído', cor: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-    error: { label: '⚠️ Erro', cor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+    success: { label: 'Concluído', cor: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
+    error: { label: 'Erro', cor: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
   }[status]
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${config.cor}`}>

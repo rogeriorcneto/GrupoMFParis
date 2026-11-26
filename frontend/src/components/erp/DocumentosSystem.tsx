@@ -52,16 +52,16 @@ export default function DocumentosSystem({ onVoltar }: { onVoltar: () => void })
   })
 
   const menu = [
-    { id: 'todos', label: 'Todos', icone: '📁', badge: docs.length },
-    ...categorias.map(c => ({ id: String(c.id), label: c.nome, icone: c.icone || '📄' })),
-    { id: 'expirados', label: 'Expirados', icone: '⚠️' },
+    { id: 'todos', label: 'Todos', icone: '', badge: docs.length },
+    ...categorias.map(c => ({ id: String(c.id), label: c.nome, icone: c.icone || '' })),
+    { id: 'expirados', label: 'Expirados', icone: '' },
   ]
 
   return (
     <ErpLayout
       titulo="Gestão Documental"
       subtitulo="Arquivamento digital"
-      icone="📁"
+      icone=""
       cor="from-red-500 to-rose-600"
       menu={menu}
       activeMenu={activeMenu}
@@ -78,7 +78,7 @@ export default function DocumentosSystem({ onVoltar }: { onVoltar: () => void })
 
         <input
           type="text"
-          placeholder="🔍 Buscar documentos..."
+          placeholder="Buscar documentos..."
           value={busca}
           onChange={e => setBusca(e.target.value)}
           className="w-full max-w-md mb-6 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
@@ -92,7 +92,7 @@ export default function DocumentosSystem({ onVoltar }: { onVoltar: () => void })
             return (
               <div key={d.id} className="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow">
                 <div className="flex items-start gap-3">
-                  <span className="text-4xl">{cat?.icone || '📄'}</span>
+                  <span className="text-4xl">{cat?.icone || ''}</span>
                   <div className="flex-1">
                     <h3 className="font-bold">{d.titulo}</h3>
                     {cat && <span className="inline-block px-2 py-0.5 text-xs rounded mt-1" style={{ backgroundColor: (cat.cor || '#6366f1') + '20', color: cat.cor || '#6366f1' }}>{cat.nome}</span>}
@@ -103,13 +103,13 @@ export default function DocumentosSystem({ onVoltar }: { onVoltar: () => void })
                       </div>
                     )}
                     {d.validade && (
-                      <p className="text-xs text-gray-500 mt-2">📅 Validade: {d.validade}</p>
+                      <p className="text-xs text-gray-500 mt-2">Validade: {d.validade}</p>
                     )}
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2">
                   {d.arquivo_url && (
-                    <a href={d.arquivo_url} target="_blank" rel="noreferrer" className="flex-1 text-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded text-sm font-medium">📥 Abrir</a>
+                    <a href={d.arquivo_url} target="_blank" rel="noreferrer" className="flex-1 text-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded text-sm font-medium">Abrir</a>
                   )}
                   <button onClick={() => { setEditDoc(d); setShowForm(true) }} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded text-sm">Editar</button>
                   <button onClick={async () => {

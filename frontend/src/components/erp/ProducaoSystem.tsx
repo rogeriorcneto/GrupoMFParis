@@ -58,16 +58,16 @@ export default function ProducaoSystem({ onVoltar }: { onVoltar: () => void }) {
   const concluidas = ordens.filter(o => o.status === 'concluida').length
 
   const menu = [
-    { id: 'dashboard', label: 'Dashboard', icone: '📊' },
-    { id: 'ordens', label: 'Ordens de Produção', icone: '🏭', badge: abertas + emProducao },
-    { id: 'kanban', label: 'Kanban', icone: '📋' },
+    { id: 'dashboard', label: 'Dashboard', icone: '' },
+    { id: 'ordens', label: 'Ordens de Produção', icone: '', badge: abertas + emProducao },
+    { id: 'kanban', label: 'Kanban', icone: '' },
   ]
 
   return (
     <ErpLayout
       titulo="Produção"
       subtitulo="Ordens de produção"
-      icone="🏭"
+      icone=""
       cor="from-gray-600 to-gray-800"
       menu={menu}
       activeMenu={activeMenu}
@@ -79,10 +79,10 @@ export default function ProducaoSystem({ onVoltar }: { onVoltar: () => void }) {
           <div>
             <h2 className="text-2xl font-bold mb-6">Dashboard de Produção</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <KpiP titulo="Abertas" valor={abertas} cor="from-gray-400 to-gray-600" icone="📂" />
-              <KpiP titulo="Em Produção" valor={emProducao} cor="from-blue-400 to-blue-600" icone="⚙️" />
-              <KpiP titulo="Concluídas" valor={concluidas} cor="from-green-400 to-green-600" icone="✅" />
-              <KpiP titulo="Total" valor={ordens.length} cor="from-purple-400 to-purple-600" icone="🏭" />
+              <KpiP titulo="Abertas" valor={abertas} cor="from-gray-400 to-gray-600" icone="" />
+              <KpiP titulo="Em Produção" valor={emProducao} cor="from-blue-400 to-blue-600" icone="" />
+              <KpiP titulo="Concluídas" valor={concluidas} cor="from-green-400 to-green-600" icone="" />
+              <KpiP titulo="Total" valor={ordens.length} cor="from-purple-400 to-purple-600" icone="" />
             </div>
           </div>
         )}

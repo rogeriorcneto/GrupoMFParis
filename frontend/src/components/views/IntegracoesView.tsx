@@ -220,12 +220,12 @@ const IntegracoesView: React.FC = () => {
   }
 
   const otherIntegrations = [
-    { id: 3, nome: 'LinkedIn', icon: '💼', desc: 'Conecte com leads e envie mensagens pelo LinkedIn' },
-    { id: 4, nome: 'Instagram Business', icon: '📸', desc: 'Gerencie DMs e interacoes do Instagram Business' },
-    { id: 5, nome: 'Facebook Pages', icon: '👥', desc: 'Integre com Facebook Pages e Messenger' },
-    { id: 6, nome: 'Google Sheets', icon: '📊', desc: 'Exporte e importe dados via Google Sheets' },
-    { id: 7, nome: 'Zapier', icon: '⚡', desc: 'Conecte com 5000+ apps via Zapier' },
-    { id: 8, nome: 'Webhooks', icon: '🔗', desc: 'Configure webhooks personalizados' },
+    { id: 3, nome: 'LinkedIn', icon: '', desc: 'Conecte com leads e envie mensagens pelo LinkedIn' },
+    { id: 4, nome: 'Instagram Business', icon: '', desc: 'Gerencie DMs e interacoes do Instagram Business' },
+    { id: 5, nome: 'Facebook Pages', icon: '', desc: 'Integre com Facebook Pages e Messenger' },
+    { id: 6, nome: 'Google Sheets', icon: '', desc: 'Exporte e importe dados via Google Sheets' },
+    { id: 7, nome: 'Zapier', icon: '', desc: 'Conecte com 5000+ apps via Zapier' },
+    { id: 8, nome: 'Webhooks', icon: '', desc: 'Configure webhooks personalizados' },
   ]
 
   const inputClass = 'w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:ring-2 focus:ring-primary-300 focus:border-primary-400 outline-none transition-colors'
@@ -242,7 +242,7 @@ const IntegracoesView: React.FC = () => {
       {authError && (
         <div className="bg-red-50 border border-red-200 rounded-apple p-4">
           <div className="flex items-center gap-2">
-            <span className="text-red-500 text-lg">🔒</span>
+            <span className="text-red-500 text-lg"></span>
             <div>
               <p className="text-sm font-medium text-red-800">{authError}</p>
               <p className="text-xs text-red-600 mt-0.5">Recarregue a página ou faça login novamente.</p>
@@ -309,7 +309,7 @@ const IntegracoesView: React.FC = () => {
         {waStatus.connected && (
           <div className="bg-green-50 rounded-apple border border-green-200 p-4 mb-4">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">✅</span>
+              <span className="text-lg"></span>
               <span className="text-sm font-semibold text-green-800">WhatsApp ativo no numero {waStatus.number}</span>
             </div>
             <p className="text-xs text-green-700">
@@ -359,7 +359,7 @@ const IntegracoesView: React.FC = () => {
               className="px-4 py-2.5 bg-orange-50 text-orange-700 border-2 border-orange-200 rounded-apple font-semibold hover:bg-orange-100 transition-colors disabled:opacity-50 text-sm"
               title="Limpa a conexão travada e permite tentar novamente"
             >
-              🔄 Resetar
+              Resetar
             </button>
           )}
         </div>
@@ -368,7 +368,7 @@ const IntegracoesView: React.FC = () => {
       {/* ═══════════════ WHATSAPP BUSINESS CRM (per-user) ═══════════════ */}
       <div className="bg-white rounded-apple shadow-apple-sm border-2 border-emerald-200 p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="text-4xl">📱</div>
+          <div className="text-4xl"></div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900">WhatsApp Business CRM</h3>
             <div className="flex items-center gap-2 mt-1">
@@ -407,7 +407,7 @@ const IntegracoesView: React.FC = () => {
         ) : (
           <div className="bg-emerald-50 rounded-apple border border-emerald-200 p-4 mb-4">
             <p className="text-sm text-emerald-800">
-              Instrua seus vendedores a acessarem <strong>Tarefas → 📱 Meu WhatsApp</strong> para conectar.
+              Instrua seus vendedores a acessarem <strong>Tarefas → Meu WhatsApp</strong> para conectar.
             </p>
             <p className="text-xs text-emerald-600 mt-1">
               Cada vendedor escaneia o QR Code com seu celular para vincular o WhatsApp Business ao CRM.
@@ -425,7 +425,7 @@ const IntegracoesView: React.FC = () => {
       {/* ═══════════════ EMAIL CONFIG CARD ═══════════════ */}
       <div className="bg-white rounded-apple shadow-apple-sm border-2 border-red-100 p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="text-4xl">📧</div>
+          <div className="text-4xl"></div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900">Email (SMTP + IMAP)</h3>
             <div className="flex items-center gap-2 mt-1">
@@ -600,7 +600,7 @@ const IntegracoesView: React.FC = () => {
         {!showEmailForm && emailStatus.configured && (
           <div className="bg-green-50 rounded-apple border border-green-200 p-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm">✅</span>
+              <span className="text-sm"></span>
               <span className="text-sm text-green-800">Email ativo: {emailStatus.from}</span>
             </div>
           </div>
@@ -621,7 +621,7 @@ const IntegracoesView: React.FC = () => {
       {/* ═══════════════ BACKUP DA BASE ═══════════════ */}
       <div className="bg-white rounded-apple shadow-apple-sm border-2 border-gray-200 p-6">
         <div className="flex items-start gap-4">
-          <div className="text-4xl">💾</div>
+          <div className="text-4xl"></div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900">Backup da base</h3>
             <p className="text-sm text-gray-600 mt-1">
@@ -687,7 +687,7 @@ const IntegracoesView: React.FC = () => {
       {/* ═══════════════ COMMANDS REFERENCE ═══════════════ */}
       <div className="bg-blue-50 rounded-apple border-2 border-blue-200 p-6">
         <div className="flex items-start gap-4">
-          <div className="text-3xl">💡</div>
+          <div className="text-3xl"></div>
           <div>
             <h3 className="text-lg font-semibold text-blue-900">Comandos do Bot WhatsApp</h3>
             <p className="text-sm text-blue-700 mt-2">

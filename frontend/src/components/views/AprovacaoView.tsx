@@ -672,7 +672,7 @@ export default function AprovacaoView({
                   <Cog6ToothIcon className="h-5 w-5 text-gray-600" />
                   <h3 className="font-semibold text-gray-900">Auto-Aprovação de Pedidos</h3>
                   {params.ativo ? (
-                    <span className="px-2 py-0.5 text-xs font-bold bg-green-100 text-green-800 rounded-full border border-green-200">✅ Ativa</span>
+                    <span className="px-2 py-0.5 text-xs font-bold bg-green-100 text-green-800 rounded-full border border-green-200">Ativa</span>
                   ) : (
                     <span className="px-2 py-0.5 text-xs font-bold bg-gray-100 text-gray-500 rounded-full border border-gray-200">⏸ Inativa</span>
                   )}
@@ -753,7 +753,7 @@ export default function AprovacaoView({
             {/* Preview da regra */}
             {params.ativo && (
               <div className="mx-5 mb-5 p-3 bg-blue-50 rounded-apple border border-blue-200">
-                <p className="text-xs font-semibold text-blue-800 mb-1">📋 Regra ativa:</p>
+                <p className="text-xs font-semibold text-blue-800 mb-1">Regra ativa:</p>
                 <p className="text-xs text-blue-700">
                   Pedidos serão auto-aprovados se
                   {params.descontoMaxPct !== null ? <strong> o desconto for ≤ {params.descontoMaxPct}%</strong> : <span> (sem limite de desconto)</span>}
@@ -768,14 +768,14 @@ export default function AprovacaoView({
                 onClick={handleResetParams}
                 className="px-4 py-2 text-sm text-gray-500 hover:text-red-600 border border-gray-200 rounded-apple hover:border-red-200 transition-colors"
               >
-                🗑 Resetar tudo
+                Resetar tudo
               </button>
               <button
                 onClick={handleSaveParams}
                 disabled={!paramsDirty}
                 className="px-6 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-apple transition-colors"
               >
-                {paramsDirty ? '💾 Salvar Parâmetros' : '✅ Salvo'}
+                {paramsDirty ? 'Salvar Parâmetros' : 'Salvo'}
               </button>
             </div>
           </div>
@@ -815,14 +815,14 @@ export default function AprovacaoView({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-base font-bold text-gray-900">{cliente.razaoSocial}</span>
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full border border-purple-200">🧪 Amostra</span>
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">🚫 Cancelamento Solicitado</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full border border-purple-200">Amostra</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full border border-amber-200 animate-pulse">Cancelamento Solicitado</span>
                         </div>
                         <div className="mt-1 space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
-                            {vendedor && <span>👤 {vendedor.nome}</span>}
+                            {vendedor && <span>{vendedor.nome}</span>}
                             <span>·</span>
-                            {cliente.dataEnvioAmostra && <span>📤 Envio da amostra: {new Date(cliente.dataEnvioAmostra).toLocaleDateString('pt-BR')}</span>}
+                            {cliente.dataEnvioAmostra && <span>Envio da amostra: {new Date(cliente.dataEnvioAmostra).toLocaleDateString('pt-BR')}</span>}
                           </div>
                         </div>
                       </div>
@@ -842,7 +842,7 @@ export default function AprovacaoView({
                         disabled={isLoading}
                         className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
                       >
-                        {isLoading ? '⏳ Processando...' : '✅ Aprovar Cancelamento'}
+                        {isLoading ? '⏳ Processando...' : 'Aprovar Cancelamento'}
                       </button>
                     </div>
                   </div>
@@ -858,15 +858,15 @@ export default function AprovacaoView({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-base font-bold text-gray-900">{pedido.numero}</span>
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full border border-indigo-200">📦 Pedido</span>
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full border border-red-200 animate-pulse">🚫 Cancelamento Solicitado</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-700 rounded-full border border-indigo-200">Pedido</span>
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full border border-red-200 animate-pulse">Cancelamento Solicitado</span>
                         </div>
                         <div className="mt-1 space-y-0.5">
                           <p className="text-sm font-medium text-gray-800">{cliente?.razaoSocial || '—'}</p>
                           <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500">
-                            {vendedor && <span>👤 {vendedor.nome}</span>}
+                            {vendedor && <span>{vendedor.nome}</span>}
                             <span>·</span>
-                            <span>📅 {new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')}</span>
+                            <span>{new Date(pedido.dataCriacao).toLocaleDateString('pt-BR')}</span>
                           </div>
                         </div>
                       </div>
@@ -895,7 +895,7 @@ export default function AprovacaoView({
                         disabled={isLoading}
                         className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-sm font-semibold rounded-apple transition-colors"
                       >
-                        {isLoading ? '⏳ Processando...' : '✅ Confirmar Cancelamento'}
+                        {isLoading ? '⏳ Processando...' : 'Confirmar Cancelamento'}
                       </button>
                       <button
                         onClick={async () => {

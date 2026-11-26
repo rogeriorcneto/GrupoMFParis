@@ -81,14 +81,14 @@ export default function PedidosOmieView() {
             onClick={() => setShowLancarPorNFModal(true)}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm"
           >
-            🚀 Lançar Rastreio por NF
+            Lançar Rastreio por NF
           </button>
           <button
             onClick={carregar}
             className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium text-sm"
             disabled={loading}
           >
-            {loading ? 'Carregando…' : '🔄 Atualizar'}
+            {loading ? 'Carregando…' : 'Atualizar'}
           </button>
         </div>
       </div>
@@ -162,7 +162,7 @@ export default function PedidosOmieView() {
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
-          ❌ {error}
+          {error}
         </div>
       )}
 
@@ -314,7 +314,7 @@ function RastreioModal({ empresaId, pedido, onClose, onSaved }: {
     setSaving(true); setError(null); setSuccess(null)
     try {
       const res = await atualizarRastreioOmie(empresaId, numeroPedido, codigo.trim())
-      setSuccess(`✅ Atualizado via ${res.metodo}`)
+      setSuccess(`Atualizado via ${res.metodo}`)
       setTimeout(onSaved, 800)
     } catch (err: any) {
       setError(err.message)
@@ -343,7 +343,7 @@ function RastreioModal({ empresaId, pedido, onClose, onSaved }: {
               placeholder="Ex: BR123456789BR"
             />
           </div>
-          {error && <div className="text-red-700 text-sm bg-red-50 border border-red-200 rounded p-2">❌ {error}</div>}
+          {error && <div className="text-red-700 text-sm bg-red-50 border border-red-200 rounded p-2">{error}</div>}
           {success && <div className="text-green-700 text-sm bg-green-50 border border-green-200 rounded p-2">{success}</div>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancelar</button>
@@ -376,7 +376,7 @@ function LancarPorNFModal({ empresas, empresaIdInicial, onClose, onSaved }: {
     setSaving(true); setError(null); setResult(null)
     try {
       const res = await lancarRastreioPorNF(empresaId, nf.trim(), codigo.trim())
-      setResult(`✅ Pedido #${res.numero_pedido} atualizado via ${res.metodo}`)
+      setResult(`Pedido #${res.numero_pedido} atualizado via ${res.metodo}`)
       setTimeout(onSaved, 1200)
     } catch (err: any) {
       setError(err.message)
@@ -389,7 +389,7 @@ function LancarPorNFModal({ empresas, empresaIdInicial, onClose, onSaved }: {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
         <div className="p-6 border-b">
-          <h3 className="text-lg font-bold">🚀 Lançar Rastreio por NF</h3>
+          <h3 className="text-lg font-bold">Lançar Rastreio por NF</h3>
           <p className="text-xs text-gray-500 mt-1">Replica o fluxo do Apps Script: busca pedido pela NF e atualiza o código de rastreio.</p>
         </div>
         <form onSubmit={onSubmit} className="p-6 space-y-4">
@@ -426,7 +426,7 @@ function LancarPorNFModal({ empresas, empresaIdInicial, onClose, onSaved }: {
               placeholder="Ex: BR123456789BR"
             />
           </div>
-          {error && <div className="text-red-700 text-sm bg-red-50 border border-red-200 rounded p-2">❌ {error}</div>}
+          {error && <div className="text-red-700 text-sm bg-red-50 border border-red-200 rounded p-2">{error}</div>}
           {result && <div className="text-green-700 text-sm bg-green-50 border border-green-200 rounded p-2">{result}</div>}
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancelar</button>

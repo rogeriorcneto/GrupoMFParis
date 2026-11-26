@@ -384,14 +384,14 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
         {/* SAVED */}
         {state === 'saved' && (
           <div className="text-center py-4">
-            <div className="text-4xl mb-2">✅</div>
+            <div className="text-4xl mb-2"></div>
             <p className="text-sm font-semibold text-green-700">Gravação salva com sucesso!</p>
             <p className="text-xs text-gray-500 mt-1">{formatTime(seconds)} — {contactName || cliente?.razaoSocial || phoneNumber}</p>
 
             {/* Transcription */}
             {transcription ? (
               <div className="mt-3 text-left bg-gray-50 border border-gray-200 rounded-xl p-3 max-h-40 overflow-y-auto">
-                <p className="text-xs font-semibold text-gray-700 mb-1">📝 Transcrição:</p>
+                <p className="text-xs font-semibold text-gray-700 mb-1">Transcrição:</p>
                 <p className="text-xs text-gray-600 whitespace-pre-wrap">{transcription}</p>
               </div>
             ) : savedId ? (
@@ -404,7 +404,7 @@ export default function CallRecorder({ cliente, vendedorId, phoneNumber, contact
                   {transcribing ? (
                     <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> Transcrevendo...</>
                   ) : (
-                    <>🤖 Transcrever com IA</>
+                    <>Transcrever com IA</>
                   )}
                 </button>
                 {error && !transcribing && (

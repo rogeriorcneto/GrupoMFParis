@@ -78,7 +78,7 @@ export default function TabelaPrecosView({ loggedUser, showToast }: Props) {
     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">💰 Tabela de Preços</h1>
+          <h1 className="text-xl font-bold text-gray-900">Tabela de Preços</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Custos, comissões e margens que alimentam o simulador de preço — no CRM e na página pública.
           </p>
@@ -93,7 +93,7 @@ export default function TabelaPrecosView({ loggedUser, showToast }: Props) {
               onClick={() => setEditando(v => !v)}
               className={`px-4 py-2 rounded-apple shadow-apple-sm font-semibold transition-colors ${editando ? 'bg-gray-200 text-gray-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
             >
-              {editando ? 'Cancelar edição' : '✏️ Editar tabela'}
+              {editando ? 'Cancelar edição' : 'Editar tabela'}
             </button>
           )}
         </div>
@@ -198,7 +198,7 @@ export default function TabelaPrecosView({ loggedUser, showToast }: Props) {
                   disabled={saving}
                   className="mt-4 px-5 py-2.5 rounded-apple font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
-                  {saving ? 'Salvando...' : '💾 Salvar tabela de preços'}
+                  {saving ? 'Salvando...' : 'Salvar tabela de preços'}
                 </button>
               )}
             </>

@@ -17,7 +17,7 @@ const sistemas: SistemaCard[] = [
     id: 'crm',
     nome: 'CRM MF Paris',
     descricao: 'Gestão de clientes, funil de vendas, pedidos e relacionamento comercial',
-    icone: '🎯',
+    icone: '',
     cor: 'from-blue-500 to-blue-700',
     status: 'disponivel',
     categoria: 'Comercial'
@@ -26,7 +26,7 @@ const sistemas: SistemaCard[] = [
     id: 'academia',
     nome: 'Academia de Vendas',
     descricao: 'Treinamento comercial, simulações de vendas e desenvolvimento da equipe',
-    icone: '🎓',
+    icone: '',
     cor: 'from-violet-500 to-purple-700',
     status: 'disponivel',
     categoria: 'Comercial'
@@ -35,7 +35,7 @@ const sistemas: SistemaCard[] = [
     id: 'cerebro',
     nome: 'Cérebro Paris (IA)',
     descricao: 'IA contextual com visão 360° de todas operações da empresa',
-    icone: '🧠',
+    icone: '',
     cor: 'from-purple-500 to-indigo-700',
     status: 'disponivel',
     categoria: 'Inteligência'
@@ -44,7 +44,7 @@ const sistemas: SistemaCard[] = [
     id: 'logistica',
     nome: 'Logística & Frete',
     descricao: 'Transportadoras, rotas, rastreamento e gestão de entregas',
-    icone: '🚚',
+    icone: '',
     cor: 'from-orange-500 to-red-600',
     status: 'disponivel',
     categoria: 'Operações'
@@ -53,7 +53,7 @@ const sistemas: SistemaCard[] = [
     id: 'financeiro',
     nome: 'Financeiro',
     descricao: 'Contas a pagar/receber, fluxo de caixa, DRE e conciliação',
-    icone: '💰',
+    icone: '',
     cor: 'from-green-500 to-emerald-600',
     status: 'disponivel',
     categoria: 'Financeiro'
@@ -62,7 +62,7 @@ const sistemas: SistemaCard[] = [
     id: 'producao',
     nome: 'Produção',
     descricao: 'Ordens de produção, controle de qualidade e estoque industrial',
-    icone: '🏭',
+    icone: '',
     cor: 'from-gray-600 to-gray-800',
     status: 'disponivel',
     categoria: 'Operações'
@@ -71,7 +71,7 @@ const sistemas: SistemaCard[] = [
     id: 'rh',
     nome: 'Recursos Humanos',
     descricao: 'Folha de pagamento, ponto eletrônico, benefícios e gestão de pessoas',
-    icone: '👥',
+    icone: '',
     cor: 'from-indigo-500 to-blue-600',
     status: 'disponivel',
     categoria: 'Pessoas'
@@ -80,7 +80,7 @@ const sistemas: SistemaCard[] = [
     id: 'bi',
     nome: 'Business Intelligence',
     descricao: 'Dashboards executivos, análises avançadas e relatórios gerenciais',
-    icone: '📊',
+    icone: '',
     cor: 'from-pink-500 to-purple-600',
     status: 'disponivel',
     categoria: 'Inteligência'
@@ -89,7 +89,7 @@ const sistemas: SistemaCard[] = [
     id: 'documentos',
     nome: 'Gestão Documental',
     descricao: 'Arquivamento digital, contratos, NFe e documentos da empresa',
-    icone: '📁',
+    icone: '',
     cor: 'from-red-500 to-rose-600',
     status: 'disponivel',
     categoria: 'Operações'
@@ -165,7 +165,7 @@ export default function GrupoParisHome({ usuario, onSelectSistema, onSignOut }: 
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-8">
         <div className="text-center">
           <h2 className="text-4xl md:text-5xl font-bold text-white mb-3">
-            Bem-vindo{usuario?.nome ? `, ${usuario.nome.split(' ')[0]}` : ''}! 👋
+            Bem-vindo{usuario?.nome ? `, ${usuario.nome.split(' ')[0]}` : ''}!
           </h2>
           <p className="text-lg text-indigo-200 max-w-2xl mx-auto">
             Acesse todos os sistemas do Grupo MF Paris em um só lugar.

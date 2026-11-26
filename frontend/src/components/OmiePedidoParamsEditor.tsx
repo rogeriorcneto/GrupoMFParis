@@ -182,7 +182,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
       <div className="bg-white rounded-apple shadow-apple-lg max-w-3xl w-full max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">⚙️ Parâmetros Omie — {pedidoNumero}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Parâmetros Omie — {pedidoNumero}</h2>
             <p className="text-[11px] text-gray-400">Alterações regravam o pedido inteiro no Omie (AlterarPedidoVenda). Pedido faturado pode rejeitar edições.</p>
           </div>
           <button onClick={onClose} disabled={saving} className="text-gray-400 hover:text-gray-600 text-xl leading-none disabled:opacity-50">×</button>
@@ -201,7 +201,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
             <>
               {/* ── Cabeçalho ── */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-800 mb-2">📋 Cabeçalho</h3>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Cabeçalho</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {input('cabecalho.codigo_pedido', 'Código Omie', 'text', true)}
                   {input('cabecalho.numero_pedido', 'Nº Pedido', 'text', true)}
@@ -215,7 +215,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
 
               {/* ── Itens ── */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-800 mb-2">📦 Itens ({det.length})</h3>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Itens ({det.length})</h3>
                 <div className="space-y-3">
                   {det.map((item, i) => (
                     <div key={i} className="border border-gray-200 rounded-apple p-3 bg-gray-50/50">
@@ -246,7 +246,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
 
               {/* ── Frete ── */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-800 mb-2">🚚 Frete</h3>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Frete</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <label className="block">
                     <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Modalidade</span>
@@ -278,7 +278,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
               {/* ── Parcelas ── */}
               {parcelas.length > 0 && (
                 <section>
-                  <h3 className="text-sm font-semibold text-gray-800 mb-2">💳 Parcelas ({parcelas.length})</h3>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Parcelas ({parcelas.length})</h3>
                   <div className="space-y-2">
                     {parcelas.map((p: any, i: number) => (
                       <div key={i} className="grid grid-cols-4 gap-2 items-end border border-gray-200 rounded-apple p-2 bg-gray-50/50">
@@ -294,7 +294,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
 
               {/* ── Inf. adicionais / entrega ── */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-800 mb-2">📌 Informações adicionais</h3>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Informações adicionais</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {input('informacoes_adicionais.codigo_categoria', 'Categoria')}
                   {input('informacoes_adicionais.codigo_conta_corrente', 'Conta corrente')}
@@ -312,7 +312,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
               {/* ── Totais/impostos calculados pelo Omie (read-only) ── */}
               {Object.keys(totalPedido).length > 0 && (
                 <section>
-                  <h3 className="text-sm font-semibold text-gray-800 mb-2">🧮 Totais e impostos <span className="text-[10px] font-normal text-gray-400">(calculado pelo Omie — somente leitura)</span></h3>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-2">Totais e impostos <span className="text-[10px] font-normal text-gray-400">(calculado pelo Omie — somente leitura)</span></h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-gray-50 border border-gray-200 rounded-apple p-3">
                     {[
                       ['Mercadorias', totalPedido.valor_mercadorias],
@@ -335,7 +335,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
 
               {/* ── Observações ── */}
               <section>
-                <h3 className="text-sm font-semibold text-gray-800 mb-2">📝 Observações</h3>
+                <h3 className="text-sm font-semibold text-gray-800 mb-2">Observações</h3>
                 <textarea
                   rows={3}
                   value={estrutura?.observacoes?.obs_venda ?? ''}
@@ -351,7 +351,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
         {estrutura && !loading && (
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between">
             <div>
-              <p className="text-[11px] text-amber-700">⚠️ Salvar substitui o pedido inteiro no Omie.</p>
+              <p className="text-[11px] text-amber-700">Salvar substitui o pedido inteiro no Omie.</p>
               <button onClick={aplicarPadrao} disabled={saving}
                 className="mt-1 text-[11px] text-blue-600 hover:text-blue-800 underline disabled:opacity-50">
                 ⬇️ Aplicar parâmetros padrão salvos
@@ -364,7 +364,7 @@ export default function OmiePedidoParamsEditor({ pedidoId, pedidoNumero, onClose
               </button>
               <button onClick={() => salvar(false)} disabled={saving}
                 className="px-4 py-2 bg-green-600 text-white rounded-apple hover:bg-green-700 text-sm font-medium disabled:opacity-50">
-                {saving ? '⏳ Salvando…' : '💾 Salvar neste pedido'}
+                {saving ? '⏳ Salvando…' : 'Salvar neste pedido'}
               </button>
               <button onClick={() => salvar(true)} disabled={saving}
                 title="Salva este pedido E grava estes parâmetros como padrão para as próximas vendas"

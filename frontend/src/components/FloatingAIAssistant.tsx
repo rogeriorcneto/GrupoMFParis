@@ -201,7 +201,7 @@ export default function FloatingAIAssistant({
       const now = Date.now()
       if (now - lastAnalysisErrorRef.current > 60000) {
         lastAnalysisErrorRef.current = now
-        setSuggestions(prev => [{ text: '⚠️ Falha ao gerar sugestão — verifique a conexão. A escuta continua.', ts: now, type: 'tip' as MeetingSuggestion['type'] }, ...prev].slice(0, 20))
+        setSuggestions(prev => [{ text: 'Falha ao gerar sugestão — verifique a conexão. A escuta continua.', ts: now, type: 'tip' as MeetingSuggestion['type'] }, ...prev].slice(0, 20))
       }
     } finally {
       analyzingRef.current = false
@@ -292,10 +292,10 @@ export default function FloatingAIAssistant({
 
   const suggestionIcon = (type: MeetingSuggestion['type']) => {
     switch (type) {
-      case 'tip': return '💡'
-      case 'objection': return '🛡️'
-      case 'question': return '❓'
-      case 'closing': return '🤝'
+      case 'tip': return ''
+      case 'objection': return ''
+      case 'question': return ''
+      case 'closing': return ''
     }
   }
   const suggestionColor = (type: MeetingSuggestion['type']) => {
@@ -353,10 +353,10 @@ export default function FloatingAIAssistant({
                 <p className="text-xs text-gray-400">Como posso te ajudar?</p>
                 <div className="space-y-1.5">
                   {[
-                    '✏️ Corrigir uma mensagem para cliente',
-                    '📧 Escrever um email de follow-up',
-                    '🛡️ Responder objeção de preço',
-                    '📦 Info sobre produto do catálogo',
+                    'Corrigir uma mensagem para cliente',
+                    'Escrever um email de follow-up',
+                    'Responder objeção de preço',
+                    'Info sobre produto do catálogo',
                   ].map((s, i) => (
                     <button key={i} onClick={() => { setInput(s.slice(2).trim()); setTimeout(() => inputRef.current?.focus(), 50) }}
                       className="block w-full text-left px-3 py-2 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">

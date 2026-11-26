@@ -95,19 +95,19 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
   const valorTotal = fretes.reduce((s, f) => s + (f.valor_frete || 0), 0)
 
   const menu = [
-    { id: 'dashboard', label: 'Dashboard', icone: '📊' },
-    { id: 'pedidos-omie', label: 'Pedidos & NFe', icone: '📦' },
-    { id: 'fretes', label: 'Fretes', icone: '🚚', badge: fretesPendentes },
-    { id: 'transportadoras', label: 'Transportadoras', icone: '🏢' },
-    { id: 'rastreamento', label: 'Rastreamento', icone: '📍' },
-    { id: 'sync-omie', label: 'Sync Omie', icone: '⚡' },
+    { id: 'dashboard', label: 'Dashboard', icone: '' },
+    { id: 'pedidos-omie', label: 'Pedidos & NFe', icone: '' },
+    { id: 'fretes', label: 'Fretes', icone: '', badge: fretesPendentes },
+    { id: 'transportadoras', label: 'Transportadoras', icone: '' },
+    { id: 'rastreamento', label: 'Rastreamento', icone: '' },
+    { id: 'sync-omie', label: 'Sync Omie', icone: '' },
   ]
 
   return (
     <ErpLayout
       titulo="Logística & Frete"
       subtitulo="Gestão de entregas"
-      icone="🚚"
+      icone=""
       cor="from-orange-500 to-red-600"
       menu={menu}
       activeMenu={activeMenu}
@@ -120,9 +120,9 @@ export default function LogisticaSystem({ onVoltar }: { onVoltar: () => void }) 
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Dashboard de Logística</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <KpiCard titulo="Fretes Pendentes" valor={fretesPendentes} icone="⏳" cor="from-yellow-400 to-orange-500" />
-              <KpiCard titulo="Em Trânsito" valor={fretesEmTransito} icone="🚛" cor="from-blue-400 to-indigo-500" />
-              <KpiCard titulo="Entregues" valor={fretesEntregues} icone="✅" cor="from-green-400 to-emerald-500" />
-              <KpiCard titulo="Valor Total" valor={`R$ ${valorTotal.toFixed(2)}`} icone="💰" cor="from-purple-400 to-pink-500" />
+              <KpiCard titulo="Em Trânsito" valor={fretesEmTransito} icone="" cor="from-blue-400 to-indigo-500" />
+              <KpiCard titulo="Entregues" valor={fretesEntregues} icone="" cor="from-green-400 to-emerald-500" />
+              <KpiCard titulo="Valor Total" valor={`R$ ${valorTotal.toFixed(2)}`} icone="" cor="from-purple-400 to-pink-500" />
             </div>
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h3 className="font-bold text-gray-900 mb-4">Fretes Recentes</h3>
@@ -313,9 +313,9 @@ function TransportadorasView({ transportadoras, loading, onAdd, onEdit, onRefres
                 {t.ativo ? 'Ativa' : 'Inativa'}
               </span>
             </div>
-            {t.contato && <p className="text-sm text-gray-700">👤 {t.contato}</p>}
-            {t.telefone && <p className="text-sm text-gray-700">📞 {t.telefone}</p>}
-            {t.email && <p className="text-sm text-gray-700">✉️ {t.email}</p>}
+            {t.contato && <p className="text-sm text-gray-700">{t.contato}</p>}
+            {t.telefone && <p className="text-sm text-gray-700">{t.telefone}</p>}
+            {t.email && <p className="text-sm text-gray-700">{t.email}</p>}
             <div className="mt-4 flex gap-2">
               <button onClick={() => onEdit(t)} className="flex-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-sm font-medium">Editar</button>
               <button onClick={() => handleDelete(t.id)} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded text-sm font-medium">Excluir</button>

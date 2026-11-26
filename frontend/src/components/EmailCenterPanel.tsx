@@ -132,7 +132,7 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
     <div className="space-y-4">
       {!cliente.contatoEmail ? (
         <div className="text-center py-6">
-          <p className="text-4xl mb-2">📭</p>
+          <p className="text-4xl mb-2"></p>
           <p className="text-sm text-gray-600">Sem email cadastrado para este cliente.</p>
         </div>
       ) : (
@@ -224,7 +224,7 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
                   disabled={aiSubjectLoading}
                   className="text-[11px] px-2 py-1 rounded-apple border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                 >
-                  {aiSubjectLoading ? '✨ IA...' : '✨ Sugerir assunto'}
+                  {aiSubjectLoading ? 'IA...' : 'Sugerir assunto'}
                 </button>
               </div>
               <input
@@ -242,7 +242,7 @@ export default function EmailCenterPanel({ cliente, vendedorNome, showToast }: E
                   disabled={aiBodyLoading}
                   className="text-[11px] px-2 py-1 rounded-apple border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                 >
-                  {aiBodyLoading ? '✨ IA...' : '✨ Sugerir mensagem'}
+                  {aiBodyLoading ? 'IA...' : 'Sugerir mensagem'}
                 </button>
               </div>
               <textarea

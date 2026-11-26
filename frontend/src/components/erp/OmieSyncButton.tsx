@@ -34,7 +34,7 @@ export default function OmieSyncButton({ onSync, label = 'Sincronizar com Omie',
         disabled={loading}
         className="px-4 py-2 bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white rounded-lg font-medium text-sm flex items-center gap-2 disabled:opacity-50 shadow-md"
       >
-        <span>{loading ? '🔄' : '⚡'}</span>
+        <span>{loading ? '' : ''}</span>
         {loading ? 'Sincronizando...' : label}
       </button>
 
@@ -43,12 +43,12 @@ export default function OmieSyncButton({ onSync, label = 'Sincronizar com Omie',
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className={`font-bold ${result.success ? 'text-green-800' : 'text-red-800'}`}>
-                {result.success ? '✅ Sincronização concluída' : '❌ Erro na sincronização'}
+                {result.success ? 'Sincronização concluída' : 'Erro na sincronização'}
               </p>
               {result.success && (
                 <div className="mt-2 text-sm text-gray-700">
-                  <p>📥 <strong>{result.inseridos}</strong> inseridos</p>
-                  <p>🔄 <strong>{result.atualizados}</strong> atualizados</p>
+                  <p><strong>{result.inseridos}</strong> inseridos</p>
+                  <p><strong>{result.atualizados}</strong> atualizados</p>
                   {result.detalhes && <p className="text-xs text-gray-500 mt-1">{result.detalhes}</p>}
                 </div>
               )}

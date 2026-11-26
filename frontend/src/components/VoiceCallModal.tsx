@@ -215,9 +215,9 @@ async function callAIVoiceStream(
     if (!res.ok) {
       throw new Error(`Edge Function ${res.status}: ${res.statusText}`)
     }
-    console.log('🚀 Usando Gemini Edge Function (Fase 3)')
+    console.log('Usando Gemini Edge Function (Fase 3)')
   } catch (edgeError) {
-    console.warn('⚠️ Edge Function falhou, usando backend (Fase 2):', edgeError)
+    console.warn('Edge Function falhou, usando backend (Fase 2):', edgeError)
     
     // Fallback para backend streaming
     try {
@@ -235,9 +235,9 @@ async function callAIVoiceStream(
       if (!res.ok) {
         throw new Error(`Backend Stream ${res.status}: ${res.statusText}`)
       }
-      console.log('🔄 Usando Backend Stream (Fase 2)')
+      console.log('Usando Backend Stream (Fase 2)')
     } catch (backendError) {
-      console.warn('⚠️ Backend streaming falhou, usando API simples:', backendError)
+      console.warn('Backend streaming falhou, usando API simples:', backendError)
       
       // Fallback final para API simples
       res = await fetch(`${BOT_URL}/api/gemini`, {
@@ -258,7 +258,7 @@ async function callAIVoiceStream(
         throw new Error(`API Simples ${res.status}: ${res.statusText}`)
       }
       
-      console.log('🔄 Usando API Simples (Fallback)')
+      console.log('Usando API Simples (Fallback)')
       
       // Para API simples, processar resposta normal
       const data = await res.json()
@@ -978,7 +978,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
               callState === 'error'     ? 'bg-red-600' :
               'bg-gray-600'
             }`}>
-              🤖
+              
             </div>
           </div>
         </div>
@@ -998,7 +998,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
           ) : callState === 'listening' && transcript ? (
             <p className="text-sm text-green-300 italic">"{transcript}"</p>
           ) : callState === 'listening' ? (
-            <p className="text-sm text-gray-500 text-center mt-2">🎤 Pode falar...</p>
+            <p className="text-sm text-gray-500 text-center mt-2">Pode falar...</p>
           ) : aiText ? (
             <p className="text-sm text-gray-200 leading-relaxed">{stripMarkdown(aiText).slice(0, 250)}{stripMarkdown(aiText).length > 250 ? '...' : ''}</p>
           ) : null}
@@ -1009,7 +1009,7 @@ export default function VoiceCallModal({ systemPrompt, loggedUserName, onClose }
           <div className="mx-4 mb-3 space-y-1 max-h-24 overflow-y-auto">
             {turns.slice(-4).map((t, i) => (
               <div key={i} className={`text-xs px-2 py-1 rounded-xl ${t.role === 'user' ? 'bg-gray-700 text-gray-300 text-right' : 'bg-gray-800 text-blue-300'}`}>
-                {t.role === 'user' ? '🎤 ' : '🤖 '}{t.text.slice(0, 80)}{t.text.length > 80 ? '…' : ''}
+                {t.role === 'user' ? '' : ''}{t.text.slice(0, 80)}{t.text.length > 80 ? '…' : ''}
               </div>
             ))}
           </div>

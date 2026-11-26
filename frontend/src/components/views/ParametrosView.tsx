@@ -220,7 +220,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
   return (
     <div className="max-w-5xl mx-auto space-y-6 p-2 sm:p-4">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">⚙️ Parâmetros do Sistema</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Parâmetros do Sistema</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Gerencie as listas dos dropdowns do CRM. Opções desativadas saem dos seletores novos sem alterar clientes ou pedidos antigos.
         </p>
@@ -386,7 +386,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
       {/* Campos obrigatórios para cadastro completo (item 12) */}
       <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 p-4 sm:p-6 space-y-3">
         <div>
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">📋 Campos obrigatórios do cadastro completo</h3>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Campos obrigatórios do cadastro completo</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Ative ou desative campos sem desenvolvimento. Ao salvar, a situação dos cadastros passa a ser recalculada com a nova lista.
           </p>
@@ -416,7 +416,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
       {/* Nomes das duas tarefas automáticas criadas ao cadastrar cliente novo */}
       <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 p-4 sm:p-6 space-y-3">
         <div>
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">📌 Tarefas automáticas no cadastro de cliente novo</h3>
+          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Tarefas automáticas no cadastro de cliente novo</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Criadas automaticamente para o vendedor ao salvar cliente novo (manual, importação ou Omie): produtos de interesse (prazo 5 dias) e completar cadastro (prazo 15 dias, apenas se houver campos pendentes).
           </p>
@@ -454,7 +454,7 @@ export default function ParametrosView({ loggedUser, showToast }: Props) {
 
       {/* Registro de auditoria (quem alterou e quando) */}
       <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 p-4 sm:p-6 space-y-3">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">🕒 Histórico de alterações de parâmetros</h3>
+        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Histórico de alterações de parâmetros</h3>
         {(parametros.auditoria || []).length === 0 ? (
           <p className="text-xs text-gray-400">Nenhuma alteração manual registrada ainda.</p>
         ) : (

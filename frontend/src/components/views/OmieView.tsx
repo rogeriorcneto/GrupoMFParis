@@ -42,18 +42,18 @@ const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> 
 }
 
 const LOGISTICA_STEPS_AMOSTRA = [
-  { key: 'enviado', label: 'Aprov. Gerência', icon: '✅' },
-  { key: 'faturado', label: 'Faturado', icon: '📄' },
-  { key: 'expedido', label: 'Coletado', icon: '📦' },
-  { key: 'entregue', label: 'Entregue', icon: '✔️' },
+  { key: 'enviado', label: 'Aprov. Gerência', icon: '' },
+  { key: 'faturado', label: 'Faturado', icon: '' },
+  { key: 'expedido', label: 'Coletado', icon: '' },
+  { key: 'entregue', label: 'Entregue', icon: '' },
 ]
 
 const LOGISTICA_STEPS_VENDA = [
-  { key: 'enviado', label: 'Aprov. Gerência', icon: '✅' },
-  { key: 'em_producao', label: 'Aprov. Financeiro', icon: '💰' },
-  { key: 'faturado', label: 'Faturado', icon: '📄' },
-  { key: 'expedido', label: 'Coletado', icon: '📦' },
-  { key: 'entregue', label: 'Entregue', icon: '✔️' },
+  { key: 'enviado', label: 'Aprov. Gerência', icon: '' },
+  { key: 'em_producao', label: 'Aprov. Financeiro', icon: '' },
+  { key: 'faturado', label: 'Faturado', icon: '' },
+  { key: 'expedido', label: 'Coletado', icon: '' },
+  { key: 'entregue', label: 'Entregue', icon: '' },
 ]
 
 function StatusBadge({ status }: { status: string }) {
@@ -67,9 +67,9 @@ function StatusBadge({ status }: { status: string }) {
 
 function TipoBadge({ tipo }: { tipo?: 'venda' | 'bonificacao' }) {
   if (tipo === 'bonificacao') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">🧪 Amostra</span>
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Amostra</span>
   }
-  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">🛒 Venda</span>
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">Venda</span>
 }
 
 function LogisticaTimeline({ status, tipo }: { status: string; tipo?: 'venda' | 'bonificacao' }) {
@@ -215,7 +215,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
       const res = await omieAssociarPorCnpj()
       if (res.success && res.data) {
         const d = res.data
-        setAssocResult(`✅ ${d.associados} associados | 🔗 ${d.jaVinculados} já vinculados | ❌ ${d.naoEncontradosOmie} não encontrados no Omie | ⚠️ ${d.semCnpj} sem CNPJ`)
+        setAssocResult(`${d.associados} associados | ${d.jaVinculados} já vinculados | ${d.naoEncontradosOmie} não encontrados no Omie | ⚠️ ${d.semCnpj} sem CNPJ`)
         if (d.associados > 0) loadPedidos()
       } else {
         setAssocResult(`Erro: ${res.error}`)
@@ -432,7 +432,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                               className="px-2 py-1 text-xs bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-apple font-medium transition-colors"
                               title="Consultar entrega"
                             >
-                              🔄 Detalhar
+                              Detalhar
                             </button>
                           </td>
                         </tr>
@@ -627,7 +627,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                   title="Associa automaticamente clientes do CRM com clientes do Omie pelo CNPJ"
                 >
                   <ArrowPathIcon className={`h-4 w-4 ${assocLoading ? 'animate-spin' : ''}`} />
-                  🔗 Associar por CNPJ
+                  Associar por CNPJ
                 </button>
                 <button
                   onClick={handleSyncLogistics}
@@ -682,10 +682,10 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                         </div>
                         <p className="text-sm text-gray-600 mt-0.5">{p.clienteNome}</p>
                         <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                          <span>👤 {p.vendedorNome}</span>
-                          <span>📅 {new Date(p.dataCriacao).toLocaleDateString('pt-BR')}</span>
-                          {p.nf && <span>📄 NF: {p.nf}</span>}
-                          {p.codigoRastreio && <span>📦 {p.codigoRastreio}</span>}
+                          <span>{p.vendedorNome}</span>
+                          <span>{new Date(p.dataCriacao).toLocaleDateString('pt-BR')}</span>
+                          {p.nf && <span>NF: {p.nf}</span>}
+                          {p.codigoRastreio && <span>{p.codigoRastreio}</span>}
                         </div>
                       </div>
                       <div className="text-right">
@@ -694,7 +694,7 @@ export default function OmieView({ pedidos, clientes, vendedores, loggedUser }: 
                           onClick={() => handleConsultarEntrega(p.pedidoId)}
                           className="mt-1 px-2 py-1 text-xs bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-apple font-medium"
                         >
-                          🔄 Consultar Entrega
+                          Consultar Entrega
                         </button>
                       </div>
                     </div>

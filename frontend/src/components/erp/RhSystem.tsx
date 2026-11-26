@@ -45,9 +45,9 @@ export default function RhSystem({ onVoltar }: { onVoltar: () => void }) {
   const departamentos = Array.from(new Set(funcionarios.map(f => f.departamento).filter(Boolean)))
 
   const menu = [
-    { id: 'dashboard', label: 'Dashboard', icone: '📊' },
-    { id: 'funcionarios', label: 'Funcionários', icone: '👥', badge: ativos },
-    { id: 'folha', label: 'Folha de Pagamento', icone: '💵' },
+    { id: 'dashboard', label: 'Dashboard', icone: '' },
+    { id: 'funcionarios', label: 'Funcionários', icone: '', badge: ativos },
+    { id: 'folha', label: 'Folha de Pagamento', icone: '' },
     { id: 'ponto', label: 'Ponto Eletrônico', icone: '⏰' },
   ]
 
@@ -55,7 +55,7 @@ export default function RhSystem({ onVoltar }: { onVoltar: () => void }) {
     <ErpLayout
       titulo="Recursos Humanos"
       subtitulo="Gestão de pessoas"
-      icone="👥"
+      icone=""
       cor="from-indigo-500 to-blue-600"
       menu={menu}
       activeMenu={activeMenu}
@@ -67,10 +67,10 @@ export default function RhSystem({ onVoltar }: { onVoltar: () => void }) {
           <div>
             <h2 className="text-2xl font-bold mb-6">Dashboard de RH</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <KpiRh titulo="Funcionários Ativos" valor={ativos} icone="✅" cor="from-green-400 to-emerald-600" />
-              <KpiRh titulo="Total Cadastrado" valor={funcionarios.length} icone="👥" cor="from-blue-400 to-indigo-600" />
-              <KpiRh titulo="Departamentos" valor={departamentos.length} icone="🏢" cor="from-purple-400 to-purple-600" />
-              <KpiRh titulo="Folha Mensal" valor={`R$ ${folhaTotal.toFixed(0)}`} icone="💵" cor="from-orange-400 to-red-600" />
+              <KpiRh titulo="Funcionários Ativos" valor={ativos} icone="" cor="from-green-400 to-emerald-600" />
+              <KpiRh titulo="Total Cadastrado" valor={funcionarios.length} icone="" cor="from-blue-400 to-indigo-600" />
+              <KpiRh titulo="Departamentos" valor={departamentos.length} icone="" cor="from-purple-400 to-purple-600" />
+              <KpiRh titulo="Folha Mensal" valor={`R$ ${folhaTotal.toFixed(0)}`} icone="" cor="from-orange-400 to-red-600" />
             </div>
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h3 className="font-bold mb-4">Por Departamento</h3>
@@ -120,8 +120,8 @@ export default function RhSystem({ onVoltar }: { onVoltar: () => void }) {
                   <h3 className="font-bold">{f.nome}</h3>
                   <p className="text-sm text-gray-600">{f.cargo || '—'}</p>
                   <p className="text-xs text-gray-500">{f.departamento || '—'}</p>
-                  {f.email && <p className="text-xs text-gray-500 mt-2">✉️ {f.email}</p>}
-                  {f.telefone && <p className="text-xs text-gray-500">📞 {f.telefone}</p>}
+                  {f.email && <p className="text-xs text-gray-500 mt-2">{f.email}</p>}
+                  {f.telefone && <p className="text-xs text-gray-500">{f.telefone}</p>}
                   <div className="mt-3 flex gap-2">
                     <button onClick={() => { setEditF(f); setShowForm(true) }} className="flex-1 px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-sm">Editar</button>
                     <button onClick={async () => {

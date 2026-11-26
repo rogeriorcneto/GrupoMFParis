@@ -8,12 +8,12 @@ import {
 
 // ─── Ícones por grupo ───
 const GROUP_ICONS: Record<string, string> = {
-  geral: '📋',
-  crm: '🤝',
-  financas: '💰',
-  compras: '🛒',
-  estoque: '📦',
-  vendas: '🧾',
+  geral: '',
+  crm: '',
+  financas: '',
+  compras: '',
+  estoque: '',
+  vendas: '',
 }
 
 const GROUP_LABELS: Record<string, string> = {
@@ -209,7 +209,7 @@ const OmieIntegration: React.FC<Props> = ({ botOnline }) => {
     <div className="bg-white rounded-apple shadow-apple-sm border-2 border-blue-200 p-6">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
-        <div className="text-4xl">🔗</div>
+        <div className="text-4xl"></div>
         <div className="flex-1">
           <h3 className="text-lg font-semibold text-gray-900">Omie ERP</h3>
           <div className="flex items-center gap-2 mt-1">
@@ -294,7 +294,7 @@ const OmieIntegration: React.FC<Props> = ({ botOnline }) => {
         <div className="bg-green-50 rounded-apple border border-green-200 p-3 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-sm">✅</span>
+              <span className="text-sm"></span>
               <span className="text-sm text-green-800">Conectado ao Omie: {status.empresa}</span>
             </div>
             <button
@@ -311,7 +311,7 @@ const OmieIntegration: React.FC<Props> = ({ botOnline }) => {
       {!showConfigForm && config?.configured && status && !status.success && (
         <div className="bg-red-50 rounded-apple border border-red-200 p-3 mb-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm">❌</span>
+            <span className="text-sm"></span>
             <span className="text-sm text-red-700">Erro: {status.error}</span>
           </div>
         </div>
@@ -454,7 +454,7 @@ const OmieIntegration: React.FC<Props> = ({ botOnline }) => {
                     : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                {GROUP_ICONS[group] || '📄'} {GROUP_LABELS[group] || group}
+                {GROUP_ICONS[group] || ''} {GROUP_LABELS[group] || group}
               </button>
             ))}
           </div>

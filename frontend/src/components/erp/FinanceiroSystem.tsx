@@ -82,19 +82,19 @@ export default function FinanceiroSystem({ onVoltar }: { onVoltar: () => void })
   const aPagar = despesas.filter(l => l.status === 'pendente').reduce((s, l) => s + Number(l.valor), 0)
 
   const menu = [
-    { id: 'dashboard', label: 'Dashboard', icone: '📊' },
-    { id: 'receber', label: 'Contas a Receber', icone: '💰', badge: receitas.filter(l => l.status === 'pendente').length },
-    { id: 'pagar', label: 'Contas a Pagar', icone: '💸', badge: despesas.filter(l => l.status === 'pendente').length },
-    { id: 'fluxo', label: 'Fluxo de Caixa', icone: '📈' },
-    { id: 'contas', label: 'Contas Bancárias', icone: '🏦' },
-    { id: 'categorias', label: 'Categorias', icone: '🏷️' },
+    { id: 'dashboard', label: 'Dashboard', icone: '' },
+    { id: 'receber', label: 'Contas a Receber', icone: '', badge: receitas.filter(l => l.status === 'pendente').length },
+    { id: 'pagar', label: 'Contas a Pagar', icone: '', badge: despesas.filter(l => l.status === 'pendente').length },
+    { id: 'fluxo', label: 'Fluxo de Caixa', icone: '' },
+    { id: 'contas', label: 'Contas Bancárias', icone: '' },
+    { id: 'categorias', label: 'Categorias', icone: '' },
   ]
 
   return (
     <ErpLayout
       titulo="Financeiro"
       subtitulo="Gestão financeira"
-      icone="💰"
+      icone=""
       cor="from-green-500 to-emerald-600"
       menu={menu}
       activeMenu={activeMenu}
@@ -113,14 +113,14 @@ export default function FinanceiroSystem({ onVoltar }: { onVoltar: () => void })
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <KpiFin titulo="Saldo" valor={saldo} icone="💵" cor={saldo >= 0 ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600'} />
-              <KpiFin titulo="Receitas" valor={totalReceitas} icone="📥" cor="from-blue-500 to-indigo-600" />
-              <KpiFin titulo="Despesas" valor={totalDespesas} icone="📤" cor="from-orange-500 to-red-600" />
+              <KpiFin titulo="Saldo" valor={saldo} icone="" cor={saldo >= 0 ? 'from-green-500 to-emerald-600' : 'from-red-500 to-rose-600'} />
+              <KpiFin titulo="Receitas" valor={totalReceitas} icone="" cor="from-blue-500 to-indigo-600" />
+              <KpiFin titulo="Despesas" valor={totalDespesas} icone="" cor="from-orange-500 to-red-600" />
               <KpiFin titulo="A Receber" valor={aReceber} icone="⏳" cor="from-purple-500 to-pink-600" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="font-bold text-gray-900 mb-4">📥 Receitas Pendentes</h3>
+                <h3 className="font-bold text-gray-900 mb-4">Receitas Pendentes</h3>
                 {receitas.filter(l => l.status === 'pendente').slice(0, 5).map(l => (
                   <div key={l.id} className="flex justify-between py-2 border-b last:border-0">
                     <div>
@@ -135,7 +135,7 @@ export default function FinanceiroSystem({ onVoltar }: { onVoltar: () => void })
                 )}
               </div>
               <div className="bg-white rounded-xl shadow-sm p-6">
-                <h3 className="font-bold text-gray-900 mb-4">📤 Despesas Pendentes</h3>
+                <h3 className="font-bold text-gray-900 mb-4">Despesas Pendentes</h3>
                 {despesas.filter(l => l.status === 'pendente').slice(0, 5).map(l => (
                   <div key={l.id} className="flex justify-between py-2 border-b last:border-0">
                     <div>
@@ -384,7 +384,7 @@ function ContasBancariasView({ contas, loading, onRefresh }: any) {
                 <h3 className="font-bold">{c.nome}</h3>
                 {c.banco && <p className="text-xs text-gray-500">{c.banco}</p>}
               </div>
-              <span className="text-2xl">🏦</span>
+              <span className="text-2xl"></span>
             </div>
             <p className="text-sm text-gray-500">Saldo Atual</p>
             <p className="text-2xl font-bold text-green-600">R$ {Number(c.saldo_atual).toFixed(2)}</p>
@@ -436,7 +436,7 @@ function CategoriasView({ categorias, loading, onRefresh }: any) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <h3 className="font-bold text-green-700 mb-3">📥 Receitas</h3>
+          <h3 className="font-bold text-green-700 mb-3">Receitas</h3>
           <div className="space-y-2">
             {categorias.filter((c: Categoria) => c.tipo === 'receita').map((c: Categoria) => (
               <div key={c.id} className="bg-white rounded-lg shadow-sm p-3 flex items-center justify-between">
@@ -450,7 +450,7 @@ function CategoriasView({ categorias, loading, onRefresh }: any) {
           </div>
         </div>
         <div>
-          <h3 className="font-bold text-red-700 mb-3">📤 Despesas</h3>
+          <h3 className="font-bold text-red-700 mb-3">Despesas</h3>
           <div className="space-y-2">
             {categorias.filter((c: Categoria) => c.tipo === 'despesa').map((c: Categoria) => (
               <div key={c.id} className="bg-white rounded-lg shadow-sm p-3 flex items-center justify-between">

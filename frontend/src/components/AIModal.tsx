@@ -132,7 +132,7 @@ export default function AIModal({ show, onClose, clientes, pedidos = [], vendedo
                 </label>
                 {aiError && (
                   <div className="bg-red-50 rounded-apple p-3 border border-red-200">
-                    <p className="text-xs text-red-700">⚠️ {aiError}</p>
+                    <p className="text-xs text-red-700">{aiError}</p>
                   </div>
                 )}
                 {aiResponse && (

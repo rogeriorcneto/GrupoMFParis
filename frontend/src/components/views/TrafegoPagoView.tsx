@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import type { Vendedor } from '../../types'
 import { authFetch } from '../../lib/botApi'
+import { ChartBarIcon, SparklesIcon, PencilSquareIcon, PhotoIcon, InboxIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ interface MetricCard {
   value: string
   sub?: string
   color: string
-  icon: string
+  icon?: string
   delta?: string
   deltaPositive?: boolean
 }
@@ -65,15 +66,14 @@ function StatusBadge({ status }: { status: Campanha['status'] }) {
 }
 
 function PlataformaBadge({ plataforma }: { plataforma: 'meta' | 'google' }) {
-  if (plataforma === 'meta') return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700">📘 Meta</span>
-  return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-700">🔴 Google</span>
+  if (plataforma === 'meta') return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-100 text-blue-700">Meta</span>
+  return <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-700">Google</span>
 }
 
 function MetricCardComp({ m }: { m: MetricCard }) {
   return (
     <div className={`bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-1 shadow-sm`}>
       <div className="flex items-center justify-between">
-        <span className="text-lg">{m.icon}</span>
         {m.delta && (
           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${m.deltaPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
             {m.deltaPositive ? '▲' : '▼'} {m.delta}
@@ -98,7 +98,7 @@ function SetupWizard({ onSave }: { onSave: (creds: PlatformCreds) => void }) {
     <div className="max-w-2xl mx-auto">
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-5 text-white">
-          <h2 className="text-lg font-bold">🚀 Configurar Tráfego Pago</h2>
+          <h2 className="text-lg font-bold">Configurar Tráfego Pago</h2>
           <p className="text-sm text-blue-100 mt-1">Conecte suas contas de anúncios para começar</p>
         </div>
 
@@ -107,7 +107,7 @@ function SetupWizard({ onSave }: { onSave: (creds: PlatformCreds) => void }) {
           {(['meta', 'google'] as const).map((s, i) => (
             <button key={s} onClick={() => setStep(s)} className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${step === s ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600' : 'text-gray-400 hover:text-gray-600'}`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${step === s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>{i + 1}</span>
-              {s === 'meta' ? '📘 Meta Ads' : '🔴 Google Ads'}
+              {s === 'meta' ? 'Meta Ads' : 'Google Ads'}
             </button>
           ))}
         </div>
@@ -171,8 +171,8 @@ function SetupWizard({ onSave }: { onSave: (creds: PlatformCreds) => void }) {
                   </div>
                 ))}
               </div>
-              <button onClick={() => onSave({ meta, google })} className="w-full py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
-                ✅ Salvar e Conectar
+              <button onClick={() => onSave({ meta, google })} className="w-full py-2.5 bg-primary-700 text-white text-sm font-semibold rounded-lg hover:bg-primary-800 transition-colors">
+                Salvar e Conectar
               </button>
             </>
           )}
@@ -199,21 +199,21 @@ function NovaCampanhaModal({ onClose, onCriar }: { onClose: () => void; onCriar:
   const [loading, setLoading] = useState(false)
 
   const objetivosMeta = [
-    { value: 'LINK_CLICKS', label: '🖱️ Cliques no Link' },
-    { value: 'LEAD_GENERATION', label: '📋 Geração de Leads' },
-    { value: 'REACH', label: '👁️ Alcance' },
-    { value: 'BRAND_AWARENESS', label: '📣 Reconhecimento de Marca' },
-    { value: 'CONVERSIONS', label: '🎯 Conversões' },
-    { value: 'VIDEO_VIEWS', label: '🎥 Visualizações de Vídeo' },
-    { value: 'MESSAGES', label: '💬 Mensagens' },
+    { value: 'LINK_CLICKS', label: 'Cliques no Link' },
+    { value: 'LEAD_GENERATION', label: 'Geração de Leads' },
+    { value: 'REACH', label: 'Alcance' },
+    { value: 'BRAND_AWARENESS', label: 'Reconhecimento de Marca' },
+    { value: 'CONVERSIONS', label: 'Conversões' },
+    { value: 'VIDEO_VIEWS', label: 'Visualizações de Vídeo' },
+    { value: 'MESSAGES', label: 'Mensagens' },
   ]
 
   const objetivosGoogle = [
-    { value: 'SEARCH', label: '🔍 Pesquisa' },
-    { value: 'DISPLAY', label: '🖼️ Display' },
-    { value: 'SHOPPING', label: '🛒 Shopping' },
-    { value: 'VIDEO', label: '🎥 YouTube' },
-    { value: 'SMART', label: '🤖 Smart Campaign' },
+    { value: 'SEARCH', label: 'Pesquisa' },
+    { value: 'DISPLAY', label: 'Display' },
+    { value: 'SHOPPING', label: 'Shopping' },
+    { value: 'VIDEO', label: 'YouTube' },
+    { value: 'SMART', label: 'Smart Campaign' },
   ]
 
   const objetivos = form.plataforma === 'meta' ? objetivosMeta : objetivosGoogle
@@ -233,7 +233,7 @@ function NovaCampanhaModal({ onClose, onCriar }: { onClose: () => void; onCriar:
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-          <h3 className="font-bold text-gray-900">🚀 Nova Campanha</h3>
+          <h3 className="font-bold text-gray-900">Nova Campanha</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -244,7 +244,7 @@ function NovaCampanhaModal({ onClose, onCriar }: { onClose: () => void; onCriar:
               {(['meta', 'google'] as const).map(p => (
                 <button key={p} type="button" onClick={() => setForm(v => ({ ...v, plataforma: p, objetivo: p === 'meta' ? 'LINK_CLICKS' : 'SEARCH' }))}
                   className={`flex-1 py-2.5 text-sm font-semibold rounded-lg border-2 transition-colors ${form.plataforma === p ? (p === 'meta' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-red-500 bg-red-50 text-red-700') : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                  {p === 'meta' ? '📘 Meta Ads' : '🔴 Google Ads'}
+                  {p === 'meta' ? 'Meta Ads' : 'Google Ads'}
                 </button>
               ))}
             </div>
@@ -284,7 +284,7 @@ function NovaCampanhaModal({ onClose, onCriar }: { onClose: () => void; onCriar:
 
           {/* Público */}
           <div className="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50">
-            <p className="text-xs font-bold text-gray-700">🎯 Segmentação do Público</p>
+            <p className="text-xs font-bold text-gray-700">Segmentação do Público</p>
             <div>
               <label className="block text-xs text-gray-600 mb-1">Faixa Etária</label>
               <select value={form.publicoIdade} onChange={e => setForm(v => ({ ...v, publicoIdade: e.target.value }))} className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none">
@@ -301,10 +301,10 @@ function NovaCampanhaModal({ onClose, onCriar }: { onClose: () => void; onCriar:
             </div>
           </div>
 
-          <button type="submit" disabled={loading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+          <button type="submit" disabled={loading} className="w-full py-3 bg-primary-700 text-white text-sm font-bold rounded-lg hover:bg-primary-800 disabled:opacity-60 transition-colors">
             {loading ? (
               <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Criando campanha...</span>
-            ) : '🚀 Criar Campanha'}
+            ) : 'Criar Campanha'}
           </button>
         </form>
       </div>
@@ -357,8 +357,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
     try {
       const r = await apiFetch('/trafico/ia/planejar', { method: 'POST', body: JSON.stringify({ ...iaBriefing, canais: ['Meta Ads', 'Google Ads'] }) })
       if (r.success) setIaPlano(r.plano)
-      else showToast('❌ ' + r.error)
-    } catch { showToast('❌ Erro ao gerar plano') } finally { setIaLoading(false) }
+      else showToast('' + r.error)
+    } catch { showToast('Erro ao gerar plano') } finally { setIaLoading(false) }
   }
 
   async function handleGerarCopy() {
@@ -367,8 +367,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
     try {
       const r = await apiFetch('/trafico/ia/copy', { method: 'POST', body: JSON.stringify(copyForm) })
       if (r.success) setCopyResult(r.copy)
-      else showToast('❌ ' + r.error)
-    } catch { showToast('❌ Erro ao gerar copy') } finally { setCopyLoading(false) }
+      else showToast('' + r.error)
+    } catch { showToast('Erro ao gerar copy') } finally { setCopyLoading(false) }
   }
 
   async function handleGerarImagem() {
@@ -377,8 +377,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
     try {
       const r = await apiFetch('/trafico/ia/imagem', { method: 'POST', body: JSON.stringify(criativoForm) })
       if (r.success) setCriativoImages(r.images)
-      else showToast('❌ ' + r.error)
-    } catch { showToast('❌ Erro ao gerar imagem') } finally { setCriativoLoading(false) }
+      else showToast('' + r.error)
+    } catch { showToast('Erro ao gerar imagem') } finally { setCriativoLoading(false) }
   }
 
   // Load saved creds
@@ -399,22 +399,22 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
 
   async function handleSaveCreds(newCreds: PlatformCreds) {
     const r = await apiFetch('/trafico/config', { method: 'POST', body: JSON.stringify(newCreds) })
-    if (r.success) { setCreds(newCreds); showToast('✅ Credenciais salvas com sucesso!') }
-    else showToast('❌ Erro ao salvar credenciais: ' + r.error)
+    if (r.success) { setCreds(newCreds); showToast('Credenciais salvas com sucesso!') }
+    else showToast('Erro ao salvar credenciais: ' + r.error)
   }
 
   async function handleSync() {
     setSyncing(true)
     try {
       const r = await apiFetch('/trafico/sync', { method: 'POST', body: JSON.stringify({ range: dateRange }) })
-      if (r.success && r.data) { setCampanhas(r.data); showToast('✅ Dados sincronizados!') }
-      else showToast('⚠️ ' + (r.error || 'Erro ao sincronizar'))
+      if (r.success && r.data) { setCampanhas(r.data); showToast('Dados sincronizados!') }
+      else showToast('' + (r.error || 'Erro ao sincronizar'))
     } finally { setSyncing(false) }
   }
 
   async function handleCriarCampanha(form: any) {
     const r = await apiFetch('/trafico/campanha', { method: 'POST', body: JSON.stringify(form) })
-    if (r.success) { showToast('✅ Campanha criada! Sincronizando...'); await handleSync() }
+    if (r.success) { showToast('Campanha criada! Sincronizando...'); await handleSync() }
     else throw new Error(r.error || 'Erro ao criar campanha')
   }
 
@@ -427,7 +427,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
     if (r.success) {
       setCampanhas(prev => prev.map(cam => cam.id === c.id ? { ...cam, status: novoStatus } : cam))
       showToast(`${novoStatus === 'ACTIVE' ? '▶️' : '⏸️'} Campanha ${novoStatus === 'ACTIVE' ? 'ativada' : 'pausada'}`)
-    } else showToast('❌ Erro: ' + r.error)
+    } else showToast('Erro: ' + r.error)
   }
 
   // Derived metrics
@@ -450,25 +450,25 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
   }, [campanhasFiltradas])
 
   const metricCards: MetricCard[] = [
-    { label: 'Gasto Total', value: `R$ ${metrics.gastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: '💰', color: 'text-gray-800', sub: `${dateRange === '7d' ? 'Últimos 7 dias' : dateRange === '30d' ? 'Últimos 30 dias' : 'Últimos 90 dias'}` },
-    { label: 'Leads Gerados', value: metrics.leadsTotal.toLocaleString(), icon: '🎯', color: 'text-indigo-700', sub: `CPL médio: R$ ${metrics.cplMedio.toFixed(2)}` },
-    { label: 'Cliques', value: metrics.cliquesTotal.toLocaleString(), icon: '🖱️', color: 'text-blue-700', sub: `CTR: ${metrics.ctrMedio.toFixed(2)}%` },
-    { label: 'Impressões', value: metrics.impressoesTotal >= 1000 ? `${(metrics.impressoesTotal / 1000).toFixed(1)}k` : String(metrics.impressoesTotal), icon: '👁️', color: 'text-purple-700', sub: `CPC: R$ ${metrics.cpcMedio.toFixed(2)}` },
-    { label: 'Campanhas Ativas', value: String(metrics.ativas), icon: '▶️', color: 'text-green-700', sub: `de ${campanhasFiltradas.length} total` },
+    { label: 'Gasto Total', value: `R$ ${metrics.gastoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, color: 'text-gray-800', sub: `${dateRange === '7d' ? 'Últimos 7 dias' : dateRange === '30d' ? 'Últimos 30 dias' : 'Últimos 90 dias'}` },
+    { label: 'Leads Gerados', value: metrics.leadsTotal.toLocaleString(), color: 'text-indigo-700', sub: `CPL médio: R$ ${metrics.cplMedio.toFixed(2)}` },
+    { label: 'Cliques', value: metrics.cliquesTotal.toLocaleString(), color: 'text-blue-700', sub: `CTR: ${metrics.ctrMedio.toFixed(2)}%` },
+    { label: 'Impressões', value: metrics.impressoesTotal >= 1000 ? `${(metrics.impressoesTotal / 1000).toFixed(1)}k` : String(metrics.impressoesTotal), color: 'text-purple-700', sub: `CPC: R$ ${metrics.cpcMedio.toFixed(2)}` },
+    { label: 'Campanhas Ativas', value: String(metrics.ativas), color: 'text-green-700', sub: `de ${campanhasFiltradas.length} total` },
   ]
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   if (!credsLoaded) return (
     <div className="flex-1 flex items-center justify-center">
-      <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-700 rounded-full animate-spin" />
     </div>
   )
 
   if (!creds) return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">📊 Tráfego Pago</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Tráfego Pago</h1>
         <p className="text-gray-500 text-sm mt-1">Configure suas contas de anúncios para começar</p>
       </div>
       <SetupWizard onSave={handleSaveCreds} />
@@ -488,30 +488,30 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
       <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">📊 Tráfego Pago</h1>
+            <h1 className="text-xl font-bold text-gray-900">Tráfego Pago</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {creds.meta.adAccountId && <span className="mr-3">📘 Meta: <span className="font-medium text-blue-600">{creds.meta.adAccountId}</span></span>}
-              {creds.google.customerId && <span>🔴 Google: <span className="font-medium text-red-600">{creds.google.customerId}</span></span>}
+              {creds.meta.adAccountId && <span className="mr-3 inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500" />Meta: <span className="font-medium text-blue-600">{creds.meta.adAccountId}</span></span>}
+              {creds.google.customerId && <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500" />Google: <span className="font-medium text-red-600">{creds.google.customerId}</span></span>}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Date range */}
             <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-medium">
               {(['7d', '30d', '90d'] as const).map(r => (
-                <button key={r} onClick={() => setDateRange(r)} className={`px-3 py-1.5 transition-colors ${dateRange === r ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                <button key={r} onClick={() => setDateRange(r)} className={`px-3 py-1.5 transition-colors ${dateRange === r ? 'bg-primary-700 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
                   {r === '7d' ? '7 dias' : r === '30d' ? '30 dias' : '90 dias'}
                 </button>
               ))}
             </div>
             <button onClick={handleSync} disabled={syncing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
-              {syncing ? <span className="w-3 h-3 border-2 border-gray-400 border-t-gray-700 rounded-full animate-spin" /> : '🔄'}
+              {syncing ? <span className="w-3 h-3 border-2 border-gray-400 border-t-gray-700 rounded-full animate-spin" /> : <ArrowPathIcon className="h-3.5 w-3.5" />}
               Sync
             </button>
-            <button onClick={() => setShowNovaCampanha(true)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
+            <button onClick={() => setShowNovaCampanha(true)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-primary-700 text-white rounded-lg hover:bg-primary-800 transition-colors shadow-sm">
               + Nova Campanha
             </button>
             <button onClick={() => setTab('config')} className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
-              ⚙️ Config
+              Config
             </button>
           </div>
         </div>
@@ -519,14 +519,14 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
         {/* Tabs */}
         <div className="flex gap-1 mt-4 flex-wrap">
           {[
-            { id: 'dashboard', label: '📈 Dashboard' },
-            { id: 'campanhas', label: '📋 Campanhas' },
-            { id: 'ia', label: '🤖 IA Planejar' },
-            { id: 'copy', label: '✍️ Copy' },
-            { id: 'criativos', label: '🎨 Criativos' },
+            { id: 'dashboard', label: 'Dashboard' },
+            { id: 'campanhas', label: 'Campanhas' },
+            { id: 'ia', label: 'IA Planejar' },
+            { id: 'copy', label: 'Copy' },
+            { id: 'criativos', label: 'Criativos' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id as any)}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tab === t.id ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+              className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${tab === t.id ? 'bg-primary-700 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
               {t.label}
             </button>
           ))}
@@ -541,7 +541,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
           <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden text-xs font-medium">
             {(['all', 'meta', 'google'] as const).map(p => (
               <button key={p} onClick={() => setFilterPlat(p)} className={`px-3 py-1.5 transition-colors ${filterPlat === p ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-50'}`}>
-                {p === 'all' ? 'Todas' : p === 'meta' ? '📘 Meta' : '🔴 Google'}
+                {p === 'all' ? 'Todas' : p === 'meta' ? 'Meta' : 'Google'}
               </button>
             ))}
           </div>
@@ -556,7 +556,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center space-y-3">
-              <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto" />
+              <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-700 rounded-full animate-spin mx-auto" />
               <p className="text-sm text-gray-500">Carregando dados das plataformas...</p>
             </div>
           </div>
@@ -583,7 +583,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                     return (
                       <div key={plat} className={`bg-white rounded-xl border-2 p-5 ${plat === 'meta' ? 'border-blue-100' : 'border-red-100'}`}>
                         <div className="flex items-center gap-2 mb-4">
-                          <span className="text-xl">{plat === 'meta' ? '📘' : '🔴'}</span>
+                          <span className={`w-2.5 h-2.5 rounded-full ${plat === 'meta' ? 'bg-blue-500' : 'bg-red-500'}`} />
                           <h3 className="font-bold text-gray-800">{plat === 'meta' ? 'Meta Ads' : 'Google Ads'}</h3>
                           <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${plat === 'meta' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{cs.filter(c => c.status === 'ACTIVE').length} ativas</span>
                         </div>
@@ -609,7 +609,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                 {campanhas.length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="font-bold text-gray-800 text-sm">🏆 Top Campanhas por Leads</h3>
+                      <h3 className="font-bold text-gray-800 text-sm">Top Campanhas por Leads</h3>
                     </div>
                     <div className="divide-y divide-gray-50">
                       {[...campanhas].sort((a, b) => b.leads - a.leads).slice(0, 5).map(c => (
@@ -633,10 +633,10 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
 
                 {campanhas.length === 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                    <p className="text-4xl mb-3">📊</p>
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center"><ChartBarIcon className="h-6 w-6 text-gray-400" /></div>
                     <p className="text-gray-600 font-medium">Nenhuma campanha encontrada</p>
                     <p className="text-gray-400 text-sm mt-1">Crie sua primeira campanha ou ajuste os filtros de data</p>
-                    <button onClick={() => setShowNovaCampanha(true)} className="mt-4 px-5 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors">
+                    <button onClick={() => setShowNovaCampanha(true)} className="mt-4 px-5 py-2 bg-primary-700 text-white text-sm font-bold rounded-lg hover:bg-primary-800 transition-colors">
                       + Criar Primeira Campanha
                     </button>
                   </div>
@@ -648,12 +648,12 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
             {tab === 'campanhas' && (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                  <h3 className="font-bold text-gray-800 text-sm">📋 Todas as Campanhas ({campanhasFiltradas.length})</h3>
-                  <button onClick={() => setShowNovaCampanha(true)} className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700">+ Nova</button>
+                  <h3 className="font-bold text-gray-800 text-sm">Todas as Campanhas ({campanhasFiltradas.length})</h3>
+                  <button onClick={() => setShowNovaCampanha(true)} className="px-3 py-1.5 bg-primary-700 text-white text-xs font-bold rounded-lg hover:bg-primary-800">+ Nova</button>
                 </div>
                 {campanhasFiltradas.length === 0 ? (
                   <div className="p-12 text-center text-gray-400">
-                    <p className="text-3xl mb-2">📭</p>
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center"><InboxIcon className="h-6 w-6 text-gray-400" /></div>
                     <p>Nenhuma campanha com os filtros selecionados</p>
                   </div>
                 ) : (
@@ -704,7 +704,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Briefing form */}
                 <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-                  <h3 className="font-bold text-gray-800">🤖 Planejamento com IA</h3>
+                  <h3 className="font-bold text-gray-800">Planejamento com IA</h3>
                   <p className="text-xs text-gray-500">Preencha o briefing e a IA criará um plano completo de campanha com estratégia, público-alvo, orçamento e cronograma.</p>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Produto / Serviço *</label>
@@ -728,8 +728,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Contexto adicional (opcional)</label>
                     <textarea value={iaBriefing.contexto} onChange={e => setIaBriefing(v => ({ ...v, contexto: e.target.value }))} rows={3} placeholder="Diferenciais, sazonalidade, histórico de campanhas..." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
                   </div>
-                  <button onClick={handleGerarPlano} disabled={!iaBriefing.produto || iaLoading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                    {iaLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando plano...</> : '🤖 Gerar Plano Completo'}
+                  <button onClick={handleGerarPlano} disabled={!iaBriefing.produto || iaLoading} className="w-full py-3 bg-primary-700 text-white text-sm font-bold rounded-lg hover:bg-primary-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                    {iaLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando plano...</> : 'Gerar Plano Completo'}
                   </button>
                 </div>
 
@@ -737,25 +737,25 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                 <div className="space-y-4">
                   {!iaPlano && !iaLoading && (
                     <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                      <p className="text-4xl mb-3">🤖</p>
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center"><SparklesIcon className="h-6 w-6 text-gray-400" /></div>
                       <p className="text-gray-500 font-medium">Preencha o briefing e clique em gerar</p>
                       <p className="text-gray-400 text-xs mt-1">A IA vai criar um plano completo com estratégia, público, orçamento e cronograma</p>
                     </div>
                   )}
                   {iaLoading && (
                     <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                      <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-700 rounded-full animate-spin mx-auto mb-3" />
                       <p className="text-gray-500 text-sm">IA analisando e criando seu plano...</p>
                     </div>
                   )}
                   {iaPlano && (
                     <>
                       <div className="bg-indigo-50 rounded-xl border border-indigo-100 p-4">
-                        <p className="text-xs font-bold text-indigo-700 mb-1">📋 Resumo Executivo</p>
+                        <p className="text-xs font-bold text-indigo-700 mb-1">Resumo Executivo</p>
                         <p className="text-sm text-indigo-900">{iaPlano.resumo}</p>
                       </div>
                       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-                        <p className="text-xs font-bold text-gray-700">💰 Distribuição do Orçamento</p>
+                        <p className="text-xs font-bold text-gray-700">Distribuição do Orçamento</p>
                         {(iaPlano.distribuicaoOrcamento || []).map((d: any, i: number) => (
                           <div key={i} className="flex items-center gap-3">
                             <span className="text-xs font-medium text-gray-700 w-24">{d.canal}</span>
@@ -767,7 +767,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                         ))}
                       </div>
                       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-2">
-                        <p className="text-xs font-bold text-gray-700">🎯 Campanhas Sugeridas</p>
+                        <p className="text-xs font-bold text-gray-700">Campanhas Sugeridas</p>
                         {(iaPlano.campanhas || []).map((c: any, i: number) => (
                           <div key={i} className="bg-gray-50 rounded-lg p-3">
                             <div className="flex items-center justify-between mb-1">
@@ -784,7 +784,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                         ))}
                       </div>
                       <div className="bg-white rounded-xl border border-gray-200 p-4">
-                        <p className="text-xs font-bold text-gray-700 mb-2">📅 Cronograma</p>
+                        <p className="text-xs font-bold text-gray-700 mb-2">Cronograma</p>
                         <div className="space-y-1">
                           {(iaPlano.cronograma || []).map((s: any) => (
                             <div key={s.semana} className="flex gap-2 text-xs">
@@ -796,7 +796,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                       </div>
                       {(iaPlano.recomendacoes || []).length > 0 && (
                         <div className="bg-amber-50 rounded-xl border border-amber-100 p-4">
-                          <p className="text-xs font-bold text-amber-700 mb-2">💡 Recomendações</p>
+                          <p className="text-xs font-bold text-amber-700 mb-2">Recomendações</p>
                           <ul className="space-y-1">
                             {iaPlano.recomendacoes.map((r: string, i: number) => <li key={i} className="text-xs text-amber-800">• {r}</li>)}
                           </ul>
@@ -813,7 +813,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Form */}
                 <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-                  <h3 className="font-bold text-gray-800">✍️ Gerador de Copy com IA</h3>
+                  <h3 className="font-bold text-gray-800">Gerador de Copy com IA</h3>
                   <p className="text-xs text-gray-500">A IA gera headlines, textos principais, descrições e CTAs otimizados para Meta Ads e Google Ads.</p>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Produto / Serviço *</label>
@@ -833,8 +833,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                       {['Profissional e persuasivo', 'Descontraído e próximo', 'Urgência e escassez', 'Autoridade e confiança', 'Emocional e inspirador'].map(t => <option key={t}>{t}</option>)}
                     </select>
                   </div>
-                  <button onClick={handleGerarCopy} disabled={!copyForm.produto || copyLoading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                    {copyLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando copies...</> : '✍️ Gerar Copies'}
+                  <button onClick={handleGerarCopy} disabled={!copyForm.produto || copyLoading} className="w-full py-3 bg-primary-700 text-white text-sm font-bold rounded-lg hover:bg-primary-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                    {copyLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando copies...</> : 'Gerar Copies'}
                   </button>
                 </div>
 
@@ -842,13 +842,13 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                 <div className="space-y-4">
                   {!copyResult && !copyLoading && (
                     <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                      <p className="text-4xl mb-3">✍️</p>
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center"><PencilSquareIcon className="h-6 w-6 text-gray-400" /></div>
                       <p className="text-gray-500 font-medium">Preencha o formulário e gere seus copies</p>
                     </div>
                   )}
                   {copyLoading && (
                     <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                      <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-700 rounded-full animate-spin mx-auto mb-3" />
                       <p className="text-gray-500 text-sm">Criando copies de alta conversão...</p>
                     </div>
                   )}
@@ -856,7 +856,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                     <>
                       {/* Meta */}
                       <div className="bg-white rounded-xl border border-blue-100 p-4 space-y-3">
-                        <p className="text-xs font-bold text-blue-700">📘 Meta Ads</p>
+                        <p className="text-xs font-bold text-blue-700">Meta Ads</p>
                         <div>
                           <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Headlines</p>
                           <div className="space-y-1">
@@ -884,7 +884,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                           <div className="flex flex-wrap gap-1">
                             {(copyResult.meta?.ctas || []).map((c: string, i: number) => (
                               <button key={i} onClick={() => copyToClipboard(c, `mc${i}`)} className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full hover:bg-blue-100 transition-colors">
-                                {copiedItem === `mc${i}` ? '✓ Copiado' : c}
+                                {copiedItem === `mc${i}` ? 'Copiado' : c}
                               </button>
                             ))}
                           </div>
@@ -893,7 +893,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
 
                       {/* Google */}
                       <div className="bg-white rounded-xl border border-red-100 p-4 space-y-3">
-                        <p className="text-xs font-bold text-red-700">🔴 Google Ads</p>
+                        <p className="text-xs font-bold text-red-700">Google Ads</p>
                         <div>
                           <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Headlines</p>
                           <div className="space-y-1">
@@ -920,7 +920,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                       {/* Proposta de valor */}
                       {copyResult.geral?.proposta_valor && (
                         <div className="bg-amber-50 rounded-xl border border-amber-100 p-4">
-                          <p className="text-xs font-bold text-amber-700 mb-1">💡 Proposta de Valor</p>
+                          <p className="text-xs font-bold text-amber-700 mb-1">Proposta de Valor</p>
                           <p className="text-sm text-amber-900 font-medium">{copyResult.geral.proposta_valor}</p>
                         </div>
                       )}
@@ -935,7 +935,7 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Form */}
                 <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-                  <h3 className="font-bold text-gray-800">🎨 Gerador de Criativos com IA</h3>
+                  <h3 className="font-bold text-gray-800">Gerador de Criativos com IA</h3>
                   <p className="text-xs text-gray-500">Descreva o criativo e a IA gera imagens prontas para seus anúncios usando Google Imagen 3.</p>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Produto / Serviço *</label>
@@ -950,8 +950,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { value: 'feed_quadrado', label: '⬜ Feed (1:1)', sub: 'Instagram/Facebook' },
-                        { value: 'stories', label: '📱 Stories (9:16)', sub: 'Reels/Stories' },
-                        { value: 'feed_retangular', label: '🖼️ Link (1.91:1)', sub: 'Link Ads' },
+                        { value: 'stories', label: 'Stories (9:16)', sub: 'Reels/Stories' },
+                        { value: 'feed_retangular', label: 'Link (1.91:1)', sub: 'Link Ads' },
                       ].map(f => (
                         <button key={f.value} type="button" onClick={() => setCriativoForm(v => ({ ...v, formato: f.value }))}
                           className={`p-2 rounded-lg border-2 text-center transition-colors ${criativoForm.formato === f.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -967,8 +967,8 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                       {['Moderno e profissional', 'Elegante e luxuoso', 'Colorido e vibrante', 'Minimalista e clean', 'Natural e autêntico', 'Bold e impactante'].map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
-                  <button onClick={handleGerarImagem} disabled={!criativoForm.produto || !criativoForm.descricao || criativoLoading} className="w-full py-3 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
-                    {criativoLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando imagens...</> : '🎨 Gerar Criativos (2 imagens)'}
+                  <button onClick={handleGerarImagem} disabled={!criativoForm.produto || !criativoForm.descricao || criativoLoading} className="w-full py-3 bg-primary-700 text-white text-sm font-bold rounded-lg hover:bg-primary-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                    {criativoLoading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Gerando imagens...</> : 'Gerar Criativos (2 imagens)'}
                   </button>
                   <p className="text-[10px] text-gray-400 text-center">Powered by Google Imagen 3 • Geração pode levar 10-20 segundos</p>
                 </div>
@@ -977,14 +977,14 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                 <div>
                   {!criativoImages.length && !criativoLoading && (
                     <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                      <p className="text-4xl mb-3">🎨</p>
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F5F5F7] dark:bg-[#262629] flex items-center justify-center"><PhotoIcon className="h-6 w-6 text-gray-400" /></div>
                       <p className="text-gray-500 font-medium">Preencha o formulário e gere seus criativos</p>
                       <p className="text-gray-400 text-xs mt-1">A IA vai gerar 2 variações para você escolher</p>
                     </div>
                   )}
                   {criativoLoading && (
                     <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                      <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                      <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-700 rounded-full animate-spin mx-auto mb-3" />
                       <p className="text-gray-500 text-sm">Imagen 3 criando seus anúncios...</p>
                       <p className="text-gray-400 text-xs mt-1">Pode levar até 20 segundos</p>
                     </div>
@@ -998,11 +998,11 @@ export default function TrafegoPagoView({ loggedUser }: { loggedUser: Vendedor |
                             <img src={`data:${img.mimeType};base64,${img.base64}`} alt={`Criativo ${i + 1}`} className="w-full object-cover" />
                             <div className="p-3 flex gap-2">
                               <a href={`data:${img.mimeType};base64,${img.base64}`} download={`criativo-${i + 1}.png`}
-                                className="flex-1 py-2 bg-indigo-600 text-white text-xs font-bold text-center rounded-lg hover:bg-indigo-700 transition-colors">
-                                ⬇️ Baixar Criativo {i + 1}
+                                className="flex-1 py-2 bg-primary-700 text-white text-xs font-bold text-center rounded-lg hover:bg-primary-800 transition-colors">
+                                Baixar Criativo {i + 1}
                               </a>
                               <button onClick={handleGerarImagem} disabled={criativoLoading} className="px-3 py-2 bg-gray-100 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
-                                🔄 Regerar
+                                Regerar
                               </button>
                             </div>
                           </div>

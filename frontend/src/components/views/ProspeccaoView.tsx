@@ -47,7 +47,7 @@ const LeadPlacesEnrich: React.FC<{ lead: Cliente }> = ({ lead }) => {
           className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl transition-all"
         >
           <MagnifyingGlassIcon className="h-4 w-4" />
-          🔍 Cruzar dados no Google (telefone, site, Instagram...)
+          Cruzar dados no Google (telefone, site, Instagram...)
         </button>
         <p className="text-xs text-gray-400 mt-1">1 consulta por cliente — econômico</p>
       </div>
@@ -141,7 +141,7 @@ const LeadPlacesEnrich: React.FC<{ lead: Cliente }> = ({ lead }) => {
           {/* Instagram hint */}
           {details.website?.includes('instagram.com') && (
             <div className="flex items-center gap-2 p-2.5 bg-pink-50 rounded-xl border border-pink-200">
-              <span className="text-pink-500 text-lg">📸</span>
+              <GlobeAltIcon className="h-4 w-4 text-pink-500" />
               <div className="min-w-0">
                 <p className="text-xs text-pink-700 font-bold">Instagram</p>
                 <a href={details.website} target="_blank" rel="noopener noreferrer"
@@ -174,7 +174,7 @@ const LeadPlacesEnrich: React.FC<{ lead: Cliente }> = ({ lead }) => {
               {details.googleMapsUrl && (
                 <a href={details.googleMapsUrl} target="_blank" rel="noopener noreferrer"
                   className="ml-auto text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-lg hover:bg-gray-300 whitespace-nowrap flex-shrink-0">
-                  🗺️ Maps
+                  Maps
                 </a>
               )}
             </div>
@@ -188,7 +188,7 @@ const LeadPlacesEnrich: React.FC<{ lead: Cliente }> = ({ lead }) => {
                 <p className="text-xs text-gray-600 font-bold mb-1">
                   Horários —{' '}
                   <span className={details.isOpen ? 'text-green-600' : 'text-red-500'}>
-                    {details.isOpen ? 'Aberto agora ✅' : 'Fechado agora ❌'}
+                    {details.isOpen ? 'Aberto agora' : 'Fechado agora'}
                   </span>
                 </p>
                 <div className="text-xs text-gray-600 space-y-0.5">
@@ -318,8 +318,8 @@ const ProspeccaoView: React.FC<{
             const alta = sugestoes.filter(s => s.prioridade === 'alta').length
             const media = sugestoes.filter(s => s.prioridade === 'media').length
             const baixa = sugestoes.filter(s => s.prioridade === 'baixa').length
-            const resumo = sugestoes.slice(0, 5).map(s => `• ${s.prioridade === 'alta' ? '🔴' : s.prioridade === 'media' ? '🟡' : '⚪'} ${s.acao}`).join('\n')
-            alert(`✨ IA analisou ${clientes.length} clientes!\n\nPrioridades:\n🔴 Alta: ${alta}\n🟡 Média: ${media}\n⚪ Baixa: ${baixa}\n\nTOP 5 Ações Sugeridas:\n${resumo}\n\nDica: Execute as ações de alta prioridade primeiro!`)
+            const resumo = sugestoes.slice(0, 5).map(s => `• ${s.prioridade === 'alta' ? '●' : s.prioridade === 'media' ? '●' : '⚪'} ${s.acao}`).join('\n')
+            alert(`IA analisou ${clientes.length} clientes!\n\nPrioridades:\n🔴 Alta: ${alta}\n• Média: ${media}\n⚪ Baixa: ${baixa}\n\nTOP 5 Ações Sugeridas:\n${resumo}\n\nDica: Execute as ações de alta prioridade primeiro!`)
           }}
           className="px-4 py-2 bg-primary-700 text-white rounded-xl hover:bg-primary-800 shadow-apple-sm flex items-center text-sm font-semibold"
         >
@@ -420,7 +420,7 @@ const ProspeccaoView: React.FC<{
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
               <div className="text-lg font-semibold text-gray-900">Fila do dia</div>
               <div className="text-sm text-gray-600 mt-1">Jobs pendentes para execução manual.</div>
-              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-apple text-xs text-yellow-800">⚠️ <strong>MVP:</strong> Os jobs são registros de ações planejadas. Clique "Executar" para registrar a interação no CRM. O envio real (WhatsApp/Email) requer integração futura.</div>
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-apple text-xs text-yellow-800"><strong>MVP:</strong> Os jobs são registros de ações planejadas. Clique "Executar" para registrar a interação no CRM. O envio real (WhatsApp/Email) requer integração futura.</div>
               <div className="mt-4 space-y-2">
                 {jobs.length === 0 && <div className="text-sm text-gray-500">Sem jobs agendados ainda.</div>}
                 {jobs.slice(0, 30).map((j) => {
@@ -447,7 +447,7 @@ const ProspeccaoView: React.FC<{
               <div className="flex items-start justify-between">
                 <div><div className="text-lg font-semibold text-gray-900">Campanhas</div><div className="text-sm text-gray-600 mt-1">Defina audiência e inicie uma cadência.</div></div>
               </div>
-              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-apple text-xs text-yellow-800">⚠️ <strong>MVP:</strong> Campanhas agendam jobs na fila, mas o envio é manual. Vá na aba "Fila" e clique "Executar" para disparar cada ação.</div>
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-apple text-xs text-yellow-800"><strong>MVP:</strong> Campanhas agendam jobs na fila, mas o envio é manual. Vá na aba "Fila" e clique "Executar" para disparar cada ação.</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div className="rounded-apple border border-gray-200 p-4">
                   <div className="text-sm font-semibold text-gray-900">Nova campanha</div>

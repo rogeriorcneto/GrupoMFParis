@@ -50,7 +50,7 @@ export default function AcademiaSystem({ onVoltar }: { onVoltar: () => void }) {
         >
           ← Portal Grupo Paris
         </button>
-        <h1 className="text-base sm:text-lg font-semibold text-gray-900">🎓 Academia de Vendas</h1>
+        <h1 className="text-base sm:text-lg font-semibold text-gray-900">Academia de Vendas</h1>
       </div>
       <TreinamentoView
         vendedor={vendedor || ({ id: 0, nome: 'Vendedor', email: '', cargo: 'vendedor', ativo: true } as Vendedor)}

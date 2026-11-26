@@ -77,12 +77,12 @@ interface FunilModalsProps {
 }
 
 const perdaCategorias: { key: NonNullable<Cliente['categoriaPerda']>; label: string; active: string }[] = [
-  { key: 'preco', label: '💲 Preço', active: 'border-yellow-500 bg-yellow-50 text-yellow-800' },
+  { key: 'preco', label: 'Preço', active: 'border-yellow-500 bg-yellow-50 text-yellow-800' },
   { key: 'prazo', label: '⏰ Prazo', active: 'border-orange-500 bg-orange-50 text-orange-800' },
   { key: 'qualidade', label: '⭐ Qualidade', active: 'border-blue-500 bg-blue-50 text-blue-800' },
-  { key: 'concorrencia', label: '🏁 Concorrência', active: 'border-red-500 bg-red-50 text-red-800' },
-  { key: 'sem_resposta', label: '📵 Sem resposta', active: 'border-gray-500 bg-gray-50 text-gray-800' },
-  { key: 'outro', label: '📝 Outro', active: 'border-purple-500 bg-purple-50 text-purple-800' },
+  { key: 'concorrencia', label: 'Concorrência', active: 'border-red-500 bg-red-50 text-red-800' },
+  { key: 'sem_resposta', label: 'Sem resposta', active: 'border-gray-500 bg-gray-50 text-gray-800' },
+  { key: 'outro', label: 'Outro', active: 'border-purple-500 bg-purple-50 text-purple-800' },
 ]
 
 export default function FunilModals({
@@ -258,7 +258,7 @@ export default function FunilModals({
           dataProposta: new Date().toISOString().split('T')[0],
         }
         if (itensSnapshot.length > 0) extrasNovoCiclo.produtosInteresse = itensSnapshot.map(i => i.nomeProduto)
-        const notasParts: string[] = ['🔄 Novo ciclo de vendas iniciado']
+        const notasParts: string[] = ['Novo ciclo de vendas iniciado']
         if (propostaTipo === 'bonificacao') notasParts.push('BONIFICAÇÃO')
         if (propostaFrete) notasParts.push(`Frete: ${propostaFrete}`)
         if (pagamentoEfetivo && pagamentoEfetivo !== DEFAULT_PAYMENT_TERM) notasParts.push(`Pagamento: ${pagamentoEfetivo}`)
@@ -429,13 +429,13 @@ export default function FunilModals({
       {showMotivoPerda && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4" onClick={cancelPerda}>
           <div className="bg-white rounded-t-2xl sm:rounded-apple shadow-apple-lg max-w-md w-full p-4 sm:p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">❌ Marcar como Perdido</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Marcar como Perdido</h2>
             <div className="mb-4 space-y-1">
               <p className="text-sm text-gray-600">Cliente: <span className="font-medium">{draggedItem?.cliente.razaoSocial}</span></p>
               <div className="flex items-center gap-3 text-xs text-gray-400 bg-gray-50 rounded-apple px-3 py-2 border border-gray-200">
-                <span>👤 <span className="font-medium text-gray-600">{loggedUser?.nome || 'Usuário'}</span></span>
+                <span><span className="font-medium text-gray-600">{loggedUser?.nome || 'Usuário'}</span></span>
                 <span>·</span>
-                <span>🕐 {dataHoraAtual}</span>
+                <span>{dataHoraAtual}</span>
               </div>
             </div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Motivo <span className="text-red-500">*</span></label>
@@ -469,7 +469,7 @@ export default function FunilModals({
             {/* Header */}
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-lg font-semibold text-gray-900">
-                {draggedItem?.fromStage === 'amostra_perdida' ? '🔄 2ª Tentativa de Amostra' : '📦 Enviar Amostra'}
+                {draggedItem?.fromStage === 'amostra_perdida' ? '2ª Tentativa de Amostra' : 'Enviar Amostra'}
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">Cliente: <span className="font-medium text-gray-800">{draggedItem?.cliente.razaoSocial}</span></p>
             </div>
@@ -481,7 +481,7 @@ export default function FunilModals({
                 <div className="p-4 border-b border-gray-100 space-y-3 flex-shrink-0">
                   {draggedItem?.fromStage === 'amostra_perdida' && (
                     <div className="bg-amber-50 border border-amber-200 rounded-apple p-3">
-                      <p className="text-xs text-amber-800 font-medium">⚠️ Esta é a 2ª tentativa de amostra.</p>
+                      <p className="text-xs text-amber-800 font-medium">Esta é a 2ª tentativa de amostra.</p>
                       {draggedItem.cliente.motivoReprovacao && <p className="text-xs text-amber-700 mt-0.5">Motivo anterior: {draggedItem.cliente.motivoReprovacao}</p>}
                     </div>
                   )}
@@ -492,12 +492,12 @@ export default function FunilModals({
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-1">Tipo de Frete</p>
                     <div className="flex gap-2">
-                      <button onClick={() => setPedidoFrete('CIF')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>📦 CIF (Entrega)</button>
-                      <button onClick={() => setPedidoFrete('FOB')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🏭 FOB (Retirada)</button>
-                      <button onClick={() => setPedidoFrete('VISITA')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'VISITA' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>🚗 Entregue em Visita</button>
+                      <button onClick={() => setPedidoFrete('CIF')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'CIF' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>CIF (Entrega)</button>
+                      <button onClick={() => setPedidoFrete('FOB')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'FOB' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>FOB (Retirada)</button>
+                      <button onClick={() => setPedidoFrete('VISITA')} className={`flex-1 py-2 rounded-apple text-sm font-medium border-2 transition-colors ${pedidoFrete === 'VISITA' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>Entregue em Visita</button>
                     </div>
                   </div>
-                  <input type="text" placeholder="🔍 Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  <input type="text" placeholder="Buscar produto..." value={pedidoSearch} onChange={e => setPedidoSearch(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
                 </div>
                 <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-1">
                   {!pedidoSearch.trim() && <p className="text-xs text-gray-400 text-center py-6">Digite para buscar produtos do catálogo</p>}
@@ -520,7 +520,7 @@ export default function FunilModals({
                 {/* Coluna direita: carrinho fixo */}
               <div className="w-full sm:w-72 flex flex-col bg-gray-50 flex-shrink-0">
                 <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
-                  <p className="text-sm font-semibold text-gray-900">🛒 Itens selecionados</p>
+                  <p className="text-sm font-semibold text-gray-900">Itens selecionados</p>
                 </div>
                 <div className="sm:flex-1 sm:overflow-y-auto p-3 space-y-2">
                   {pedidoItens.length === 0 && (
@@ -920,13 +920,13 @@ export default function FunilModals({
             {/* Footer */}
             {propostaErroInline && (
               <div className="px-4 sm:px-6 py-2 bg-red-50 border-t border-red-200 text-xs font-medium text-red-700">
-                ⚠️ {propostaErroInline}
+                {propostaErroInline}
               </div>
             )}
             <div className="px-4 sm:px-6 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-3 flex-shrink-0">
               <button onClick={cancelProposta} className="px-4 py-2 bg-white border border-gray-300 rounded-apple hover:bg-gray-50 text-sm">Cancelar</button>
               <button onClick={handleConfirmNegociacao} disabled={propostaSaving} className="px-5 py-2 bg-purple-600 text-white rounded-apple hover:bg-purple-700 text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2">
-                {propostaSaving ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Salvando proposta...</> : '📄 Gerar Proposta'}
+                {propostaSaving ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Salvando proposta...</> : 'Gerar Proposta'}
               </button>
             </div>
           </div>

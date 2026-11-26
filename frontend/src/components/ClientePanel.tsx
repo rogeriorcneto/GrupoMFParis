@@ -1479,7 +1479,7 @@ export default function ClientePanel({
                         }}
                         className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
                       >
-                        📥 Exportar Histórico
+                        Exportar Histórico
                         <span className="ml-auto text-[9px] text-gray-400 font-medium">GESTOR</span>
                       </button>
                     )}
@@ -1494,7 +1494,7 @@ export default function ClientePanel({
                         }}
                         className="w-full px-3 py-2 text-sm text-green-700 hover:bg-green-50 text-left flex items-center gap-2"
                       >
-                        ♻️ Reativar Cliente
+                        Reativar Cliente
                         <span className="ml-auto text-[9px] text-gray-400 font-medium">GESTOR</span>
                       </button>
                     )}
@@ -1505,7 +1505,7 @@ export default function ClientePanel({
                           onClick={() => { setShowMaisOpcoesHeader(false); setExcluirConfirmText(''); setShowExcluirConfirm(true) }}
                           className="w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left flex items-center gap-2"
                         >
-                          🗑️ Excluir Empresa
+                          Excluir Empresa
                           <span className="ml-auto text-[9px] text-gray-400 font-medium">GESTOR</span>
                         </button>
                       </>
@@ -1788,7 +1788,7 @@ export default function ClientePanel({
                     }`}
                     title={jaSolicitado ? 'Cancelamento já solicitado — aguardando aprovação do gerente' : 'Solicitar cancelamento do pedido (requer aprovação do gerente)'}
                   >
-                    {jaSolicitado ? '⏳ Cancelamento Solicitado' : '🚫 Cancelar Pedido'}
+                    {jaSolicitado ? '⏳ Cancelamento Solicitado' : 'Cancelar Pedido'}
                   </button>
                 )
               })()}
@@ -1799,7 +1799,7 @@ export default function ClientePanel({
                 <button onClick={() => {
                   onTriggerPerda(c)
                   onClose()
-                }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Perdido</button>
+                }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">Perdido</button>
               )}
               {c.etapa === 'lead' && !showProspeccaoModal && (
                 <button
@@ -1809,12 +1809,12 @@ export default function ClientePanel({
                   }}
                   className="px-3 py-1.5 text-xs font-medium bg-sky-600 text-white rounded-apple hover:bg-sky-700"
                 >
-                  🔎 Enviar para Prospecção
+                  Enviar para Prospecção
                 </button>
               )}
               {c.etapa === 'lead' && showProspeccaoModal && (
                 <div className="w-full mt-1 p-3 bg-sky-50 border border-sky-200 rounded-xl space-y-2" onClick={e => e.stopPropagation()}>
-                  <p className="text-xs font-bold text-sky-800">🔎 Designar responsável pela prospecção</p>
+                  <p className="text-xs font-bold text-sky-800">Designar responsável pela prospecção</p>
                   <select
                     value={prospeccaoVendedorId}
                     onChange={e => setProspeccaoVendedorId(e.target.value === '' ? '' : Number(e.target.value))}
@@ -1844,16 +1844,16 @@ export default function ClientePanel({
                       }}
                       className="flex-1 py-1.5 text-xs font-bold bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50"
                     >
-                      ✅ Confirmar
+                      Confirmar
                     </button>
                   </div>
                 </div>
               )}
               {c.etapa === 'amostra_perdida' && (c.tentativaAmostra || 0) < 2 && (
-                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">🔄 2ª Tentativa Amostra</button>
+                <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">2ª Tentativa Amostra</button>
               )}
               {c.etapa === 'inativo' && (
-                <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">🔄 Reativar</button>
+                <button onClick={() => { onMoverCliente(c.id, 'prospecção', { motivoPerda: undefined, categoriaPerda: undefined, dataPerda: undefined }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-apple hover:bg-blue-700">Reativar</button>
               )}
             </div>
           </div>
@@ -2020,7 +2020,7 @@ export default function ClientePanel({
               <input
                 value={produtoInteresseBusca}
                 onChange={e => setProdutoInteresseBusca(e.target.value)}
-                placeholder="🔍 Buscar e adicionar produto..."
+                placeholder="Buscar e adicionar produto..."
                 className="w-full px-3 py-2 border border-indigo-200 bg-white rounded-apple text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               {produtoInteresseBusca.trim() && (
@@ -2054,7 +2054,7 @@ export default function ClientePanel({
           {/* === INFORMAÇÕES ADICIONAIS === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">📋 Informações adicionais</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Informações adicionais</h3>
               {!editingInfoAdicional && (
                 <button
                   onClick={() => setEditingInfoAdicional(true)}
@@ -2080,7 +2080,7 @@ export default function ClientePanel({
                     onClick={async () => { await handleSalvarDadosEmpresa(); setEditingInfoAdicional(false) }}
                     className="px-4 py-1.5 bg-gray-800 text-white rounded-apple text-xs font-medium hover:bg-gray-900 transition-colors"
                   >
-                    💾 Salvar
+                    Salvar
                   </button>
                   <button
                     onClick={() => setEditingInfoAdicional(false)}
@@ -2116,7 +2116,7 @@ export default function ClientePanel({
             const socios: { nome_socio?: string; qualificacao_socio?: string }[] = dadosCnpj?.qsa || []
             return (c.cnpj || loadingCnpj || dadosCnpj) ? (
               <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-gray-900">🏛️ Dados cadastrais <span className="text-xs font-normal text-gray-500">(Receita Federal)</span></h3>
+                <h3 className="text-sm font-semibold text-gray-900">Dados cadastrais <span className="text-xs font-normal text-gray-500">(Receita Federal)</span></h3>
                 {loadingCnpj ? (
                   <p className="text-sm text-gray-400 italic">Consultando CNPJ...</p>
                 ) : dadosCnpj ? (
@@ -2385,7 +2385,7 @@ export default function ClientePanel({
                   />
                   {redesSociaisMap[rede.key] && (
                     <a href={redesSociaisMap[rede.key].startsWith('http') ? redesSociaisMap[rede.key] : `https://${redesSociaisMap[rede.key]}`} target="_blank" rel="noopener noreferrer" className="block text-xs text-primary-600 hover:underline truncate">
-                      🔗 {redesSociaisMap[rede.key]}
+                      {redesSociaisMap[rede.key]}
                     </a>
                   )}
                   <div className="flex gap-2 pt-1">
@@ -2398,7 +2398,7 @@ export default function ClientePanel({
           })()}
 
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">🌐 Redes sociais e informações adicionais</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Redes sociais e informações adicionais</h3>
             <div>
               <label className="block text-xs text-gray-500 mb-2">Redes sociais — clique no ícone para adicionar o link</label>
               <div className="flex items-center gap-3 flex-wrap">
@@ -2699,7 +2699,7 @@ export default function ClientePanel({
                 {familiaCiclos.length > 0 && (
                   <div className="bg-white rounded-apple border border-gray-200">
                     <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                      <p className="text-sm font-semibold text-gray-900">🔄 Ciclos de venda no funil ({familiaCiclos.length})</p>
+                      <p className="text-sm font-semibold text-gray-900">Ciclos de venda no funil ({familiaCiclos.length})</p>
                     </div>
                     <div className="divide-y divide-gray-100">
                       {familiaCiclos.map(cardCiclo => {
@@ -2740,7 +2740,7 @@ export default function ClientePanel({
                 {/* Lista de Pedidos */}
                 <div className="bg-white rounded-apple border border-gray-200">
                   <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <p className="text-sm font-semibold text-gray-900">🧾 Pedidos do cliente</p>
+                    <p className="text-sm font-semibold text-gray-900">Pedidos do cliente</p>
                   </div>
                   {pedidosCli.length === 0 ? (
                     <p className="text-sm text-gray-400 p-4 text-center">Nenhum pedido registrado ainda.</p>
@@ -2773,7 +2773,7 @@ export default function ClientePanel({
                                     className="px-2 py-0.5 text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100 disabled:opacity-50"
                                     title="Documentos fiscais do pedido no Omie"
                                   >
-                                    {docsPedido[p.id] === 'loading' ? '⏳' : docsPedido[p.id] ? '▲ Docs' : '📄 NF/PDF'}
+                                    {docsPedido[p.id] === 'loading' ? '⏳' : docsPedido[p.id] ? '▲ Docs' : 'NF/PDF'}
                                   </button>
                                 </div>
                               )}
@@ -2783,7 +2783,7 @@ export default function ClientePanel({
                                   className="px-2 py-0.5 text-[10px] font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-lg hover:bg-orange-100"
                                   title="Reportar e ver ocorrências do pedido"
                                 >
-                                  {ocorrenciasAbertas[p.id] ? '▲ Ocorrências' : '⚠️ Ocorrências'}
+                                  {ocorrenciasAbertas[p.id] ? '▲ Ocorrências' : 'Ocorrências'}
                                 </button>
                               </div>
                               {(p.status === 'rascunho' || p.status === 'enviado') && (
@@ -2800,7 +2800,7 @@ export default function ClientePanel({
                                     className="px-2 py-0.5 text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100"
                                     title="Editar pedido (antes de integrar ao Omie)"
                                   >
-                                    ✏️ Editar
+                                    Editar
                                   </button>
                                 </div>
                               )}
@@ -2822,7 +2822,7 @@ export default function ClientePanel({
                             return (
                               <div className="mt-2 p-2 bg-sky-50 border border-sky-100 rounded-lg space-y-1.5">
                                 {docs.pdfPedido && (
-                                  <a href={docs.pdfPedido} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">📄 PDF do pedido (Omie)</a>
+                                  <a href={docs.pdfPedido} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">PDF do pedido (Omie)</a>
                                 )}
                                 {docs.nfe ? (
                                   <>
@@ -2832,13 +2832,13 @@ export default function ClientePanel({
                                       {docs.nfe.valor != null ? ` · R$ ${Number(docs.nfe.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
                                     </p>
                                     {docs.nfe.pdfDanfe && (
-                                      <a href={docs.nfe.pdfDanfe} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">🧾 DANFE — NF-e nº {docs.nfe.numero || '-'}{docs.nfe.serie ? `/${docs.nfe.serie}` : ''}</a>
+                                      <a href={docs.nfe.pdfDanfe} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">DANFE — NF-e nº {docs.nfe.numero || '-'}{docs.nfe.serie ? `/${docs.nfe.serie}` : ''}</a>
                                     )}
                                     {docs.nfe.temXml && (
                                       <button onClick={async () => { const r = await downloadXmlNfePedido(p.id); if (!r.success) showToast?.('error', r.error || 'Falha ao baixar XML') }} className="block text-[11px] text-sky-700 hover:underline font-medium">⬇ XML da NF-e{docs.nfe.chave ? ` (${docs.nfe.chave.slice(-8)})` : ''}</button>
                                     )}
                                     {docs.nfe.linkPortal && (
-                                      <a href={docs.nfe.linkPortal} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">🔗 Documentos no portal Omie</a>
+                                      <a href={docs.nfe.linkPortal} target="_blank" rel="noreferrer" className="block text-[11px] text-sky-700 hover:underline font-medium">Documentos no portal Omie</a>
                                     )}
                                   </>
                                 ) : (
@@ -2859,7 +2859,7 @@ export default function ClientePanel({
                 {/* Conta corrente de margem (item 6.1) */}
                 <div className="bg-white rounded-apple border border-gray-200">
                   <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-gray-900">💰 Conta Corrente de Margem</p>
+                    <p className="text-sm font-semibold text-gray-900">Conta Corrente de Margem</p>
                     <span className="text-[10px] text-gray-400">estimada via margem cadastrada no produto</span>
                   </div>
                   {ledgerMargem.length === 0 ? (
@@ -2882,7 +2882,7 @@ export default function ClientePanel({
                       </div>
                       {receitaSemMargem > 0 && (
                         <p className="px-4 py-1.5 text-[10px] text-amber-700 bg-amber-50 border-b border-amber-100">
-                          ⚠️ R$ {receitaSemMargem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em vendas sem margem cadastrada no produto — fora do cálculo.
+                          R$ {receitaSemMargem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em vendas sem margem cadastrada no produto — fora do cálculo.
                         </p>
                       )}
                       <div className="divide-y divide-gray-100 max-h-56 overflow-y-auto">
@@ -2909,7 +2909,7 @@ export default function ClientePanel({
                 {todasPropostas.length > 0 && (
                   <div className="bg-white rounded-apple border border-gray-200">
                     <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-gray-900">📋 Histórico de Propostas</p>
+                      <p className="text-sm font-semibold text-gray-900">Histórico de Propostas</p>
                       <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{todasPropostas.length} proposta(s)</span>
                     </div>
                     <div className="divide-y divide-gray-100">
@@ -3163,7 +3163,7 @@ export default function ClientePanel({
           {editingInter && (
             <div className="bg-white rounded-apple border border-primary-200 shadow-md p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900">✏️ Editar atividade</h3>
+                <h3 className="text-sm font-bold text-gray-900">Editar atividade</h3>
                 <button onClick={() => setEditingInter(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
               </div>
               {/* Abas de tipo */}
@@ -3297,7 +3297,7 @@ export default function ClientePanel({
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    🕐 Histórico de atividades
+                    Histórico de atividades
                     <span className="text-[11px] font-normal text-gray-400">({clienteInteracoes.length})</span>
                   </button>
                   <button
@@ -3308,7 +3308,7 @@ export default function ClientePanel({
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    📌 Fixadas
+                    Fixadas
                     <span className="text-[11px] font-normal text-gray-400">({totalFixadas})</span>
                   </button>
                 </div>
@@ -3519,14 +3519,14 @@ export default function ClientePanel({
                                   {!tid && (
                                     <button onClick={() => handleTranscrever(gravacao.id)} disabled={carregando}
                                       className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors">
-                                      {carregando ? '⏳ Transcrevendo...' : '🤖 Transcrever com IA'}
+                                      {carregando ? '⏳ Transcrevendo...' : 'Transcrever com IA'}
                                     </button>
                                   )}
                                   <span className="text-[9px] text-gray-400 self-center">{Math.floor((gravacao.duracao_segundos || 0) / 60)}:{String((gravacao.duracao_segundos || 0) % 60).padStart(2, '0')} min</span>
                                 </div>
                                 {tid && (
                                   <div className={`rounded-lg p-2 text-[10px] leading-relaxed ${tid.startsWith('Erro') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-white text-gray-700 border border-gray-200'}`}>
-                                    <span className="font-semibold block mb-0.5">📝 Transcrição:</span>{tid}
+                                    <span className="font-semibold block mb-0.5">Transcrição:</span>{tid}
                                   </div>
                                 )}
                               </div>
@@ -3649,7 +3649,7 @@ export default function ClientePanel({
                                 }`}
                                 title={isPinned ? 'Desafixar' : 'Fixar'}
                               >
-                                📌
+                                
                               </button>
                               {isGerente && isTaskItem && onDeleteTarefa && (
                                 <button
@@ -3662,7 +3662,7 @@ export default function ClientePanel({
                                   className="flex-shrink-0 p-1 rounded-full text-gray-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-all"
                                   title="Excluir tarefa"
                                 >
-                                  🗑️
+                                  
                                 </button>
                               )}
                             </div>
@@ -3887,7 +3887,7 @@ export default function ClientePanel({
             {/* Header */}
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
               <div>
-                <h2 className="text-base font-bold text-gray-900">📝 {ultimaProposta ? 'Editar Proposta' : 'Nova Proposta'}</h2>
+                <h2 className="text-base font-bold text-gray-900">{ultimaProposta ? 'Editar Proposta' : 'Nova Proposta'}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{ultimaProposta ? `${ultimaProposta.numero} · ${new Date(ultimaProposta.criadoEm).toLocaleDateString('pt-BR')}` : 'Itens, frete e pagamento são exigidos pelo botão "Ganhou"'}</p>
               </div>
               <button onClick={() => { setShowEditProposta(false); setEditPropostaProdSearch('') }} className="p-1.5 hover:bg-gray-100 rounded-lg"><XMarkIcon className="h-5 w-5 text-gray-500" /></button>
@@ -3988,7 +3988,7 @@ export default function ClientePanel({
                     <p className="text-[10px] text-gray-500 mb-1">Adicionar produto:</p>
                     <input
                       type="text"
-                      placeholder="🔍 Buscar produto para adicionar..."
+                      placeholder="Buscar produto para adicionar..."
                       value={editPropostaProdSearch}
                       onChange={e => setEditPropostaProdSearch(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-apple text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -4093,7 +4093,7 @@ export default function ClientePanel({
               >
                 {editPropostaSaving
                   ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Gerando...</>
-                  : '📄 Gerar Nova Versão PDF'
+                  : 'Gerar Nova Versão PDF'
                 }
               </button>
             </div>
@@ -4105,7 +4105,7 @@ export default function ClientePanel({
       {showCancelModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onClick={() => setShowCancelModal(false)}>
           <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">🚫 Solicitar Cancelamento de Pedido</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Solicitar Cancelamento de Pedido</h2>
             <p className="text-sm text-gray-500 mb-4">A solicitação será enviada para aprovação do gerente. O pedido só será cancelado após confirmação.</p>
             <label className="block text-sm font-medium text-gray-700 mb-1">Motivo do cancelamento <span className="text-red-500">*</span></label>
             <textarea
@@ -4162,7 +4162,7 @@ export default function ClientePanel({
         return (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4" onClick={() => !editPedidoSaving && setEditPedido(null)}>
             <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">✏️ Editar Pedido {editPedido.numero}</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Editar Pedido {editPedido.numero}</h2>
               <p className="text-xs text-gray-500 mb-4">Edição disponível enquanto o pedido não foi integrado ao Omie. Após a aprovação, use o cancelamento.</p>
 
               <label className="block text-sm font-medium text-gray-700 mb-1">Itens</label>
@@ -4278,7 +4278,7 @@ export default function ClientePanel({
                     }}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-apple hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {editPedidoSaving ? '⏳ Salvando...' : editPedido.status === 'cancelado' ? '📤 Salvar e Reenviar' : 'Salvar alterações'}
+                    {editPedidoSaving ? '⏳ Salvando...' : editPedido.status === 'cancelado' ? 'Salvar e Reenviar' : 'Salvar alterações'}
                   </button>
                 </div>
               </div>
@@ -4353,7 +4353,7 @@ export default function ClientePanel({
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4" onClick={() => setShowAvaliarAmostra(false)}>
             <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 space-y-4" onClick={e => e.stopPropagation()}>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">🧪 Resultado da Amostra por Item</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Resultado da Amostra por Item</h2>
                 <p className="text-sm text-gray-500 mt-0.5">{c.razaoSocial} — Classifique cada produto como Aprovado ou Reprovado</p>
               </div>
 
@@ -4362,8 +4362,8 @@ export default function ClientePanel({
                   <p>Nenhum item encontrado no pedido de amostra.</p>
                   <p className="text-xs mt-1">Registre o resultado geral para encerrar o card de Amostra (a venda segue em Proposta).</p>
                   <div className="flex gap-3 justify-center mt-4">
-                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; await onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">✅ Homologado</button>
-                    <button onClick={async () => { await onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">🚫 Reprovado</button>
+                    <button onClick={async () => { const hoje = new Date().toISOString().split('T')[0]; await onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'aprovada', dataResultadoAmostra: hoje }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-green-600 text-white rounded-apple text-sm hover:bg-green-700">Homologado</button>
+                    <button onClick={async () => { await onMoverCliente(c.id, 'amostra_perdida', { resultadoAmostra: 'reprovada', dataResultadoAmostra: new Date().toISOString().split('T')[0] }); setShowAvaliarAmostra(false); onClose() }} className="px-4 py-2 bg-red-600 text-white rounded-apple text-sm hover:bg-red-700">Reprovado</button>
                   </div>
                 </div>
               ) : (
@@ -4381,11 +4381,11 @@ export default function ClientePanel({
                             <button
                               onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { aprovado: true, motivo: '' } }))}
                               className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === true ? 'bg-green-600 text-white border-green-600' : 'bg-white text-green-700 border-green-300 hover:bg-green-50'}`}
-                            >✅ Aprovado</button>
+                            >Aprovado</button>
                             <button
                               onClick={() => setAvaliacaoItens(prev => ({ ...prev, [idx]: { ...prev[idx], aprovado: false, motivo: prev[idx]?.motivo || '' } }))}
                               className={`px-3 py-1 rounded-apple text-xs font-medium border transition-colors ${av.aprovado === false ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-700 border-red-300 hover:bg-red-50'}`}
-                            >🚫 Reprovado</button>
+                            >Reprovado</button>
                           </div>
                         </div>
                         {av.aprovado === false && (
@@ -4409,10 +4409,10 @@ export default function ClientePanel({
                   {todosAvaliados && (
                     <p className="text-xs text-gray-500 mb-3">
                       {todosAprovados
-                        ? '✅ Todos os itens homologados — card de Amostra será encerrado e a venda segue pelo card de Proposta.'
+                        ? 'Todos os itens homologados — card de Amostra será encerrado e a venda segue pelo card de Proposta.'
                         : algumReprovado && !todosAprovados
-                          ? '⚠️ Resultado misto registrado por item (homologados + reprovados) — card de Amostra será encerrado e a venda segue em Proposta.'
-                          : '🚫 Todos os itens reprovados — registrados no cadastro e card de Amostra encerrado.'}
+                          ? 'Resultado misto registrado por item (homologados + reprovados) — card de Amostra será encerrado e a venda segue em Proposta.'
+                          : 'Todos os itens reprovados — registrados no cadastro e card de Amostra encerrado.'}
                     </p>
                   )}
                   <div className="flex justify-end gap-3">
@@ -4449,7 +4449,7 @@ export default function ClientePanel({
           <div className="bg-white rounded-apple shadow-apple-lg max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-3">
               <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl">⚠️</span>
+                <span className="text-2xl"></span>
               </div>
               <h3 className="text-base font-bold text-gray-900">Excluir Empresa</h3>
               <p className="text-sm text-gray-600 mt-1">Você está prestes a excluir <strong>{c.razaoSocial}</strong> permanentemente.</p>
@@ -4476,7 +4476,7 @@ export default function ClientePanel({
                 disabled={excluirConfirmText !== 'EXCLUIR'}
                 className={`flex-1 px-3 py-2 rounded-apple font-medium text-sm text-white ${excluirConfirmText === 'EXCLUIR' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-300 cursor-not-allowed'}`}
               >
-                🗑️ Excluir definitivamente
+                Excluir definitivamente
               </button>
             </div>
           </div>

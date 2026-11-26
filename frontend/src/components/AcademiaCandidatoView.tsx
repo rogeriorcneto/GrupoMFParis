@@ -327,7 +327,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
       const resp = await callAI([{ role: 'user', content: 'Pode começar o roleplay.' }], sistemaTreinamento())
       setMsgs([{ role: 'assistant', content: resp, ts: Date.now() }])
     } catch {
-      setMsgs([{ role: 'assistant', content: '📱 *nova mensagem* Olá, quem é?', ts: Date.now() }])
+      setMsgs([{ role: 'assistant', content: '*nova mensagem* Olá, quem é?', ts: Date.now() }])
     }
     setLoading(false)
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -486,7 +486,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
         {fase === 'home' && aba === 'home' && (
           <div className="space-y-4">
             <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-5 text-white">
-              <h2 className="text-lg font-bold">Olá, {nomeCandidato.split(' ')[0]}! 👋</h2>
+              <h2 className="text-lg font-bold">Olá, {nomeCandidato.split(' ')[0]}!</h2>
               <p className="text-sm text-purple-100 mt-1">
                 Este é seu ambiente de avaliação. Escolha um módulo, converse com o cliente simulado e receba uma nota com feedback no final.
               </p>
@@ -601,8 +601,8 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
               </div>
               <div className="p-6 space-y-4">
                 {[
-                  { label: '💰 Preço Referência', value: produtoVer.preco },
-                  { label: '🍳 Aplicações', value: produtoVer.aplicacao },
+                  { label: 'Preço Referência', value: produtoVer.preco },
+                  { label: 'Aplicações', value: produtoVer.aplicacao },
                   { label: '⭐ Diferencial de Venda', value: produtoVer.dif },
                 ].map(row => (
                   <div key={row.label} className="bg-gray-50 rounded-xl p-4">
@@ -611,7 +611,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
                   </div>
                 ))}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <p className="text-xs font-bold text-blue-700 mb-1">💡 Argumento de Venda Sugerido</p>
+                  <p className="text-xs font-bold text-blue-700 mb-1">Argumento de Venda Sugerido</p>
                   <p className="text-sm text-blue-800">"Nosso {produtoVer.nome.split(' ').slice(0, 3).join(' ')} tem {produtoVer.dif.toLowerCase()}, o que garante {produtoVer.destaque.toLowerCase()} para o seu negócio."</p>
                 </div>
                 <button
@@ -768,13 +768,13 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             <div className="grid sm:grid-cols-2 gap-3">
               {Array.isArray(feedbackObj.pontos_fortes) && feedbackObj.pontos_fortes.length > 0 && (
                 <div className="bg-green-50 rounded-xl border border-green-200 p-4">
-                  <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2">💪 Pontos fortes</p>
+                  <p className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2">Pontos fortes</p>
                   <ul className="space-y-1">{feedbackObj.pontos_fortes.map((p: string, i: number) => <li key={i} className="text-xs text-green-800">• {p}</li>)}</ul>
                 </div>
               )}
               {Array.isArray(feedbackObj.pontos_melhora) && feedbackObj.pontos_melhora.length > 0 && (
                 <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
-                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2">🎯 Para melhorar</p>
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2">Para melhorar</p>
                   <ul className="space-y-1">{feedbackObj.pontos_melhora.map((p: string, i: number) => <li key={i} className="text-xs text-amber-800">• {p}</li>)}</ul>
                 </div>
               )}

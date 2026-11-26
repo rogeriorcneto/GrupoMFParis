@@ -112,7 +112,7 @@ export default function ProtocolosView({ loggedUser, showToast }: Props) {
     <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">🐛 Protocolos de Erro</h1>
+          <h1 className="text-xl font-bold text-gray-900">Protocolos de Erro</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Chamados de erro do sistema. SLA: crítico atendido em 24h e corrigido em 48h · demais em 5 dias úteis.
           </p>
@@ -164,7 +164,7 @@ export default function ProtocolosView({ loggedUser, showToast }: Props) {
       {loading ? (
         <p className="text-sm text-gray-400 py-8 text-center">Carregando...</p>
       ) : protocolos.length === 0 ? (
-        <p className="text-sm text-gray-400 py-8 text-center">Nenhum protocolo aberto. 🎉</p>
+        <p className="text-sm text-gray-400 py-8 text-center">Nenhum protocolo aberto.</p>
       ) : (
         <div className="space-y-3">
           {protocolos.map(p => (
@@ -177,8 +177,8 @@ export default function ProtocolosView({ loggedUser, showToast }: Props) {
                 {p.severidade === 'critico' && (
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white">CRÍTICO</span>
                 )}
-                {p.slaAtendimentoEstourado && <span className="text-xs font-semibold text-red-600">⚠️ SLA atendimento estourado</span>}
-                {p.slaCorrecaoEstourado && <span className="text-xs font-semibold text-red-600">⚠️ SLA correção estourado</span>}
+                {p.slaAtendimentoEstourado && <span className="text-xs font-semibold text-red-600">SLA atendimento estourado</span>}
+                {p.slaCorrecaoEstourado && <span className="text-xs font-semibold text-red-600">SLA correção estourado</span>}
                 <span className="ml-auto text-xs text-gray-400">{fmt(p.criadoEm)}</span>
               </div>
               <h3 className="font-semibold text-gray-900 mt-2">{p.titulo}</h3>

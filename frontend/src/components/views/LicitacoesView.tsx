@@ -270,7 +270,7 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">🏛️ Licitações Públicas</h1>
+            <h1 className="text-xl font-bold text-gray-900">Licitações Públicas</h1>
             <p className="text-sm text-gray-500 mt-0.5">Monitoramento via Portal Nacional de Contratações Públicas (PNCP)</p>
           </div>
           <div className="flex gap-2">
@@ -294,9 +294,9 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
         {/* Abas */}
         <div className="flex gap-0 mt-4 border-b border-gray-200 -mb-px">
           {[
-            { id: 'abertas', label: '📋 Oportunidades Abertas', count: abertas.length },
-            { id: 'resultados', label: '🏆 Empresas Vencedoras', count: resultados.length },
-            { id: 'config', label: '⚙️ Configuração', count: null },
+            { id: 'abertas', label: 'Oportunidades Abertas', count: abertas.length },
+            { id: 'resultados', label: 'Empresas Vencedoras', count: resultados.length },
+            { id: 'config', label: 'Configuração', count: null },
           ].map(tab => (
             <button key={tab.id} onClick={() => setAba(tab.id as Aba)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${aba === tab.id ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
@@ -336,7 +336,7 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
 
             {erroAbertas && !loadingAbertas && (
               <div className="bg-red-50 border border-red-200 rounded-apple p-4 text-sm text-red-700">
-                ⚠️ {erroAbertas}
+                {erroAbertas}
               </div>
             )}
 
@@ -364,7 +364,7 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
                           <BuildingOfficeIcon className="h-3.5 w-3.5" />
                           {c.orgaoEntidade.razaoSocial}
                         </span>
-                        <span className="text-xs text-gray-500">📍 {c.unidadeOrgao.municipioNome} — {c.unidadeOrgao.ufSigla}</span>
+                        <span className="text-xs text-gray-500">{c.unidadeOrgao.municipioNome} — {c.unidadeOrgao.ufSigla}</span>
                         {c.dataEncerramentoProposta && (
                           <span className="flex items-center gap-1 text-xs text-orange-600 font-medium">
                             <ClockIcon className="h-3.5 w-3.5" />
@@ -372,7 +372,7 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
                           </span>
                         )}
                         {c.valorTotalEstimado && (
-                          <span className="text-xs font-semibold text-green-700">💰 {fmtBRL(c.valorTotalEstimado)}</span>
+                          <span className="text-xs font-semibold text-green-700">{fmtBRL(c.valorTotalEstimado)}</span>
                         )}
                       </div>
                     </div>
@@ -446,7 +446,7 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
 
             {erroResultados && !loadingResultados && (
               <div className="bg-red-50 border border-red-200 rounded-apple p-4 text-sm text-red-700">
-                ⚠️ {erroResultados}
+                {erroResultados}
               </div>
             )}
 
@@ -474,9 +474,9 @@ export default function LicitacoesView({ loggedUser, onNovoCliente }: Licitacoes
                           <BuildingOfficeIcon className="h-3.5 w-3.5" />
                           {c.orgaoEntidade.razaoSocial}
                         </span>
-                        <span className="text-xs text-gray-500">📍 {c.unidadeOrgao.municipioNome} — {c.unidadeOrgao.ufSigla}</span>
+                        <span className="text-xs text-gray-500">{c.unidadeOrgao.municipioNome} — {c.unidadeOrgao.ufSigla}</span>
                         {c.valorTotalHomologado && (
-                          <span className="text-xs font-semibold text-amber-700">🏆 {fmtBRL(c.valorTotalHomologado)}</span>
+                          <span className="text-xs font-semibold text-amber-700">{fmtBRL(c.valorTotalHomologado)}</span>
                         )}
                       </div>
                     </div>

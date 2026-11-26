@@ -577,7 +577,7 @@ const MapaView: React.FC<MapaViewProps> = ({ clientes, vendedores, tarefas, pedi
 
                           <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-2">
                             {noCrm ? (
-                              <span className="flex-1 text-center text-xs text-green-700 py-1">✓ Já importado</span>
+                              <span className="flex-1 text-center text-xs text-green-700 py-1">Já importado</span>
                             ) : (
                               <button
                                 onClick={e => { e.stopPropagation(); importarLead(place) }}

@@ -77,16 +77,16 @@ export default function BiSystem({ onVoltar }: { onVoltar: () => void }) {
   useEffect(() => { fetchData() }, [])
 
   const menu = [
-    { id: 'vendas', label: 'Vendas', icone: '📈' },
-    { id: 'clientes', label: 'Clientes', icone: '👥' },
-    { id: 'mensal', label: 'Análise Mensal', icone: '📅' },
+    { id: 'vendas', label: 'Vendas', icone: '' },
+    { id: 'clientes', label: 'Clientes', icone: '' },
+    { id: 'mensal', label: 'Análise Mensal', icone: '' },
   ]
 
   return (
     <ErpLayout
       titulo="Business Intelligence"
       subtitulo="Análises gerenciais"
-      icone="📊"
+      icone=""
       cor="from-pink-500 to-purple-600"
       menu={menu}
       activeMenu={activeMenu}
@@ -98,12 +98,12 @@ export default function BiSystem({ onVoltar }: { onVoltar: () => void }) {
 
         {!loading && data && activeMenu === 'vendas' && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">📈 Análise de Vendas</h2>
+            <h2 className="text-2xl font-bold mb-6">Análise de Vendas</h2>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <KpiBi titulo="Total de Pedidos" valor={data.totalPedidos} cor="from-blue-400 to-indigo-600" icone="📦" />
-              <KpiBi titulo="Faturamento Total" valor={`R$ ${data.faturamentoTotal.toFixed(0)}`} cor="from-green-400 to-emerald-600" icone="💰" />
-              <KpiBi titulo="Ticket Médio" valor={`R$ ${data.ticketMedio.toFixed(0)}`} cor="from-purple-400 to-pink-600" icone="💎" />
-              <KpiBi titulo="Total Clientes" valor={data.totalClientes} cor="from-orange-400 to-red-600" icone="👥" />
+              <KpiBi titulo="Total de Pedidos" valor={data.totalPedidos} cor="from-blue-400 to-indigo-600" icone="" />
+              <KpiBi titulo="Faturamento Total" valor={`R$ ${data.faturamentoTotal.toFixed(0)}`} cor="from-green-400 to-emerald-600" icone="" />
+              <KpiBi titulo="Ticket Médio" valor={`R$ ${data.ticketMedio.toFixed(0)}`} cor="from-purple-400 to-pink-600" icone="" />
+              <KpiBi titulo="Total Clientes" valor={data.totalClientes} cor="from-orange-400 to-red-600" icone="" />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm p-6">
@@ -127,7 +127,7 @@ export default function BiSystem({ onVoltar }: { onVoltar: () => void }) {
 
         {!loading && data && activeMenu === 'clientes' && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">👥 Top Clientes por Faturamento</h2>
+            <h2 className="text-2xl font-bold mb-6">Top Clientes por Faturamento</h2>
             <div className="bg-white rounded-xl shadow-sm p-6">
               {data.topClientes.length === 0 && <p className="text-gray-500">Sem dados de clientes</p>}
               <div className="space-y-3">
@@ -152,7 +152,7 @@ export default function BiSystem({ onVoltar }: { onVoltar: () => void }) {
 
         {!loading && data && activeMenu === 'mensal' && (
           <div>
-            <h2 className="text-2xl font-bold mb-6">📅 Análise Mensal</h2>
+            <h2 className="text-2xl font-bold mb-6">Análise Mensal</h2>
             <div className="bg-white rounded-xl shadow-sm p-6">
               {Object.keys(data.faturamentoPorMes).length === 0 && <p className="text-gray-500">Sem dados</p>}
               {Object.entries(data.faturamentoPorMes)

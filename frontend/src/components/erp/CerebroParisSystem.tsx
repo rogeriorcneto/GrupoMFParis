@@ -20,12 +20,12 @@ interface Contexto {
 }
 
 const PROMPTS_RAPIDOS = [
-  '📊 Resuma a saúde financeira da empresa',
-  '🎯 Quais clientes precisam de atenção?',
-  '🚚 Status das entregas em andamento',
-  '💡 Sugira 3 ações para aumentar vendas',
-  '⚠️ Quais são os principais riscos atuais?',
-  '📈 Análise de performance do mês',
+  'Resuma a saúde financeira da empresa',
+  'Quais clientes precisam de atenção?',
+  'Status das entregas em andamento',
+  'Sugira 3 ações para aumentar vendas',
+  'Quais são os principais riscos atuais?',
+  'Análise de performance do mês',
 ]
 
 export default function CerebroParisSystem({ onVoltar }: { onVoltar: () => void }) {
@@ -34,7 +34,7 @@ export default function CerebroParisSystem({ onVoltar }: { onVoltar: () => void 
     {
       id: '1',
       papel: 'ai',
-      texto: '🧠 Olá! Sou o Cérebro Paris, IA com visão 360° de toda a empresa. Tenho acesso a clientes, pedidos, financeiro, logística e mais. Como posso te ajudar hoje?',
+      texto: 'Olá! Sou o Cérebro Paris, IA com visão 360° de toda a empresa. Tenho acesso a clientes, pedidos, financeiro, logística e mais. Como posso te ajudar hoje?',
       timestamp: new Date()
     }
   ])
@@ -99,7 +99,7 @@ export default function CerebroParisSystem({ onVoltar }: { onVoltar: () => void 
       const errMsg: Mensagem = {
         id: (Date.now() + 1).toString(),
         papel: 'ai',
-        texto: '⚠️ Erro ao processar. Verifique a configuração da IA.',
+        texto: 'Erro ao processar. Verifique a configuração da IA.',
         timestamp: new Date()
       }
       setMensagens(prev => [...prev, errMsg])
@@ -109,16 +109,16 @@ export default function CerebroParisSystem({ onVoltar }: { onVoltar: () => void 
   }
 
   const menu = [
-    { id: 'chat', label: 'Chat IA', icone: '💬' },
-    { id: 'insights', label: 'Insights', icone: '💡' },
-    { id: 'contexto', label: 'Contexto Empresa', icone: '🏢' },
+    { id: 'chat', label: 'Chat IA', icone: '' },
+    { id: 'insights', label: 'Insights', icone: '' },
+    { id: 'contexto', label: 'Contexto Empresa', icone: '' },
   ]
 
   return (
     <ErpLayout
       titulo="Cérebro Paris"
       subtitulo="IA Empresarial"
-      icone="🧠"
+      icone=""
       cor="from-purple-500 to-indigo-700"
       menu={menu}
       activeMenu={activeMenu}
@@ -148,7 +148,7 @@ export default function CerebroParisSystem({ onVoltar }: { onVoltar: () => void 
                     ? 'bg-indigo-600 text-white'
                     : 'bg-white text-gray-900 border'
                 }`}>
-                  {m.papel === 'ai' && <div className="text-xs text-purple-600 font-bold mb-1">🧠 Cérebro Paris</div>}
+                  {m.papel === 'ai' && <div className="text-xs text-purple-600 font-bold mb-1">Cérebro Paris</div>}
                   <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.texto}</div>
                   <div className={`text-[10px] mt-1 opacity-60 ${m.papel === 'user' ? 'text-white' : 'text-gray-500'}`}>
                     {m.timestamp.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -232,21 +232,21 @@ function InsightsView({ contexto }: { contexto: Contexto | null }) {
 
   const insights = []
   if (contexto.contasPagar > contexto.contasReceber) {
-    insights.push({ tipo: 'alerta', icone: '⚠️', texto: 'Despesas pendentes superam receitas a receber. Atenção ao fluxo de caixa.' })
+    insights.push({ tipo: 'alerta', icone: '', texto: 'Despesas pendentes superam receitas a receber. Atenção ao fluxo de caixa.' })
   }
   if (contexto.fretesPendentes > 5) {
-    insights.push({ tipo: 'info', icone: '🚚', texto: `${contexto.fretesPendentes} fretes em andamento. Monitorar prazos.` })
+    insights.push({ tipo: 'info', icone: '', texto: `${contexto.fretesPendentes} fretes em andamento. Monitorar prazos.` })
   }
   if (contexto.saldo > 0) {
-    insights.push({ tipo: 'positivo', icone: '✅', texto: `Saldo previsto positivo: R$ ${contexto.saldo.toFixed(2)}` })
+    insights.push({ tipo: 'positivo', icone: '', texto: `Saldo previsto positivo: R$ ${contexto.saldo.toFixed(2)}` })
   }
   if (contexto.clientes < 10) {
-    insights.push({ tipo: 'oportunidade', icone: '🎯', texto: 'Base de clientes pequena. Oportunidade para prospecção.' })
+    insights.push({ tipo: 'oportunidade', icone: '', texto: 'Base de clientes pequena. Oportunidade para prospecção.' })
   }
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">💡 Insights Automáticos</h2>
+      <h2 className="text-2xl font-bold mb-6">Insights Automáticos</h2>
       <div className="space-y-3">
         {insights.map((i, idx) => (
           <div key={idx} className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-purple-500">
@@ -266,17 +266,17 @@ function ContextoView({ contexto, onRefresh }: any) {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">🏢 Contexto da Empresa</h2>
-        <button onClick={onRefresh} className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg">🔄 Atualizar</button>
+        <h2 className="text-2xl font-bold">Contexto da Empresa</h2>
+        <button onClick={onRefresh} className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg">Atualizar</button>
       </div>
       {contexto && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <ContextoCard titulo="Total de Clientes" valor={contexto.clientes} icone="👥" />
-          <ContextoCard titulo="Total de Pedidos" valor={contexto.pedidos} icone="📦" />
-          <ContextoCard titulo="Faturamento Total" valor={`R$ ${contexto.faturamento.toFixed(2)}`} icone="💰" />
-          <ContextoCard titulo="Fretes Ativos" valor={contexto.fretesPendentes} icone="🚚" />
-          <ContextoCard titulo="A Receber" valor={`R$ ${contexto.contasReceber.toFixed(2)}`} icone="📥" cor="text-green-600" />
-          <ContextoCard titulo="A Pagar" valor={`R$ ${contexto.contasPagar.toFixed(2)}`} icone="📤" cor="text-red-600" />
+          <ContextoCard titulo="Total de Clientes" valor={contexto.clientes} icone="" />
+          <ContextoCard titulo="Total de Pedidos" valor={contexto.pedidos} icone="" />
+          <ContextoCard titulo="Faturamento Total" valor={`R$ ${contexto.faturamento.toFixed(2)}`} icone="" />
+          <ContextoCard titulo="Fretes Ativos" valor={contexto.fretesPendentes} icone="" />
+          <ContextoCard titulo="A Receber" valor={`R$ ${contexto.contasReceber.toFixed(2)}`} icone="" cor="text-green-600" />
+          <ContextoCard titulo="A Pagar" valor={`R$ ${contexto.contasPagar.toFixed(2)}`} icone="" cor="text-red-600" />
         </div>
       )}
     </div>
@@ -345,20 +345,20 @@ function fallbackResposta(pergunta: string, ctx: Contexto): string {
   const p = pergunta.toLowerCase()
 
   if (p.includes('saúde financeira') || p.includes('financeiro')) {
-    return `📊 **Saúde Financeira:**
+    return `**Saúde Financeira:**
 
-• Saldo previsto: R$ ${ctx.saldo.toFixed(2)} ${ctx.saldo >= 0 ? '✅' : '⚠️'}
+• Saldo previsto: R$ ${ctx.saldo.toFixed(2)} ${ctx.saldo >= 0 ? '' : ''}
 • A receber: R$ ${ctx.contasReceber.toFixed(2)}
 • A pagar: R$ ${ctx.contasPagar.toFixed(2)}
 • Faturamento histórico: R$ ${ctx.faturamento.toFixed(2)}
 
 ${ctx.saldo < 0
-  ? '⚠️ ATENÇÃO: Despesas pendentes superam receitas. Considere antecipar recebíveis ou negociar prazos.'
-  : '✅ Situação positiva. Mantenha o ritmo de cobrança e aproveite para investir.'}`
+  ? 'ATENÇÃO: Despesas pendentes superam receitas. Considere antecipar recebíveis ou negociar prazos.'
+  : 'Situação positiva. Mantenha o ritmo de cobrança e aproveite para investir.'}`
   }
 
   if (p.includes('cliente')) {
-    return `🎯 **Análise de Clientes:**
+    return `**Análise de Clientes:**
 
 • Total de clientes: ${ctx.clientes}
 • Pedidos gerados: ${ctx.pedidos}
@@ -368,14 +368,14 @@ ${ctx.saldo < 0
   }
 
   if (p.includes('entrega') || p.includes('frete') || p.includes('logística')) {
-    return `🚚 **Entregas em Andamento:**
+    return `**Entregas em Andamento:**
 
 • Fretes ativos: ${ctx.fretesPendentes}
 ${ctx.fretesPendentes > 0 ? '• Acesse o módulo Logística para detalhes e rastreamento.' : '• Nenhum frete em trânsito no momento.'}`
   }
 
   if (p.includes('venda') || p.includes('aumentar') || p.includes('crescer')) {
-    return `📈 **Sugestões para Aumentar Vendas:**
+    return `**Sugestões para Aumentar Vendas:**
 
 1. **Reativar clientes inativos**: Contato com base atual
 2. **Cross-sell**: Oferecer produtos complementares aos compradores recentes
@@ -388,14 +388,14 @@ Ticket médio atual: R$ ${ctx.pedidos > 0 ? (ctx.faturamento / ctx.pedidos).toFi
 
   if (p.includes('risco') || p.includes('alerta') || p.includes('problema')) {
     const riscos = []
-    if (ctx.saldo < 0) riscos.push('• ⚠️ Fluxo de caixa negativo')
-    if (ctx.contasPagar > ctx.contasReceber * 1.5) riscos.push('• ⚠️ Despesas muito acima das receitas')
-    if (ctx.fretesPendentes > 10) riscos.push('• ⚠️ Muitos fretes pendentes — risco de atraso')
-    if (ctx.clientes < 5) riscos.push('• ⚠️ Base de clientes pequena — concentração de risco')
-    return riscos.length > 0 ? `**Riscos Identificados:**\n\n${riscos.join('\n')}` : '✅ Nenhum risco crítico identificado no momento.'
+    if (ctx.saldo < 0) riscos.push('• Fluxo de caixa negativo')
+    if (ctx.contasPagar > ctx.contasReceber * 1.5) riscos.push('• Despesas muito acima das receitas')
+    if (ctx.fretesPendentes > 10) riscos.push('• Muitos fretes pendentes — risco de atraso')
+    if (ctx.clientes < 5) riscos.push('• Base de clientes pequena — concentração de risco')
+    return riscos.length > 0 ? `**Riscos Identificados:**\n\n${riscos.join('\n')}` : 'Nenhum risco crítico identificado no momento.'
   }
 
-  return `🧠 Posso ajudar com análises sobre:
+  return `Posso ajudar com análises sobre:
 
 • **Financeiro**: "Como está a saúde financeira?"
 • **Clientes**: "Quem precisa de atenção?"

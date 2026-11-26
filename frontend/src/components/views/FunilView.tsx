@@ -1248,7 +1248,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         {stageClientes.length > 0 && (
                           <div className="flex items-center gap-2 py-1">
                             <div className="flex-1 h-px bg-gray-200" />
-                            <span className="text-[9px] text-gray-400 uppercase tracking-wide whitespace-nowrap">🔄 {todos.length} novo{todos.length > 1 ? 's' : ''} ciclo{todos.length > 1 ? 's' : ''}</span>
+                            <span className="text-[9px] text-gray-400 uppercase tracking-wide whitespace-nowrap">{todos.length} novo{todos.length > 1 ? 's' : ''} ciclo{todos.length > 1 ? 's' : ''}</span>
                             <div className="flex-1 h-px bg-gray-200" />
                           </div>
                         )}
@@ -1337,7 +1337,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         }}
                         className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
                       >
-                        🧪 Registrar Resultado (por item)
+                        Registrar Resultado (por item)
                       </button>
                       <button
                         onClick={() => {
@@ -1352,7 +1352,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         }}
                         className="flex-1 bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
                       >
-                        📦 Amostra Perdida
+                        Amostra Perdida
                       </button>
                     </div>
                   </div>
@@ -1421,7 +1421,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                         }}
                         className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-3 rounded-lg text-sm transition-colors"
                       >
-                        📝 Nova Proposta
+                        Nova Proposta
                       </button>
                     </div>
                   </div>

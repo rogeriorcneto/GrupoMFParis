@@ -303,17 +303,17 @@ const GATILHOS = [
 
 // Tipos de tarefas
 const TIPOS_TAREFA_ACAO = [
-  { key: 'ligacao', label: 'Ligação', icon: '📞' },
-  { key: 'email', label: 'E-mail', icon: '📧' },
-  { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
-  { key: 'reuniao', label: 'Reunião', icon: '🤝' },
-  { key: 'visita', label: 'Visita', icon: '📍' }
+  { key: 'ligacao', label: 'Ligação', icon: '' },
+  { key: 'email', label: 'E-mail', icon: '' },
+  { key: 'whatsapp', label: 'WhatsApp', icon: '' },
+  { key: 'reuniao', label: 'Reunião', icon: '' },
+  { key: 'visita', label: 'Visita', icon: '' }
 ]
 
 const TIPOS_TAREFA = [
   ...TIPOS_TAREFA_ACAO,
-  { key: 'follow-up', label: 'Follow-up (legado)', icon: '🔄' },
-  { key: 'outro', label: 'Outro (legado)', icon: '📌' }
+  { key: 'follow-up', label: 'Follow-up (legado)', icon: '' },
+  { key: 'outro', label: 'Outro (legado)', icon: '' }
 ]
 
 interface ConfiguracaoTarefasViewProps {

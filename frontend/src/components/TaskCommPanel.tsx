@@ -33,7 +33,7 @@ function renderWaContent(msg: Message) {
       case 'document':
         return (
           <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline text-xs block mb-1">
-            📎 {msg.fileName || 'Documento'}
+            {msg.fileName || 'Documento'}
           </a>
         )
       default:
@@ -196,7 +196,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
     if (!result.success) {
       setWaMessages(prev => [...prev, {
         id: Date.now() + 1,
-        text: '❌ Falha ao enviar: ' + (result.error || 'Erro desconhecido'),
+        text: 'Falha ao enviar: ' + (result.error || 'Erro desconhecido'),
         from: 'system',
         time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       }])
@@ -254,25 +254,25 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
             onClick={() => setActiveTab('whatsapp')}
             className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'whatsapp' ? 'text-green-700 border-b-2 border-green-500 bg-green-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           >
-            💬 WhatsApp
+            WhatsApp
           </button>
           <button
             onClick={() => setActiveTab('email')}
             className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'email' ? 'text-blue-700 border-b-2 border-blue-500 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           >
-            📧 Email
+            Email
           </button>
           <button
             onClick={() => setActiveTab('telefone')}
             className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'telefone' ? 'text-purple-700 border-b-2 border-purple-500 bg-purple-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           >
-            📞 Telefone
+            Telefone
           </button>
           <button
             onClick={() => setActiveTab('historico')}
             className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${activeTab === 'historico' ? 'text-orange-700 border-b-2 border-orange-500 bg-orange-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
           >
-            📋 Histórico
+            Histórico
           </button>
         </div>
 
@@ -284,7 +284,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
               {!whatsappNumber ? (
                 <div className="flex-1 flex items-center justify-center p-6">
                   <div className="text-center">
-                    <p className="text-4xl mb-3">📵</p>
+                    <p className="text-4xl mb-3"></p>
                     <p className="text-gray-600 font-medium">Sem número de WhatsApp</p>
                     <p className="text-sm text-gray-400 mt-1">Este cliente não possui número de celular/WhatsApp cadastrado.</p>
                   </div>
@@ -356,7 +356,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                         disabled={waSuggesting || waSending}
                         className="px-3 h-10 text-xs font-semibold bg-white border border-green-200 text-green-700 hover:bg-green-50 disabled:opacity-50 rounded-full"
                       >
-                        {waSuggesting ? '✨ IA...' : '✨ IA'}
+                        {waSuggesting ? 'IA...' : 'IA'}
                       </button>
                       <textarea
                         value={waText}
@@ -414,12 +414,12 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                 <div className="divide-y divide-gray-100">
                   {historico.map(item => {
                     const tipoIcon = item.tipo === 'whatsapp_enviada' ? '💬↗' :
-                      item.tipo === 'whatsapp_recebida' ? '💬↙' :
-                      item.tipo === 'whatsapp' ? '💬' :
-                      item.tipo === 'email' ? '📧' :
-                      item.tipo === 'ligacao' ? '📞' :
-                      item.tipo === 'reuniao' ? '🤝' :
-                      item.tipo === 'nota' ? '📝' : '📋'
+                      item.tipo === 'whatsapp_recebida' ? '↙' :
+                      item.tipo === 'whatsapp' ? '' :
+                      item.tipo === 'email' ? '' :
+                      item.tipo === 'ligacao' ? '' :
+                      item.tipo === 'reuniao' ? '' :
+                      item.tipo === 'nota' ? '' : ''
                     const tipoLabel = item.tipo === 'whatsapp_enviada' ? 'WhatsApp enviada' :
                       item.tipo === 'whatsapp_recebida' ? 'WhatsApp recebida' :
                       item.tipo === 'whatsapp' ? 'WhatsApp' :
@@ -499,7 +499,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                       className="flex items-center justify-center gap-3 w-full py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
                       <PhoneIcon className="h-5 w-5" />
-                      📱 {cliente.contatoCelular}
+                      {cliente.contatoCelular}
                     </a>
                   )}
                   {cliente.contatoTelefoneFixo && (
@@ -509,12 +509,12 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                       className="flex items-center justify-center gap-3 w-full py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-apple font-medium transition-colors shadow-apple-sm"
                     >
                       <PhoneIcon className="h-5 w-5" />
-                      ☎️ {cliente.contatoTelefoneFixo}
+                      {cliente.contatoTelefoneFixo}
                     </a>
                   )}
                   {!phoneNumber && (
                     <div className="text-center">
-                      <p className="text-4xl mb-3">📵</p>
+                      <p className="text-4xl mb-3"></p>
                       <p className="text-gray-600 font-medium">Sem telefone cadastrado</p>
                     </div>
                   )}
@@ -528,7 +528,7 @@ const TaskCommPanel: React.FC<TaskCommPanelProps> = ({ cliente, loggedUser, onCl
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2 w-full py-2.5 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-apple text-sm font-medium transition-colors"
                     >
-                      💬 Abrir no WhatsApp Web
+                      Abrir no WhatsApp Web
                     </a>
                   </div>
                 )}

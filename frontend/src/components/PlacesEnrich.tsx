@@ -248,7 +248,7 @@ export const PlacesEnrich: React.FC<Props> = ({ razaoSocial, cidade, onApply }) 
             )}
             {selected.website?.includes('instagram.com') && (
               <div className="flex items-center gap-1.5">
-                <span className="text-pink-500 text-sm">📸</span>
+                <GlobeAltIcon className="h-3.5 w-3.5 text-pink-500" />
                 <a href={selected.website} target="_blank" rel="noopener noreferrer"
                   className="text-pink-600 hover:underline truncate">
                   Instagram: {selected.website}
@@ -272,7 +272,7 @@ export const PlacesEnrich: React.FC<Props> = ({ razaoSocial, cidade, onApply }) 
                 applied ? 'bg-green-500 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
               }`}
             >
-              {applied ? <><CheckIcon className="h-3.5 w-3.5" /> Aplicado!</> : '✅ Aplicar ao cadastro'}
+              {applied ? <><CheckIcon className="h-3.5 w-3.5" /> Aplicado!</> : 'Aplicar ao cadastro'}
             </button>
           </div>
         </div>

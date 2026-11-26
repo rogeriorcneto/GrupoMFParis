@@ -637,7 +637,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
       )
       setRelatorioIA(resp)
     } catch (err: any) {
-      setRelatorioIA(`❌ Erro ao gerar relatório: ${err?.message || 'Tente novamente.'}`)
+      setRelatorioIA(`Erro ao gerar relatório: ${err?.message || 'Tente novamente.'}`)
     } finally {
       setRelatorioLoading(false)
     }
@@ -710,7 +710,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                     onClick={() => { navigator.clipboard.writeText(relatorioIA) }}
                     className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
                   >
-                    📋 Copiar
+                    Copiar
                   </button>
                 )}
                 <button onClick={() => setRelatorioOpen(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
@@ -753,7 +753,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                 disabled={relatorioLoading}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 transition-colors disabled:opacity-50"
               >
-                🔄 Regenerar
+                Regenerar
               </button>
             </div>
           </div>
@@ -1592,7 +1592,7 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                 <div className="space-y-3">
                   {ranking.map((v, i) => (
                     <div key={v.id} className="flex items-center gap-3">
-                      <span className="text-lg font-bold w-6 text-center">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>
+                      <span className="text-lg font-bold w-6 text-center">{i === 0 ? '' : i === 1 ? '' : ''}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-semibold text-gray-900 truncate">{v.nome}</span>

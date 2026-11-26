@@ -328,17 +328,17 @@ const VendedoresView: React.FC<{
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 rounded-apple border border-gray-200">
-                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">💰 Vendas</p><p className="text-sm font-bold text-gray-900">R$ {m.valorPipeline.toLocaleString('pt-BR')} / {selectedVendedor.metaVendas.toLocaleString('pt-BR')}</p></div>
+                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">Vendas</p><p className="text-sm font-bold text-gray-900">R$ {m.valorPipeline.toLocaleString('pt-BR')} / {selectedVendedor.metaVendas.toLocaleString('pt-BR')}</p></div>
                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden"><div className={`h-3 rounded-full transition-all duration-500 ${getBarColor(pctVendas)}`} style={{ width: `${pctVendas}%` }}></div></div>
                 <p className="text-xs text-gray-500 mt-1">{pctVendas.toFixed(0)}% da meta</p>
               </div>
               <div className="p-4 rounded-apple border border-gray-200">
-                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">📋 Leads</p><p className="text-sm font-bold text-gray-900">{m.totalLeads} / {selectedVendedor.metaLeads}</p></div>
+                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">Leads</p><p className="text-sm font-bold text-gray-900">{m.totalLeads} / {selectedVendedor.metaLeads}</p></div>
                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden"><div className={`h-3 rounded-full transition-all duration-500 ${getBarColor(pctLeads)}`} style={{ width: `${pctLeads}%` }}></div></div>
                 <p className="text-xs text-gray-500 mt-1">{pctLeads.toFixed(0)}% da meta</p>
               </div>
               <div className="p-4 rounded-apple border border-gray-200">
-                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">🔄 Conversão</p><p className="text-sm font-bold text-gray-900">{m.taxaConversao.toFixed(1)}% / {selectedVendedor.metaConversao}%</p></div>
+                <div className="flex items-center justify-between mb-2"><p className="text-sm font-medium text-gray-600">Conversão</p><p className="text-sm font-bold text-gray-900">{m.taxaConversao.toFixed(1)}% / {selectedVendedor.metaConversao}%</p></div>
                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden"><div className={`h-3 rounded-full transition-all duration-500 ${getBarColor(pctConversao)}`} style={{ width: `${pctConversao}%` }}></div></div>
                 <p className="text-xs text-gray-500 mt-1">{pctConversao.toFixed(0)}% da meta</p>
               </div>

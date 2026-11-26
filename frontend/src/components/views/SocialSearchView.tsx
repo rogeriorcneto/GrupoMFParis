@@ -59,11 +59,11 @@ const SocialSearchView: React.FC<{ onAddLead: (nome: string, telefone: string, e
             <label className="block text-sm font-medium text-gray-700 mb-2">Fonte de busca</label>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
-                { id: 'painel', label: '🎯 Painel', desc: 'Busca completa' },
-                { id: 'google', label: '🔍 Google', desc: 'Busca geral' },
-                { id: 'instagram', label: '📸 Instagram', desc: 'Perfis comerciais' },
-                { id: 'facebook', label: '👥 Facebook', desc: 'Páginas e grupos' },
-                { id: 'linkedin', label: '💼 LinkedIn', desc: 'Empresas B2B' }
+                { id: 'painel', label: 'Painel', desc: 'Busca completa' },
+                { id: 'google', label: 'Google', desc: 'Busca geral' },
+                { id: 'instagram', label: 'Instagram', desc: 'Perfis comerciais' },
+                { id: 'facebook', label: 'Facebook', desc: 'Páginas e grupos' },
+                { id: 'linkedin', label: 'LinkedIn', desc: 'Empresas B2B' }
               ].map((source) => (
                 <button key={source.id} onClick={() => setSearchType(source.id as any)} className={`p-3 rounded-apple border-2 transition-all ${searchType === source.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
                   <div className="text-center">
@@ -75,7 +75,7 @@ const SocialSearchView: React.FC<{ onAddLead: (nome: string, telefone: string, e
             </div>
           </div>
           <button onClick={handleSearch} disabled={!searchQuery.trim() || isSearching} className="w-full px-6 py-3 bg-primary-600 text-white rounded-apple hover:bg-primary-700 disabled:bg-gray-400 shadow-apple-sm font-semibold">
-            {isSearching ? '🔍 Buscando...' : '🔍 Buscar Potenciais Clientes'}
+            {isSearching ? 'Buscando...' : 'Buscar Potenciais Clientes'}
           </button>
         </div>
       </div>
@@ -92,18 +92,18 @@ const SocialSearchView: React.FC<{ onAddLead: (nome: string, telefone: string, e
                     <h4 className="text-lg font-semibold text-gray-900">{result.nome}</h4>
                     <p className="text-sm text-gray-600 mt-1">{result.descricao}</p>
                     <div className="mt-3 space-y-1">
-                      <p className="text-sm text-gray-700">📍 {result.endereco}</p>
-                      <p className="text-sm text-gray-700">📞 {result.telefone}</p>
-                      {result.site && <p className="text-sm text-primary-600">🌐 {result.site}</p>}
+                      <p className="text-sm text-gray-700">{result.endereco}</p>
+                      <p className="text-sm text-gray-700">{result.telefone}</p>
+                      {result.site && <p className="text-sm text-primary-600">{result.site}</p>}
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {result.fonte && <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full font-semibold">🎯 {result.fonte}</span>}
-                        {result.instagram && <span className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">📸 {result.instagram}</span>}
-                        {result.facebook && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">👥 {result.facebook}</span>}
-                        {result.linkedin && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">💼 {result.linkedin}</span>}
+                        {result.fonte && <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full font-semibold">{result.fonte}</span>}
+                        {result.instagram && <span className="text-xs bg-pink-100 text-pink-700 px-2 py-1 rounded-full">{result.instagram}</span>}
+                        {result.facebook && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">{result.facebook}</span>}
+                        {result.linkedin && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">{result.linkedin}</span>}
                       </div>
                     </div>
                   </div>
-                  <button onClick={() => { onAddLead(result.nome, result.telefone, result.endereco); alert(`✅ "${result.nome}" adicionado como lead em Prospecção!`) }} className="ml-4 px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm whitespace-nowrap">➕ Adicionar Lead</button>
+                  <button onClick={() => { onAddLead(result.nome, result.telefone, result.endereco); alert(`✅ "${result.nome}" adicionado como lead em Prospecção!`) }} className="ml-4 px-4 py-2 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm whitespace-nowrap">Adicionar Lead</button>
                 </div>
               </div>
             ))}
@@ -112,7 +112,7 @@ const SocialSearchView: React.FC<{ onAddLead: (nome: string, telefone: string, e
       )}
       {!isSearching && results.length === 0 && (
         <div className="bg-gray-50 rounded-apple border-2 border-dashed border-gray-300 p-12 text-center">
-          <div className="text-4xl mb-4">🔍</div>
+          <div className="text-4xl mb-4"></div>
           <p className="text-gray-600">Digite sua busca e clique em "Buscar" para encontrar potenciais clientes</p>
           <p className="text-sm text-gray-500 mt-2">MVP: Demonstração com dados mockados</p>
         </div>

@@ -197,9 +197,9 @@ export default function MissaoView({ clientes, vendedores, loggedUser, showToast
           )}
           {detalhe.missao.status === 'aguardando_aprovacao' && isGerente && (
             <div className="mt-4 flex gap-2 flex-wrap">
-              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'aprovar' }, 'Missão aprovada')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">✅ Aprovar</button>
-              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'alteracao', motivo: 'Solicito ajustes' }, 'Alteração solicitada')} className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">✏️ Solicitar alteração</button>
-              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'reprovar', motivo: 'Reprovada' }, 'Missão reprovada')} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">❌ Reprovar</button>
+              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'aprovar' }, 'Missão aprovada')} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">Aprovar</button>
+              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'alteracao', motivo: 'Solicito ajustes' }, 'Alteração solicitada')} className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">Solicitar alteração</button>
+              <button onClick={() => acao(detalhe.missao, 'aprovar', { acao: 'reprovar', motivo: 'Reprovada' }, 'Missão reprovada')} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">Reprovar</button>
             </div>
           )}
           {detalhe.missao.status === 'aprovada' && (

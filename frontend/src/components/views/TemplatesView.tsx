@@ -64,7 +64,7 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${t.canal === 'email' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                  {t.canal === 'email' ? <>📧 Email</> : <><WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp</>}
+                  {t.canal === 'email' ? <>Email</> : <><WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp</>}
                 </span>
                 <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
                   {t.etapa}
@@ -85,7 +85,7 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
           <div className="bg-white rounded-apple shadow-apple-lg max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
             <div className="text-center mb-4">
               <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl">🗑️</span>
+                <span className="text-2xl"></span>
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Excluir Template</h3>
               <p className="text-sm text-gray-600 mt-2">Tem certeza que deseja excluir <strong>{templates.find(t => t.id === deleteConfirmId)?.nome}</strong>?</p>
@@ -107,7 +107,7 @@ const TemplatesView: React.FC<{ templates: Template[], onAdd: (t: Omit<Template,
                 <h2 className="text-lg font-semibold text-gray-900">{previewTemplate.nome}</h2>
                 <div className="flex gap-2 mt-1">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full ${previewTemplate.canal === 'email' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                    {previewTemplate.canal === 'email' ? <>📧 Email</> : <><WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp</>}
+                    {previewTemplate.canal === 'email' ? <>Email</> : <><WhatsAppIcon variant="outline" className="h-3 w-3" /> WhatsApp</>}
                   </span>
                   <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700">{previewTemplate.etapa}</span>
                 </div>

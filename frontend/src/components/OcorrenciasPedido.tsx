@@ -74,7 +74,7 @@ export default function OcorrenciasPedido({ pedidoId, showToast }: Props) {
 
   return (
     <div className="mt-2 p-2 bg-orange-50 border border-orange-100 rounded-lg space-y-2" onClick={e => e.stopPropagation()}>
-      <p className="text-[11px] font-semibold text-orange-800">⚠️ Ocorrências do pedido</p>
+      <p className="text-[11px] font-semibold text-orange-800">Ocorrências do pedido</p>
       {loading ? (
         <p className="text-[11px] text-gray-400">Carregando…</p>
       ) : ocorrencias.length === 0 ? (

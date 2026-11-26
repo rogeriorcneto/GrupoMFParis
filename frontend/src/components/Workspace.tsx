@@ -1273,7 +1273,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                       {actions.map(a => (
                         <div key={a.id} className="flex items-start gap-2 p-2 bg-gray-50 border border-gray-200 rounded-apple">
                           <span className="text-sm flex-shrink-0">
-                            {a.tipo === 'whatsapp' ? '📱' : a.tipo === 'email' ? '📧' : a.tipo === 'nota' ? '📝' : a.tipo === 'tarefa' ? '✅' : a.tipo === 'ia' ? '🤖' : '📋'}
+                            {a.tipo === 'whatsapp' ? '' : a.tipo === 'email' ? '' : a.tipo === 'nota' ? '' : a.tipo === 'tarefa' ? '' : a.tipo === 'ia' ? '' : ''}
                           </span>
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-800">{a.descricao}</p>
@@ -1466,8 +1466,8 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 </div>
                 <div className="flex gap-1 mt-3">
                   <button onClick={() => setActiveTool('whatsapp')} className="flex-1 px-2 py-1.5 text-xs bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100 inline-flex items-center justify-center gap-1"><WhatsAppIcon variant="outline" className="h-3 w-3" /> WA</button>
-                  <button onClick={() => setActiveTool('email')} className="flex-1 px-2 py-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100">📧 Email</button>
-                  <button onClick={() => setActiveTool('notas')} className="flex-1 px-2 py-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100">📝 Nota</button>
+                  <button onClick={() => setActiveTool('email')} className="flex-1 px-2 py-1.5 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100">Email</button>
+                  <button onClick={() => setActiveTool('notas')} className="flex-1 px-2 py-1.5 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded hover:bg-amber-100">Nota</button>
                 </div>
               </div>
             ) : (
@@ -1491,7 +1491,7 @@ const Workspace: React.FC<WorkspaceProps> = ({
                 {actions.slice(0, 20).map(a => (
                   <div key={a.id} className="flex items-start gap-1.5 text-xs">
                     <span className="flex-shrink-0 mt-0.5">
-                      {a.tipo === 'whatsapp' ? '📱' : a.tipo === 'email' ? '📧' : a.tipo === 'nota' ? '📝' : a.tipo === 'tarefa' ? '✅' : a.tipo === 'ia' ? '🤖' : '📋'}
+                      {a.tipo === 'whatsapp' ? '' : a.tipo === 'email' ? '' : a.tipo === 'nota' ? '' : a.tipo === 'tarefa' ? '' : a.tipo === 'ia' ? '' : ''}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-gray-700 truncate">{a.descricao.replace('[Workspace] ', '').substring(0, 50)}</p>
