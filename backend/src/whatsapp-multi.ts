@@ -315,9 +315,36 @@ export function generateBrazilianPhoneVariations(formatted: string): string[] {
   return variations
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout (${Math.round(ms / 1000)}s) em ${label}`)), ms)
+    promise.then(
+      val => { clearTimeout(timer); resolve(val) },
+      err => { clearTimeout(timer); reject(err) }
+    )
+  })
+}
+
+export function isPlaceholderPhone(rawPhone: string): boolean {
+  const digits = String(rawPhone || '').replace(/\D/g, '')
+  if (digits.length < 8) return true
+  const local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(4) : digits.slice(-8)
+  return /^(\d)\1{7,}$/.test(local) || local === '12345678' || local === '87654321'
+}
+
+function isOwnSessionPhoneJid(session: UserWhatsAppSession, candidateJid: string): boolean {
+  if (!session.connectedNumber || !candidateJid) return false
+  const candNum = formatBrazilianPhone(candidateJid.split('@')[0].split(':')[0])
+  const myNum = formatBrazilianPhone(session.connectedNumber)
+  if (!candNum || !myNum) return false
+  if (candNum === myNum) return true
+  const myVars = generateBrazilianPhoneVariations(myNum)
+  return myVars.includes(candNum)
+}
+
 /**
  * Resolve o JID correto de um número usando Baileys onWhatsApp().
- * Tenta o número formatado e variações com/sem 9º dígito.
+ * Tenta o número formatado e variações com/sem 9º dígito (com timeout curto por tentativa).
  * Retorna o JID validado ou null se não encontrar.
  */
 export async function resolveWhatsAppJid(
@@ -325,24 +352,26 @@ export async function resolveWhatsAppJid(
   rawNumber: string
 ): Promise<{ jid: string; exists: boolean; number: string } | null> {
   const formatted = formatBrazilianPhone(rawNumber)
-  if (!formatted) return null
+  if (!formatted || isPlaceholderPhone(formatted)) return null
 
   const variations = generateBrazilianPhoneVariations(formatted)
 
   for (const num of variations) {
     try {
-      const results = await sock.onWhatsApp(num)
+      const results = await withTimeout(sock.onWhatsApp(num), 8_000, `onWhatsApp(${num})`)
       const result = results?.[0]
-      if (result?.exists) {
-        log.info(`✅ Número ${rawNumber} → validado como ${result.jid}`)
+      if (result?.exists && result.jid) {
+        const cleanJid = result.jid.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
+        const resolvedNum = cleanJid.replace('@s.whatsapp.net', '')
+        log.info(`✅ Número ${rawNumber} → validado como ${cleanJid}`)
         return {
-          jid: result.jid,
+          jid: cleanJid,
           exists: true,
-          number: num,
+          number: resolvedNum,
         }
       }
     } catch (err) {
-      log.warn({ err, num }, `⚠️ Erro ao verificar ${num} no WhatsApp`)
+      log.warn({ err, num }, `⚠️ Erro/timeout ao verificar ${num} no WhatsApp`)
     }
   }
 
@@ -452,83 +481,86 @@ export async function validateContactsOnWhatsApp(
 }
 
 /**
- * Resolve o JID para envio, considerando LID quando disponível.
- * Novas versões do WhatsApp usam LID (@lid) em vez de phone JID (@s.whatsapp.net).
- * Se o contato já enviou uma mensagem, o lidMap terá o mapeamento.
- * Tenta LID primeiro, depois fallback para phone JID via onWhatsApp.
+ * Resolve o JID canônico (@s.whatsapp.net) para envio.
+ * IMPORTANTE: Sempre enviar para o JID @s.whatsapp.net validado pelo onWhatsApp
+ * (e gravar o proto enviado em session.rawMessages para suportar retry Signal do destinatário).
+ * Enviar diretamente para @lid causava mensagens silenciosamente descartadas no aparelho
+ * do destinatário ou travamento (signal timed out) na troca de prekeys LID.
  */
 async function resolveJidForSending(
   session: UserWhatsAppSession,
   rawNumber: string
-): Promise<string | null> {
-  const phoneJid = formatBrazilianPhone(rawNumber) + '@s.whatsapp.net'
-  // 1. Verificar se já temos um LID mapeado para este phone JID no lidMap
-  for (const [lid, pn] of session.lidMap.entries()) {
-    if (pn === phoneJid) {
-      log.info(`🔗 Usando LID conhecido: ${phoneJid} → ${lid}`)
-      return lid
+): Promise<{ jid: string; resolvedNumber: string } | null> {
+  if (rawNumber.endsWith('@lid')) {
+    const mappedPn = session.lidMap.get(rawNumber)
+    if (mappedPn && mappedPn.endsWith('@s.whatsapp.net') && !isOwnSessionPhoneJid(session, mappedPn)) {
+      return { jid: mappedPn, resolvedNumber: mappedPn.replace('@s.whatsapp.net', '') }
+    }
+    return { jid: rawNumber, resolvedNumber: rawNumber }
+  }
+
+  const formatted = formatBrazilianPhone(rawNumber)
+  if (!formatted || isPlaceholderPhone(formatted)) return null
+
+  // 1. Verificar cache de contatos já conhecidos na sessão (instantâneo, sem rede)
+  const variations = generateBrazilianPhoneVariations(formatted)
+  for (const v of variations) {
+    const candidateJid = `${v}@s.whatsapp.net`
+    if (session.contacts.some(c => c.jid === candidateJid)) {
+      return { jid: candidateJid, resolvedNumber: v }
     }
   }
-  // 2. Tentar resolver via onWhatsApp (retorna phone JID válido)
-  try {
-    if (session.sock) {
-      const resolved = await resolveWhatsAppJid(session.sock, rawNumber)
-      log.info(`🔍 [resolveJidForSending] onWhatsApp result: ${JSON.stringify(resolved)}`)
-      if (resolved) {
-        // 2a. Tentar obter o LID correspondente via signalRepository
-        try {
-          const lidMapping = (session.sock as any).signalRepository?.lidMapping
-          if (lidMapping?.getLIDForPN) {
-            const lid = await lidMapping.getLIDForPN(resolved.jid)
-            log.info(`🔍 [resolveJidForSending] getLIDForPN(${resolved.jid}) → ${lid}`)
-            if (lid && lid.endsWith('@lid')) {
-              session.lidMap.set(lid, resolved.jid)
-              log.info(`🔗 LID resolvido via signalRepository: ${resolved.jid} → ${lid}`)
-              return lid
-            }
-          } else {
-            log.warn(`⚠️ signalRepository.lidMapping.getLIDForPN não disponível`)
-          }
-        } catch (e) {
-          log.warn(`⚠️ getLIDForPN falhou para ${resolved.jid}: ${e}`)
-        }
-        return resolved.jid
-      }
+
+  // 2. Validar via onWhatsApp (resolve automaticamente 9º dígito de DDDs como 31, 62, etc.)
+  if (session.sock) {
+    const resolved = await resolveWhatsAppJid(session.sock, rawNumber)
+    if (resolved) {
+      return { jid: resolved.jid, resolvedNumber: resolved.number }
     }
-  } catch (e) {
-    log.warn(`⚠️ resolveWhatsAppJid falhou para ${rawNumber}: ${e}`)
   }
-  log.warn(`⚠️ [resolveJidForSending] número não validado: ${phoneJid}`)
+
   return null
+}
+
+function rememberSentRawMessage(session: UserWhatsAppSession, sent: any, fallbackMessage: Record<string, any>): void {
+  const id = sent?.key?.id
+  if (!id) return
+  session.outgoingMessageIds.add(id)
+  session.rawMessages.set(id, sent?.message ? sent : { key: sent.key, message: fallbackMessage })
+  if (session.rawMessages.size > 1000) {
+    const firstKey = session.rawMessages.keys().next().value
+    if (firstKey) session.rawMessages.delete(firstKey)
+  }
+  import('./database.js').then(d => d.claimWhatsAppExternalId(id)).catch(() => {})
 }
 
 export async function sendUserWhatsAppMessage(
   vendedorId: number,
   number: string,
   text: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; jid?: string; resolvedNumber?: string; error?: string }> {
   const session = sessions.get(vendedorId)
   if (!session || !session.sock || session.status !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
+  if (isPlaceholderPhone(number)) {
+    return { success: false, error: 'Telefone do cliente é inválido/fictício (ex.: 99999-9999). Atualize o número real antes de enviar.' }
+  }
   try {
     const sock = session.sock
-    const jid = await resolveJidForSending(session, number)
-    if (!jid) {
+    const target = await resolveJidForSending(session, number)
+    if (!target) {
       return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
     if (sessions.get(vendedorId) !== session || session.sock !== sock || session.status !== 'connected') {
       return { success: false, error: 'WhatsApp reconectando. Tente enviar novamente em instantes.' }
     }
-    log.info(`📤 Enviando mensagem para ${jid} (número original: ${number})`)
-    const sent = await sock.sendMessage(jid, { text })
-    if (sent?.key?.id) {
-      session.outgoingMessageIds.add(sent.key.id)
-      // Marca como vista p/ o re-sync não duplicar no histórico após restart
-      import('./database.js').then(d => d.claimWhatsAppExternalId(sent.key.id!)).catch(() => {})
-    }
-    log.info({ messageId: sent?.key?.id, jid }, `📨 Mensagem aceita pelo WhatsApp para vendedor ${vendedorId}`)
-    return { success: true }
+    log.info(`📤 Enviando mensagem para ${target.jid} (número original: ${number})`)
+    const msgPayload = { text }
+    const sent = await withTimeout(sock.sendMessage(target.jid, msgPayload), 25_000, `sendMessage(${target.jid})`)
+    rememberSentRawMessage(session, sent, { conversation: text })
+    log.info({ messageId: sent?.key?.id, jid: target.jid }, `📨 Mensagem aceita pelo WhatsApp para vendedor ${vendedorId}`)
+    return { success: true, jid: target.jid, resolvedNumber: target.resolvedNumber }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar mensagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
@@ -675,27 +707,27 @@ export async function sendUserWhatsAppAudio(
   number: string,
   audioBase64: string,
   mimetype: string = 'audio/ogg; codecs=opus'
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; jid?: string; resolvedNumber?: string; error?: string }> {
   const session = sessions.get(vendedorId)
   if (!session || !session.sock || session.status !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
+  if (isPlaceholderPhone(number)) {
+    return { success: false, error: 'Telefone do cliente é inválido/fictício.' }
+  }
   try {
-    const jid = await resolveJidForSending(session, number)
-    if (!jid) {
+    const target = await resolveJidForSending(session, number)
+    if (!target) {
       return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
     const buffer = Buffer.from(audioBase64, 'base64')
-    const sent = await session.sock.sendMessage(jid, {
-      audio: buffer,
-      mimetype,
-      ptt: true,
-    })
-    if (sent?.key?.id) {
-      session.outgoingMessageIds.add(sent.key.id)
-      import('./database.js').then(d => d.claimWhatsAppExternalId(sent.key.id!)).catch(() => {})
-    }
-    return { success: true }
+    const sent = await withTimeout(
+      session.sock.sendMessage(target.jid, { audio: buffer, mimetype, ptt: true }),
+      30_000,
+      `sendAudio(${target.jid})`
+    )
+    rememberSentRawMessage(session, sent, { audioMessage: { mimetype, ptt: true } })
+    return { success: true, jid: target.jid, resolvedNumber: target.resolvedNumber }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar áudio para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar áudio' }
@@ -709,26 +741,27 @@ export async function sendUserWhatsAppImage(
   imageBase64: string,
   mimetype: string = 'image/jpeg',
   caption?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; jid?: string; resolvedNumber?: string; error?: string }> {
   const session = sessions.get(vendedorId)
   if (!session || !session.sock || session.status !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
   }
+  if (isPlaceholderPhone(number)) {
+    return { success: false, error: 'Telefone do cliente é inválido/fictício.' }
+  }
   try {
-    const jid = await resolveJidForSending(session, number)
-    if (!jid) {
+    const target = await resolveJidForSending(session, number)
+    if (!target) {
       return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
     const buffer = Buffer.from(imageBase64, 'base64')
-    const sent = await session.sock.sendMessage(jid, {      image: buffer,
-      mimetype,
-      caption: caption || undefined,
-    })
-    if (sent?.key?.id) {
-      session.outgoingMessageIds.add(sent.key.id)
-      import('./database.js').then(d => d.claimWhatsAppExternalId(sent.key.id!)).catch(() => {})
-    }
-    return { success: true }
+    const sent = await withTimeout(
+      session.sock.sendMessage(target.jid, { image: buffer, mimetype, caption: caption || undefined }),
+      30_000,
+      `sendImage(${target.jid})`
+    )
+    rememberSentRawMessage(session, sent, { imageMessage: { mimetype, caption: caption || '' } })
+    return { success: true, jid: target.jid, resolvedNumber: target.resolvedNumber }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar imagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar imagem' }
@@ -783,6 +816,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     }
 
     const setLidMap = (lid: string, phoneJid: string) => {
+      // NUNCA mapear um @lid de terceiro para o próprio número conectado do vendedor!
+      if (isOwnSessionPhoneJid(session, phoneJid)) {
+        log.warn(`🛡️ Bloqueado mapeamento LID auto-referente (${lid} → ${phoneJid})`)
+        return
+      }
       session.lidMap.set(lid, phoneJid)
       saveLidMap?.(session.lidMap).catch(() => {})
 
@@ -935,6 +973,19 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
         if (me) {
           session.connectedNumber = me.id.split(':')[0].split('@')[0]
           log.info(`✅ WhatsApp do vendedor ${vendedorId} conectado! Número: ${session.connectedNumber}`)
+          // Higienizar entradas corrompidas no lidMap que apontavam para o próprio número do vendedor
+          let purged = 0
+          for (const [lidKey, mappedPn] of Array.from(session.lidMap.entries())) {
+            if (isOwnSessionPhoneJid(session, mappedPn)) {
+              session.lidMap.delete(lidKey)
+              session.messageStore.delete(mappedPn)
+              purged++
+            }
+          }
+          if (purged > 0) {
+            log.warn(`🧹 Vendedor ${vendedorId}: removidas ${purged} entradas auto-referentes do lidMap`)
+            saveLidMap?.(session.lidMap).catch(() => {})
+          }
         }
 
         // Persist credentials as soon as the connection opens to ensure the
@@ -1140,38 +1191,60 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
     const resolveJid = async (msg: any): Promise<string | null> => {
       const raw = msg.key?.remoteJid
       if (!raw) return null
+      const isFromMe = !!msg.key?.fromMe
       // Standard WhatsApp JID — normalize by removing device suffix (:N)
       if (raw.endsWith('@s.whatsapp.net')) {
         return raw.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
       }
       // LID JID — resolve to @s.whatsapp.net using session's persistent lidMap
       if (raw.endsWith('@lid')) {
-        // 1. Check session lidMap cache
+        // 1. Check session lidMap cache (ignorando entradas auto-referentes)
         const mapped = session.lidMap.get(raw)
-        if (mapped) return mapped
-        // 2. Try senderPn field (Baileys 7 provides this for @lid messages)
-        const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
-        if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
-          const normalizedPn = senderPn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-          setLidMap(raw, normalizedPn)
-          log.info(`🔗 LID mapped via senderPn: ${raw} → ${normalizedPn}`)
-          return normalizedPn
+        if (mapped && !isOwnSessionPhoneJid(session, mapped)) return mapped
+
+        // 2 & 3. senderPn / participant SOMENTE quando a mensagem NÃO é fromMe!
+        // Quando fromMe === true, senderPn/participant é o próprio número do vendedor —
+        // usar isso mapeava todas as conversas enviadas pelo celular para um único número!
+        if (!isFromMe) {
+          const senderPn = (msg as any).senderPn || (msg as any).key?.senderPn
+          if (senderPn && senderPn.endsWith('@s.whatsapp.net')) {
+            const normalizedPn = senderPn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
+            if (!isOwnSessionPhoneJid(session, normalizedPn)) {
+              setLidMap(raw, normalizedPn)
+              log.info(`🔗 LID mapped via senderPn: ${raw} → ${normalizedPn}`)
+              return normalizedPn
+            }
+          }
+          const participant = msg.key?.participant || (msg as any).participant
+          if (participant && participant.endsWith('@s.whatsapp.net')) {
+            const normalizedPn = participant.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
+            if (!isOwnSessionPhoneJid(session, normalizedPn)) {
+              setLidMap(raw, normalizedPn)
+              log.info(`🔗 LID mapped: ${raw} → ${normalizedPn}`)
+              return normalizedPn
+            }
+          }
+        } else {
+          const recipientPn = (msg as any).recipientPn || (msg as any).key?.recipientPn
+          if (recipientPn && recipientPn.endsWith('@s.whatsapp.net')) {
+            const normalizedPn = recipientPn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
+            if (!isOwnSessionPhoneJid(session, normalizedPn)) {
+              setLidMap(raw, normalizedPn)
+              log.info(`🔗 LID mapped via recipientPn: ${raw} → ${normalizedPn}`)
+              return normalizedPn
+            }
+          }
         }
-        // 3. Try participant field
-        const participant = msg.key?.participant || (msg as any).participant
-        if (participant && participant.endsWith('@s.whatsapp.net')) {
-          const normalizedPn = participant.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-          setLidMap(raw, normalizedPn)
-          log.info(`🔗 LID mapped: ${raw} → ${normalizedPn}`)
-          return normalizedPn
-        }
+
         // 4. Try to find matching contact by LID in contacts list
         for (const c of session.contacts) {
           if ((c as any).lid === raw) {
             const phoneJid = c.jid.endsWith('@s.whatsapp.net') ? c.jid : `${c.number}@s.whatsapp.net`
-            setLidMap(raw, phoneJid)
-            log.info(`🔗 LID mapped via contacts: ${raw} → ${phoneJid}`)
-            return phoneJid
+            if (!isOwnSessionPhoneJid(session, phoneJid)) {
+              setLidMap(raw, phoneJid)
+              log.info(`🔗 LID mapped via contacts: ${raw} → ${phoneJid}`)
+              return phoneJid
+            }
           }
         }
         // 5. Try Baileys 7 signalRepository LID mapping (USync)
@@ -1181,9 +1254,11 @@ export async function connectUserWhatsApp(vendedorId: number): Promise<void> {
             const pn = await lidMapping.getPNForLID(raw)
             if (pn && pn.endsWith('@s.whatsapp.net')) {
               const normalizedPn = pn.replace(/:\d+@s\.whatsapp\.net$/, '@s.whatsapp.net')
-              setLidMap(raw, normalizedPn)
-              log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalizedPn}`)
-              return normalizedPn
+              if (!isOwnSessionPhoneJid(session, normalizedPn)) {
+                setLidMap(raw, normalizedPn)
+                log.info(`🔗 LID mapped via signalRepository: ${raw} → ${normalizedPn}`)
+                return normalizedPn
+              }
             }
           }
         } catch (e) {

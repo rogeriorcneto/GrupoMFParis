@@ -272,23 +272,41 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const hasChatTarget = !!(cliente || selectedContact)
 
   // Load chat history when connected + (cliente or selectedContact)
-  // Strategy: try in-memory Baileys cache first (has synced history), fall back to DB
+  // IMPORTANTE: limpa imediatamente o histórico anterior ao trocar de cliente/contato
+  // e cancela respostas atrasadas (evita vazar mensagens de uma conversa em outra)
   useEffect(() => {
-    if (!waStatus.connected) return
-    if (!cliente?.id && !selectedContact) return
-    setChatLoading(true)
+    let cancelled = false
+    setMessages([])
+
+    if (!waStatus.connected) {
+      setChatLoading(false)
+      return () => { cancelled = true }
+    }
+    if (!cliente?.id && !selectedContact) {
+      setChatLoading(false)
+      return () => { cancelled = true }
+    }
 
     const chatNumber = selectedContact?.number || (cliente?.whatsapp || cliente?.contatoCelular || cliente?.contatoTelefone || '').replace(/\D/g, '')
+    const digitsLocal = chatNumber.startsWith('55') && chatNumber.length >= 12 ? chatNumber.slice(4) : chatNumber.slice(-8)
+    const isFakePhone = !chatNumber || chatNumber.length < 8 || /^(\d)\1{7,}$/.test(digitsLocal)
 
-    // 1. Try in-memory cache (Baileys synced messages)
-    const tryCache = chatNumber
-      ? fetchWhatsAppChatMessages({ numero: chatNumber, limit: 100 })
+    if (isFakePhone && !cliente?.id) {
+      setChatLoading(false)
+      return () => { cancelled = true }
+    }
+
+    setChatLoading(true)
+
+    const tryCache = !isFakePhone
+      ? fetchWhatsAppChatMessages({ jid: selectedContact?.jid, numero: chatNumber, clienteId: cliente?.id, limit: 100 })
       : Promise.resolve([])
 
     tryCache.then(cachedMsgs => {
+      if (cancelled) return
       if (cachedMsgs && cachedMsgs.length > 0) {
         setMessages(cachedMsgs.map((m: any) => ({
-          id: m.id || Date.now(),
+          id: m.id || `${m.timestamp}-${m.text}`,
           text: m.text,
           mediaUrl: m.mediaUrl,
           tipo: m.type || m.tipo,
@@ -299,16 +317,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         setChatLoading(false)
         return
       }
-      // 2. Fall back to DB messages
       const dbPromise = cliente?.id
         ? fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
-        : chatNumber
+        : !isFakePhone
           ? fetchWhatsAppMessages({ numero: chatNumber, limit: 100 })
           : Promise.resolve([])
 
       dbPromise.then(dbMsgs => {
+        if (cancelled) return
         setMessages((dbMsgs || []).map((m: any) => ({
-          id: m.id || Date.now(),
+          id: m.id || `${m.createdAt}-${m.mensagem}`,
           text: m.mensagem,
           mediaUrl: m.mediaUrl,
           tipo: m.tipo,
@@ -316,23 +334,34 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
           time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
         })))
-      }).catch(() => {}).finally(() => setChatLoading(false))
+      }).catch(() => {}).finally(() => { if (!cancelled) setChatLoading(false) })
     }).catch(() => {
-      setChatLoading(false)
+      if (!cancelled) setChatLoading(false)
     })
-  }, [waStatus.connected, cliente?.id, selectedContact])
 
-  // Poll WA messages every 5s when chat is open
+    return () => { cancelled = true }
+  }, [waStatus.connected, cliente?.id, cliente?.whatsapp, cliente?.contatoCelular, cliente?.contatoTelefone, selectedContact?.jid])
+
+  // Poll WA messages every 5s when chat is open (isolado por conversa ativa)
   useEffect(() => {
     if (!waStatus.connected) return
     if (!cliente?.id && !selectedContact) return
     const chatNumber = selectedContact?.number || (cliente?.whatsapp || cliente?.contatoCelular || cliente?.contatoTelefone || '').replace(/\D/g, '')
-    if (!chatNumber) return
+    const digitsLocal = chatNumber.startsWith('55') && chatNumber.length >= 12 ? chatNumber.slice(4) : chatNumber.slice(-8)
+    const isFakePhone = !chatNumber || chatNumber.length < 8 || /^(\d)\1{7,}$/.test(digitsLocal)
+    if (isFakePhone && !cliente?.id) return
+
+    let cancelled = false
     const iv = setInterval(() => {
-      fetchWhatsAppChatMessages({ numero: chatNumber, limit: 100 }).then(cached => {
+      const req = !isFakePhone
+        ? fetchWhatsAppChatMessages({ jid: selectedContact?.jid, numero: chatNumber, clienteId: cliente?.id, limit: 100 })
+        : Promise.resolve([])
+
+      req.then(cached => {
+        if (cancelled) return
         if (cached && cached.length > 0) {
-          const incoming = cached.map((m: any) => ({
-            id: m.id || Date.now(),
+          const incoming: Message[] = cached.map((m: any) => ({
+            id: m.id || `${m.timestamp}-${m.text}`,
             text: m.text,
             mediaUrl: m.mediaUrl,
             tipo: m.type || m.tipo,
@@ -341,49 +370,34 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
           }))
           setMessages(prev => {
-            const seen = new Set(prev.map(m => String(m.id)))
-            const merged = [...prev]
-            for (const m of incoming) {
-              if (!seen.has(String(m.id))) {
-                seen.add(String(m.id))
-                merged.push(m)
-              }
-            }
-            return merged
+            // Preserva apenas mensagens de sistema/otimistas locais recentes que ainda não vieram do servidor
+            const systemMsgs = prev.filter(m => m.from === 'system')
+            const incomingTexts = new Set(incoming.map(m => `${m.from}|${m.text}`))
+            const pendingLocal = prev.filter(m => typeof m.id === 'number' && !incomingTexts.has(`${m.from}|${m.text}`))
+            return [...incoming, ...pendingLocal, ...systemMsgs]
           })
-        } else {
-          const dbPromise = cliente?.id
-            ? fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 })
-            : fetchWhatsAppMessages({ numero: chatNumber, limit: 100 })
-          dbPromise.then(dbMsgs => {
-            if (dbMsgs && dbMsgs.length > 0) {
-              const incoming = (dbMsgs || []).map((m: any) => ({
-                id: m.id || Date.now(),
-                text: m.mensagem,
-                mediaUrl: m.mediaUrl,
-                tipo: m.tipo,
-                fileName: m.fileName,
-                from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
-                time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
-              }))
-              setMessages(prev => {
-                const seen = new Set(prev.map(m => String(m.id)))
-                const merged = [...prev]
-                for (const m of incoming) {
-                  if (!seen.has(String(m.id))) {
-                    seen.add(String(m.id))
-                    merged.push(m)
-                  }
-                }
-                return merged
-              })
-            }
+        } else if (cliente?.id) {
+          fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 }).then(dbMsgs => {
+            if (cancelled || !dbMsgs || dbMsgs.length === 0) return
+            const incoming: Message[] = dbMsgs.map((m: any) => ({
+              id: m.id || `${m.createdAt}-${m.mensagem}`,
+              text: m.mensagem,
+              mediaUrl: m.mediaUrl,
+              tipo: m.tipo,
+              fileName: m.fileName,
+              from: m.direcao === 'recebida' ? 'them' as const : 'me' as const,
+              time: m.createdAt ? new Date(m.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
+            }))
+            setMessages(prev => {
+              const systemMsgs = prev.filter(m => m.from === 'system')
+              return [...incoming, ...systemMsgs]
+            })
           }).catch(() => {})
         }
       }).catch(() => {})
     }, 5_000)
-    return () => clearInterval(iv)
-  }, [waStatus.connected, cliente?.id, selectedContact])
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [waStatus.connected, cliente?.id, cliente?.whatsapp, cliente?.contatoCelular, cliente?.contatoTelefone, selectedContact?.jid])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })

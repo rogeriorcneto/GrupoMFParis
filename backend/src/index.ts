@@ -7,7 +7,7 @@ import { connectWhatsApp, disconnectWhatsApp, getWhatsAppStatus, getQRDataUrl, s
 import {
   connectUserWhatsApp, disconnectUserWhatsApp, getUserWhatsAppStatus,
   getUserQRDataUrl, sendUserWhatsAppMessage, getAllUserSessions,
-  startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone,
+  startSessionCleanup, checkWhatsAppSessionTable, formatBrazilianPhone, isPlaceholderPhone,
   getUserWhatsAppContacts, getUserWhatsAppChats, getUserWhatsAppChatMessages,
   sendUserWhatsAppAudio, sendUserWhatsAppImage, checkNumberOnWhatsApp,
   validateContactsOnWhatsApp, cacheMessage, getUserWhatsAppSession,
@@ -448,7 +448,7 @@ app.get('/api/whatsapp/messages', requireAuth, async (req, res) => {
     if (clienteId) {
       messages = await db.fetchWhatsAppMessagesByCliente(Number(clienteId), Number(limit) || 100)
     } else if (numero) {
-      messages = await db.fetchWhatsAppMessages(String(numero), Number(limit) || 100)
+      messages = await db.fetchWhatsAppMessages(String(numero), Number(limit) || 100, !reqIsGerente(req) ? me?.id : undefined)
     } else {
       res.status(400).json({ error: 'Informe numero ou clienteId' })
       return
@@ -536,9 +536,10 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
     const result = await sendUserWhatsAppMessage(vendedor.id, number, text)
     if (result.success) {
       try {
-        // Cache sent message in session so it shows up in polling
-        const normalizedNum = formatBrazilianPhone(number)
-        const sentJid = `${normalizedNum}@s.whatsapp.net`
+        // Grava e cacheia usando o número real resolvido pelo WhatsApp (ex.: 12 dígitos em MG sem 9º dígito),
+        // mantendo enviadas e recebidas exatamente na mesma conversa!
+        const normalizedNum = result.resolvedNumber || formatBrazilianPhone(number)
+        const sentJid = result.jid || `${normalizedNum}@s.whatsapp.net`
         const session = getUserWhatsAppSession(vendedor.id)
         if (session) {
           cacheMessage(session, sentJid, {
@@ -606,14 +607,19 @@ app.get('/api/whatsapp/user/contacts', requireAuth, async (req, res) => {
   }
 })
 
-// Buscar mensagens de um chat específico (cache in-memory do Baileys)
+// Buscar mensagens de um chat específico (cache in-memory do Baileys, isolado por conversa)
 app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
   const userId = (req as any).userId
-  const { jid, numero, limit } = req.query
+  const { jid, numero, clienteId, limit } = req.query
   try {
     const db = await import('./database.js')
     const vendedor = await db.getVendedorByAuthId(userId)
     if (!vendedor) { res.status(404).json({ error: 'Vendedor não encontrado' }); return }
+    // Bloquear números fictícios (ex.: 99999-9999) para nunca misturar conversas
+    if (numero && !jid && isPlaceholderPhone(String(numero))) {
+      res.json([])
+      return
+    }
     // Accept either jid or numero — normalize with formatBrazilianPhone to ensure 55 prefix
     let chatJid = jid ? String(jid) : ''
     if (!chatJid && numero) {
@@ -625,6 +631,15 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
 
     const session = getUserWhatsAppSession(vendedor.id)
     if (!session) { res.json([]); return }
+
+    // IMPORTANTE: se o número pesquisado for o PRÓPRIO número conectado do vendedor,
+    // não buscar LIDs mapeados na sessão (evita vazar conversas caso tenha aberto um card de teste com o próprio número).
+    const myNum = session.connectedNumber ? formatBrazilianPhone(session.connectedNumber) : ''
+    const queryNum = numero ? formatBrazilianPhone(String(numero)) : chatJid.split('@')[0]
+    const isSelfChat = !!myNum && (
+      queryNum === myNum ||
+      (queryNum.length >= 12 && myNum.length >= 12 && queryNum.slice(-8) === myNum.slice(-8) && queryNum.slice(0, 4) === myNum.slice(0, 4))
+    )
 
     // Build list of JID variations to look up.
     // primaryJids: JIDs que são com certeza este contato (jid exato, numero exato, LIDs mapeados)
@@ -659,19 +674,20 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
       if (primaryJids.has(v)) variantJids.delete(v)
     }
 
-    // Find @lid JIDs that map to this phone number via session.lidMap (primários)
-    for (const [lid, phoneJid] of session.lidMap.entries()) {
-      if (primaryJids.has(phoneJid) || variantJids.has(phoneJid)) {
-        primaryJids.add(lid)
+    // Find @lid JIDs that map to this phone number via session.lidMap (somente se não for o próprio número conectado)
+    if (!isSelfChat) {
+      for (const [lid, phoneJid] of session.lidMap.entries()) {
+        if (primaryJids.has(phoneJid) || variantJids.has(phoneJid)) {
+          primaryJids.add(lid)
+        }
       }
-    }
-    // Include @lid JIDs only when explicitly mapped to this phone number.
-    const allStoreKeys = Array.from(session.messageStore.keys())
-    for (const key of allStoreKeys) {
-      if (key.endsWith('@lid') && !primaryJids.has(key)) {
-        const mapped = session.lidMap.get(key)
-        if (mapped && (primaryJids.has(mapped) || variantJids.has(mapped))) {
-          primaryJids.add(key)
+      const allStoreKeys = Array.from(session.messageStore.keys())
+      for (const key of allStoreKeys) {
+        if (key.endsWith('@lid') && !primaryJids.has(key)) {
+          const mapped = session.lidMap.get(key)
+          if (mapped && (primaryJids.has(mapped) || variantJids.has(mapped))) {
+            primaryJids.add(key)
+          }
         }
       }
     }
@@ -703,16 +719,19 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
     merged.sort((a, b) => a.timestamp - b.timestamp)
     let messages = merged.slice(-lim)
 
-    // Fallback: se cache vazio, buscar do DB
-    if (messages.length === 0 && numero) {
+    // Fallback: se cache vazio, buscar do DB (isolado por clienteId quando informado ou pelo vendedor logado)
+    if (messages.length === 0 && (clienteId || numero)) {
       try {
-        const normalized = formatBrazilianPhone(String(numero))
-        const dbMsgs = await db.fetchWhatsAppMessages(normalized, lim)
+        const dbMsgs = clienteId
+          ? await db.fetchWhatsAppMessagesByCliente(Number(clienteId), lim)
+          : await db.fetchWhatsAppMessages(formatBrazilianPhone(String(numero)), lim, vendedor.id)
         if (dbMsgs.length > 0) {
           messages = dbMsgs.map(m => ({
             id: String(m.id),
             fromMe: m.direcao === 'enviada',
             text: m.mensagem,
+            mediaUrl: m.mediaUrl,
+            fileName: m.fileName,
             timestamp: Math.floor(new Date(m.createdAt || Date.now()).getTime() / 1000),
             type: m.tipo || 'text',
           }))
@@ -814,7 +833,7 @@ app.post('/api/whatsapp/user/send-audio', requireAuth, rateLimit(10, 60_000), as
       try {
         const mediaUrl = await db.uploadWhatsAppMedia(Buffer.from(audioBase64, 'base64'), mime)
         await db.insertWhatsAppMessage({
-          numero: formatBrazilianPhone(number),
+          numero: result.resolvedNumber || formatBrazilianPhone(number),
           clienteId: clienteId || undefined,
           vendedorId: vendedor.id,
           direcao: 'enviada',
@@ -849,7 +868,7 @@ app.post('/api/whatsapp/user/send-image', requireAuth, rateLimit(10, 60_000), as
       try {
         const mediaUrl = await db.uploadWhatsAppMedia(Buffer.from(imageBase64, 'base64'), mime)
         await db.insertWhatsAppMessage({
-          numero: formatBrazilianPhone(number),
+          numero: result.resolvedNumber || formatBrazilianPhone(number),
           clienteId: clienteId || undefined,
           vendedorId: vendedor.id,
           direcao: 'enviada',

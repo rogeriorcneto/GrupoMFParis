@@ -1127,28 +1127,34 @@ async function attachMediaFromKV(msgs: WhatsAppMessage[]): Promise<WhatsAppMessa
   return msgs
 }
 
-export async function fetchWhatsAppMessages(numero: string, limit = 100): Promise<WhatsAppMessage[]> {
-  const cleanNum = formatBrazilianPhone(numero.replace(/\D/g, ''))
-  // Busca primeiro pelo número exato. As variações com/sem o 9 só entram
-  // como fallback — a variante pode ser o número de OUTRA pessoa e
-  // misturava conversas pessoais dentro do histórico do cliente.
-  const exact = await supabase
+export async function fetchWhatsAppMessages(numero: string, limit = 100, vendedorId?: number): Promise<WhatsAppMessage[]> {
+  const digits = numero.replace(/\D/g, '')
+  const local = digits.startsWith('55') && digits.length >= 12 ? digits.slice(4) : digits.slice(-8)
+  if (!digits || digits.length < 8 || /^(\d)\1{7,}$/.test(local)) {
+    return []
+  }
+  const cleanNum = formatBrazilianPhone(digits)
+  let exactQuery = supabase
     .from('whatsapp_messages')
     .select('*')
     .eq('numero', cleanNum)
     .order('created_at', { ascending: true })
     .limit(limit)
+  if (vendedorId) exactQuery = exactQuery.eq('vendedor_id', vendedorId)
+  const exact = await exactQuery
   if (exact.error) throw exact.error
   let data = exact.data
   if (!data || data.length === 0) {
     const variations = generateBrazilianPhoneVariations(cleanNum).filter(v => v !== cleanNum)
     if (variations.length > 0) {
-      const res = await supabase
+      let varQuery = supabase
         .from('whatsapp_messages')
         .select('*')
         .in('numero', variations)
         .order('created_at', { ascending: true })
         .limit(limit)
+      if (vendedorId) varQuery = varQuery.eq('vendedor_id', vendedorId)
+      const res = await varQuery
       if (res.error) throw res.error
       data = res.data
     }

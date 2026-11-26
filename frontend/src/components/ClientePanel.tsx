@@ -3650,22 +3650,22 @@ export default function ClientePanel({
             <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowWhatsApp(false)}>
               <div
                 ref={whatsAppRef}
-                className="bg-white rounded-apple shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+                className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.10] w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-emerald-50">
-                  <div className="flex items-center gap-2">
-                    <WhatsAppIcon variant="filled" className="h-6 w-6 text-emerald-600" />
+                <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.08] bg-white/95 dark:bg-[#1C1C1E]/95">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">WhatsApp — {c.razaoSocial}</p>
-                      {(c.contatoCelular || c.contatoTelefone) && (
-                        <p className="text-xs text-gray-500">{c.contatoCelular || c.contatoTelefone}</p>
+                      <p className="text-sm font-semibold tracking-tight text-gray-900">WhatsApp — {c.razaoSocial}</p>
+                      {(c.whatsapp || c.contatoCelular || c.contatoTelefone) && (
+                        <p className="text-xs text-gray-500 tabular-nums">{c.whatsapp || c.contatoCelular || c.contatoTelefone}</p>
                       )}
                     </div>
                   </div>
                   <button
                     onClick={() => setShowWhatsApp(false)}
-                    className="p-1.5 rounded-full hover:bg-emerald-100 text-gray-500 hover:text-gray-800 transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
                     title="Fechar"
                   >
                     <XMarkIcon className="h-5 w-5" />

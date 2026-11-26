@@ -64,11 +64,12 @@ export async function fetchWhatsAppMessages(params: { numero?: string; clienteId
 }
 
 /** Fetch WhatsApp chat messages from in-memory Baileys cache (real-time + history) */
-export async function fetchWhatsAppChatMessages(params: { jid?: string; numero?: string; limit?: number }): Promise<any[]> {
+export async function fetchWhatsAppChatMessages(params: { jid?: string; numero?: string; clienteId?: number; limit?: number }): Promise<any[]> {
   try {
     const query = new URLSearchParams()
     if (params.jid) query.set('jid', params.jid)
     else if (params.numero) query.set('numero', params.numero)
+    if (params.clienteId) query.set('clienteId', String(params.clienteId))
     if (params.limit) query.set('limit', String(params.limit))
     const res = await authFetch(`${BOT_URL}/api/whatsapp/user/chat-messages?${query.toString()}`)
     return await res.json()
