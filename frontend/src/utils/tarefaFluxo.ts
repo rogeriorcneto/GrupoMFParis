@@ -102,6 +102,34 @@ export function ehTarefaIncluirProdutos(tarefa: Pick<Tarefa, 'titulo'>, tituloCo
   return alvos.some(alvo => fullTitulo === alvo || baseTitulo === alvo || fullTitulo.startsWith(`${alvo} - `))
 }
 
+const _clientesPorIdCache = new WeakMap<readonly Cliente[], Map<number, Cliente>>()
+const _tarefasPendentesPorClienteCache = new WeakMap<readonly Tarefa[], Map<number, Tarefa[]>>()
+
+function getClientesPorIdMap(clientes: readonly Cliente[]): Map<number, Cliente> {
+  let m = _clientesPorIdCache.get(clientes)
+  if (!m) {
+    m = new Map<number, Cliente>()
+    for (const c of clientes) m.set(c.id, c)
+    _clientesPorIdCache.set(clientes, m)
+  }
+  return m
+}
+
+function getTarefasPendentesPorClienteMap(tarefas: readonly Tarefa[]): Map<number, Tarefa[]> {
+  let m = _tarefasPendentesPorClienteCache.get(tarefas)
+  if (!m) {
+    m = new Map<number, Tarefa[]>()
+    for (const t of tarefas) {
+      if (t.status !== 'pendente' || t.clienteId == null || !t.data) continue
+      let arr = m.get(t.clienteId)
+      if (!arr) { arr = []; m.set(t.clienteId, arr) }
+      arr.push(t)
+    }
+    _tarefasPendentesPorClienteCache.set(tarefas, m)
+  }
+  return m
+}
+
 export function clienteJaTemOutraTarefaAberta(
   tarefaAtual: Pick<Tarefa, 'id' | 'clienteId'>,
   todasTarefas: Tarefa[],
@@ -109,12 +137,30 @@ export function clienteJaTemOutraTarefaAberta(
   referencia: Date = new Date(),
 ): Tarefa | undefined {
   if (!tarefaAtual.clienteId) return undefined
-  const clienteBase = todosClientes.find(c => c.id === tarefaAtual.clienteId)
-  const idsFamilia = clienteBase
-    ? new Set(familiaDoClienteNoFunil(clienteBase, todosClientes).map(c => c.id))
-    : new Set([tarefaAtual.clienteId])
-  idsFamilia.add(tarefaAtual.clienteId)
+  const clienteBase = todosClientes.length > 20
+    ? getClientesPorIdMap(todosClientes).get(tarefaAtual.clienteId)
+    : todosClientes.find(c => c.id === tarefaAtual.clienteId)
+  const familia = clienteBase ? familiaDoClienteNoFunil(clienteBase, todosClientes) : []
   const hojeISO = dataLocalISO(referencia)
+
+  if (todasTarefas.length > 30) {
+    const porCli = getTarefasPendentesPorClienteMap(todasTarefas)
+    const ids = familia.length > 0 ? familia.map(c => c.id) : [tarefaAtual.clienteId]
+    if (!ids.includes(tarefaAtual.clienteId)) ids.push(tarefaAtual.clienteId)
+    let melhor: Tarefa | undefined
+    for (const cid of ids) {
+      const lista = porCli.get(cid)
+      if (!lista) continue
+      for (const t of lista) {
+        if (t.id === tarefaAtual.id || t.data < hojeISO) continue
+        if (!melhor || t.data < melhor.data) melhor = t
+      }
+    }
+    return melhor
+  }
+
+  const idsFamilia = new Set(familia.map(c => c.id))
+  idsFamilia.add(tarefaAtual.clienteId)
   const candidatas = todasTarefas
     .filter(t =>
       t.id !== tarefaAtual.id

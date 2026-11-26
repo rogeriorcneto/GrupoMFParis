@@ -1096,6 +1096,8 @@ const TarefasView: React.FC<{
   const [filterTipo, setFilterTipo] = useState<string>('todos')
   const [filtroVendedorId, setFiltroVendedorId] = useState<number | 'todos'>('todos')
   const [showConcluidas, setShowConcluidas] = useState(true)
+  const [limiteAtrasadas, setLimiteAtrasadas] = useState(50)
+  const [limiteFuturas, setLimiteFuturas] = useState(60)
   const isGerente = loggedUser?.cargo === 'gerente'
 
   const hoje = new Date().toISOString().split('T')[0]
@@ -1330,15 +1332,16 @@ const TarefasView: React.FC<{
     return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
   }
 
-  // Agrupar futuras por data
+  // Agrupar futuras visíveis por data (paginado progressivamente para resposta instantânea)
+  const futurasVisiveis = useMemo(() => futuras.slice(0, limiteFuturas), [futuras, limiteFuturas])
   const futurasPorData = useMemo(() => {
     const map: Record<string, Tarefa[]> = {}
-    for (const t of futuras) {
+    for (const t of futurasVisiveis) {
       if (!map[t.data]) map[t.data] = []
       map[t.data].push(t)
     }
     return map
-  }, [futuras])
+  }, [futurasVisiveis])
 
   const handleUpdateNota = useCallback((tarefa: Tarefa, nota: string) => {
     onUpdateTarefa({ ...tarefa, descricao: nota })
@@ -1387,8 +1390,9 @@ const TarefasView: React.FC<{
   const renderCard = (tarefa: Tarefa, overdue = false) => {
     const cliente = getClienteDaTarefa(tarefa)
     const vendedor = vendedores.find(v => v.id === tarefa.vendedorId)
-    const outraAberta = clienteJaTemOutraTarefaAberta(tarefa, tarefas, clientes)
-    const exigeProdutos = !!cliente
+    const isPendente = tarefa.status === 'pendente'
+    const outraAberta = isPendente ? clienteJaTemOutraTarefaAberta(tarefa, tarefas, clientes) : undefined
+    const exigeProdutos = isPendente && !!cliente
       && ehTarefaIncluirProdutos(tarefa, parametros.tarefasPadraoCadastro?.incluirProdutos)
       && !temJustificativaAtiva(cliente, 'produtos_interesse', clientes)
     return (
@@ -2003,7 +2007,16 @@ const TarefasView: React.FC<{
               </span>
             </div>
             <div className="space-y-2">
-              {atrasadas.map(t => renderCard(t, true))}
+              {atrasadas.slice(0, limiteAtrasadas).map(t => renderCard(t, true))}
+              {atrasadas.length > limiteAtrasadas && (
+                <button
+                  type="button"
+                  onClick={() => setLimiteAtrasadas(v => v + 60)}
+                  className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-white rounded-xl border border-gray-200 transition-colors cursor-pointer"
+                >
+                  Mostrar mais ({atrasadas.length - limiteAtrasadas} atrasadas restantes)
+                </button>
+              )}
             </div>
           </section>
         )}
@@ -2069,6 +2082,15 @@ const TarefasView: React.FC<{
                   </div>
                 </div>
               ))}
+              {futuras.length > limiteFuturas && (
+                <button
+                  type="button"
+                  onClick={() => setLimiteFuturas(v => v + 80)}
+                  className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:text-gray-900 bg-white rounded-xl border border-gray-200 transition-colors cursor-pointer"
+                >
+                  Mostrar mais ({futuras.length - limiteFuturas} próximas restantes)
+                </button>
+              )}
             </div>
           </section>
         )}
