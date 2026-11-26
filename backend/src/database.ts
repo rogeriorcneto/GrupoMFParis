@@ -558,18 +558,17 @@ export async function findClienteByPhone(phone: string, vendedorId?: number): Pr
     }
   }
 
-  if (matches.length === 0) return null
+  // Se a sessão é do WhatsApp pessoal de um usuário (vendedorId informado), SOMENTE vincula a card
+  // pertencente a esse MESMO usuário! Nunca anexar conversa pessoal do WhatsApp de um usuário no card de outro!
+  const filteredMatches = vendedorId
+    ? matches.filter(m => m.vendedor_id === vendedorId)
+    : matches
 
-  // Desempate: cliente da carteira do vendedor da sessão primeiro
-  matches.sort((a, b) => {
-    if (vendedorId) {
-      if (a.vendedor_id === vendedorId && b.vendedor_id !== vendedorId) return -1
-      if (b.vendedor_id === vendedorId && a.vendedor_id !== vendedorId) return 1
-    }
-    return b.id - a.id // mais recente como fallback
-  })
+  if (filteredMatches.length === 0) return null
 
-  const { data: full } = await supabase.from('clientes').select('*').eq('id', matches[0].id).single()
+  filteredMatches.sort((a, b) => b.id - a.id)
+
+  const { data: full } = await supabase.from('clientes').select('*').eq('id', filteredMatches[0].id).single()
   return full ? clienteFromDb(full) : null
 }
 
@@ -1163,12 +1162,19 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100, vendedo
 }
 
 export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 100): Promise<WhatsAppMessage[]> {
-  const { data, error } = await supabase
+  const { data: cliRow } = await supabase.from('clientes').select('vendedor_id').eq('id', clienteId).maybeSingle()
+  let q = supabase
     .from('whatsapp_messages')
     .select('*')
     .eq('cliente_id', clienteId)
     .order('created_at', { ascending: true })
     .limit(limit)
+  // Só exibe mensagens da sessão WhatsApp do próprio dono do card (ou do bot sem vendedor_id),
+  // impedindo que mensagens do WhatsApp pessoal de outro usuário apareçam neste card!
+  if (cliRow?.vendedor_id) {
+    q = q.or(`vendedor_id.eq.${cliRow.vendedor_id},vendedor_id.is.null`)
+  }
+  const { data, error } = await q
   if (error) throw error
   return attachMediaFromKV((data || []).map((row: any) => ({
     id: row.id,

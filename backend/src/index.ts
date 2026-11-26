@@ -1,4 +1,5 @@
 import express from 'express'
+import zlib from 'zlib'
 import cors from 'cors'
 import helmet from 'helmet'
 import { rateLimit } from './middleware/rate-limit.js'
@@ -119,6 +120,113 @@ app.get('/api/health', (_req, res) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     res.status(500).json({ status: 'error', error: errorMessage })
+  }
+})
+
+// ─── Bootstrap rápido do CRM (elimina 30-35s de RLS linha-a-linha em 9.300+ tarefas no navegador + comprime em gzip) ───
+async function fetchAllTableServiceRole(
+  table: string,
+  orderCol = 'id',
+  ascending = true,
+  filterFn?: (q: any) => any
+): Promise<any[]> {
+  const PAGE = 1000
+  let countQuery = supabase.from(table).select('id', { count: 'exact', head: true })
+  if (filterFn) countQuery = filterFn(countQuery)
+  const { count } = await countQuery
+  if (typeof count === 'number' && count > 0) {
+    const pages = Math.ceil(count / PAGE)
+    const rows: any[] = []
+    // Lotes paralelos de até 5 páginas por vez via service_role (~300-600ms total)
+    for (let i = 0; i < pages; i += 5) {
+      const batch = Array.from({ length: Math.min(5, pages - i) }, (_, k) => {
+        const p = i + k
+        let q = supabase.from(table).select('*').order(orderCol, { ascending }).range(p * PAGE, (p + 1) * PAGE - 1)
+        if (filterFn) q = filterFn(q)
+        return q
+      })
+      const results = await Promise.all(batch)
+      for (const r of results) {
+        if (r.error) throw r.error
+        if (r.data) rows.push(...r.data)
+      }
+    }
+    return rows
+  }
+  const rows: any[] = []
+  for (let from = 0; ; from += PAGE) {
+    let q = supabase.from(table).select('*').order(orderCol, { ascending }).range(from, from + PAGE - 1)
+    if (filterFn) q = filterFn(q)
+    const { data, error } = await q
+    if (error) throw error
+    if (!data || data.length === 0) break
+    rows.push(...data)
+    if (data.length < PAGE) break
+  }
+  return rows
+}
+
+app.get('/api/crm/bootstrap', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ error: 'Vendedor não autorizado' }); return }
+    const isGerente = me.cargo === 'gerente'
+
+    const [vendedoresRows, clientesRows, tarefasRows, pedidosRows, itensRows, interacoesRows] = await Promise.all([
+      supabase.from('vendedores').select('*').order('id', { ascending: true }).then(r => r.data || []),
+      fetchAllTableServiceRole('clientes', 'id', true, isGerente ? undefined : (q) => q.eq('vendedor_id', me.id)),
+      fetchAllTableServiceRole('tarefas', 'id', true, isGerente ? undefined : (q) => q.eq('vendedor_id', me.id)),
+      fetchAllTableServiceRole('pedidos', 'id', false, isGerente ? undefined : (q) => q.eq('vendedor_id', me.id)),
+      fetchAllTableServiceRole('itens_pedido', 'id', true),
+      isGerente
+        ? fetchAllTableServiceRole('interacoes', 'id', false)
+        : Promise.resolve([] as any[]),
+    ])
+
+    let interacoesFinal = interacoesRows
+    if (!isGerente && clientesRows.length > 0) {
+      const cliIds = clientesRows.map((c: any) => c.id)
+      const chunks: any[] = []
+      for (let i = 0; i < cliIds.length; i += 200) {
+        const slice = cliIds.slice(i, i + 200)
+        const { data } = await supabase.from('interacoes').select('*').in('cliente_id', slice).order('id', { ascending: false }).limit(2000)
+        if (data) chunks.push(...data)
+      }
+      interacoesFinal = chunks
+    }
+
+    const itensByPed = new Map<number, any[]>()
+    for (const it of itensRows) {
+      let arr = itensByPed.get(it.pedido_id)
+      if (!arr) { arr = []; itensByPed.set(it.pedido_id, arr) }
+      arr.push(it)
+    }
+    const pedidosComItens = pedidosRows.map((p: any) => ({
+      ...p,
+      itens_pedido: itensByPed.get(p.id) || [],
+    }))
+
+    const jsonStr = JSON.stringify({
+      vendedores: vendedoresRows,
+      clientes: clientesRows,
+      tarefas: tarefasRows,
+      pedidos: pedidosComItens,
+      interacoes: interacoesFinal,
+    })
+
+    const acceptEnc = String(req.headers['accept-encoding'] || '')
+    if (acceptEnc.includes('gzip')) {
+      const gz = zlib.gzipSync(Buffer.from(jsonStr, 'utf8'), { level: 6 })
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.setHeader('Content-Encoding', 'gzip')
+      res.setHeader('Vary', 'Accept-Encoding')
+      res.send(gz)
+      return
+    }
+    res.type('application/json').send(jsonStr)
+  } catch (err: any) {
+    log.error({ err }, 'Erro em /api/crm/bootstrap')
+    res.status(500).json({ error: err?.message || 'Erro ao carregar bootstrap' })
   }
 })
 

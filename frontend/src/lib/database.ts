@@ -286,7 +286,7 @@ function produtoFromDb(row: any): Produto {
   }
 }
 
-function vendedorFromDb(row: any): Vendedor {
+export function vendedorFromDb(row: any): Vendedor {
   return {
     id: row.id,
     nome: row.nome,
@@ -570,6 +570,32 @@ export async function fetchVendedores(): Promise<Vendedor[]> {
   const { data, error } = await supabase.from('vendedores').select('*').order('id')
   if (error) throw error
   return (data || []).map(vendedorFromDb)
+}
+
+/** Carregamento rápido unificado via backend (service_role + gzip em ~1s em vez de ~35s de RLS linha-a-linha em 9.300+ tarefas!) */
+export async function fetchCrmBootstrap(): Promise<{
+  vendedores: Vendedor[]
+  clientes: Cliente[]
+  tarefas: Tarefa[]
+  pedidos: Pedido[]
+  interacoes: Interacao[]
+} | null> {
+  try {
+    const { authFetch, BOT_URL } = await import('./botApi')
+    const res = await authFetch(`${BOT_URL}/api/crm/bootstrap`)
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data || !Array.isArray(data.clientes) || !Array.isArray(data.tarefas)) return null
+    return {
+      vendedores: (data.vendedores || []).map(vendedorFromDb),
+      clientes: (data.clientes || []).map(clienteFromDb),
+      tarefas: (data.tarefas || []).map(tarefaFromDb),
+      pedidos: (data.pedidos || []).map((p: any) => pedidoFromDb(p, p.itens_pedido || [])),
+      interacoes: (data.interacoes || []).map(interacaoFromDb),
+    }
+  } catch {
+    return null
+  }
 }
 
 export async function insertVendedor(v: Omit<Vendedor, 'id'>): Promise<Vendedor> {

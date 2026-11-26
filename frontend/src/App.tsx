@@ -235,10 +235,21 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   const loadAllData = useCallback(async (usuario: Vendedor | null = loggedUserRef.current) => {
     setIsLoading(false)
     setCoreDataLoading(true)
-    db.fetchInteracoes().then(setInteracoes).catch(err => logger.error('interacoes:', err))
     db.fetchProdutos().then(setProdutos).catch(err => logger.error('produtos:', err))
     db.fetchNotificacoes(usuario?.cargo === 'gerente' ? undefined : usuario?.id).then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
     try {
+      // Tenta primeiro o bootstrap comprimido (gzip) no servidor (~1s para 9.300+ tarefas + clientes + pedidos)
+      const boot = await db.fetchCrmBootstrap()
+      if (boot) {
+        setVendedores(boot.vendedores)
+        setClientes(boot.clientes)
+        setTarefas(boot.tarefas)
+        setPedidos(boot.pedidos)
+        setInteracoes(boot.interacoes)
+        return
+      }
+      // Fallback direto ao Supabase caso o backend esteja indisponível localmente
+      db.fetchInteracoes().then(setInteracoes).catch(err => logger.error('interacoes:', err))
       await Promise.all([
         db.fetchClientes().then(setClientes).catch(err => logger.error('clientes:', err)),
         db.fetchTarefas().then(setTarefas).catch(err => logger.error('tarefas:', err)),
