@@ -120,6 +120,7 @@ function segundaFeiraISO(d = new Date()): string {
 }
 
 interface RelatoriosViewProps {
+  dataLoading?: boolean
   clientes: Cliente[]
   vendedores: Vendedor[]
   interacoes: Interacao[]
@@ -163,6 +164,7 @@ const BarraHorizontalItem: React.FC<{
 )
 
 const RelatoriosView: React.FC<RelatoriosViewProps> = ({
+  dataLoading = false,
   clientes: clientesProp,
   vendedores,
   interacoes = [],
@@ -432,9 +434,10 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
       .map(v => {
         const emps = empresasFiltradas.filter(e => e.vendedorId === v.id)
         const cardIdsV = new Set(emps.flatMap(e => e.cards.map(c => c.id)))
-        const tars = tarefasFiltradas.filter(t => t.vendedorId === v.id || (t.clienteId != null && cardIdsV.has(t.clienteId) && !t.vendedorId))
-        const peds = pedidosFiltrados.filter(p => cardIdsV.has(p.clienteId))
-        const somaNosTotais = v.ativo !== false && emps.length > 0
+        // Mesma regra exata do Dashboard: tarefas pertencentes ao vendedor (sem puxar tarefas órfãs sem vendedor_id!)
+        const tars = tarefasFiltradas.filter(t => t.vendedorId === v.id)
+        const peds = pedidosFiltrados.filter(p => cardIdsV.has(p.clienteId) || p.vendedorId === v.id)
+        const somaNosTotais = v.ativo !== false
         return calcularIndicadoresGrupo({
           id: v.id,
           nome: v.nome,
@@ -525,8 +528,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
     )
     const emps = empresasFiltradas.filter(e => e.vendedorId != null && idsVendedoresValidos.has(e.vendedorId))
     const cardIds = new Set(emps.flatMap(e => e.cards.map(c => c.id)))
-    const tars = tarefasFiltradas.filter(t => (t.vendedorId != null && idsVendedoresValidos.has(t.vendedorId)) || (t.clienteId != null && cardIds.has(t.clienteId)))
-    const peds = pedidosFiltrados.filter(p => cardIds.has(p.clienteId))
+    // Unificado 100% com o Dashboard: apenas tarefas com vendedorId da equipe ativa selecionada (sem somar tarefas órfãs de banco!)
+    const tars = tarefasFiltradas.filter(t => t.vendedorId != null && idsVendedoresValidos.has(t.vendedorId))
+    const peds = pedidosFiltrados.filter(p => cardIds.has(p.clienteId) || (p.vendedorId != null && idsVendedoresValidos.has(p.vendedorId)))
     const tempoTotal = [...idsVendedoresValidos].reduce((s, id) => s + (tempoPorVendedor.get(id) || 0), 0)
     return calcularIndicadoresGrupo({
       id: 'equipe',
@@ -1233,10 +1237,12 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5 text-xs">
           <select
             value={filtros.periodo}
-            onChange={e => setFiltros(f => ({ ...f, periodo: e.target.value as FiltrosRelatorioFase2['periodo'] }))}
+            onChange={e => setFiltros(f => ({ ...f, periodo: e.target.value as FiltrosRelatorioFase2['periodo'], dataInicio: undefined, dataFim: undefined }))}
             className="px-2 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-700"
             title="Filtro de período"
           >
+            <option value="hoje">Hoje</option>
+            <option value="semana">Semana atual</option>
             <option value="mes_atual">Mês atual</option>
             <option value="7d">Últimos 7 dias</option>
             <option value="30d">Últimos 30 dias</option>
@@ -1276,6 +1282,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
             <option value="amarelo">Amarelo (11–15d)</option>
             <option value="vermelho">Vermelho (&gt;15d)</option>
             <option value="cinza">Justificado (Cinza)</option>
+            <option value="em_banco">Em banco</option>
           </select>
 
           <select
@@ -1382,6 +1389,32 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
             )}
           </div>
         </div>
+
+        {/* Período personalizado opcional (Item 2: Hoje, Semana, Mês ou período escolhido) */}
+        <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] text-gray-500 pt-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span>Período:</span>
+            <input
+              type="date"
+              value={filtros.dataInicio || inicioISO}
+              onChange={e => setFiltros(f => ({ ...f, dataInicio: e.target.value }))}
+              className="px-2 py-0.5 border border-gray-200 rounded-md bg-white text-gray-700"
+            />
+            <span>até</span>
+            <input
+              type="date"
+              value={filtros.dataFim || fimISO}
+              onChange={e => setFiltros(f => ({ ...f, dataFim: e.target.value }))}
+              className="px-2 py-0.5 border border-gray-200 rounded-md bg-white text-gray-700"
+            />
+          </div>
+          {dataLoading && (
+            <span className="inline-flex items-center gap-1.5 font-medium text-primary-700">
+              <span className="w-3 h-3 border-2 border-gray-300 border-t-primary-600 rounded-full animate-spin" />
+              Carregando indicadores...
+            </span>
+          )}
+        </div>
       </div>
 
       {/* PAINEL INTERATIVO DE LISTA DETALHADA — CLIQUE 2 (Item 11: na mesma tela, sem trocar de página) */}
@@ -1475,7 +1508,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                       <td className="py-2 px-2 text-right font-bold">
                         {e ? (
                           <span className={`px-1.5 py-0.5 rounded border text-[10px] ${CADENCIA_CONFIG[e.cadencia].cor}`}>
-                            {e.diasSemContato == null ? 'Sem contato' : `${e.diasSemContato}d`}
+                            {e.cadencia === 'em_banco' ? 'Em banco' : (e.diasSemContato == null ? 'Sem contato' : `${e.diasSemContato}d`)}
                           </span>
                         ) : (r.diasOrdenacao != null ? `${r.diasOrdenacao}d` : '—')}
                       </td>
@@ -1515,39 +1548,39 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
       {/* ==================== ABA 1: VISÃO GERAL (SÓ GESTOR — NÍVEL 1) ==================== */}
       {aba === 'visao_geral' && isGerente && (
         <div className="space-y-3">
-          {/* 6 cartões compactos por linha no computador, 2 no celular */}
+          {/* 6 cartões de situação de hoje + recorte do período, e barra de resultados do período */}
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
             {[
               {
-                titulo: 'Sem tarefa aberta',
-                valor: String(indTotalAtivos.semTarefaAberta.length),
-                variacao: variacaoSemanaAnterior ? `${variacaoSemanaAnterior.semTarefaDiff > 0 ? '+' : ''}${variacaoSemanaAnterior.semTarefaDiff} vs sem. ant.` : 'Meta: 0 na carteira',
-                cor: indTotalAtivos.semTarefaAberta.length === 0 ? 'text-emerald-700' : 'text-red-600',
-                formula: 'clientes da carteira até 180 dias sem tarefa pendente (meta = 0)',
+                titulo: 'Sem tarefa aberta · hoje',
+                valor: dataLoading ? 'Carregando...' : String(indTotalAtivos.semTarefaAberta.length),
+                variacao: dataLoading ? 'situação de hoje' : `Situação de hoje · ${indTotalAtivos.coberturaMes.length} atendidos no período`,
+                cor: !dataLoading && indTotalAtivos.semTarefaAberta.length === 0 ? 'text-emerald-700' : 'text-red-600',
+                formula: 'clientes da carteira até 180 dias sem tarefa pendente (situação de hoje)',
                 onClick: () => abrirListaEmpresas(`${indTotalAtivos.vendedorNome} · Sem tarefa aberta`, indTotalAtivos.semTarefaAberta, { section: 'tarefas' }, 'clientes da carteira até 180 dias sem tarefa pendente'),
               },
               {
-                titulo: 'Carteira em dia',
-                valor: `${indTotalAtivos.pctCarteiraEmDia}%`,
-                variacao: variacaoSemanaAnterior ? `${variacaoSemanaAnterior.pctCarteiraEmDiaDiff >= 0 ? '+' : ''}${variacaoSemanaAnterior.pctCarteiraEmDiaDiff} p.p. vs sem. ant.` : `${indTotalAtivos.verdes.length}/${indTotalAtivos.carteira180.length} verdes`,
+                titulo: 'Carteira em dia · hoje',
+                valor: dataLoading ? 'Carregando...' : `${indTotalAtivos.pctCarteiraEmDia}%`,
+                variacao: dataLoading ? 'situação de hoje' : `${indTotalAtivos.verdes.length}/${indTotalAtivos.carteira180.length} verdes hoje · ${indTotalAtivos.coberturaMes.length} no período`,
                 cor: 'text-emerald-700',
-                formula: 'clientes verdes (contato ≤ 10d) ÷ carteira até 180 dias',
+                formula: 'clientes verdes (contato ≤ 10d) ÷ carteira até 180 dias (situação de hoje)',
                 onClick: () => abrirListaEmpresas(`${indTotalAtivos.vendedorNome} · Em dia (Verde)`, indTotalAtivos.verdes, { section: 'historico' }, 'clientes verdes ÷ carteira até 180 dias'),
               },
               {
-                titulo: 'Cobertura do mês',
-                valor: `${indTotalAtivos.pctCoberturaMes}%`,
-                variacao: `${indTotalAtivos.coberturaMes.length}/${indTotalAtivos.carteira180.length} atendidos`,
+                titulo: 'Cobertura no período',
+                valor: dataLoading ? 'Carregando...' : `${indTotalAtivos.pctCoberturaMes}%`,
+                variacao: dataLoading ? 'resultado no período' : `${indTotalAtivos.coberturaMes.length}/${indTotalAtivos.carteira180.length} atendidos no período`,
                 cor: 'text-blue-700',
                 formula: 'clientes da carteira com ≥ 1 tarefa finalizada no período ÷ carteira até 180 dias',
                 onClick: () => abrirListaEmpresas(`${indTotalAtivos.vendedorNome} · Cobertura no período`, indTotalAtivos.coberturaMes, { section: 'historico' }, 'clientes com ≥ 1 tarefa finalizada no período ÷ carteira até 180 dias'),
               },
               {
-                titulo: 'Tarefas atrasadas',
-                valor: String(indTotalAtivos.tarefasAtrasadas.length),
-                variacao: indTotalAtivos.tarefasAtrasadas[0] ? `Maior: ${indTotalAtivos.tarefasAtrasadas[0].diasAtraso}d vencida` : 'Em dia',
-                cor: indTotalAtivos.tarefasAtrasadas.length > 0 ? 'text-red-600' : 'text-emerald-700',
-                formula: 'tarefas pendentes com prazo anterior a hoje',
+                titulo: 'Tarefas atrasadas · hoje',
+                valor: dataLoading ? 'Carregando...' : `${indTotalAtivos.tarefasAtrasadas.length} hoje`,
+                variacao: dataLoading ? 'situação de hoje' : `${indTotalAtivos.tarefasVencidasNoPeriodo.length} vencidas no período selecionado`,
+                cor: !dataLoading && indTotalAtivos.tarefasAtrasadas.length > 0 ? 'text-red-600' : 'text-emerald-700',
+                formula: 'situação de hoje: pendentes < hoje · recorte: vencidas dentro do período selecionado',
                 onClick: () => abrirListaCustom(
                   `${indTotalAtivos.vendedorNome} · Tarefas atrasadas`,
                   indTotalAtivos.tarefasAtrasadas.map(x => ({
@@ -1563,9 +1596,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                 ),
               },
               {
-                titulo: 'Cadastros completos',
-                valor: `${indTotalAtivos.pctCadastrosCompletos}%`,
-                variacao: `${indTotalAtivos.cadastrosCompletos.length}/${indTotalAtivos.carteira180.length} completos`,
+                titulo: 'Cadastros completos · hoje',
+                valor: dataLoading ? 'Carregando...' : `${indTotalAtivos.pctCadastrosCompletos}%`,
+                variacao: dataLoading ? 'situação de hoje' : `${indTotalAtivos.cadastrosCompletos.length}/${indTotalAtivos.carteira180.length} hoje · +${indTotalAtivos.novosCadastrosPeriodo.length} novos no período`,
                 cor: 'text-purple-700',
                 formula: '(cadastros completos + completos c/ justificativa) ÷ carteira até 180 dias',
                 onClick: () => abrirListaEmpresas(
@@ -1576,9 +1609,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                 ),
               },
               {
-                titulo: 'Contatos / cliente',
-                valor: String(indTotalAtivos.contatosPorClienteMes),
-                variacao: 'Ref.: ≥ 2,0 / mês',
+                titulo: 'Contatos / cliente (período)',
+                valor: dataLoading ? 'Carregando...' : String(indTotalAtivos.contatosPorClienteMes),
+                variacao: dataLoading ? 'resultado no período' : `${indTotalAtivos.tarefasFinalizadasMes.length} tarefas finalizadas no período`,
                 cor: indTotalAtivos.contatosPorClienteMes >= 2 ? 'text-emerald-700' : 'text-amber-700',
                 formula: 'tarefas finalizadas da carteira no período ÷ carteira até 180 dias',
                 onClick: () => abrirListaCustom(
@@ -1733,7 +1766,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                   </td>
                 </tr>
 
-                {/* Linhas separadas dos dois Bancos (não somam nos totais de vendedores) */}
+                {/* Linhas separadas dos dois Bancos (Item 9: não entram na cadência; mostram "Em banco") */}
                 {[linhaBancoClientes, linhaBancoProspectos].map(b => (
                   <tr key={String(b.vendedorId)} className="bg-amber-50/40 text-gray-700">
                     <td className="py-1.5 px-2.5 font-semibold sticky left-0 bg-amber-50/80">
@@ -1746,14 +1779,14 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                       </button>
                     </td>
                     <td onClick={() => abrirListaEmpresas(`${b.vendedorNome} · ≤180d`, b.carteira180)} className="py-1.5 px-2 text-right cursor-pointer hover:underline">{b.carteira180.length}</td>
-                    <td className="py-1.5 px-2 text-right">{b.semTarefaAberta.length}</td>
-                    <td className="py-1.5 px-2 text-right">{b.verdes.length}</td>
-                    <td className="py-1.5 px-2 text-right">{b.amarelos.length}</td>
-                    <td className="py-1.5 px-2 text-right">{b.vermelhos.length}</td>
-                    <td className="py-1.5 px-2 text-right">{b.justificados.length}</td>
+                    <td colSpan={5} className="py-1.5 px-2 text-center">
+                      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-300 text-[10px] font-semibold">
+                        Em banco
+                      </span>
+                    </td>
                     <td className="py-1.5 px-2 text-right">—</td>
                     <td className="py-1.5 px-2 text-right">—</td>
-                    <td className="py-1.5 px-2 text-right">{b.tarefasAtrasadas.length}</td>
+                    <td className="py-1.5 px-2 text-right text-gray-400">0</td>
                     <td onClick={() => abrirListaEmpresas(b.vendedorNome, [...b.situacaoCompraCounts.ativo, ...b.situacaoCompraCounts.em_atencao, ...b.situacaoCompraCounts.em_risco, ...b.situacaoCompraCounts.inativo_recente, ...b.situacaoCompraCounts.inativo_antigo, ...b.situacaoCompraCounts.prospecto])} className="py-1.5 px-2 text-right cursor-pointer hover:underline whitespace-nowrap">
                       {b.situacaoCompraCounts.ativo.length}/{b.situacaoCompraCounts.em_atencao.length}/{b.situacaoCompraCounts.em_risco.length}/{b.situacaoCompraCounts.inativo_recente.length}/{b.situacaoCompraCounts.inativo_antigo.length}/{b.situacaoCompraCounts.prospecto.length}
                     </td>
@@ -2174,10 +2207,29 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
         </div>
       )}
 
-      {/* ==================== ABA 4: FUNIL E VENDAS (Itens 4.12–17, 5 e 11) ==================== */}
+      {/* ==================== ABA 4: FUNIL E VENDAS (Itens 1, 2, 4.12–17, 5 e 11) ==================== */}
       {aba === 'funil_vendas' && (
         <div className="space-y-3">
-          {/* Cartões de resultado do trabalho (Item 4: 12 a 17 + Item 5 corrigidos) */}
+          {/* Indicadores de resultado no período selecionado (idênticos ao Dashboard — respeitam Hoje / Semana / Mês / Período!) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+            {[
+              { label: 'Faturamento (período)', val: dataLoading ? 'Carregando...' : fmtMoeda(indTotalAtivos.faturamentoPeriodo), sub: `${indTotalAtivos.pedidosConfirmadosPeriodo.length} pedido(s) confirmado(s)`, onClick: () => abrirListaCustom('Pedidos confirmados no período', indTotalAtivos.pedidosConfirmadosPeriodo.map(p => ({ key: `pc-${p.id}`, empresa: empresaPorCardId.get(p.clienteId), focus: { section: 'pedidos', pedidoId: p.id }, extraInfo: `${p.numero} · ${fmtMoeda(p.totalValor)}` })), 'pedidos') },
+              { label: 'Propostas (período)', val: dataLoading ? 'Carregando...' : indTotalAtivos.propostasEnviadasPeriodo, sub: 'enviadas no período', onClick: () => {} },
+              { label: 'Visitas / Reuniões', val: dataLoading ? 'Carregando...' : indTotalAtivos.visitasRealizadasPeriodo.length, sub: 'realizadas no período', onClick: () => abrirListaCustom('Visitas e reuniões realizadas no período', indTotalAtivos.visitasRealizadasPeriodo.map(t => ({ key: `vr-${t.id}`, empresa: t.clienteId ? empresaPorCardId.get(t.clienteId) : undefined, focus: { section: 'tarefas', tarefaId: t.id }, extraInfo: `${t.titulo} · ${fmtDataCurta(dataConclusaoISO(t))}` })), 'tarefas') },
+              { label: 'Novos clientes', val: dataLoading ? 'Carregando...' : indTotalAtivos.novosClientesPeriodo.length, sub: `+${indTotalAtivos.novosCadastrosPeriodo.length} cadastro(s) novo(s)`, onClick: () => abrirListaEmpresas('Novos clientes (1ª compra no período)', indTotalAtivos.novosClientesPeriodo) },
+              { label: 'Ganhas (período)', val: dataLoading ? 'Carregando...' : indTotalAtivos.negociacoesGanhasPeriodo.length, sub: 'vendas confirmadas', onClick: () => abrirListaCustom('Negociações ganhas no período', indTotalAtivos.negociacoesGanhasPeriodo.map(p => ({ key: `ng-${p.id}`, empresa: empresaPorCardId.get(p.clienteId), focus: { section: 'pedidos', pedidoId: p.id }, extraInfo: `${p.numero} · ${fmtMoeda(p.totalValor)}` })), 'pedidos') },
+              { label: 'Perdidas (período)', val: dataLoading ? 'Carregando...' : indTotalAtivos.negociacoesPerdidasPeriodo.length, sub: 'marcadas como perdido', onClick: () => abrirListaCustom('Negociações perdidas no período', indTotalAtivos.negociacoesPerdidasPeriodo.map(c => ({ key: `np-${c.id}`, empresa: empresaPorCardId.get(c.id), clienteCard: c, extraInfo: c.motivoPerda || 'Perdido' })), 'cards') },
+              { label: 'Conversão (período)', val: dataLoading ? 'Carregando...' : `${indTotalAtivos.taxaConversaoPeriodo}%`, sub: 'ganhas ÷ (ganhas + perdidas)', onClick: () => {} },
+            ].map(c => (
+              <button key={c.label} type="button" onClick={c.onClick} className="text-left bg-white hover:bg-primary-50/40 border border-gray-200 rounded-xl px-3 py-2.5 cursor-pointer">
+                <p className="text-[11px] font-semibold text-gray-500 truncate">{c.label}</p>
+                <p className="text-lg font-bold text-gray-900 mt-0.5 tabular-nums">{c.val}</p>
+                <p className="text-[10px] text-gray-400 truncate">{c.sub}</p>
+              </button>
+            ))}
+          </div>
+
+          {/* Cartões de situação e ritmo (situação de hoje + recorte do período) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
             {[
               { label: 'Ativos (≤40d)', val: metricasBaseCorrigidas.ativos40d.length, sub: `Novos no período: ${metricasBaseCorrigidas.novosNoPeriodo.length}`, formula: 'empresas únicas com última venda enviada ao Omie há até 40 dias', onClick: () => abrirListaEmpresas('Clientes Ativos (≤40d)', metricasBaseCorrigidas.ativos40d) },

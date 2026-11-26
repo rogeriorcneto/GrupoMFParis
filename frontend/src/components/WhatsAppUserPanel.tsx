@@ -370,10 +370,16 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             time: m.timestamp ? new Date(m.timestamp * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '',
           }))
           setMessages(prev => {
-            // Preserva apenas mensagens de sistema/otimistas locais recentes que ainda não vieram do servidor
             const systemMsgs = prev.filter(m => m.from === 'system')
-            const incomingTexts = new Set(incoming.map(m => `${m.from}|${m.text}`))
-            const pendingLocal = prev.filter(m => typeof m.id === 'number' && !incomingTexts.has(`${m.from}|${m.text}`))
+            // Mantém bolha otimista local (id numérico) somente enquanto nenhuma mensagem enviada igual chegou do servidor
+            const pendingLocal = prev.filter(m => {
+              if (typeof m.id !== 'number') return false
+              const jaChegou = incoming.some(inc =>
+                inc.from === m.from &&
+                (inc.text === m.text || (m.text.includes('Áudio') && inc.tipo === 'audio') || (m.text.includes('[Imagem]') && inc.tipo === 'image'))
+              )
+              return !jaChegou
+            })
             return [...incoming, ...pendingLocal, ...systemMsgs]
           })
         } else if (cliente?.id) {
@@ -508,6 +514,9 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       setChatText(msg)
       showToast?.('error', 'Falha ao enviar: ' + (result.error || ''))
     } else {
+      if ((result as any).messageId) {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: (result as any).messageId } : m))
+      }
       showToast?.('success', 'Mensagem enviada!')
     }
     setSending(false)
@@ -601,8 +610,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
         reader.readAsDataURL(voiceBlobRef.current!)
       })
       const result = await sendUserWhatsAppAudio(chatNum, audioBase64, voiceBlobRef.current!.type, cliente?.id)
-      if (!result.success) showToast?.('error', 'Falha ao enviar áudio: ' + (result.error || ''))
-      else showToast?.('success', 'Áudio enviado!')
+      if (!result.success) {
+        setMessages(prev => prev.filter(m => m.text !== `🎙️ Áudio (${durationLabel})` || typeof m.id !== 'number'))
+        showToast?.('error', 'Falha ao enviar áudio: ' + (result.error || ''))
+      } else {
+        if ((result as any).messageId) {
+          setMessages(prev => prev.map(m => (typeof m.id === 'number' && m.text === `🎙️ Áudio (${durationLabel})`) ? { ...m, id: (result as any).messageId } : m))
+        }
+        showToast?.('success', 'Áudio enviado!')
+      }
     } catch (err: any) {
       showToast?.('error', 'Erro ao processar áudio: ' + (err?.message || ''))
     }

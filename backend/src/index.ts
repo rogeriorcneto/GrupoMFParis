@@ -536,14 +536,13 @@ app.post('/api/whatsapp/user/send', requireAuth, rateLimit(20, 60_000), async (r
     const result = await sendUserWhatsAppMessage(vendedor.id, number, text)
     if (result.success) {
       try {
-        // Grava e cacheia usando o número real resolvido pelo WhatsApp (ex.: 12 dígitos em MG sem 9º dígito),
-        // mantendo enviadas e recebidas exatamente na mesma conversa!
+        // Usa exatamente o mesmo messageId retornado pelo Baileys para que messages.upsert não duplique a bolha!
         const normalizedNum = result.resolvedNumber || formatBrazilianPhone(number)
         const sentJid = result.jid || `${normalizedNum}@s.whatsapp.net`
         const session = getUserWhatsAppSession(vendedor.id)
-        if (session) {
+        if (session && result.messageId) {
           cacheMessage(session, sentJid, {
-            key: { id: `sent-${Date.now()}-${Math.random().toString(36).slice(2)}`, fromMe: true, remoteJid: sentJid },
+            key: { id: result.messageId, fromMe: true, remoteJid: sentJid },
             message: { conversation: text },
             messageTimestamp: Math.floor(Date.now() / 1000),
           })
@@ -729,24 +728,33 @@ app.get('/api/whatsapp/user/chat-messages', requireAuth, async (req, res) => {
         ])
         const dbCombined = [...byNum, ...byCli.filter(m => m.vendedorId == null || m.vendedorId === vendedor.id)]
         const seenDbIds = new Set<number>()
-        const existingFingerprints = new Set(
-          messages.map((m: any) => `${m.fromMe ? '1' : '0'}|${String(m.text || '').trim()}|${Math.floor((m.timestamp || 0) / 120)}`)
-        )
         for (const m of dbCombined) {
           if (m.id && seenDbIds.has(m.id)) continue
           if (m.id) seenDbIds.add(m.id)
           const ts = Math.floor(new Date(m.createdAt || Date.now()).getTime() / 1000)
-          const fp = `${m.direcao === 'enviada' ? '1' : '0'}|${String(m.mensagem || '').trim()}|${Math.floor(ts / 120)}`
-          if (existingFingerprints.has(fp)) continue
-          existingFingerprints.add(fp)
+          const isFromMe = m.direcao === 'enviada'
+          const mType = m.tipo || 'text'
+          const mTextNorm = String(m.mensagem || '').trim()
+          // Se já existe em memória uma mensagem na mesma direção dentro de 180s com mesmo texto (ou mesma mídia), não duplica!
+          const jaExisteEmMemoria = messages.some((em: any) => {
+            if (Boolean(em.fromMe) !== isFromMe) return false
+            if (Math.abs((em.timestamp || 0) - ts) > 180) return false
+            if (mType !== 'text' && (em.type || 'text') === mType) {
+              // Se a do DB tem mediaUrl e a da memória não, enriquece a da memória sem duplicar!
+              if (m.mediaUrl && !em.mediaUrl) em.mediaUrl = m.mediaUrl
+              return true
+            }
+            return String(em.text || '').trim() === mTextNorm
+          })
+          if (jaExisteEmMemoria) continue
           messages.push({
             id: `db-${m.id}`,
-            fromMe: m.direcao === 'enviada',
+            fromMe: isFromMe,
             text: m.mensagem,
             mediaUrl: m.mediaUrl,
             fileName: m.fileName,
             timestamp: ts,
-            type: m.tipo || 'text',
+            type: mType,
           })
         }
         messages.sort((a: any, b: any) => a.timestamp - b.timestamp)
@@ -1633,6 +1641,84 @@ app.use('/api/maps', requireAuth, mapsRouter)
 // Ordem importa: /gerente primeiro para não cair no router público
 app.use('/api/academia/gerente', requireAuth, requireGerente, academiaGerenteRouter)
 app.use('/api/academia', rateLimit(30, 60_000), academiaCandidatoRouter)
+
+// ─── Editar / Reenviar pedido (substitui itens_pedido via service_role sem duplicar linhas por RLS) ───
+app.put('/api/pedidos/:id/editar', requireAuth, async (req, res) => {
+  const pedidoId = parseInt(req.params.id, 10)
+  if (isNaN(pedidoId)) { res.status(400).json({ error: 'ID inválido' }); return }
+
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ error: 'Acesso negado' }); return }
+
+    const { data: pedAtual, error: pedErr } = await supabase
+      .from('pedidos')
+      .select('*')
+      .eq('id', pedidoId)
+      .single()
+    if (pedErr || !pedAtual) { res.status(404).json({ error: 'Pedido não encontrado' }); return }
+
+    if (me.cargo !== 'gerente' && Number(pedAtual.vendedor_id) !== me.id) {
+      res.status(403).json({ error: 'Sem permissão para editar este pedido' })
+      return
+    }
+    if (pedAtual.omie_codigo) {
+      res.status(400).json({ error: 'Pedido já integrado ao Omie não pode ter itens substituídos por aqui.' })
+      return
+    }
+
+    const { observacoes, formaPagamento, tipoFrete, itens, totalValor, reenviar } = req.body || {}
+    const row: Record<string, any> = {}
+    if (observacoes !== undefined) row.observacoes = observacoes
+    if (formaPagamento !== undefined) row.forma_pagamento = formaPagamento
+    if (tipoFrete !== undefined) row.tipo_frete = tipoFrete
+
+    if (Array.isArray(itens)) {
+      const ehAmostraSemValor = pedAtual.tipo === 'bonificacao' && !String(pedAtual.numero || '').toUpperCase().startsWith('BON-')
+      const somaLinhas = Math.round(
+        itens.reduce((s: number, i: any) => s + Number(i.preco || 0) * Number(i.quantidade || 0), 0) * 100
+      ) / 100
+      row.total_valor = ehAmostraSemValor ? 0 : somaLinhas
+    } else if (totalValor !== undefined) {
+      row.total_valor = totalValor
+    }
+
+    if (reenviar) {
+      row.status = 'enviado'
+      row.motivo_recusa = null
+      row.data_envio = new Date().toISOString()
+    }
+
+    if (Array.isArray(itens)) {
+      const { error: delErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedidoId)
+      if (delErr) throw new Error(delErr.message)
+      if (itens.length > 0) {
+        const itensRows = itens.map((i: any) => ({
+          pedido_id: pedidoId,
+          produto_id: i.produtoId,
+          nome_produto: i.nomeProduto,
+          sku: i.sku || '',
+          unidade: i.unidade || 'kg',
+          preco: Number(i.preco || 0),
+          quantidade: Number(i.quantidade || 0),
+        }))
+        const { error: insErr } = await supabase.from('itens_pedido').insert(itensRows)
+        if (insErr) throw new Error(insErr.message)
+      }
+    }
+
+    const { data: updatedPed, error: updErr } = Object.keys(row).length > 0
+      ? await supabase.from('pedidos').update(row).eq('id', pedidoId).select('*').single()
+      : { data: pedAtual, error: null }
+    if (updErr) throw new Error(updErr.message)
+
+    const { data: itensAtuais } = await supabase.from('itens_pedido').select('*').eq('pedido_id', pedidoId).order('id', { ascending: true })
+    res.json({ success: true, pedido: updatedPed, itens: itensAtuais || [] })
+  } catch (err: any) {
+    log.error({ err, pedidoId }, 'Erro ao editar/reenviar pedido')
+    res.status(500).json({ error: err?.message || 'Erro ao editar pedido' })
+  }
+})
 
 // ─── Pedido → Omie (automático ao aprovar) ───
 

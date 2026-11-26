@@ -15,10 +15,11 @@ FROM node:20-slim AS runner
 
 WORKDIR /app
 
-# Baileys precisa de libssl e ca-certificates para conexão TLS com WA
+# Baileys precisa de libssl, ca-certificates e ffmpeg (conversão de áudio WebM → OGG/Opus nativo do WhatsApp)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     ca-certificates \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./

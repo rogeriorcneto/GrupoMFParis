@@ -227,19 +227,27 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [tarefas, setTarefas] = useState<Tarefa[]>([])
   const [vendedores, setVendedores] = useState<Vendedor[]>([])
+  const [coreDataLoading, setCoreDataLoading] = useState(true)
 
   // Carregar dados essenciais do Supabase após autenticação (core)
-  // Não bloqueia UI: cada fetch atualiza seu próprio estado conforme chega.
+  // Item 3 da devolutiva: mantém coreDataLoading=true até clientes, tarefas, pedidos e vendedores
+  // terminarem de chegar (para nunca exibir 0 falso na tela enquanto carrega!)
   const loadAllData = useCallback(async (usuario: Vendedor | null = loggedUserRef.current) => {
-    setIsLoading(false) // garante que a tela esteja liberada
-    // Disparar em paralelo, sem await sequencial — cada um atualiza sua slice ao retornar
-    db.fetchClientes().then(setClientes).catch(err => logger.error('clientes:', err))
+    setIsLoading(false)
+    setCoreDataLoading(true)
     db.fetchInteracoes().then(setInteracoes).catch(err => logger.error('interacoes:', err))
-    db.fetchTarefas().then(setTarefas).catch(err => logger.error('tarefas:', err))
     db.fetchProdutos().then(setProdutos).catch(err => logger.error('produtos:', err))
-    db.fetchPedidos().then(setPedidos).catch(err => logger.error('pedidos:', err))
-    db.fetchVendedores().then(setVendedores).catch(err => logger.error('vendedores:', err))
     db.fetchNotificacoes(usuario?.cargo === 'gerente' ? undefined : usuario?.id).then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err))
+    try {
+      await Promise.all([
+        db.fetchClientes().then(setClientes).catch(err => logger.error('clientes:', err)),
+        db.fetchTarefas().then(setTarefas).catch(err => logger.error('tarefas:', err)),
+        db.fetchPedidos().then(setPedidos).catch(err => logger.error('pedidos:', err)),
+        db.fetchVendedores().then(setVendedores).catch(err => logger.error('vendedores:', err)),
+      ])
+    } finally {
+      setCoreDataLoading(false)
+    }
   }, [])
 
   // Lazy load de datasets secundários (carregados quando a view é acessada)
@@ -633,6 +641,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
             <>
               <AppRouter
                 activeView={activeView} loggedUser={loggedUser}
+                dataLoading={coreDataLoading}
                 clientes={clientes} interacoes={interacoes} vendedores={vendedores}
                 tarefas={tarefas} atividades={atividades} templates={templates}
                 templatesMsgs={templatesMsgs} cadencias={cadencias} campanhas={campanhas}

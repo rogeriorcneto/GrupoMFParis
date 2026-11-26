@@ -31,6 +31,7 @@ import {
   OBJETIVO_LABEL,
   OBJETIVOS_TAREFA,
   ObjetivoTarefa,
+  obterSaudacaoBrasilia,
   validarFinalizacaoTarefa,
   validarReagendamentoPrazo,
 } from '../../utils/tarefaFluxo'
@@ -1930,8 +1931,8 @@ const TarefasView: React.FC<{
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-gray-900">
-                  {new Date().getHours() < 12 ? 'Bom dia' : new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'}
-                  {loggedUser ? `, ${loggedUser.nome.split(' ')[0]}` : ''}! 👋
+                  {obterSaudacaoBrasilia()}
+                  {loggedUser ? `, ${loggedUser.nome.split(' ')[0]}` : ''}
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {totalHoje + concluidasHoje === 0

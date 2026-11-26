@@ -144,12 +144,29 @@ describe('Fase 1 — fluxo de finalização de tarefa', () => {
     expect(outra?.id).toBe(2)
     expect(validarFinalizacaoTarefa({ canalUsado: 'whatsapp', conclusao: 'Contato feito' }, ref, { exigeProximoPasso: !outra })).toBeNull()
   })
-  it('não considera tarefa atrasada como tarefa futura em aberto', () => {
-    const ref = new Date('2026-11-25T12:00:00')
+  it('aceite Item 4: cliente com 4 tarefas abertas (mesmo vencidas) finaliza 3 sem exigir nova e exige próximo passo somente na 4ª', () => {
+    const ref = new Date('2026-11-26T16:26:00')
     const cli = clienteBase({ id: 10 })
-    const tAtual: Tarefa = { id: 1, titulo: 'Ligação', data: '2026-11-25', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
-    const tAtrasada: Tarefa = { id: 2, titulo: 'Antiga', data: '2026-11-10', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
-    expect(clienteJaTemOutraTarefaAberta(tAtual, [tAtual, tAtrasada], [cli], ref)).toBeUndefined()
+    const t1: Tarefa = { id: 1, titulo: 'T1', data: '2026-11-24', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    const t2: Tarefa = { id: 2, titulo: 'T2', data: '2026-11-24', tipo: 'email', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    const t3: Tarefa = { id: 3, titulo: 'T3', data: '2026-11-24', tipo: 'whatsapp', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+    const t4: Tarefa = { id: 4, titulo: 'T4', data: '2026-11-24', tipo: 'ligacao', status: 'pendente', prioridade: 'media', clienteId: 10, vendedorId: 1 }
+
+    // 1ª, 2ª e 3ª finalizações: ainda restam outras abertas -> não exige próximo passo
+    expect(clienteJaTemOutraTarefaAberta(t1, [t1, t2, t3, t4], [cli], ref)?.id).toBe(2)
+    expect(validarFinalizacaoTarefa({ canalUsado: 'email', conclusao: 'Enviado' }, ref, { exigeProximoPasso: false })).toBeNull()
+
+    const apos1 = [{ ...t1, status: 'concluida' as const }, t2, t3, t4]
+    expect(clienteJaTemOutraTarefaAberta(t2, apos1, [cli], ref)?.id).toBe(3)
+
+    const apos2 = [{ ...t1, status: 'concluida' as const }, { ...t2, status: 'concluida' as const }, t3, t4]
+    expect(clienteJaTemOutraTarefaAberta(t3, apos2, [cli], ref)?.id).toBe(4)
+
+    // 4ª finalização (última aberta): exige próximo passo obrigatoriamente!
+    const apos3 = [{ ...t1, status: 'concluida' as const }, { ...t2, status: 'concluida' as const }, { ...t3, status: 'concluida' as const }, t4]
+    const outra4 = clienteJaTemOutraTarefaAberta(t4, apos3, [cli], ref)
+    expect(outra4).toBeUndefined()
+    expect(validarFinalizacaoTarefa({ canalUsado: 'whatsapp', conclusao: 'Concluída' }, ref, { exigeProximoPasso: !outra4 })).toMatch(/próximo passo/i)
   })
   it('exige registro de produtos com consumo mensal > 0 ao concluir tarefa de incluir produtos', () => {
     const ref = new Date('2026-11-25T12:00:00')

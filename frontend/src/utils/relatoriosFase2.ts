@@ -3,13 +3,14 @@ import { avaliarCadastroCliente, CADASTRO_CAMPO_LABEL, CampoCadastroKey, CAMPOS_
 import { classificarSituacaoCompra, diasDesdeData, situacaoContaNaCarteiraAte180, SituacaoCompra } from './situacaoCompra'
 import { CANAL_LABEL, CanalTarefa, inferirOrigemTarefa, OBJETIVO_LABEL, ObjetivoTarefa } from './tarefaFluxo'
 
-export type StatusCadencia = 'verde' | 'amarelo' | 'vermelho' | 'cinza'
+export type StatusCadencia = 'verde' | 'amarelo' | 'vermelho' | 'cinza' | 'em_banco'
 
 export const CADENCIA_CONFIG: Record<StatusCadencia, { label: string; cor: string; corBarra: string; ordem: number }> = {
   vermelho: { label: 'Vencido (>15d)', cor: 'bg-red-100 text-red-800 border-red-200', corBarra: '#DC2626', ordem: 0 },
   amarelo: { label: 'Atenção (11–15d)', cor: 'bg-amber-100 text-amber-800 border-amber-200', corBarra: '#F59E0B', ordem: 1 },
   verde: { label: 'Em dia (≤10d)', cor: 'bg-emerald-100 text-emerald-800 border-emerald-200', corBarra: '#16A34A', ordem: 2 },
   cinza: { label: 'Justificado', cor: 'bg-slate-200 text-slate-700 border-slate-300', corBarra: '#94A3B8', ordem: 3 },
+  em_banco: { label: 'Em banco', cor: 'bg-slate-100 text-slate-600 border-slate-300', corBarra: '#64748B', ordem: 4 },
 }
 
 export type CanalRelatorio = CanalTarefa | 'sem_canal'
@@ -26,7 +27,7 @@ export const OBJETIVO_RELATORIO_LABEL: Record<ObjetivoRelatorio, string> = {
 }
 
 export interface FiltrosRelatorioFase2 {
-  periodo: '7d' | '30d' | '90d' | 'mes_atual' | 'total'
+  periodo: 'hoje' | 'semana' | '7d' | '30d' | '90d' | 'mes_atual' | 'total'
   dataInicio?: string
   dataFim?: string
   vendedorId: number | 'todos' | 'banco_clientes' | 'banco_prospectos'
@@ -122,6 +123,19 @@ export interface IndicadoresVendedorFase2 {
   coberturaMes: EmpresaConsolidada[]
   pctCoberturaMes: number
   tarefasAtrasadas: { tarefa: Tarefa; empresa?: EmpresaConsolidada; diasAtraso: number }[]
+  tarefasVencidasNoPeriodo: { tarefa: Tarefa; empresa?: EmpresaConsolidada; diasAtraso: number }[]
+  tarefasAbertasHoje: Tarefa[]
+  tarefasAbertasNoPeriodo: Tarefa[]
+  // Resultados no período unificados (Item 1 e Item 2)
+  faturamentoPeriodo: number
+  pedidosConfirmadosPeriodo: Pedido[]
+  propostasEnviadasPeriodo: number
+  visitasRealizadasPeriodo: Tarefa[]
+  novosClientesPeriodo: EmpresaConsolidada[]
+  novosCadastrosPeriodo: EmpresaConsolidada[]
+  negociacoesGanhasPeriodo: Pedido[]
+  negociacoesPerdidasPeriodo: Cliente[]
+  taxaConversaoPeriodo: number
   clientesEmpurrados: { tarefa: Tarefa; empresa?: EmpresaConsolidada; qtdReagendamentos: number }[]
   justificativasPrazoLongo: { empresa: EmpresaConsolidada; tarefa: Tarefa; justificativa: string }[]
   cadastrosCompletos: EmpresaConsolidada[]
@@ -350,7 +364,11 @@ export function consolidarEmpresasFase2(
       return String(b.criadoEm || '').localeCompare(String(a.criadoEm || '')) || (b.id - a.id)
     })
     const cardPrincipal = sorted[0]
-    const cardComVendedor = sorted.find(c => c.vendedorId != null && c.vendedorId > 0)
+    // Se existe card aberto na empresa, o dono da empresa é o dono do card aberto (evita que card antigo encerrado em Perdido puxe empresa do Banco para a carteira do gestor!)
+    const temCardAberto = sorted.some(c => (etapasAbertasRank[c.etapa] || 0) > 0)
+    const cardComVendedor = temCardAberto
+      ? sorted.find(c => (etapasAbertasRank[c.etapa] || 0) > 0 && c.vendedorId != null && c.vendedorId > 0)
+      : sorted.find(c => c.vendedorId != null && c.vendedorId > 0)
     const vendedorId = cardComVendedor?.vendedorId ?? null
 
     // Datas de venda confirmadas e integradas ao Omie + dataUltimaVenda legada
@@ -380,6 +398,8 @@ export function consolidarEmpresasFase2(
     const banco: EmpresaConsolidada['banco'] = vendedorId == null
       ? (compra.situacao === 'prospecto' ? 'prospectos' : 'clientes')
       : null
+    // Item 9: Cliente em Banco não entra na cadência de 15 dias — mostrar como "Em banco"
+    const cadenciaFinal: StatusCadencia = banco !== null ? 'em_banco' : cadInfo.cadencia
 
     const emp: EmpresaConsolidada = {
       chave: `emp:${root}`,
@@ -393,7 +413,7 @@ export function consolidarEmpresasFase2(
       situacaoCadastro: cad.situacao,
       camposFaltantes: cad.faltantes,
       justificativasCadastro: justCad,
-      cadencia: cadInfo.cadencia,
+      cadencia: cadenciaFinal,
       diasSemContato: cadInfo.diasSemContato,
       ultimoContatoISO: cadInfo.ultimoContatoISO,
       ultimoContatoObjetivo: cadInfo.ultimoContatoObjetivo,
@@ -417,6 +437,14 @@ export function intervaloDatasFiltro(
 ): { inicioISO: string; fimISO: string } {
   const fimISO = filtros.dataFim || dataLocalISO(agora)
   if (filtros.dataInicio) return { inicioISO: filtros.dataInicio, fimISO }
+  if (filtros.periodo === 'hoje') {
+    return { inicioISO: dataLocalISO(agora), fimISO }
+  }
+  if (filtros.periodo === 'semana') {
+    const d = new Date(agora)
+    d.setDate(d.getDate() - d.getDay())
+    return { inicioISO: dataLocalISO(d), fimISO }
+  }
   if (filtros.periodo === '7d') {
     const d = new Date(agora); d.setDate(d.getDate() - 7)
     return { inicioISO: dataLocalISO(d), fimISO }
@@ -572,15 +600,20 @@ export function calcularIndicadoresGrupo(params: {
   const coberturaMes = carteira180.filter(e => empresasComTarefaNoMes.has(e.chave))
   const pctCoberturaMes = carteira180.length > 0 ? Math.round((coberturaMes.length / carteira180.length) * 1000) / 10 : 0
 
-  // Tarefas atrasadas
-  const tarefasAtrasadas = params.tarefasGrupo
-    .filter(t => t.status === 'pendente' && !!t.data && t.data < hojeISO)
+  // Tarefas atrasadas (situação de hoje) + recorte vencido no período (Item 2)
+  const tarefasAbertasHoje = params.tarefasGrupo.filter(t => t.status === 'pendente')
+  const tarefasAbertasNoPeriodo = tarefasAbertasHoje.filter(t => !!t.data && t.data >= janelaInicio && t.data <= janelaFim)
+  const tarefasAtrasadas = tarefasAbertasHoje
+    .filter(t => !!t.data && t.data < hojeISO)
     .map(t => ({
       tarefa: t,
       empresa: t.clienteId ? params.empresaPorCardId.get(t.clienteId) : undefined,
       diasAtraso: diasDesdeData(t.data, agora),
     }))
     .sort((a, b) => b.diasAtraso - a.diasAtraso)
+  const tarefasVencidasNoPeriodo = tarefasAtrasadas.filter(
+    x => x.tarefa.data >= janelaInicio && x.tarefa.data <= janelaFim
+  )
 
   // Cliente empurrado (3+ reagendamentos)
   const clientesEmpurrados = params.tarefasGrupo
@@ -808,6 +841,69 @@ export function calcularIndicadoresGrupo(params: {
     : null
   const leadTimeMaxDias = leadTimePedidos.length > 0 ? leadTimePedidos[0].diasLeadTime : null
 
+  // Resultados no período unificados (100% algorítmico — Item 1 e Item 2)
+  const pedidosConfirmadosPeriodo = params.pedidosGrupo.filter(p => {
+    if (p.status !== 'confirmado' || (p.tipo || 'venda') === 'bonificacao') return false
+    const dt = (p.dataAprovacao || p.dataEnvioOmie || p.dataCriacao || '').slice(0, 10)
+    return dt >= janelaInicio && dt <= janelaFim
+  })
+  const faturamentoPeriodo = Math.round(
+    pedidosConfirmadosPeriodo.reduce((s, p) => s + (Number(p.totalValor) || 0), 0) * 100
+  ) / 100
+
+  const propostasEnviadasPeriodo = params.propostas.length > 0
+    ? params.propostas.filter(pr => {
+        if (!cardIdsGrupo.has(pr.clienteId)) return false
+        const dt = (pr.criadoEm || '').slice(0, 10)
+        return dt >= janelaInicio && dt <= janelaFim
+      }).length
+    : params.empresasGrupo.reduce((acc, e) => acc + e.cards.filter(c => c.dataProposta && c.dataProposta.slice(0, 10) >= janelaInicio && c.dataProposta.slice(0, 10) <= janelaFim).length, 0)
+
+  const visitasRealizadasPeriodo = concluidasNoPeriodo.filter(t => {
+    const ch = canalEfetivoTarefa(t)
+    return ch === 'visita' || ch === 'reuniao'
+  })
+
+  // Novos clientes (1ª compra confirmada da empresa caiu dentro do período)
+  const primeiraCompraPorEmpresa = new Map<string, string>()
+  for (const p of params.pedidosGrupo) {
+    if (p.status !== 'confirmado' || (p.tipo || 'venda') === 'bonificacao') continue
+    const emp = params.empresaPorCardId.get(p.clienteId)
+    if (!emp) continue
+    const dt = (p.dataAprovacao || p.dataEnvioOmie || p.dataCriacao || '').slice(0, 10)
+    if (!dt) continue
+    const ant = primeiraCompraPorEmpresa.get(emp.chave)
+    if (!ant || dt < ant) primeiraCompraPorEmpresa.set(emp.chave, dt)
+  }
+  const novosClientesPeriodo = params.empresasGrupo.filter(e => {
+    const prim = primeiraCompraPorEmpresa.get(e.chave)
+    return !!prim && prim >= janelaInicio && prim <= janelaFim
+  })
+  const novosCadastrosPeriodo = params.empresasGrupo.filter(e => {
+    const datasCriacao = e.cards.filter(c => !c.novoCiclo && !!c.criadoEm).map(c => c.criadoEm!.slice(0, 10)).sort()
+    const primCad = datasCriacao[0]
+    return !!primCad && primCad >= janelaInicio && primCad <= janelaFim
+  })
+
+  const negociacoesGanhasPeriodo = pedidosConfirmadosPeriodo
+  const negociacoesPerdidasPeriodo = params.empresasGrupo.flatMap(e =>
+    e.cards.filter(c => {
+      if (c.etapa !== 'perdido') return false
+      const dt = (c.dataPerda || c.dataEntradaEtapa || '').slice(0, 10)
+      return dt >= janelaInicio && dt <= janelaFim
+    })
+  )
+  const empresasGanhasNoPeriodo = new Set(
+    negociacoesGanhasPeriodo.map(p => params.empresaPorCardId.get(p.clienteId)?.chave || `ped:${p.id}`)
+  ).size
+  const empresasPerdidasNoPeriodo = new Set(
+    negociacoesPerdidasPeriodo.map(c => params.empresaPorCardId.get(c.id)?.chave || `cli:${c.id}`)
+  ).size
+  const denomDecisoes = empresasGanhasNoPeriodo + empresasPerdidasNoPeriodo
+  const taxaConversaoPeriodo = denomDecisoes > 0
+    ? Math.round((empresasGanhasNoPeriodo / denomDecisoes) * 1000) / 10
+    : 0
+
   return {
     vendedorId: params.id,
     vendedorNome: params.nome,
@@ -826,6 +922,18 @@ export function calcularIndicadoresGrupo(params: {
     coberturaMes,
     pctCoberturaMes,
     tarefasAtrasadas,
+    tarefasVencidasNoPeriodo,
+    tarefasAbertasHoje,
+    tarefasAbertasNoPeriodo,
+    faturamentoPeriodo,
+    pedidosConfirmadosPeriodo,
+    propostasEnviadasPeriodo,
+    visitasRealizadasPeriodo,
+    novosClientesPeriodo,
+    novosCadastrosPeriodo,
+    negociacoesGanhasPeriodo,
+    negociacoesPerdidasPeriodo,
+    taxaConversaoPeriodo,
     clientesEmpurrados,
     justificativasPrazoLongo,
     cadastrosCompletos,

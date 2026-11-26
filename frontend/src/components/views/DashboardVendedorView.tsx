@@ -27,12 +27,14 @@ import { fetchAllPropostas } from '../../lib/database'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
 import { useParametrosListas } from '../../lib/parametrosListas'
-import { BlocoBancoResumo, calcularResumoBancosFase2, consolidarEmpresasFase2 } from '../../utils/relatoriosFase2'
+import { BlocoBancoResumo, calcularIndicadoresGrupo, calcularResumoBancosFase2, consolidarEmpresasFase2 } from '../../utils/relatoriosFase2'
 import { SITUACAO_COMPRA_CONFIG, situacaoContaNaCarteiraAte180 } from '../../utils/situacaoCompra'
+import { obterSaudacaoBrasilia } from '../../utils/tarefaFluxo'
 import type { ClientePanelFocus } from '../ClientePanel'
 import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao, PropostaHistorico, ViewType } from '../../types'
 
 interface Props {
+  dataLoading?: boolean
   clientes: Cliente[]
   vendedores: Vendedor[]
   interacoes: Interacao[]
@@ -151,6 +153,7 @@ const SmallMetric: React.FC<{ label: string; value: number; meta: number; color:
 }
 
 export default function DashboardVendedorView({
+  dataLoading = false,
   clientes,
   vendedores,
   interacoes,
@@ -310,55 +313,63 @@ export default function DashboardVendedorView({
     { ...(isGerente ? {} : { vendedorId: userId }), meta: metaVendas }
   ), [clientes, pedidos, periodoValidoInicio, periodoValidoFim, isGerente, userId, metaVendas])
 
-  // Vendas reais confirmadas (sem amostra/bonificação)
-  const fatMes = indCom.vendasConfirmadas
-  // Novos clientes: 1ª compra faturada no período + contagem separada de novos cadastros únicos criados (sem ciclos automáticos)
-  const novosClientesMes = indCom.novosClientes
-  const novosCadastrosMes = useMemo(() => {
-    const setEmp = new Set<string>()
-    meusClientes.forEach(c => {
-      if (!c.novoCiclo && inRange(c.criadoEm)) {
-        setEmp.add(indiceEmpresas.get(c.id) || `cliente:${c.id}`)
-      }
-    })
-    return setEmp.size
-  }, [meusClientes, indiceEmpresas, periodoInicio, periodoFim])
-
-  // Propostas reais emitidas no período (tabela `propostas`)
-  const propostasMes = useMemo(() => {
-    const filtradas = propostasLoaded.filter(p =>
-      inRange(p.criadoEm) && (isGerente || meusClientesIds.has(p.clienteId))
+  // Motor único 100% algorítmico compartilhado com Relatórios (Itens 1, 2 e 3 da devolutiva)
+  const indUnificado = useMemo(() => {
+    const idsEquipeAtiva = new Set(
+      vendedores
+        .filter(v => v.ativo !== false)
+        .filter(v => isGerente ? true : v.id === userId)
+        .map(v => v.id)
     )
-    if (filtradas.length > 0 || propostasLoaded.length > 0) return filtradas.length
-    return meusClientes.filter(c => c.dataProposta && inRange(c.dataProposta)).length
-  }, [propostasLoaded, isGerente, meusClientesIds, meusClientes, periodoInicio, periodoFim])
+    const emps = consolidadoFase2.empresas.filter(e =>
+      isGerente
+        ? (e.vendedorId != null && (idsEquipeAtiva.size === 0 || idsEquipeAtiva.has(e.vendedorId)))
+        : e.vendedorId === userId
+    )
+    const cardIds = new Set(emps.flatMap(e => e.cards.map(c => c.id)))
+    const tars = tarefas.filter(t =>
+      isGerente
+        ? (t.vendedorId != null && (idsEquipeAtiva.size === 0 || idsEquipeAtiva.has(t.vendedorId)))
+        : t.vendedorId === userId
+    )
+    const peds = pedidos.filter(p =>
+      isGerente
+        ? (cardIds.has(p.clienteId) || (p.vendedorId != null && (idsEquipeAtiva.size === 0 || idsEquipeAtiva.has(p.vendedorId))))
+        : (p.vendedorId === userId || cardIds.has(p.clienteId))
+    )
+    return calcularIndicadoresGrupo({
+      id: isGerente ? 'equipe' : (userId || 0),
+      nome: isGerente ? 'Total equipe ativa' : (loggedUser?.nome || 'Vendedor'),
+      ativo: true,
+      somaNosTotais: true,
+      empresasGrupo: emps,
+      tarefasGrupo: tars,
+      pedidosGrupo: peds,
+      propostas: propostasLoaded,
+      empresaPorCardId: consolidadoFase2.empresaPorCardId,
+      inicioPeriodoISO: periodoValidoInicio,
+      fimPeriodoISO: periodoValidoFim,
+    })
+  }, [vendedores, isGerente, userId, consolidadoFase2, tarefas, pedidos, propostasLoaded, loggedUser?.nome, periodoValidoInicio, periodoValidoFim])
+
+  // Resultados no período (100% unificados com Relatórios — respeitam Hoje / Semana / Mês / Período)
+  const fatMes = indUnificado.faturamentoPeriodo
+  const novosClientesMes = indUnificado.novosClientesPeriodo.length
+  const novosCadastrosMes = indUnificado.novosCadastrosPeriodo.length
+  const propostasMes = indUnificado.propostasEnviadasPeriodo
+  const visitasMes = indUnificado.visitasRealizadasPeriodo.length
+  const taxaConversao = indUnificado.taxaConversaoPeriodo
 
   const minhasTarefas = useMemo(
-    () => isGerente ? tarefas : tarefas.filter(t => t.vendedorId === userId),
+    () => isGerente ? tarefas.filter(t => !!t.vendedorId) : tarefas.filter(t => t.vendedorId === userId),
     [tarefas, userId, isGerente]
   )
   const interacoesUsuario = useMemo(
     () => isGerente ? interacoes : interacoes.filter(i => meusClientesIds.has(i.clienteId)),
     [interacoes, meusClientesIds, isGerente]
   )
-  const visitasMes = useMemo(
-    () => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && inRange(t.concluidaEm || t.data)).length,
-    [minhasTarefas, periodoInicio, periodoFim]
-  )
   const visitasHoje = useMemo(() => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'pendente' && isHoje(t.data)),
     [minhasTarefas])
-
-  // Taxa de conversão por empresa única (empresas com venda confirmada / total de empresas únicas da carteira)
-  const taxaConversao = useMemo(() => {
-    const empresasCarteira = new Set(meusClientes.map(c => indiceEmpresas.get(c.id) || `cliente:${c.id}`))
-    if (empresasCarteira.size === 0) return 0
-    const empresasCompradoras = new Set(
-      meusPedidos
-        .filter(p => p.status === 'confirmado' && p.tipo !== 'bonificacao')
-        .map(p => indiceEmpresas.get(p.clienteId) || `cliente:${p.clienteId}`)
-    )
-    return (empresasCompradoras.size / empresasCarteira.size) * 100
-  }, [meusClientes, meusPedidos, indiceEmpresas])
 
   const mapaUltimaProposta = useMemo(() => criarMapaUltimaProposta(propostasLoaded), [propostasLoaded])
 
@@ -472,16 +483,18 @@ export default function DashboardVendedorView({
   const ticketMedio = indCom.ticketMedioPedido || 0
   const topProdutosVendedor = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 5)
 
-  // Gargalos comerciais acionáveis
+  // Gargalos comerciais acionáveis (situação de hoje + recorte do período — unificados 100% com Relatórios!)
   const gargalos = useMemo(() => {
     const diasDesdeISO = (d?: string) => d ? Math.max(0, Math.floor((Date.parse(hojeISO) - Date.parse(d.slice(0, 10))) / 86400000)) : 0
     return {
-      tarefasAtrasadas: tarefasPendentes.filter(t => t.data && t.data.slice(0, 10) < hojeISO).length,
-      amostrasMais30d: meusClientes.filter(c => c.etapa === 'amostra' && diasDesdeISO(c.dataEnvioAmostra || c.dataEntradaEtapa) > 30).length,
+      tarefasAtrasadas: indUnificado.tarefasAtrasadas.length,
+      tarefasVencidasNoPeriodo: indUnificado.tarefasVencidasNoPeriodo.length,
+      semTarefaAbertaHoje: indUnificado.semTarefaAberta.length,
+      amostrasMais30d: indUnificado.amostrasSemRetorno30d.length,
       negociacoesMais3d: meusClientes.filter(c => c.etapa === 'negociacao' && diasDesdeISO(c.dataEntradaEtapa) > 3).length,
-      semCompraMais60d: indOps.situacaoCompra.em_risco + indOps.situacaoCompra.inativo_recente + indOps.situacaoCompra.inativo_antigo,
+      semCompraMais60d: indUnificado.situacaoCompraCounts.em_risco.length + indUnificado.situacaoCompraCounts.inativo_recente.length + indUnificado.situacaoCompraCounts.inativo_antigo.length,
     }
-  }, [tarefasPendentes, meusClientes, indOps.semCompra, hojeISO])
+  }, [indUnificado, meusClientes, hojeISO])
 
   const [missoesAtivas, setMissoesAtivas] = useState<Missao[]>([])
 
@@ -494,13 +507,20 @@ export default function DashboardVendedorView({
 
   const visitasMissao = tarefas.filter(t => t.missaoId && missoesAtivas.some(m => m.id === t.missaoId)).length
 
+  // Dicas operacionais usando exatamente os números unificados da tela (Item 3: sem divergência de 927 clientes!)
   const dica = useMemo(() => {
-    const inativos = meusClientes.filter(c => (c.diasInativo || 0) > 30 && c.etapa !== 'perdido').length
-    const amostrasPendentes = amostras.length
-    if (inativos > 0) return `Você tem ${inativos} cliente(s) inativo(s) há mais de 30 dias. Que tal uma rodada de reaquecimento?`
-    if (amostrasPendentes > 0) return `${amostrasPendentes} amostra(s) estão em andamento. Acompanhe o teste para acelerar a conversão.`
-    return 'Bom ritmo! Aproveite para qualificar novos leads e enviar propostas personalizadas.'
-  }, [meusClientes, amostras])
+    if (dataLoading) return 'Carregando indicadores da carteira...'
+    if (indUnificado.semTarefaAberta.length > 0) {
+      return `Há ${indUnificado.semTarefaAberta.length} cliente(s) da carteira (≤180d) sem tarefa aberta hoje e ${indUnificado.tarefasAtrasadas.length} tarefa(s) atrasada(s). Priorize zerar pendências.`
+    }
+    if (indUnificado.vermelhos.length > 0) {
+      return `${indUnificado.vermelhos.length} cliente(s) da carteira estão vencidos na cadência (>15d sem contato) e ${gargalos.semCompraMais60d} estão sem compra há 61+ dias.`
+    }
+    if (indUnificado.amostrasSemRetorno30d.length > 0) {
+      return `${indUnificado.amostrasSemRetorno30d.length} amostra(s) estão há mais de 30 dias aguardando retorno. Acompanhe o teste para acelerar a conversão.`
+    }
+    return 'Carteira com cadência e tarefas em dia. Aproveite para qualificar novos leads e avançar propostas.'
+  }, [dataLoading, indUnificado, gargalos.semCompraMais60d])
 
   // ─── Detalhamento por vendedor (modal) ───────────────────────────────────────
   type DetailKey = 'faturamento' | 'comissao' | 'visitas' | 'propostas' | 'novos' | 'conversao' | 'visitasHoje' | 'missoes' | 'visitasMissao'
@@ -744,8 +764,8 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Bom dia, {loggedUser?.nome?.split(' ')[0] || 'Vendedor'}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Visão geral da operação e prioridades de hoje.</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{obterSaudacaoBrasilia()}, {loggedUser?.nome?.split(' ')[0] || 'Vendedor'}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Visão geral da operação · resultados no período selecionado e situação de hoje.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <div className="inline-flex p-0.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30]">
@@ -775,12 +795,17 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
           </div>
         </div>
 
-        {/* Item 7: Tela inicial "Minha carteira hoje" (vermelhos → amarelos → sem tarefa aberta → cadastro incompleto vencido + tarefas do dia) */}
-        {minhaCarteiraHoje && (!isGerente || minhaCarteiraHoje.possuiCarteira) && (
+        {/* Item 7: Tela inicial "Minha carteira hoje" — enquanto carrega, exibe Carregando (nunca 0 falso!) */}
+        {dataLoading ? (
+          <div className="bg-white rounded-apple border border-gray-200 shadow-apple-sm p-4 text-xs text-gray-500 flex items-center gap-2">
+            <span className="w-3.5 h-3.5 border-2 border-gray-300 border-t-primary-600 rounded-full animate-spin" />
+            Carregando Minha carteira hoje...
+          </div>
+        ) : minhaCarteiraHoje && (!isGerente || minhaCarteiraHoje.possuiCarteira) && (
           <div className="bg-white rounded-apple border border-gray-200 shadow-apple-sm p-4 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h2 className="text-base font-bold text-gray-900">Minha carteira hoje</h2>
+                <h2 className="text-base font-bold text-gray-900">Minha carteira hoje <span className="text-[11px] font-normal text-gray-400">· situação de hoje</span></h2>
                 <p className="text-xs text-gray-500">Ordem de prioridade diária: vencidos, atenção, sem tarefa aberta, cadastro vencido e tarefas do dia.</p>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -869,115 +894,129 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
           </div>
         )}
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          <MetricCard
-            label="Faturamento do mês"
-            value={fmtBRL(fatMes)}
-            meta={metaVendas}
-            total={fatMes}
-            color="#22C55E"
-            icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#22C55E' }} />}
-            onClick={isGerente ? () => setDetailOpen('faturamento') : undefined}
-          />
-          <MetricCard
-            label="Comissão estimada"
-            value={fmtBRL(comissao)}
-            meta={metaComissao}
-            total={comissao}
-            color="#10B981"
-            icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#10B981' }} />}
-            onClick={isGerente ? () => setDetailOpen('comissao') : undefined}
-          />
-          <MetricCard
-            label="Visitas realizadas"
-            value={String(visitasMes)}
-            meta={45}
-            total={visitasMes}
-            color="#3B82F6"
-            icon={<MapPinIcon className="h-5 w-5" style={{ color: '#3B82F6' }} />}
-            onClick={isGerente ? () => setDetailOpen('visitas') : undefined}
-          />
-          <MetricCard
-            label="Propostas enviadas"
-            value={String(propostasMes)}
-            meta={25}
-            total={propostasMes}
-            color="#A855F7"
-            icon={<ClipboardDocumentCheckIcon className="h-5 w-5" style={{ color: '#A855F7' }} />}
-            onClick={isGerente ? () => setDetailOpen('propostas') : undefined}
-          />
-          <MetricCard
-            label="Novos clientes (1ª compra)"
-            value={String(novosClientesMes)}
-            subtitle={`${novosCadastrosMes} cadastro(s) novo(s) no período`}
-            meta={metaLeads}
-            total={novosClientesMes}
-            color="#F59E0B"
-            icon={<UsersIcon className="h-5 w-5" style={{ color: '#F59E0B' }} />}
-            onClick={isGerente ? () => setDetailOpen('novos') : undefined}
-          />
-          <MetricCard
-            label="Conversão da carteira"
-            value={`${taxaConversao.toFixed(0)}%`}
-            subtitle={`${indCom.pedidosFechados} pedido(s) fechado(s) no período`}
-            meta={metaConversao}
-            total={taxaConversao}
-            color="#EF4444"
-            icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#EF4444' }} />}
-            onClick={isGerente ? () => setDetailOpen('conversao') : undefined}
-          />
-          <MetricCard
-            label="Ticket médio"
-            value={fmtBRL(ticketMedio)}
-            meta={0}
-            total={ticketMedio}
-            color="#0EA5E9"
-            icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#0EA5E9' }} />}
-          />
-          <MetricCard
-            label="Pipeline ponderado"
-            value={fmtBRL(indOps.pipelinePonderado)}
-            meta={0}
-            total={indOps.pipelinePonderado}
-            color="#14B8A6"
-            icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
-          />
-          <MetricCard
-            label="Em atenção"
-            value={String(indOps.situacaoCompra.em_atencao)}
-            meta={0}
-            total={indOps.situacaoCompra.em_atencao}
-            color="#F97316"
-            icon={<UsersIcon className="h-5 w-5" style={{ color: '#F97316' }} />}
-          />
-          <MetricCard
-            label="Próximas visitas hoje"
-            value={String(visitasHoje.length)}
-            meta={Math.max(visitasHoje.length, 1)}
-            total={visitasHoje.length}
-            color="#14B8A6"
-            icon={<CalendarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
-            onClick={isGerente ? () => setDetailOpen('visitasHoje') : undefined}
-          />
-          <MetricCard
-            label="Missões em andamento"
-            value={String(missoesAtivas.length)}
-            meta={Math.max(missoesAtivas.length, 1)}
-            total={missoesAtivas.length}
-            color="#F97316"
-            icon={<FlagIcon className="h-5 w-5" style={{ color: '#F97316' }} />}
-          />
-          <MetricCard
-            label="Visitas de missão"
-            value={String(visitasMissao)}
-            meta={Math.max(visitasMissao, 1)}
-            total={visitasMissao}
-            color="#8B5CF6"
-            icon={<MapPinIcon className="h-5 w-5" style={{ color: '#8B5CF6' }} />}
-            onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
-          />
-        </div>
+        {/* KPIs · Resultados no período selecionado + Situação de hoje explícita */}
+        {(() => {
+          const periodoNome = periodoPreset === 'hoje' ? 'hoje' : periodoPreset === 'semana' ? 'na semana' : periodoPreset === 'mes' ? 'no mês' : 'no período'
+          const L = (val: string) => dataLoading ? 'Carregando...' : val
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              <MetricCard
+                label={`Faturamento (${periodoNome})`}
+                value={L(fmtBRL(fatMes))}
+                subtitle={dataLoading ? undefined : `${indUnificado.pedidosConfirmadosPeriodo.length} pedido(s) confirmado(s) ${periodoNome}`}
+                meta={metaVendas}
+                total={dataLoading ? 0 : fatMes}
+                color="#22C55E"
+                icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#22C55E' }} />}
+                onClick={isGerente ? () => setDetailOpen('faturamento') : undefined}
+              />
+              <MetricCard
+                label={`Comissão estimada (${periodoNome})`}
+                value={L(fmtBRL(comissao))}
+                meta={metaComissao}
+                total={dataLoading ? 0 : comissao}
+                color="#10B981"
+                icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#10B981' }} />}
+                onClick={isGerente ? () => setDetailOpen('comissao') : undefined}
+              />
+              <MetricCard
+                label={`Visitas realizadas (${periodoNome})`}
+                value={L(String(visitasMes))}
+                subtitle={dataLoading ? undefined : `Resultado ${periodoNome}`}
+                meta={45}
+                total={dataLoading ? 0 : visitasMes}
+                color="#3B82F6"
+                icon={<MapPinIcon className="h-5 w-5" style={{ color: '#3B82F6' }} />}
+                onClick={isGerente ? () => setDetailOpen('visitas') : undefined}
+              />
+              <MetricCard
+                label={`Propostas enviadas (${periodoNome})`}
+                value={L(String(propostasMes))}
+                subtitle={dataLoading ? undefined : `Resultado ${periodoNome}`}
+                meta={25}
+                total={dataLoading ? 0 : propostasMes}
+                color="#A855F7"
+                icon={<ClipboardDocumentCheckIcon className="h-5 w-5" style={{ color: '#A855F7' }} />}
+                onClick={isGerente ? () => setDetailOpen('propostas') : undefined}
+              />
+              <MetricCard
+                label={`Novos clientes (${periodoNome})`}
+                value={L(String(novosClientesMes))}
+                subtitle={dataLoading ? undefined : `${novosCadastrosMes} cadastro(s) novo(s) ${periodoNome}`}
+                meta={metaLeads}
+                total={dataLoading ? 0 : novosClientesMes}
+                color="#F59E0B"
+                icon={<UsersIcon className="h-5 w-5" style={{ color: '#F59E0B' }} />}
+                onClick={isGerente ? () => setDetailOpen('novos') : undefined}
+              />
+              <MetricCard
+                label={`Conversão (${periodoNome})`}
+                value={L(`${taxaConversao.toFixed(1)}%`)}
+                subtitle={dataLoading ? undefined : `${indUnificado.negociacoesGanhasPeriodo.length} ganha(s) · ${indUnificado.negociacoesPerdidasPeriodo.length} perdida(s) ${periodoNome}`}
+                meta={metaConversao}
+                total={dataLoading ? 0 : taxaConversao}
+                color="#EF4444"
+                icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#EF4444' }} />}
+                onClick={isGerente ? () => setDetailOpen('conversao') : undefined}
+              />
+              <MetricCard
+                label={`Ticket médio (${periodoNome})`}
+                value={L(fmtBRL(ticketMedio))}
+                meta={0}
+                total={dataLoading ? 0 : ticketMedio}
+                color="#0EA5E9"
+                icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#0EA5E9' }} />}
+              />
+              <MetricCard
+                label="Pipeline ponderado · hoje"
+                value={L(fmtBRL(indOps.pipelinePonderado))}
+                subtitle="Situação de hoje"
+                meta={0}
+                total={dataLoading ? 0 : indOps.pipelinePonderado}
+                color="#14B8A6"
+                icon={<ChartBarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
+              />
+              <MetricCard
+                label="Em atenção (41–60d) · hoje"
+                value={L(String(indUnificado.situacaoCompraCounts.em_atencao.length))}
+                subtitle={`Situação de hoje · ${indUnificado.coberturaMes.length} atendidos ${periodoNome}`}
+                meta={0}
+                total={dataLoading ? 0 : indUnificado.situacaoCompraCounts.em_atencao.length}
+                color="#F97316"
+                icon={<UsersIcon className="h-5 w-5" style={{ color: '#F97316' }} />}
+              />
+              <MetricCard
+                label="Próximas visitas hoje"
+                value={L(String(visitasHoje.length))}
+                subtitle="Situação de hoje"
+                meta={Math.max(visitasHoje.length, 1)}
+                total={dataLoading ? 0 : visitasHoje.length}
+                color="#14B8A6"
+                icon={<CalendarIcon className="h-5 w-5" style={{ color: '#14B8A6' }} />}
+                onClick={isGerente ? () => setDetailOpen('visitasHoje') : undefined}
+              />
+              <MetricCard
+                label="Missões em andamento"
+                value={L(String(missoesAtivas.length))}
+                subtitle="Situação de hoje"
+                meta={Math.max(missoesAtivas.length, 1)}
+                total={dataLoading ? 0 : missoesAtivas.length}
+                color="#F97316"
+                icon={<FlagIcon className="h-5 w-5" style={{ color: '#F97316' }} />}
+              />
+              <MetricCard
+                label="Visitas de missão"
+                value={L(String(visitasMissao))}
+                subtitle="Situação de hoje"
+                meta={Math.max(visitasMissao, 1)}
+                total={dataLoading ? 0 : visitasMissao}
+                color="#8B5CF6"
+                icon={<MapPinIcon className="h-5 w-5" style={{ color: '#8B5CF6' }} />}
+                onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
+              />
+            </div>
+          )
+        })()}
 
         {/* Item 1 da devolutiva: Blocos próprios dos dois Bancos no Dashboard do gestor */}
         {isGerente && resumoBancosDashboard && (() => {
@@ -1238,36 +1277,46 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
               onClick={() => onNavigate?.('tarefas')}
               className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
             >
-              <p className="text-[11px] font-medium text-gray-500 uppercase">Tarefas atrasadas</p>
-              <p className={`text-xl font-bold mt-0.5 ${gargalos.tarefasAtrasadas > 0 ? 'text-red-600' : 'text-green-700'}`}>{gargalos.tarefasAtrasadas}</p>
-              <p className="text-[11px] text-gray-400">vencidas antes de hoje</p>
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Tarefas atrasadas · situação de hoje</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && gargalos.tarefasAtrasadas > 0 ? 'text-red-600' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : `${gargalos.tarefasAtrasadas} atrasadas hoje`}
+              </p>
+              <p className="text-[11px] text-gray-500">
+                {dataLoading ? 'aguarde...' : `${gargalos.tarefasVencidasNoPeriodo} vencidas no período · ${gargalos.semTarefaAbertaHoje} s/ tarefa aberta`}
+              </p>
             </button>
             <button
               type="button"
               onClick={() => onNavigate?.('funil')}
               className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
             >
-              <p className="text-[11px] font-medium text-gray-500 uppercase">Amostras &gt; 30 dias</p>
-              <p className={`text-xl font-bold mt-0.5 ${gargalos.amostrasMais30d > 0 ? 'text-amber-700' : 'text-green-700'}`}>{gargalos.amostrasMais30d}</p>
-              <p className="text-[11px] text-gray-400">aguardando avaliação</p>
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Amostras &gt; 30 dias · hoje</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && gargalos.amostrasMais30d > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : gargalos.amostrasMais30d}
+              </p>
+              <p className="text-[11px] text-gray-400">situação de hoje · aguardando avaliação</p>
             </button>
             <button
               type="button"
               onClick={() => onNavigate?.('funil')}
               className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
             >
-              <p className="text-[11px] font-medium text-gray-500 uppercase">Negociações &gt; 3 dias</p>
-              <p className={`text-xl font-bold mt-0.5 ${gargalos.negociacoesMais3d > 0 ? 'text-purple-700' : 'text-green-700'}`}>{gargalos.negociacoesMais3d}</p>
-              <p className="text-[11px] text-gray-400">encerrar venda ou perda</p>
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Negociações &gt; 3 dias · hoje</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && gargalos.negociacoesMais3d > 0 ? 'text-purple-700' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : gargalos.negociacoesMais3d}
+              </p>
+              <p className="text-[11px] text-gray-400">situação de hoje · encerrar venda ou perda</p>
             </button>
             <button
               type="button"
               onClick={() => onNavigate?.('clientes')}
               className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
             >
-              <p className="text-[11px] font-medium text-gray-500 uppercase">Em risco ou inativo</p>
-              <p className={`text-xl font-bold mt-0.5 ${gargalos.semCompraMais60d > 0 ? 'text-orange-700' : 'text-green-700'}`}>{gargalos.semCompraMais60d}</p>
-              <p className="text-[11px] text-gray-400">sem compra há 61+ dias</p>
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Em risco ou inativo · hoje</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && gargalos.semCompraMais60d > 0 ? 'text-orange-700' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : gargalos.semCompraMais60d}
+              </p>
+              <p className="text-[11px] text-gray-400">situação de hoje · sem compra há 61+ dias</p>
             </button>
           </div>
         </div>

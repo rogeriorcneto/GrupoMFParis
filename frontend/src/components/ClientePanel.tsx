@@ -1082,8 +1082,9 @@ export default function ClientePanel({
       }
       const agora = new Date().toISOString()
       let proximaSalva: Tarefa | null = null
-      if (finalizacao.proximoPasso) {
-        const proximaTarefa = buildProximaTarefa(tarefa, finalizacao, c, loggedUser?.nome || 'Vendedor')
+      // Item 4: NUNCA criar próximo passo se já houver outra tarefa aberta para este cliente
+      if (!outraAberta && finalizacao.proximoPasso) {
+        const proximaTarefa = buildProximaTarefa(tarefa, finalizacao, c, loggedUser?.nome || 'Vendedor', loggedUser?.id)
         proximaSalva = await db.insertTarefa(proximaTarefa)
       }
       const justPrazoLongo = finalizacao.proximoPasso && exigeJustificativaPrazoLongo(finalizacao.proximoPasso.data)

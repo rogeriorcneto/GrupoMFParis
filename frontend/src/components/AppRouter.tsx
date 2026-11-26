@@ -72,6 +72,7 @@ interface AppRouterProps {
   onNavigate?: (view: ViewType) => void
   highlightTarefaId?: number
   onColetarSatisfacao: (cliente: Cliente) => Promise<void>
+  dataLoading?: boolean
 }
 
 export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente): boolean {
@@ -85,7 +86,7 @@ export function shouldMoveToFollowUpOnApproval(pedido: Pedido, cliente?: Cliente
 }
 
 export default function AppRouter({
-  activeView, loggedUser,
+  activeView, loggedUser, dataLoading = false,
   clientes, interacoes, vendedores, tarefas, atividades, templates,
   templatesMsgs, cadencias, campanhas, jobs, produtos, pedidos, dashboardMetrics,
   setClientes, setInteracoes, setVendedores, setTarefas, setTemplates,
@@ -110,6 +111,7 @@ export default function AppRouter({
     case 'dashboard':
       return (
         <DashboardVendedorView
+          dataLoading={dataLoading}
           clientes={clientes}
           metrics={dashboardMetrics}
           vendedores={vendedores}
@@ -660,8 +662,8 @@ export default function AppRouter({
               if (existente) {
                 proximaTarefaCriada = existente
                 tarefaParaSalvar = { ...t, proximaTarefaId: existente.id }
-              } else if (t.finalizacao.proximoPasso) {
-                const novaTarefa = buildProximaTarefa(t, t.finalizacao, clienteDaTarefa, loggedUser?.nome || 'Vendedor')
+              } else if (!outraAberta && t.finalizacao.proximoPasso) {
+                const novaTarefa = buildProximaTarefa(t, t.finalizacao, clienteDaTarefa, loggedUser?.nome || 'Vendedor', loggedUser?.id)
                 proximaTarefaCriada = await db.insertTarefa(novaTarefa)
                 const justLongo = exigeJustificativaPrazoLongo(t.finalizacao.proximoPasso.data)
                   ? t.finalizacao.proximoPasso.justificativaPrazoLongo
@@ -801,6 +803,7 @@ export default function AppRouter({
     case 'relatorios':
       return (
         <RelatoriosView
+          dataLoading={dataLoading}
           clientes={clientes}
           vendedores={vendedores}
           interacoes={interacoes}

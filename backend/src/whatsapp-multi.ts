@@ -5,6 +5,7 @@ import makeWASocket, {
   downloadMediaMessage,
 } from 'baileys'
 import { Boom } from '@hapi/boom'
+import { spawn } from 'child_process'
 import pino from 'pino'
 import * as QRCode from 'qrcode'
 import { log } from './logger.js'
@@ -544,7 +545,7 @@ export async function sendUserWhatsAppMessage(
   vendedorId: number,
   number: string,
   text: string
-): Promise<{ success: boolean; jid?: string; resolvedNumber?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; jid?: string; resolvedNumber?: string; error?: string }> {
   const session = sessions.get(vendedorId)
   if (!session || !session.sock || session.status !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
@@ -565,8 +566,9 @@ export async function sendUserWhatsAppMessage(
     const msgPayload = { text }
     const sent = await withTimeout(sock.sendMessage(target.jid, msgPayload), 25_000, `sendMessage(${target.jid})`)
     rememberSentRawMessage(session, sent, { conversation: text })
-    log.info({ messageId: sent?.key?.id, jid: target.jid }, `📨 Mensagem aceita pelo WhatsApp para vendedor ${vendedorId}`)
-    return { success: true, jid: target.jid, resolvedNumber: target.resolvedNumber }
+    const messageId = sent?.key?.id || undefined
+    log.info({ messageId, jid: target.jid }, `📨 Mensagem aceita pelo WhatsApp para vendedor ${vendedorId}`)
+    return { success: true, messageId, jid: target.jid, resolvedNumber: target.resolvedNumber }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar mensagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar mensagem' }
@@ -707,13 +709,49 @@ export function getUserWhatsAppChatMessages(vendedorId: number, jid: string, lim
   return sorted.slice(-limit)
 }
 
-/** Envia áudio via WhatsApp do vendedor (aceita Buffer base64) */
+/** Converte áudio gravado no navegador (WebM/MP4) para OGG/Opus nativo de nota de voz do WhatsApp */
+async function convertToOggOpus(inputBuffer: Buffer): Promise<{ buffer: Buffer; mimetype: string }> {
+  return new Promise((resolve) => {
+    try {
+      const ff = spawn('ffmpeg', [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-i', 'pipe:0',
+        '-vn',
+        '-ac', '1',
+        '-ar', '48000',
+        '-c:a', 'libopus',
+        '-b:a', '32k',
+        '-vbr', 'on',
+        '-application', 'voip',
+        '-f', 'ogg',
+        'pipe:1',
+      ])
+      const chunks: Buffer[] = []
+      ff.stdout.on('data', (d: Buffer) => chunks.push(d))
+      ff.on('error', () => resolve({ buffer: inputBuffer, mimetype: 'audio/ogg; codecs=opus' }))
+      ff.on('close', (code) => {
+        if (code === 0 && chunks.length > 0) {
+          resolve({ buffer: Buffer.concat(chunks), mimetype: 'audio/ogg; codecs=opus' })
+        } else {
+          resolve({ buffer: inputBuffer, mimetype: 'audio/ogg; codecs=opus' })
+        }
+      })
+      ff.stdin.on('error', () => {})
+      ff.stdin.end(inputBuffer)
+    } catch {
+      resolve({ buffer: inputBuffer, mimetype: 'audio/ogg; codecs=opus' })
+    }
+  })
+}
+
+/** Envia áudio via WhatsApp do vendedor (converte WebM → OGG/Opus nativo para iOS e Android) */
 export async function sendUserWhatsAppAudio(
   vendedorId: number,
   number: string,
   audioBase64: string,
-  mimetype: string = 'audio/ogg; codecs=opus'
-): Promise<{ success: boolean; jid?: string; resolvedNumber?: string; error?: string }> {
+  _mimetype: string = 'audio/ogg; codecs=opus'
+): Promise<{ success: boolean; messageId?: string; jid?: string; resolvedNumber?: string; error?: string }> {
   const session = sessions.get(vendedorId)
   if (!session || !session.sock || session.status !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
@@ -726,14 +764,15 @@ export async function sendUserWhatsAppAudio(
     if (!target) {
       return { success: false, error: 'Número não localizado no WhatsApp. Verifique o telefone do cliente.' }
     }
-    const buffer = Buffer.from(audioBase64, 'base64')
+    const rawBuffer = Buffer.from(audioBase64, 'base64')
+    const { buffer, mimetype } = await convertToOggOpus(rawBuffer)
     const sent = await withTimeout(
       session.sock.sendMessage(target.jid, { audio: buffer, mimetype, ptt: true }),
       30_000,
       `sendAudio(${target.jid})`
     )
     rememberSentRawMessage(session, sent, { audioMessage: { mimetype, ptt: true } })
-    return { success: true, jid: target.jid, resolvedNumber: target.resolvedNumber }
+    return { success: true, messageId: sent?.key?.id || undefined, jid: target.jid, resolvedNumber: target.resolvedNumber }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar áudio para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar áudio' }
@@ -747,7 +786,7 @@ export async function sendUserWhatsAppImage(
   imageBase64: string,
   mimetype: string = 'image/jpeg',
   caption?: string
-): Promise<{ success: boolean; jid?: string; resolvedNumber?: string; error?: string }> {
+): Promise<{ success: boolean; messageId?: string; jid?: string; resolvedNumber?: string; error?: string }> {
   const session = sessions.get(vendedorId)
   if (!session || !session.sock || session.status !== 'connected') {
     return { success: false, error: 'WhatsApp não está conectado para este usuário' }
@@ -767,7 +806,7 @@ export async function sendUserWhatsAppImage(
       `sendImage(${target.jid})`
     )
     rememberSentRawMessage(session, sent, { imageMessage: { mimetype, caption: caption || '' } })
-    return { success: true, jid: target.jid, resolvedNumber: target.resolvedNumber }
+    return { success: true, messageId: sent?.key?.id || undefined, jid: target.jid, resolvedNumber: target.resolvedNumber }
   } catch (err: any) {
     log.error({ err, number }, `❌ Falha ao enviar imagem para ${number}`)
     return { success: false, error: err?.message || 'Erro ao enviar imagem' }

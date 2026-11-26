@@ -1023,6 +1023,31 @@ export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interac
 
 export async function fetchTarefas(): Promise<Tarefa[]> {
   const PAGE_SIZE = 1000
+  const { count, error: countErr } = await supabase
+    .from('tarefas')
+    .select('id', { count: 'exact', head: true })
+  if (!countErr && typeof count === 'number' && count > 0) {
+    const pages = Math.ceil(count / PAGE_SIZE)
+    const chunks = await Promise.all(
+      Array.from({ length: pages }, (_, p) =>
+        withAuthRetry(async () => {
+          const r = await supabase
+            .from('tarefas')
+            .select('*')
+            .order('id', { ascending: true })
+            .range(p * PAGE_SIZE, (p + 1) * PAGE_SIZE - 1)
+          return r
+        })
+      )
+    )
+    const allRows: any[] = []
+    for (const ch of chunks) {
+      if (ch.error) throw ch.error
+      if (ch.data) allRows.push(...ch.data)
+    }
+    return allRows.map(tarefaFromDb)
+  }
+
   let allRows: any[] = []
   let from = 0
   while (true) {
@@ -1614,11 +1639,32 @@ export async function updatePedido(id: number, fields: {
   totalValor?: number
   reenviar?: boolean
 }): Promise<Pedido> {
+  // Passa pelo backend (service_role) para substituir itens_pedido de forma atômica
+  // sem esbarrar em RLS de DELETE que antes duplicava linhas ao recusar e reenviar!
+  try {
+    const { authFetch, BOT_URL } = await import('./botApi')
+    const res = await authFetch(`${BOT_URL}/api/pedidos/${id}/editar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    })
+    const json = await res.json()
+    if (json?.pedido) {
+      return pedidoFromDb(json.pedido, json.itens || [])
+    }
+  } catch {
+    // Fallback local caso backend esteja indisponível em ambiente de teste
+  }
+
   const row: any = {}
   if (fields.observacoes !== undefined) row.observacoes = fields.observacoes
   if (fields.formaPagamento !== undefined) row.forma_pagamento = fields.formaPagamento
   if (fields.tipoFrete !== undefined) row.tipo_frete = fields.tipoFrete
-  if (fields.totalValor !== undefined) row.total_valor = fields.totalValor
+  if (fields.itens !== undefined) {
+    row.total_valor = Math.round(fields.itens.reduce((s, i) => s + Number(i.preco || 0) * Number(i.quantidade || 0), 0) * 100) / 100
+  } else if (fields.totalValor !== undefined) {
+    row.total_valor = fields.totalValor
+  }
   if (fields.reenviar) {
     row.status = 'enviado'
     row.motivo_recusa = null

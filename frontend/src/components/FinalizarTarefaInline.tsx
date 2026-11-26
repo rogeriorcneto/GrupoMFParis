@@ -45,10 +45,9 @@ export default function FinalizarTarefaInline({
   const tipoPrevistoValido = tipoTarefaValidoParaNovoFluxo(tarefa.tipo) ? tarefa.tipo as CanalTarefa : 'ligacao'
   const [canalUsado, setCanalUsado] = useState<CanalTarefa | ''>(canalPrevisto || tipoPrevistoValido)
   const [conclusao, setConclusao] = useState('')
-  const [incluirProximoOpcional, setIncluirProximoOpcional] = useState(false)
-  const [proxTipo, setProxTipo] = useState<CanalTarefa>(tipoPrevistoValido)
-  const [proxObjetivo, setProxObjetivo] = useState<ObjetivoTarefa>(tarefa.objetivo || 'relacionamento')
-  const [proxData, setProxData] = useState(addDiasISO(hoje, 1))
+  const [proxTipo, setProxTipo] = useState<CanalTarefa | ''>('')
+  const [proxObjetivo, setProxObjetivo] = useState<ObjetivoTarefa | ''>('')
+  const [proxData, setProxData] = useState('')
   const [proxDescricao, setProxDescricao] = useState('')
   const [justificativa, setJustificativa] = useState('')
 
@@ -66,8 +65,10 @@ export default function FinalizarTarefaInline({
   }, [cliente?.id])
   const [itensProdutos, setItensProdutos] = useState<{ nome: string; kgMes: string }[]>(produtosIniciais)
 
+  // Item 4: Se já existe qualquer outra tarefa aberta para o cliente, NUNCA abre e NUNCA salva próximo passo.
+  // Só exige próximo passo quando esta é a ÚLTIMA tarefa aberta do cliente (sem preencher campos automaticamente).
   const exigeProximoPasso = !outraTarefaAberta
-  const mostrarProximoPasso = exigeProximoPasso || incluirProximoOpcional
+  const mostrarProximoPasso = exigeProximoPasso
   const precisaJustificativa = mostrarProximoPasso && proxData ? exigeJustificativaPrazoLongo(proxData, hoje) : false
 
   const produtosValidos = useMemo(() => {
@@ -117,7 +118,7 @@ export default function FinalizarTarefaInline({
     await onConfirm({
       canalUsado,
       conclusao: conclusao.trim(),
-      ...(mostrarProximoPasso ? {
+      ...(exigeProximoPasso && proxTipo && proxObjetivo && proxData ? {
         proximoPasso: {
           tipo: proxTipo,
           objetivo: proxObjetivo,
@@ -227,38 +228,21 @@ export default function FinalizarTarefaInline({
         </div>
       )}
 
-      {/* Aviso quando já existe outra tarefa aberta hoje/futura */}
-      {outraTarefaAberta && !incluirProximoOpcional && (
-        <div className="pt-2 border-t border-green-100 flex items-center justify-between gap-2 flex-wrap text-[11px] text-green-800">
-          <span>
-            Já existe tarefa aberta para este cliente: <strong>{outraTarefaAberta.titulo}</strong> ({new Date(`${outraTarefaAberta.data}T00:00:00`).toLocaleDateString('pt-BR')}).
-          </span>
-          <button
-            type="button"
-            onClick={() => setIncluirProximoOpcional(true)}
-            className="text-primary-700 hover:underline font-semibold whitespace-nowrap"
-          >
-            + Agendar outra tarefa
-          </button>
+      {/* Aviso informativo quando já existe outra tarefa aberta: NÃO abre nem salva próximo passo */}
+      {outraTarefaAberta && (
+        <div className="pt-2 border-t border-green-100 text-[11px] text-green-800">
+          Já existe outra tarefa aberta para este cliente: <strong>{outraTarefaAberta.titulo}</strong>
+          {outraTarefaAberta.data ? ` (${new Date(`${outraTarefaAberta.data}T00:00:00`).toLocaleDateString('pt-BR')})` : ''}.
         </div>
       )}
 
-      {/* 3. Próximo passo (obrigatório quando não há outra tarefa aberta; opcional se o vendedor expandir) */}
+      {/* 3. Próximo passo (exibido SOMENTE quando é a última tarefa aberta do cliente) */}
       {mostrarProximoPasso && (
         <div className="pt-2 border-t border-green-100 space-y-2.5">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold text-gray-600">
-              {exigeProximoPasso ? '3. Próximo passo *' : '3. Próximo passo adicional'}
+              3. Próximo passo *
             </p>
-            {!exigeProximoPasso && (
-              <button
-                type="button"
-                onClick={() => setIncluirProximoOpcional(false)}
-                className="text-[11px] text-gray-500 hover:text-gray-700"
-              >
-                Não criar outra tarefa
-              </button>
-            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
@@ -281,6 +265,7 @@ export default function FinalizarTarefaInline({
             <div>
               <label className="block text-[10px] text-gray-500 mb-1">Objetivo *</label>
               <select value={proxObjetivo} onChange={e => setProxObjetivo(e.target.value as ObjetivoTarefa)} className={inputClass}>
+                <option value="">Selecione o objetivo...</option>
                 {OBJETIVOS_TAREFA.map(o => <option key={o} value={o}>{OBJETIVO_LABEL[o]}</option>)}
               </select>
             </div>

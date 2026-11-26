@@ -130,19 +130,40 @@ function getTarefasPendentesPorClienteMap(tarefas: readonly Tarefa[]): Map<numbe
   return m
 }
 
+export function obterSaudacaoBrasilia(agora: Date = new Date()): 'Bom dia' | 'Boa tarde' | 'Boa noite' {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(agora)
+    const hRaw = Number(parts.find(p => p.type === 'hour')?.value ?? agora.getHours())
+    const h = hRaw === 24 ? 0 : hRaw
+    if (h < 12) return 'Bom dia'
+    if (h < 18) return 'Boa tarde'
+    return 'Boa noite'
+  } catch {
+    const h = agora.getHours()
+    if (h < 12) return 'Bom dia'
+    if (h < 18) return 'Boa tarde'
+    return 'Boa noite'
+  }
+}
+
 export function clienteJaTemOutraTarefaAberta(
   tarefaAtual: Pick<Tarefa, 'id' | 'clienteId'>,
   todasTarefas: Tarefa[],
   todosClientes: Cliente[] = [],
-  referencia: Date = new Date(),
+  _referencia: Date = new Date(),
 ): Tarefa | undefined {
   if (!tarefaAtual.clienteId) return undefined
   const clienteBase = todosClientes.length > 20
     ? getClientesPorIdMap(todosClientes).get(tarefaAtual.clienteId)
     : todosClientes.find(c => c.id === tarefaAtual.clienteId)
   const familia = clienteBase ? familiaDoClienteNoFunil(clienteBase, todosClientes) : []
-  const hojeISO = dataLocalISO(referencia)
 
+  // Regra oficial (Item 4): se o cliente possui QUALQUER outra tarefa aberta (pendente, seja vencida, hoje ou futura)
+  // além da que está sendo finalizada, NÃO exige nem abre próximo passo!
   if (todasTarefas.length > 30) {
     const porCli = getTarefasPendentesPorClienteMap(todasTarefas)
     const ids = familia.length > 0 ? familia.map(c => c.id) : [tarefaAtual.clienteId]
@@ -152,8 +173,8 @@ export function clienteJaTemOutraTarefaAberta(
       const lista = porCli.get(cid)
       if (!lista) continue
       for (const t of lista) {
-        if (t.id === tarefaAtual.id || t.data < hojeISO) continue
-        if (!melhor || t.data < melhor.data) melhor = t
+        if (t.id === tarefaAtual.id) continue
+        if (!melhor || (t.data || '') < (melhor.data || '')) melhor = t
       }
     }
     return melhor
@@ -167,10 +188,8 @@ export function clienteJaTemOutraTarefaAberta(
       && t.status === 'pendente'
       && t.clienteId != null
       && idsFamilia.has(t.clienteId)
-      && !!t.data
-      && t.data >= hojeISO
     )
-    .sort((a, b) => a.data.localeCompare(b.data))
+    .sort((a, b) => (a.data || '').localeCompare(b.data || ''))
   return candidatas[0]
 }
 
@@ -219,6 +238,7 @@ export function buildProximaTarefa(
   input: FinalizacaoTarefaInput,
   cliente?: Cliente,
   loggedUserName?: string,
+  loggedUserId?: number,
 ): Omit<Tarefa, 'id'> {
   const p = input.proximoPasso
   if (!p) throw new Error('Próximo passo ausente para criar próxima tarefa.')
@@ -233,7 +253,7 @@ export function buildProximaTarefa(
     status: 'pendente',
     prioridade: tarefaAtual.prioridade || 'media',
     clienteId: tarefaAtual.clienteId,
-    vendedorId: tarefaAtual.vendedorId,
+    vendedorId: tarefaAtual.vendedorId ?? cliente?.vendedorId ?? loggedUserId,
     objetivo: p.objetivo,
     origem: 'manual',
     criadoPor: loggedUserName,
