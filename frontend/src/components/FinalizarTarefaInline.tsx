@@ -80,11 +80,12 @@ export default function FinalizarTarefaInline({
     })
   }, [exigeProdutosInteresse, itensProdutos])
 
+  const hojeISO = useMemo(() => addDiasISO(hoje, 0), [hoje])
   const proximoValido = !mostrarProximoPasso || (
     !!proxTipo
     && !!proxObjetivo
     && !!proxData
-    && !!proxDescricao.trim()
+    && proxData >= hojeISO
     && (!precisaJustificativa || !!justificativa.trim())
   )
 
@@ -307,6 +308,7 @@ export default function FinalizarTarefaInline({
               ))}
               <input
                 type="date"
+                min={hojeISO}
                 value={proxData}
                 onChange={e => setProxData(e.target.value)}
                 onClick={e => (e.target as HTMLInputElement).showPicker?.()}
@@ -316,7 +318,7 @@ export default function FinalizarTarefaInline({
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500 mb-1">Descrição curta *</label>
+            <label className="block text-[10px] text-gray-500 mb-1">Descrição curta (opcional)</label>
             <input
               value={proxDescricao}
               onChange={e => setProxDescricao(e.target.value)}

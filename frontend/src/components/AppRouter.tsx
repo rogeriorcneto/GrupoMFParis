@@ -660,14 +660,22 @@ export default function AppRouter({
             // O campo finalizacao é transitório de UI e não vai para o banco.
             const { finalizacao: _finalizacaoTransitoria, ...tarefaPersistida } = tarefaParaSalvar
 
-            // Atualização otimista: atualiza UI imediatamente antes da resposta do banco
+            try {
+              await db.updateTarefa(t.id, tarefaPersistida as Tarefa)
+            } catch (updErr) {
+              // Rollback atômico: se falhar concluir a tarefa atual, desfaz o próximo passo recém-criado
+              if (proximaTarefaCriada && !tarefaAnterior?.proximaTarefaId) {
+                await db.deleteTarefa(proximaTarefaCriada.id).catch(() => {})
+              }
+              throw updErr
+            }
+
             setTarefas(prev => {
               const atualizadas = prev.map(x => x.id === t.id ? { ...tarefaPersistida, id: t.id } as Tarefa : x)
               return proximaTarefaCriada && !atualizadas.some(x => x.id === proximaTarefaCriada!.id)
                 ? [proximaTarefaCriada, ...atualizadas]
                 : atualizadas
             })
-            await db.updateTarefa(t.id, tarefaPersistida as Tarefa)
             if (foiConcluidaAgora && t.clienteId && t.titulo.startsWith('Coletar satisfação — ')) {
               const cliAlvo = clientes.find(c => c.id === t.clienteId)
               const targetId = cliAlvo?.arquivadoDuplicata ? cliAlvo.cardPrincipalId : t.clienteId

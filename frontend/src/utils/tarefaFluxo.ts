@@ -17,7 +17,7 @@ export interface ProximoPassoInput {
   tipo: CanalTarefa
   objetivo: ObjetivoTarefa
   data: string
-  descricao: string
+  descricao?: string
   justificativaPrazoLongo?: string
 }
 
@@ -152,7 +152,10 @@ export function validarFinalizacaoTarefa(
     if (!p?.tipo) return 'Selecione o tipo do próximo passo.'
     if (!p?.objetivo) return 'Selecione o objetivo do próximo passo.'
     if (!p?.data) return 'Informe a data do próximo passo.'
-    if (!p?.descricao?.trim()) return 'Informe a descrição curta do próximo passo.'
+    const hojeISO = dataLocalISO(referencia)
+    if (diasEntreDatasISO(hojeISO, p.data) < 0) {
+      return 'A data do próximo passo não pode estar no passado.'
+    }
     if (exigeJustificativaPrazoLongo(p.data, referencia) && !p.justificativaPrazoLongo?.trim()) {
       return 'Próximo passo acima de 15 dias exige justificativa.'
     }
@@ -174,9 +177,10 @@ export function buildProximaTarefa(
   const p = input.proximoPasso
   if (!p) throw new Error('Próximo passo ausente para criar próxima tarefa.')
   const nomeCliente = cliente?.razaoSocial || tarefaAtual.titulo.split(' - ').pop() || 'Cliente'
+  const descricaoFinal = p.descricao?.trim() || `${CANAL_LABEL[p.tipo]} — ${OBJETIVO_LABEL[p.objetivo]}`
   return {
     titulo: `Retorno: ${CANAL_LABEL[p.tipo]} - ${nomeCliente}`,
-    descricao: p.descricao.trim(),
+    descricao: descricaoFinal,
     data: p.data,
     hora: tarefaAtual.hora || undefined,
     tipo: p.tipo,

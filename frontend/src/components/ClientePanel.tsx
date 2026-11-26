@@ -1007,7 +1007,14 @@ export default function ClientePanel({
         justificativaPrazoLongo: justPrazoLongo,
         proximaTarefaId: proximaSalva?.id ?? outraAberta?.id,
       }
-      await db.updateTarefa(tarefa.id, updates)
+      try {
+        await db.updateTarefa(tarefa.id, updates)
+      } catch (updErr) {
+        if (proximaSalva) {
+          await db.deleteTarefa(proximaSalva.id).catch(() => {})
+        }
+        throw updErr
+      }
       setTarefas(prev => [
         ...(proximaSalva ? [proximaSalva] : []),
         ...prev.map(t => t.id === tarefa.id ? { ...t, ...updates } as Tarefa : t),

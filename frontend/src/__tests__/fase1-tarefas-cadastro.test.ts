@@ -124,10 +124,16 @@ describe('Fase 1 — fluxo de finalização de tarefa', () => {
       descricao: 'Verificar estoque',
     },
   }
-  it('não permite finalizar sem próximo passo quando não há outra tarefa aberta', () => {
+  it('não permite finalizar sem próximo passo quando não há outra tarefa aberta nem com data no passado', () => {
     const ref = new Date('2026-11-25T12:00:00')
     expect(validarFinalizacaoTarefa({ canalUsado: 'ligacao', conclusao: 'Falei com o comprador' }, ref, { exigeProximoPasso: true })).toMatch(/tipo/i)
-    expect(validarFinalizacaoTarefa({ ...base, proximoPasso: { ...base.proximoPasso, descricao: '' } }, ref)).toMatch(/descrição/i)
+    expect(validarFinalizacaoTarefa({ ...base, proximoPasso: { ...base.proximoPasso, data: '2026-11-20' } }, ref)).toMatch(/passado/i)
+    // Apenas tipo + data + objetivo (sem descrição manual) já é aceito
+    expect(validarFinalizacaoTarefa({
+      canalUsado: 'ligacao',
+      conclusao: 'Contato realizado',
+      proximoPasso: { tipo: 'whatsapp', objetivo: 'relacionamento', data: '2026-11-26' },
+    }, ref)).toBeNull()
   })
   it('permite finalizar apenas com canal + conclusão quando já existe outra tarefa futura em aberto para o cliente', () => {
     const ref = new Date('2026-11-25T12:00:00')
