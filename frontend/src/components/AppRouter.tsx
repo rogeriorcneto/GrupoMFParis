@@ -18,7 +18,7 @@ import { logger } from '../utils/logger'
 import { existeCardAtivoNoFunil } from '../utils/funil-logic'
 import { registrarTarefaExcluida } from '../utils/exportacaoAuditoria'
 import { getParametrosAprovacao, pedidoPassaAutoAprovacao } from './views/AprovacaoView'
-import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais } from '../lib/botApi'
+import { aprovarPedidoComOmie, cancelarPedidoOmie, enviarPedidoOmie, checkCnpjsGlobais, dispararAuditoriaIA } from '../lib/botApi'
 import { buildProximaTarefa, clienteJaTemOutraTarefaAberta, ehTarefaIncluirProdutos, exigeJustificativaPrazoLongo, validarFinalizacaoTarefa } from '../utils/tarefaFluxo'
 import { temJustificativaAtiva } from '../utils/cadastroCompleto'
 import { familiaDoClienteNoFunil } from '../utils/situacaoCompra'
@@ -691,6 +691,9 @@ export default function AppRouter({
                 ? [proximaTarefaCriada, ...atualizadas]
                 : atualizadas
             })
+            if (foiConcluidaAgora) {
+              dispararAuditoriaIA({ tipo: 'tarefa', tarefaId: t.id })
+            }
             if (foiConcluidaAgora && t.clienteId && t.titulo.startsWith('Coletar satisfação — ')) {
               const cliAlvo = clientes.find(c => c.id === t.clienteId)
               const targetId = cliAlvo?.arquivadoDuplicata ? cliAlvo.cardPrincipalId : t.clienteId

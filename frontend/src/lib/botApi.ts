@@ -656,6 +656,42 @@ export async function fetchTempoTelaRelatorio(
   }
 }
 
+export function dispararAuditoriaIA(payload: {
+  tipo: 'tarefa' | 'cadastro'
+  tarefaId?: number
+  clienteId?: number
+  campo?: string
+  justificativa?: string
+}): void {
+  authFetch(`${BOT_URL}/api/ia/auditar-registro`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {})
+}
+
+export async function fetchAuditoriaIARegistros(): Promise<import('../utils/iaAuditoria').RegistroAuditoriaIA[]> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/ia/auditoria`)
+    if (!res.ok) return []
+    const json = await res.json()
+    return Array.isArray(json?.registros) ? json.registros : []
+  } catch {
+    return []
+  }
+}
+
+export async function executarRodadaAuditoriaIA(): Promise<{ auditados: number; registros: import('../utils/iaAuditoria').RegistroAuditoriaIA[] }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/ia/auditar-rodada`, { method: 'POST' })
+    if (!res.ok) return { auditados: 0, registros: [] }
+    const json = await res.json()
+    return { auditados: json?.auditados || 0, registros: Array.isArray(json?.registros) ? json.registros : [] }
+  } catch {
+    return { auditados: 0, registros: [] }
+  }
+}
+
 export interface RoleplayMsg { role: 'user' | 'assistant'; content: string; ts: number }
 export interface RoleplaySession {
   id: string

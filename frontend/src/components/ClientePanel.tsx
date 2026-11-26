@@ -37,7 +37,8 @@ import {
   validarFinalizacaoTarefa,
 } from '../utils/tarefaFluxo'
 import { supabase } from '../lib/supabase'
-import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages } from '../lib/botApi'
+import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages, dispararAuditoriaIA, fetchAuditoriaIARegistros } from '../lib/botApi'
+import { CLASSIFICACAO_IA_CONFIG, classificarRegistroLocal, type RegistroAuditoriaIA } from '../utils/iaAuditoria'
 
 function normalizarEmpresa(s: string) {
   return s.toLowerCase().trim()
@@ -203,6 +204,32 @@ export default function ClientePanel({
   const [produtoPendenteKg, setProdutoPendenteKg] = useState('')
   const [showCadastroCompleto, setShowCadastroCompleto] = useState(false)
   const [showInfoSituacaoCompra, setShowInfoSituacaoCompra] = useState(false)
+  const [auditoriasIA, setAuditoriasIA] = useState<Map<string, RegistroAuditoriaIA>>(new Map())
+
+  useEffect(() => {
+    if (!isGerente) {
+      setAuditoriasIA(new Map())
+      return
+    }
+    fetchAuditoriaIARegistros().then(lista => {
+      const m = new Map<string, RegistroAuditoriaIA>()
+      for (const r of lista) m.set(r.chave, r)
+      setAuditoriasIA(m)
+    }).catch(() => {})
+  }, [c.id, isGerente])
+
+  const obterClassificacaoTarefaIA = useCallback((tarefa: Tarefa): { classificacao: 'OK' | 'Fraco' | 'Incoerente'; motivo: string } | null => {
+    if (!isGerente || tarefa.status !== 'concluida' || !tarefa.conclusao) return null
+    const salva = auditoriasIA.get(`tarefa:${tarefa.id}`)
+    if (salva) return { classificacao: salva.classificacao, motivo: salva.motivo }
+    return classificarRegistroLocal({
+      tipoRegistro: 'tarefa',
+      canalUsado: tarefa.canalUsado || tarefa.tipo,
+      objetivo: tarefa.objetivo,
+      conclusao: tarefa.conclusao,
+      justificativaPrazoLongo: tarefa.justificativaPrazoLongo,
+    })
+  }, [isGerente, auditoriasIA])
 
   useEffect(() => {
     reloadParametros().catch(() => {})
@@ -301,6 +328,12 @@ export default function ClientePanel({
     await Promise.all(alvosIds.map(id => db.updateCliente(id, changes)))
     const setIds = new Set(alvosIds)
     setClientes(prev => prev.map(cl => setIds.has(cl.id) ? { ...cl, ...changes } : cl))
+    if (Array.isArray(changes.cadastroJustificativas) && changes.cadastroJustificativas.length > 0) {
+      const ultimaAtiva = [...changes.cadastroJustificativas].reverse().find(j => j.ativo !== false && j.justificativa?.trim())
+      if (ultimaAtiva) {
+        dispararAuditoriaIA({ tipo: 'cadastro', clienteId: c.id, campo: ultimaAtiva.campo, justificativa: ultimaAtiva.justificativa })
+      }
+    }
     showToast?.('success', 'Cadastro atualizado.')
   }, [c.id, familiaEmpresa, setClientes, showToast])
 
@@ -1041,6 +1074,7 @@ export default function ClientePanel({
         ...(proximaSalva ? [proximaSalva] : []),
         ...prev.map(t => t.id === tarefa.id ? { ...t, ...updates } as Tarefa : t),
       ])
+      dispararAuditoriaIA({ tipo: 'tarefa', tarefaId: tarefa.id })
       setFinalizandoInteracaoId(null)
       setFinalizandoObs('')
       const msgNotif = proximaSalva
@@ -2230,6 +2264,16 @@ export default function ClientePanel({
                     </div>
                     {tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}
                     {tarefa.conclusao && <p className="mt-1 text-xs text-green-800 bg-green-50 border border-green-100 rounded px-2 py-1"><strong>Conclusão:</strong> {tarefa.conclusao}</p>}
+                    {(() => {
+                      const iaInfo = obterClassificacaoTarefaIA(tarefa)
+                      if (!iaInfo) return null
+                      const cfgIA = CLASSIFICACAO_IA_CONFIG[iaInfo.classificacao]
+                      return (
+                        <p className={`mt-1 text-[11px] border rounded px-2 py-1 ${cfgIA.cor}`}>
+                          <strong>{cfgIA.label}:</strong> {iaInfo.motivo}
+                        </p>
+                      )
+                    })()}
                     {tarefa.justificativaPrazoLongo && <p className="mt-1 text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded px-2 py-1"><strong>Justificativa de prazo longo:</strong> {tarefa.justificativaPrazoLongo}</p>}
                     <p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}{tarefa.concluidaEm ? ` · Concluída em ${new Date(tarefa.concluidaEm).toLocaleString('pt-BR')}` : ''}</p>
                   </button>
@@ -3272,6 +3316,16 @@ export default function ClientePanel({
                                   {tarefaVinculada.concluidaEm && (
                                     <p className="mt-1 text-[10px] font-semibold text-green-700">Concluída em {new Date(tarefaVinculada.concluidaEm).toLocaleString('pt-BR')}{tarefaVinculada.concluidaPor ? ` por ${tarefaVinculada.concluidaPor}` : ''}</p>
                                   )}
+                                  {(() => {
+                                    const iaInfo = obterClassificacaoTarefaIA(tarefaVinculada)
+                                    if (!iaInfo) return null
+                                    const cfgIA = CLASSIFICACAO_IA_CONFIG[iaInfo.classificacao]
+                                    return (
+                                      <p className={`mt-1.5 text-[11px] border rounded px-2 py-1 ${cfgIA.cor}`}>
+                                        <strong>{cfgIA.label}:</strong> {iaInfo.motivo}
+                                      </p>
+                                    )
+                                  })()}
                                 </div>
                               )}
                             </div>

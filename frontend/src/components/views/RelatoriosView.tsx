@@ -35,7 +35,8 @@ import type {
   Vendedor,
 } from '../../types'
 import type { ClientePanelFocus } from '../ClientePanel'
-import { authFetch, BOT_URL, fetchTempoTelaRelatorio, type TempoTelaRelatorioItem } from '../../lib/botApi'
+import { authFetch, BOT_URL, executarRodadaAuditoriaIA, fetchAuditoriaIARegistros, fetchTempoTelaRelatorio, type TempoTelaRelatorioItem } from '../../lib/botApi'
+import { CLASSIFICACAO_IA_CONFIG, classificarRegistroLocal, type ClassificacaoIA, type RegistroAuditoriaIA } from '../../utils/iaAuditoria'
 import {
   EvolucaoSemanalSnapshot,
   fetchAllPropostas,
@@ -207,6 +208,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
   const [missoes, setMissoes] = useState<Missao[]>([])
   const [ttRelatorio, setTtRelatorio] = useState<TempoTelaRelatorioItem[]>([])
   const [evolucaoSemanal, setEvolucaoSemanal] = useState<EvolucaoSemanalSnapshot[]>([])
+  const [auditoriasBackend, setAuditoriasBackend] = useState<RegistroAuditoriaIA[]>([])
+  const [filtroClassIA, setFiltroClassIA] = useState<ClassificacaoIA | 'todas'>('Fraco')
+  const [rodandoIA, setRodandoIA] = useState(false)
   const snapshotSalvoRef = useRef(false)
 
   // Garante isolamento quando logado como vendedor
@@ -221,6 +225,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
   useEffect(() => {
     fetchAllPropostas().then(setPropostasLoaded).catch(() => {})
     fetchEvolucaoSemanal().then(setEvolucaoSemanal).catch(() => {})
+    if (isGerente) {
+      fetchAuditoriaIARegistros().then(setAuditoriasBackend).catch(() => {})
+    }
     authFetch(`${BOT_URL}/api/missoes?status=em_andamento`)
       .then(r => r.json())
       .then(r => setMissoes(r.data || []))
@@ -315,10 +322,103 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
     return m
   }, [ttRelatorio])
 
-  const todosSinaisIrregulares = useMemo(
-    () => isGerente ? detectarSinaisIrregulares(tarefasFiltradas, vendedores, empresaPorCardId) : [],
-    [isGerente, tarefasFiltradas, vendedores, empresaPorCardId]
-  )
+  // Consolidação das auditorias IA (só gestor: combina resultados salvos pelo Agente Gemini + avaliação imediata das conclusões/justificativas no período)
+  const registrosAuditoriaIA = useMemo<RegistroAuditoriaIA[]>(() => {
+    if (!isGerente) return []
+    const porChave = new Map<string, RegistroAuditoriaIA>()
+    for (const r of auditoriasBackend) porChave.set(r.chave, r)
+
+    for (const t of tarefasFiltradas) {
+      if (t.status !== 'concluida' || !t.conclusao) continue
+      const dt = dataConclusaoISO(t)
+      if (inicioISO !== '0001-01-01' && (dt < inicioISO || dt > fimISO)) continue
+      const chave = `tarefa:${t.id}`
+      if (porChave.has(chave)) continue
+      const emp = t.clienteId ? empresaPorCardId.get(t.clienteId) : undefined
+      const av = classificarRegistroLocal({
+        tipoRegistro: 'tarefa',
+        canalUsado: t.canalUsado || t.tipo,
+        objetivo: t.objetivo,
+        conclusao: t.conclusao,
+        justificativaPrazoLongo: t.justificativaPrazoLongo,
+      })
+      porChave.set(chave, {
+        chave,
+        tipoRegistro: 'tarefa',
+        tarefaId: t.id,
+        clienteId: t.clienteId,
+        clienteNome: emp?.cardPrincipal.razaoSocial,
+        vendedorId: t.vendedorId,
+        canalUsado: t.canalUsado || t.tipo,
+        objetivo: t.objetivo,
+        conclusao: t.conclusao,
+        justificativa: t.justificativaPrazoLongo,
+        classificacao: av.classificacao,
+        motivo: av.motivo,
+        analisadoEm: t.concluidaEm || t.data,
+      })
+    }
+
+    for (const emp of empresasFiltradas) {
+      for (const j of emp.justificativasCadastro) {
+        const chave = `cadastro:${emp.cardPrincipal.id}:${j.campo}`
+        if (porChave.has(chave)) continue
+        const av = classificarRegistroLocal({
+          tipoRegistro: 'cadastro',
+          justificativaCadastro: j.justificativa,
+        })
+        porChave.set(chave, {
+          chave,
+          tipoRegistro: 'cadastro',
+          clienteId: emp.cardPrincipal.id,
+          clienteNome: emp.cardPrincipal.razaoSocial,
+          vendedorId: emp.vendedorId ?? undefined,
+          campoCadastro: j.campo,
+          justificativa: j.justificativa,
+          classificacao: av.classificacao,
+          motivo: av.motivo,
+          analisadoEm: j.criadoEm,
+        })
+      }
+    }
+
+    return Array.from(porChave.values()).sort((a, b) => String(b.analisadoEm || '').localeCompare(String(a.analisadoEm || '')))
+  }, [isGerente, auditoriasBackend, tarefasFiltradas, empresasFiltradas, empresaPorCardId, inicioISO, fimISO])
+
+  const pctIAOkPorVendedor = useMemo(() => {
+    const m = new Map<number, { pct: number | null; total: number; marcados: RegistroAuditoriaIA[] }>()
+    if (!isGerente) return m
+    for (const v of vendedores) {
+      const doVend = registrosAuditoriaIA.filter(r => r.vendedorId === v.id)
+      const oks = doVend.filter(r => r.classificacao === 'OK').length
+      const marcados = doVend.filter(r => r.classificacao !== 'OK')
+      m.set(v.id, {
+        pct: doVend.length > 0 ? Math.round((oks / doVend.length) * 1000) / 10 : null,
+        total: doVend.length,
+        marcados,
+      })
+    }
+    return m
+  }, [isGerente, vendedores, registrosAuditoriaIA])
+
+  const todosSinaisIrregulares = useMemo(() => {
+    if (!isGerente) return []
+    const base = detectarSinaisIrregulares(tarefasFiltradas, vendedores, empresaPorCardId)
+    const marcadosIA = registrosAuditoriaIA
+      .filter(r => r.classificacao !== 'OK' && r.vendedorId != null)
+      .slice(0, 50)
+      .map(r => ({
+        tipo: 'ia_marcado' as const,
+        vendedorId: r.vendedorId!,
+        vendedorNome: vendedores.find(v => v.id === r.vendedorId)?.nome || `Vendedor #${r.vendedorId}`,
+        descricao: `[IA ${r.classificacao}] ${r.motivo}`,
+        tarefasIds: r.tarefaId ? [r.tarefaId] : [],
+        clienteId: r.clienteId,
+        clienteNome: r.clienteNome,
+        data: r.analisadoEm?.slice(0, 10),
+      }))
+    return [...base, ...marcadosIA]
+  }, [isGerente, tarefasFiltradas, vendedores, empresaPorCardId, registrosAuditoriaIA])
 
   // Indicadores por vendedor (Item 6 e Item 7: todos aparecem na tabela; entram nos totais só ativos com clientes na carteira)
   const linhasVendedores = useMemo(() => {
@@ -1336,6 +1436,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                   <th className="text-right py-2 px-2 font-semibold" title="Ativo / Atenção / Risco / Inat.Rec / Inat.Ant / Prospecto">Compra (A/At/R/IR/IA/P)</th>
                   <th className="text-right py-2 px-2 font-semibold" title="Completo + Justif. / Incompleto / Incompleto vencido">Cad. (OK/Inc/Venc)</th>
                   <th className="text-right py-2 px-2 font-semibold" title="Tarefas finalizadas ÷ carteira">Cont./Cli</th>
+                  <th className="text-right py-2 px-2 font-semibold" title="Registros classificados como OK pelo Agente de IA ÷ total analisado">% IA OK</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1390,6 +1491,29 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                       <button type="button" onClick={() => abrirListaEmpresas(`${l.vendedorNome} · Cadastros incompletos vencidos`, l.situacaoCadastroCounts.incompleto_vencido, { section: 'cadastro' })} className="text-orange-900 font-semibold hover:underline cursor-pointer">{l.situacaoCadastroCounts.incompleto_vencido.length}</button>
                     </td>
                     <td className="py-1.5 px-2 text-right font-semibold text-gray-700">{l.contatosPorClienteMes}</td>
+                    <td
+                      onClick={() => {
+                        const info = pctIAOkPorVendedor.get(l.vendedorId as number)
+                        if (!info || info.total === 0) return
+                        const lista = registrosAuditoriaIA.filter(r => r.vendedorId === l.vendedorId)
+                        abrirListaCustom(
+                          `${l.vendedorNome} · Auditoria IA`,
+                          lista.map(r => ({
+                            key: r.chave,
+                            empresa: r.clienteId ? empresaPorCardId.get(r.clienteId) : undefined,
+                            focus: r.tipoRegistro === 'cadastro' ? { section: 'cadastro' } : { section: 'tarefas', tarefaId: r.tarefaId },
+                            extraInfo: `[${r.classificacao}] ${r.motivo}`,
+                          })),
+                          'registros'
+                        )
+                      }}
+                      className="py-1.5 px-2 text-right font-semibold text-indigo-700 cursor-pointer hover:bg-indigo-50"
+                    >
+                      {(() => {
+                        const info = pctIAOkPorVendedor.get(l.vendedorId as number)
+                        return info?.pct != null ? `${info.pct}%` : '—'
+                      })()}
+                    </td>
                   </tr>
                 ))}
 
@@ -1412,6 +1536,11 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                     {indTotalAtivos.situacaoCadastroCounts.completo.length + indTotalAtivos.situacaoCadastroCounts.completo_com_justificativa.length}/{indTotalAtivos.situacaoCadastroCounts.incompleto.length}/{indTotalAtivos.situacaoCadastroCounts.incompleto_vencido.length}
                   </td>
                   <td className="py-2 px-2 text-right">{indTotalAtivos.contatosPorClienteMes}</td>
+                  <td className="py-2 px-2 text-right">
+                    {registrosAuditoriaIA.length > 0
+                      ? `${Math.round((registrosAuditoriaIA.filter(r => r.classificacao === 'OK').length / registrosAuditoriaIA.length) * 1000) / 10}%`
+                      : '—'}
+                  </td>
                 </tr>
 
                 {/* Linhas separadas dos dois Bancos (não somam nos totais de vendedores) */}
@@ -1441,6 +1570,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                     <td className="py-1.5 px-2 text-right whitespace-nowrap">
                       {b.situacaoCadastroCounts.completo.length + b.situacaoCadastroCounts.completo_com_justificativa.length}/{b.situacaoCadastroCounts.incompleto.length}/{b.situacaoCadastroCounts.incompleto_vencido.length}
                     </td>
+                    <td className="py-1.5 px-2 text-right">—</td>
                     <td className="py-1.5 px-2 text-right">—</td>
                   </tr>
                 ))}
@@ -1703,6 +1833,95 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
               </div>
             )}
           </div>
+
+          {/* Nível 2 · Agente de IA — Lista dos registros marcados com filtro por classificação (só gestor — Item 9) */}
+          {isGerente && (() => {
+            const alvoVendId = typeof indicadorNivel2?.vendedorId === 'number' ? indicadorNivel2.vendedorId : null
+            const listaIA = registrosAuditoriaIA
+              .filter(r => alvoVendId == null || r.vendedorId === alvoVendId)
+              .filter(r => filtroClassIA === 'todas' || r.classificacao === filtroClassIA)
+            return (
+              <div className="bg-white border border-gray-200 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">Agente de IA — Análise de conclusões e justificativas (visível só ao gestor)</h4>
+                    <p className="text-[11px] text-gray-500">Não bloqueia nem altera registros; apenas classifica como OK, Fraco ou Incoerente.</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(['Fraco', 'Incoerente', 'OK', 'todas'] as const).map(cl => (
+                      <button
+                        key={cl}
+                        type="button"
+                        onClick={() => setFiltroClassIA(cl)}
+                        className={`px-2.5 py-1 rounded-full border text-xs font-semibold cursor-pointer ${
+                          filtroClassIA === cl ? 'bg-primary-600 text-white border-primary-600' : 'bg-gray-50 text-gray-600 border-gray-200'
+                        }`}
+                      >
+                        {cl === 'todas' ? 'Todas' : cl}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={rodandoIA}
+                      onClick={async () => {
+                        setRodandoIA(true)
+                        try {
+                          const r = await executarRodadaAuditoriaIA()
+                          if (r.registros.length > 0) setAuditoriasBackend(r.registros)
+                          showToast?.('success', `Rodada de IA concluída (${r.auditados} novo(s) auditado(s)).`)
+                        } finally {
+                          setRodandoIA(false)
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold hover:bg-indigo-100 disabled:opacity-50 cursor-pointer"
+                    >
+                      {rodandoIA ? 'Analisando...' : 'Rodar análise Gemini'}
+                    </button>
+                  </div>
+                </div>
+
+                {listaIA.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-4 text-center">Nenhum registro com esta classificação no filtro atual.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 text-gray-500">
+                          <th className="text-left py-1.5 px-2">Classificação</th>
+                          <th className="text-left py-1.5 px-2">Vendedor</th>
+                          <th className="text-left py-1.5 px-2">Cliente</th>
+                          <th className="text-left py-1.5 px-2">Texto analisado</th>
+                          <th className="text-left py-1.5 px-2">Motivo (IA)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {listaIA.slice(0, 20).map(r => {
+                          const emp = r.clienteId ? empresaPorCardId.get(r.clienteId) : undefined
+                          const cfgIA = CLASSIFICACAO_IA_CONFIG[r.classificacao]
+                          const vendNome = r.vendedorId ? (vendedores.find(v => v.id === r.vendedorId)?.nome || '—') : '—'
+                          return (
+                            <tr
+                              key={r.chave}
+                              onClick={() => abrirCardCliente(emp, undefined, r.tipoRegistro === 'cadastro' ? { section: 'cadastro' } : { section: 'tarefas', tarefaId: r.tarefaId })}
+                              className="hover:bg-primary-50/50 cursor-pointer"
+                            >
+                              <td className="py-1.5 px-2">
+                                <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${cfgIA.cor}`}>{r.classificacao}</span>
+                              </td>
+                              <td className="py-1.5 px-2 text-gray-700">{vendNome.split(' ')[0]}</td>
+                              <td className="py-1.5 px-2 font-medium text-gray-900">{r.clienteNome || emp?.cardPrincipal.razaoSocial || '—'}</td>
+                              <td className="py-1.5 px-2 text-gray-600 max-w-[220px] truncate">{r.conclusao || r.justificativa || '—'}</td>
+                              <td className="py-1.5 px-2 text-gray-700">{r.motivo}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
       )}
 

@@ -19,6 +19,7 @@ import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
 import { processarJobsPendentes, avaliarAutomacoes, executarAutomacaoManual, garantirSnapshotEvolucaoSemanal } from './cron.js'
+import { auditarJustificativaCadastro, auditarTarefaFinalizada, listarAuditoriasIA, rodarAuditoriaIADiaria } from './ia-auditoria.js'
 import { startBulkDispatch, getBatchStatus, getAllBatches, getBatchesByVendedor, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter, omieDocsRouter } from './routes/omie.js'
 import { placesRouter } from './routes/places.js'
@@ -1132,6 +1133,49 @@ app.get('/api/tempo-tela/relatorio', requireAuth, async (req, res) => {
   }
 })
 
+// ─── Fase 3 · Item 9: Agente de IA para Auditoria de Tarefas e Cadastro ───
+
+// Disparo pós-salvamento (não bloqueia o vendedor e não retorna classificação ao vendedor)
+app.post('/api/ia/auditar-registro', requireAuth, rateLimit(120, 60_000), async (req, res) => {
+  const { tipo, tarefaId, clienteId, campo, justificativa } = req.body || {}
+  const callerVend = reqVendedor(req)
+  res.json({ queued: true })
+  try {
+    if (tipo === 'tarefa' && tarefaId) {
+      await auditarTarefaFinalizada(Number(tarefaId))
+    } else if (tipo === 'cadastro' && clienteId && campo && justificativa) {
+      await auditarJustificativaCadastro({
+        clienteId: Number(clienteId),
+        campo: String(campo),
+        justificativa: String(justificativa),
+        vendedorId: callerVend?.id,
+      })
+    }
+  } catch (err) {
+    log.warn({ err }, 'Erro assíncrono na auditoria IA pós-salvamento')
+  }
+})
+
+// Visibilidade exclusiva do gestor (vendedor nunca vê nenhuma classificação)
+app.get('/api/ia/auditoria', requireAuth, requireGerente, async (_req, res) => {
+  try {
+    const registros = await listarAuditoriasIA()
+    res.json({ registros })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro ao listar auditorias IA' })
+  }
+})
+
+app.post('/api/ia/auditar-rodada', requireAuth, requireGerente, async (_req, res) => {
+  try {
+    const auditados = await rodarAuditoriaIADiaria(50)
+    const registros = await listarAuditoriasIA()
+    res.json({ auditados, registros })
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Erro na rodada de auditoria IA' })
+  }
+})
+
 // ─── Roleplay ───
 
 app.post('/api/roleplay/sessao', requireAuth, async (req, res) => {
@@ -2215,7 +2259,7 @@ async function start() {
   setInterval(async () => {
     if (cronRunning) return
     cronRunning = true
-    try { await avaliarAutomacoes(); await processarJobsPendentes(); await garantirSnapshotEvolucaoSemanal() } finally { cronRunning = false }
+    try { await avaliarAutomacoes(); await processarJobsPendentes(); await garantirSnapshotEvolucaoSemanal(); await rodarAuditoriaIADiaria() } finally { cronRunning = false }
   }, 5 * 60 * 1000)
   log.info('⏰ Scheduler de jobs: a cada 5 minutos')
 
