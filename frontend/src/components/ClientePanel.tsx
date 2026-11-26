@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
-import { XMarkIcon, PencilIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, PencilIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import WhatsAppIcon from './icons/WhatsAppIcon'
 import type { Cliente, Interacao, Atividade, Tarefa, Vendedor, Produto, Pedido, ItemPedido, PropostaHistorico, ConsumoProdutoInfo, ProdutosConsumoMap } from '../types'
 import { fetchPropostasByCliente, savePropostaHistorico } from '../lib/database'
@@ -207,6 +207,7 @@ export default function ClientePanel({
   const [showCadastroCompleto, setShowCadastroCompleto] = useState(false)
   const [showInfoSituacaoCompra, setShowInfoSituacaoCompra] = useState(false)
   const [waLightbox, setWaLightbox] = useState<{ url: string; caption?: string } | null>(null)
+  const [waHistSearch, setWaHistSearch] = useState('')
   const [mapReady, setMapReady] = useState(false)
   const [auditoriasIA, setAuditoriasIA] = useState<Map<string, RegistroAuditoriaIA>>(
     () => (_auditoriasIACache && Date.now() - _auditoriasIACache.ts < 60_000 ? _auditoriasIACache.map : new Map())
@@ -642,10 +643,33 @@ export default function ClientePanel({
   }, [tarefas, familiaEmpresaIds, familiaEmpresa])
 
   const limparConclusao = (txt?: string) => (txt || '').split(/\n*\[CONCLUSAO\]/i)[0].trim()
+
+  // Filtra mensagens soltas do chat WhatsApp (ficam apenas na aba WhatsApp) e deduplica notas repetidas
+  const clienteInteracoesFiltradas = React.useMemo(() => {
+    const vistos = new Set<string>()
+    const vistasTextoMinuto = new Set<string>()
+    const out: Interacao[] = []
+    for (const i of clienteInteracoesBase) {
+      if (i.tipo === 'whatsapp' && (i.assunto === 'Mensagem WhatsApp' || i.assunto === 'WhatsApp recebido')) continue
+      const idKey = `id:${i.id}`
+      if (vistos.has(idKey)) continue
+      vistos.add(idKey)
+      const minuto = Math.floor(new Date(i.data).getTime() / 60000)
+      const txtKey = `${i.tipo}|${(i.assunto || '').trim()}|${(i.descricao || '').trim()}|${minuto}`
+      if (vistasTextoMinuto.has(txtKey)) continue
+      vistasTextoMinuto.add(txtKey)
+      out.push(i)
+    }
+    return out
+  }, [clienteInteracoesBase])
+
+  // IMPORTANTE: usar exatamente a mesma regra de descMatch/assuntoMatch do render (e NUNCA vincular notas automáticas por timestamp!),
+  // pois o tsMatch antigo (<15s) engolia as tarefas automáticas de cadastro ("Incluir produtos" e "Completar cadastro")
+  // dentro da nota automática "Cliente cadastrado por...", fazendo as tarefas sumirem da ficha do cliente!
   const tarefasVinculadasIds = new Set<number>()
-  for (const inter of clienteInteracoesBase) {
+  for (const inter of clienteInteracoesFiltradas) {
+    if (inter.automatico || inter.tipo === 'nota') continue
     const interDescBase = limparConclusao(inter.descricao)
-    const interTs = new Date(inter.data).getTime()
     const t = clienteTarefasBase.find(t => {
       if (tarefasVinculadasIds.has(t.id)) return false
       const tDescBase = limparConclusao(t.descricao)
@@ -653,9 +677,7 @@ export default function ClientePanel({
       const tituloLower = (t.titulo || '').toLowerCase()
       const assuntoLower = (inter.assunto || '').toLowerCase()
       const assuntoMatch = assuntoLower.length > 5 && tituloLower.includes(assuntoLower.slice(0, 30))
-      const tTs = t.criadoEm ? new Date(t.criadoEm).getTime() : NaN
-      const tsMatch = Number.isFinite(interTs) && Number.isFinite(tTs) && Math.abs(interTs - tTs) < 15_000 && t.clienteId === inter.clienteId
-      return descMatch || assuntoMatch || tsMatch
+      return descMatch || assuntoMatch
     })
     if (t) tarefasVinculadasIds.add(t.id)
   }
@@ -682,26 +704,6 @@ export default function ClientePanel({
   )
 
   type InteracaoGlobal = Interacao & { cicloOrigem?: number; anexoNome?: string }
-
-  // Filtra mensagens soltas do chat WhatsApp (ficam apenas na aba WhatsApp) e deduplica notas repetidas
-  const clienteInteracoesFiltradas = React.useMemo(() => {
-    const vistos = new Set<string>()
-    const vistasTextoMinuto = new Set<string>()
-    const out: Interacao[] = []
-    for (const i of clienteInteracoesBase) {
-      // Mensagens avulsas enviadas pelo chat WhatsApp ficam salvas só no histórico da aba WhatsApp (não viram tarefa/card aqui)
-      if (i.tipo === 'whatsapp' && (i.assunto === 'Mensagem WhatsApp' || i.assunto === 'WhatsApp recebido')) continue
-      const idKey = `id:${i.id}`
-      if (vistos.has(idKey)) continue
-      vistos.add(idKey)
-      const minuto = Math.floor(new Date(i.data).getTime() / 60000)
-      const txtKey = `${i.tipo}|${(i.assunto || '').trim()}|${(i.descricao || '').trim()}|${minuto}`
-      if (vistasTextoMinuto.has(txtKey)) continue
-      vistasTextoMinuto.add(txtKey)
-      out.push(i)
-    }
-    return out
-  }, [clienteInteracoesBase])
 
   const descricoesInteracaoExistentes = React.useMemo(
     () => new Set(clienteInteracoesFiltradas.map(i => (i.descricao || '').trim().toLowerCase()).filter(Boolean)),
@@ -2484,11 +2486,30 @@ export default function ClientePanel({
           {/* ===== ABA WHATSAPP — conversa estilo Apple Messages (Claro e Escuro) ===== */}
           {activeTab === 'whatsapp' && (
             <div className="space-y-2.5">
-              <div className="flex justify-end">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <MagnifyingGlassIcon className="h-3.5 w-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={waHistSearch}
+                    onChange={e => setWaHistSearch(e.target.value)}
+                    placeholder="Buscar na conversa..."
+                    className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-[#1C1C1E] border border-black/[0.08] dark:border-white/[0.10] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                  />
+                  {waHistSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setWaHistSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 cursor-pointer"
+                    >
+                      <XMarkIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowWhatsApp(true)}
-                  className="px-3.5 py-1.5 bg-primary-700 hover:bg-primary-800 text-white text-xs font-medium rounded-lg shadow-apple-sm transition-colors"
+                  className="px-3.5 py-1.5 bg-primary-700 hover:bg-primary-800 text-white text-xs font-medium rounded-lg shadow-apple-sm transition-colors cursor-pointer"
                 >
                   Abrir chat WhatsApp
                 </button>
@@ -2506,7 +2527,10 @@ export default function ClientePanel({
                     </p>
                   </div>
                 )}
-                {waHistorico.map(m => {
+                {(waHistSearch.trim()
+                  ? waHistorico.filter(m => (`${m.mensagem || ''} ${m.fileName || ''}`).toLowerCase().includes(waHistSearch.trim().toLowerCase()))
+                  : waHistorico
+                ).map(m => {
                   const enviada = m.direcao === 'enviada'
                   return (
                     <div key={m.id} className={`flex ${enviada ? 'justify-end' : 'justify-start'}`}>

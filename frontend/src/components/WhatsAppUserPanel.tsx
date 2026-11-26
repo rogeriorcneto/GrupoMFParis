@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon, ShareIcon } from '@heroicons/react/24/outline'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { XMarkIcon, PaperAirplaneIcon, ArrowPathIcon, QrCodeIcon, PhoneIcon, MicrophoneIcon, StopIcon, TrashIcon, PhotoIcon, MagnifyingGlassIcon, UserGroupIcon, ChatBubbleLeftRightIcon, SparklesIcon, CpuChipIcon, CheckCircleIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon, ShareIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor } from '../types'
 import {
   getUserWhatsAppStatus, getUserWhatsAppQR,
@@ -284,8 +284,34 @@ export const WhatsAppImageLightbox: React.FC<{
   )
 }
 
+function highlightQueryText(text: string, query: string, isMine: boolean): React.ReactNode {
+  const q = query.trim()
+  if (!q) return text
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  if (parts.length <= 1) return text
+  const lower = q.toLowerCase()
+  return parts.map((part, idx) =>
+    part.toLowerCase() === lower ? (
+      <mark
+        key={idx}
+        className={`rounded px-0.5 font-semibold ${isMine ? 'bg-amber-300 text-gray-900' : 'bg-amber-200 text-gray-900'}`}
+      >
+        {part}
+      </mark>
+    ) : (
+      <React.Fragment key={idx}>{part}</React.Fragment>
+    )
+  )
+}
+
 /** Renderiza o corpo da mensagem — mídia (áudio, imagem clicável, vídeo, doc) ou texto */
-function renderMessageContent(msg: Message, isMine = false, onOpenImage?: (url: string, caption?: string) => void) {
+function renderMessageContent(
+  msg: Message,
+  isMine = false,
+  onOpenImage?: (url: string, caption?: string) => void,
+  searchQuery = '',
+) {
   if (msg.mediaUrl) {
     switch (msg.tipo) {
       case 'audio':
@@ -306,14 +332,14 @@ function renderMessageContent(msg: Message, isMine = false, onOpenImage?: (url: 
       case 'document':
         return (
           <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className={`underline text-xs block mb-1 ${isMine ? 'text-white/90' : 'text-primary-700'}`}>
-            {msg.fileName || 'Abrir documento'}
+            {highlightQueryText(msg.fileName || 'Abrir documento', searchQuery, isMine)}
           </a>
         )
       default:
         break
     }
   }
-  return <p className="whitespace-pre-wrap">{msg.text}</p>
+  return <p className="whitespace-pre-wrap">{highlightQueryText(msg.text || '', searchQuery, isMine)}</p>
 }
 
 const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
@@ -357,9 +383,20 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   const [contactSearch, setContactSearch] = useState('')
   const [selectedContact, setSelectedContact] = useState<WAContactItem | null>(null)
 
-  // Image attachment + Lightbox state
+  // Image attachment + Lightbox + Smart scroll + In-chat search state
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [lightboxImage, setLightboxImage] = useState<{ url: string; caption?: string } | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const forceScrollBottomRef = useRef(true)
+  const prevMsgCountRef = useRef(0)
+  const [hasUnreadBelow, setHasUnreadBelow] = useState(false)
+
+  const [chatSearchOpen, setChatSearchOpen] = useState(false)
+  const [chatSearchQuery, setChatSearchQuery] = useState('')
+  const [chatSearchIdx, setChatSearchIdx] = useState(0)
+  const chatSearchInputRef = useRef<HTMLInputElement>(null)
+  const msgElemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Validation state
   const [validating, setValidating] = useState(false)
@@ -536,6 +573,13 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
   useEffect(() => {
     let cancelled = false
     setMessages([])
+    forceScrollBottomRef.current = true
+    isNearBottomRef.current = true
+    prevMsgCountRef.current = 0
+    setHasUnreadBelow(false)
+    setChatSearchOpen(false)
+    setChatSearchQuery('')
+    setChatSearchIdx(0)
 
     if (!waStatus.connected) {
       setChatLoading(false)
@@ -630,7 +674,6 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
           }))
           setMessages(prev => {
             const systemMsgs = prev.filter(m => m.from === 'system')
-            // Mantém bolha otimista local (id numérico) somente enquanto nenhuma mensagem enviada igual chegou do servidor
             const pendingLocal = prev.filter(m => {
               if (typeof m.id !== 'number') return false
               const jaChegou = incoming.some(inc =>
@@ -639,7 +682,15 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
               )
               return !jaChegou
             })
-            return [...incoming, ...pendingLocal, ...systemMsgs]
+            const next = [...incoming, ...pendingLocal, ...systemMsgs]
+            // Se nada mudou, preserva a referência de prev para NÃO disparar re-render nem mexer na rolagem!
+            if (
+              prev.length === next.length &&
+              prev.every((m, idx) => String(m.id) === String(next[idx].id) && m.mediaUrl === next[idx].mediaUrl && m.text === next[idx].text)
+            ) {
+              return prev
+            }
+            return next
           })
         } else if (cliente?.id) {
           fetchWhatsAppMessages({ clienteId: cliente.id, limit: 100 }).then(dbMsgs => {
@@ -655,7 +706,14 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             }))
             setMessages(prev => {
               const systemMsgs = prev.filter(m => m.from === 'system')
-              return [...incoming, ...systemMsgs]
+              const next = [...incoming, ...systemMsgs]
+              if (
+                prev.length === next.length &&
+                prev.every((m, idx) => String(m.id) === String(next[idx].id) && m.mediaUrl === next[idx].mediaUrl && m.text === next[idx].text)
+              ) {
+                return prev
+              }
+              return next
             })
           }).catch(() => {})
         }
@@ -664,9 +722,56 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     return () => { cancelled = true; clearInterval(iv) }
   }, [waStatus.connected, cliente?.id, cliente?.whatsapp, cliente?.contatoCelular, cliente?.contatoTelefone, selectedContact?.jid])
 
+  const scrollToBottom = useCallback((smooth = false) => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    else el.scrollTop = el.scrollHeight
+    isNearBottomRef.current = true
+    setHasUnreadBelow(false)
+  }, [])
+
+  // Rolagem inteligente: só desce ao abrir a conversa, ao enviar mensagem ou quando o usuário já está no final.
+  // Se o usuário subiu para ler o histórico (ou está buscando), NUNCA puxa a tela para baixo sozinho!
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (messages.length === 0) {
+      prevMsgCountRef.current = 0
+      return
+    }
+    if (chatSearchOpen && chatSearchQuery.trim()) {
+      prevMsgCountRef.current = messages.length
+      return
+    }
+    if (forceScrollBottomRef.current) {
+      forceScrollBottomRef.current = false
+      requestAnimationFrame(() => scrollToBottom(false))
+    } else if (isNearBottomRef.current) {
+      if (messages.length > prevMsgCountRef.current) {
+        requestAnimationFrame(() => scrollToBottom(true))
+      }
+    } else if (messages.length > prevMsgCountRef.current) {
+      setHasUnreadBelow(true)
+    }
+    prevMsgCountRef.current = messages.length
+  }, [messages, chatSearchOpen, chatSearchQuery, scrollToBottom])
+
+  const matchedMsgIds = useMemo(() => {
+    const q = chatSearchQuery.trim().toLowerCase()
+    if (!chatSearchOpen || !q) return [] as string[]
+    return messages
+      .filter(m => m.from !== 'system' && (`${m.text || ''} ${m.fileName || ''}`).toLowerCase().includes(q))
+      .map(m => String(m.id))
+  }, [messages, chatSearchOpen, chatSearchQuery])
+
+  const activeMatchedMsgId = matchedMsgIds.length > 0
+    ? matchedMsgIds[Math.min(chatSearchIdx, matchedMsgIds.length - 1)]
+    : null
+
+  useEffect(() => {
+    if (!activeMatchedMsgId) return
+    const el = msgElemRefs.current.get(activeMatchedMsgId)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [activeMatchedMsgId])
 
   // Handle image send
   const handleImageSend = useCallback(async (file: File) => {
@@ -683,6 +788,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
       const base64 = dataUrl.split(',')[1]
       const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       const tempId = Date.now()
+      forceScrollBottomRef.current = true
       setMessages(prev => [...prev, { id: tempId, text: `📷 [Imagem] ${file.name}`, mediaUrl: dataUrl, tipo: 'image', from: 'me', time: now }])
       const result = await sendUserWhatsAppImage(num, base64, file.type, undefined, cliente?.id)
       if (!result.success) {
@@ -761,6 +867,7 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
     setSending(true)
 
     const tempId = Date.now()
+    forceScrollBottomRef.current = true
     setMessages(prev => [...prev, {
       id: tempId, text: msg, from: 'me',
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -1207,6 +1314,25 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             {getChatNumber() && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
+                  type="button"
+                  onClick={() => {
+                    setChatSearchOpen(v => {
+                      const next = !v
+                      if (!next) { setChatSearchQuery(''); setChatSearchIdx(0) }
+                      else setTimeout(() => chatSearchInputRef.current?.focus(), 30)
+                      return next
+                    })
+                  }}
+                  title="Buscar na conversa"
+                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                    chatSearchOpen
+                      ? 'bg-primary-700 text-white'
+                      : 'bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08]'
+                  }`}
+                >
+                  <MagnifyingGlassIcon className="h-4 w-4" />
+                </button>
+                <button
                   onClick={() => { setCallMode('phone'); setShowCallRecorder(true) }}
                   title="Ligar (telefone) + gravar"
                   className="p-1.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 hover:bg-black/[0.08] transition-colors"
@@ -1226,8 +1352,76 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
             )}
           </div>
 
-          {/* Messages — Apple Messages style (Claro e Escuro) */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-[#F5F5F7] dark:bg-[#141416]" style={{ minHeight: compact ? 200 : 300 }}>
+          {/* Barra de busca dentro da conversa */}
+          {chatSearchOpen && (
+            <div className="px-3 py-2 bg-white/95 dark:bg-[#1C1C1E]/95 border-b border-black/[0.05] dark:border-white/[0.07] flex items-center gap-2">
+              <div className="relative flex-1">
+                <MagnifyingGlassIcon className="h-3.5 w-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  ref={chatSearchInputRef}
+                  type="text"
+                  value={chatSearchQuery}
+                  onChange={e => { setChatSearchQuery(e.target.value); setChatSearchIdx(Math.max(0, matchedMsgIds.length - 1)) }}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setChatSearchOpen(false); setChatSearchQuery('') }
+                    if (e.key === 'Enter' && matchedMsgIds.length > 0) {
+                      e.preventDefault()
+                      setChatSearchIdx(prev => e.shiftKey ? (prev - 1 + matchedMsgIds.length) % matchedMsgIds.length : (prev + 1) % matchedMsgIds.length)
+                    }
+                  }}
+                  placeholder="Buscar palavra ou trecho nesta conversa..."
+                  className="w-full pl-8 pr-3 py-1 text-xs bg-[#F5F5F7] dark:bg-[#262629] rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+                />
+              </div>
+              {chatSearchQuery.trim() && (
+                <span className="text-[11px] text-gray-500 tabular-nums whitespace-nowrap">
+                  {matchedMsgIds.length === 0 ? '0 resultados' : `${Math.min(chatSearchIdx + 1, matchedMsgIds.length)} de ${matchedMsgIds.length}`}
+                </span>
+              )}
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  disabled={matchedMsgIds.length === 0}
+                  onClick={() => setChatSearchIdx(prev => (prev - 1 + matchedMsgIds.length) % matchedMsgIds.length)}
+                  title="Resultado anterior"
+                  className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30 text-gray-600 cursor-pointer"
+                >
+                  <ChevronUpIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={matchedMsgIds.length === 0}
+                  onClick={() => setChatSearchIdx(prev => (prev + 1) % matchedMsgIds.length)}
+                  title="Próximo resultado"
+                  className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30 text-gray-600 cursor-pointer"
+                >
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setChatSearchOpen(false); setChatSearchQuery('') }}
+                  title="Fechar busca"
+                  className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-700 cursor-pointer"
+                >
+                  <XMarkIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Messages — Apple Messages style (Claro e Escuro) com rolagem livre sem puxar para baixo */}
+          <div
+            ref={messagesContainerRef}
+            onScroll={() => {
+              const el = messagesContainerRef.current
+              if (!el) return
+              const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 90
+              isNearBottomRef.current = nearBottom
+              if (nearBottom && hasUnreadBelow) setHasUnreadBelow(false)
+            }}
+            className="relative flex-1 overflow-y-auto p-4 space-y-2.5 bg-[#F5F5F7] dark:bg-[#141416]"
+            style={{ minHeight: compact ? 200 : 300 }}
+          >
             {chatLoading && (
               <div className="text-center py-4">
                 <div className="inline-block animate-spin h-5 w-5 border-2 border-primary-600 border-t-transparent rounded-full" />
@@ -1240,25 +1434,47 @@ const WhatsAppUserPanel: React.FC<WhatsAppUserPanelProps> = ({
                 </p>
               </div>
             )}
-            {messages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.from === 'me' ? 'justify-end' : msg.from === 'them' ? 'justify-start' : 'justify-center'}`}>
-                {msg.from === 'system' ? (
-                  <div className="bg-white dark:bg-[#262629] border border-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-full max-w-[85%] shadow-sm">
-                    {msg.text}
-                  </div>
-                ) : msg.from === 'them' ? (
-                  <div className="text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-bl-sm max-w-[82%] shadow-sm bg-white dark:bg-[#262629] text-gray-900 dark:text-gray-100 border border-black/[0.04] dark:border-white/[0.06]">
-                    {renderMessageContent(msg, false, (url, caption) => setLightboxImage({ url, caption }))}
-                    <p className="text-[10px] text-right mt-1 text-gray-400 tabular-nums">{msg.time}</p>
-                  </div>
-                ) : (
-                  <div className="text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-br-sm max-w-[82%] shadow-sm bg-primary-700 dark:bg-[#2A4380] text-white">
-                    {renderMessageContent(msg, true, (url, caption) => setLightboxImage({ url, caption }))}
-                    <p className="text-[10px] text-right mt-1 text-white/70 tabular-nums">{msg.time} · enviada</p>
-                  </div>
-                )}
+            {messages.map(msg => {
+              const strId = String(msg.id)
+              const isActiveMatch = activeMatchedMsgId === strId
+              return (
+                <div
+                  key={msg.id}
+                  ref={el => {
+                    if (el) msgElemRefs.current.set(strId, el)
+                    else msgElemRefs.current.delete(strId)
+                  }}
+                  className={`flex ${msg.from === 'me' ? 'justify-end' : msg.from === 'them' ? 'justify-start' : 'justify-center'}`}
+                >
+                  {msg.from === 'system' ? (
+                    <div className="bg-white dark:bg-[#262629] border border-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-full max-w-[85%] shadow-sm">
+                      {msg.text}
+                    </div>
+                  ) : msg.from === 'them' ? (
+                    <div className={`text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-bl-sm max-w-[82%] shadow-sm bg-white dark:bg-[#262629] text-gray-900 dark:text-gray-100 border border-black/[0.04] dark:border-white/[0.06] transition-all ${isActiveMatch ? 'ring-2 ring-amber-400' : ''}`}>
+                      {renderMessageContent(msg, false, (url, caption) => setLightboxImage({ url, caption }), chatSearchOpen ? chatSearchQuery : '')}
+                      <p className="text-[10px] text-right mt-1 text-gray-400 tabular-nums">{msg.time}</p>
+                    </div>
+                  ) : (
+                    <div className={`text-[13px] leading-relaxed px-3.5 py-2 rounded-2xl rounded-br-sm max-w-[82%] shadow-sm bg-primary-700 dark:bg-[#2A4380] text-white transition-all ${isActiveMatch ? 'ring-2 ring-amber-400' : ''}`}>
+                      {renderMessageContent(msg, true, (url, caption) => setLightboxImage({ url, caption }), chatSearchOpen ? chatSearchQuery : '')}
+                      <p className="text-[10px] text-right mt-1 text-white/70 tabular-nums">{msg.time} · enviada</p>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {hasUnreadBelow && (
+              <div className="sticky bottom-2 flex justify-center pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => scrollToBottom(true)}
+                  className="pointer-events-auto px-3 py-1 rounded-full bg-white/95 dark:bg-[#262629]/95 border border-black/[0.08] shadow-md text-xs font-semibold text-primary-700 hover:bg-white cursor-pointer"
+                >
+                  ↓ Novas mensagens
+                </button>
               </div>
-            ))}
+            )}
             <div ref={chatEndRef} />
           </div>
 

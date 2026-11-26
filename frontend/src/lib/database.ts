@@ -1023,35 +1023,45 @@ export async function insertInteracao(i: Omit<Interacao, 'id'>): Promise<Interac
 
 export async function fetchTarefas(): Promise<Tarefa[]> {
   const PAGE_SIZE = 1000
-  const { count, error: countErr } = await supabase
-    .from('tarefas')
-    .select('id', { count: 'exact', head: true })
-  if (!countErr && typeof count === 'number' && count > 0) {
-    const pages = Math.ceil(count / PAGE_SIZE)
-    const chunks = await Promise.all(
-      Array.from({ length: pages }, (_, p) =>
-        withAuthRetry(async () => {
-          const r = await supabase
-            .from('tarefas')
-            .select('*')
-            .order('id', { ascending: true })
-            .range(p * PAGE_SIZE, (p + 1) * PAGE_SIZE - 1)
-          return r
-        })
+  try {
+    const countRes = await withAuthRetry(async () => {
+      const r = await supabase.from('tarefas').select('id', { count: 'exact', head: true })
+      return { data: r.count ?? null, error: r.error }
+    })
+    const count = countRes.data
+    if (!countRes.error && typeof count === 'number' && count > 0) {
+      const pages = Math.ceil(count / PAGE_SIZE)
+      const chunks = await Promise.all(
+        Array.from({ length: pages }, (_, p) =>
+          withAuthRetry(async () => {
+            const r = await supabase
+              .from('tarefas')
+              .select('*')
+              .order('id', { ascending: true })
+              .range(p * PAGE_SIZE, (p + 1) * PAGE_SIZE - 1)
+            return r
+          })
+        )
       )
-    )
-    const allRows: any[] = []
-    for (const ch of chunks) {
-      if (ch.error) throw ch.error
-      if (ch.data) allRows.push(...ch.data)
+      const allRows: any[] = []
+      let hadError = false
+      for (const ch of chunks) {
+        if (ch.error) { hadError = true; break }
+        if (ch.data) allRows.push(...ch.data)
+      }
+      if (!hadError) return allRows.map(tarefaFromDb)
     }
-    return allRows.map(tarefaFromDb)
+  } catch {
+    // Fallback sequencial abaixo
   }
 
   let allRows: any[] = []
   let from = 0
   while (true) {
-    const { data, error } = await supabase.from('tarefas').select('*').order('data').range(from, from + PAGE_SIZE - 1)
+    const { data, error } = await withAuthRetry(async () => {
+      const r = await supabase.from('tarefas').select('*').order('id', { ascending: true }).range(from, from + PAGE_SIZE - 1)
+      return r
+    })
     if (error) throw error
     if (!data || data.length === 0) break
     allRows = allRows.concat(data)
