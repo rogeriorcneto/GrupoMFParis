@@ -14,12 +14,12 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
-import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa, existeCardAtivoNoFunil } from '../../utils/funil-logic'
+import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
 import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa, transicoesPermitidas } from '../../utils/constants'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { PESO_PIPELINE, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import { extractValidSocialLinks } from '../../utils/socialLinks'
-import { familiaDoClienteNoFunil, obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../../utils/situacaoCompra'
+import { classificarSituacaoCompra, pedidoContaComoVenda, SITUACAO_COMPRA_CONFIG, type SituacaoCompra } from '../../utils/situacaoCompra'
 import { fetchAllPropostas } from '../../lib/database'
 import { omieSyncLogistics } from '../../lib/omieApi'
 import { useParametrosListas } from '../../lib/parametrosListas'
@@ -110,16 +110,78 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
   const [syncing, setSyncing] = useState(false)
   const [seloSituacaoAberto, setSeloSituacaoAberto] = useState<number | null>(null)
-  const situacaoCompraCache = useMemo(() => new Map<string, ReturnType<typeof obterSituacaoCompraCliente>>(), [clientes, pedidos])
-  const situacaoCompraDoCard = (cliente: Cliente) => {
-    const familia = familiaDoClienteNoFunil(cliente, clientes)
-    const key = familia.map(f => f.id).sort((a, b) => a - b).join('|') || String(cliente.id)
-    const cached = situacaoCompraCache.get(key)
-    if (cached) return cached
-    const calculada = obterSituacaoCompraCliente(cliente, clientes, pedidos)
-    situacaoCompraCache.set(key, calculada)
-    return calculada
-  }
+  const INITIAL_COL_LIMIT = 50
+  const [colLimits, setColLimits] = useState<Record<string, number>>({})
+
+  // P0 Performance: Índice O(N) único para famílias de empresas e situação de compra (evita O(N²) de ~10M iterações por render)
+  const { rootByCardId, situacaoPorCardId } = useMemo(() => {
+    const parent = new Map<number, number>()
+    for (const c of clientes) parent.set(c.id, c.id)
+    const find = (x: number): number => {
+      let cur = x
+      while (parent.get(cur) !== cur) {
+        const p = parent.get(cur)!
+        parent.set(cur, parent.get(p)!)
+        cur = p
+      }
+      return cur
+    }
+    const seen = new Map<string, number>()
+    for (const c of clientes) {
+      if (c.arquivadoDuplicata) continue
+      const keys: string[] = []
+      if (c.empresaFunilId) keys.push(`ef:${c.empresaFunilId}`)
+      const doc = (c.cnpj || c.cpf || '').replace(/\D/g, '')
+      if (doc) keys.push(`doc:${doc}`)
+      if (c.omieCodigo) keys.push(`om:${c.omieCodigo}`)
+      const nm = (c.razaoSocial || '').trim().toLowerCase()
+      if (nm) keys.push(`nm:${nm}`)
+      for (const k of keys) {
+        const prev = seen.get(k)
+        if (prev !== undefined) {
+          const ra = find(c.id), rb = find(prev)
+          if (ra !== rb) parent.set(rb, ra)
+        } else {
+          seen.set(k, c.id)
+        }
+      }
+    }
+    const rootByCard = new Map<number, number>()
+    const ultimaPorRoot = new Map<number, string>()
+    const setUltima = (root: number | undefined, raw?: string | null) => {
+      if (root === undefined || !raw) return
+      const iso = raw.slice(0, 10)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return
+      const prev = ultimaPorRoot.get(root)
+      if (!prev || iso > prev) ultimaPorRoot.set(root, iso)
+    }
+    for (const c of clientes) {
+      const r = find(c.id)
+      rootByCard.set(c.id, r)
+      if (!c.arquivadoDuplicata && c.dataUltimaVenda) setUltima(r, c.dataUltimaVenda)
+    }
+    for (const p of pedidos) {
+      if (!pedidoContaComoVenda(p)) continue
+      const r = rootByCard.get(p.clienteId)
+      setUltima(r, p.dataEnvioOmie || p.dataAprovacao || p.dataEnvio || p.dataCriacao)
+    }
+    const porRoot = new Map<number, { situacao: SituacaoCompra; dias: number | null }>()
+    const situacaoMap = new Map<number, { situacao: SituacaoCompra; dias: number | null }>()
+    for (const c of clientes) {
+      const r = rootByCard.get(c.id)!
+      let calc = porRoot.get(r)
+      if (!calc) {
+        const res = classificarSituacaoCompra(ultimaPorRoot.get(r) || null)
+        calc = { situacao: res.situacao, dias: res.dias }
+        porRoot.set(r, calc)
+      }
+      situacaoMap.set(c.id, calc)
+    }
+    return { rootByCardId: rootByCard, situacaoPorCardId: situacaoMap }
+  }, [clientes, pedidos])
+
+  const situacaoCompraDoCard = (cliente: Cliente) =>
+    situacaoPorCardId.get(cliente.id) || { situacao: 'prospecto' as SituacaoCompra, dias: null }
   const [showNovosCiclos, setShowNovosCiclos] = useState(false)
   const [novoCicloEscondidos, setNovoCicloEscondidos] = useState<Set<number>>(new Set())
   // Lock detection: clients in amostra 45+ days or follow_up entregue 45+ days
@@ -425,15 +487,20 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
     return m
   }, [clientesFiltrados, displayedStages])
 
-  // Clientes em follow_up OU perdidos vindo de negociação que podem iniciar novo ciclo
-  // (cards de novo ciclo em proposta já aparecem como cards normais na coluna)
+  // P0 Performance: O(N) lookup em vez de O(N²) com existeCardAtivoNoFunil por cliente
   const clientesNovoCiclo = useMemo(() => {
+    const rootsAtivosPropNeg = new Set<number>()
+    for (const c of clientesFiltradosVendedor) {
+      if (!c.arquivadoDuplicata && (c.etapa === 'proposta' || c.etapa === 'negociacao')) {
+        const r = rootByCardId.get(c.id)
+        if (r !== undefined) rootsAtivosPropNeg.add(r)
+      }
+    }
     const base = clientesFiltradosVendedor.filter(c => {
       if (c.arquivadoDuplicata) return false
-      if (existeCardAtivoNoFunil(clientesFiltradosVendedor, c, ['proposta', 'negociacao'])) return false
-      // Clientes em follow-up normais (não aguardando aprovação e sem ciclo já iniciado)
+      const r = rootByCardId.get(c.id)
+      if (r !== undefined && rootsAtivosPropNeg.has(r)) return false
       if (c.etapa === 'follow_up' && c.statusFollowUp !== 'aguardando_aprovacao_gerente' && c.statusFollowUp !== 'novo_ciclo_iniciado') return true
-      // Clientes perdidos que vieram de negociação (podem ser revividos)
       if (c.etapa === 'perdido' && c.etapaAnterior === 'negociacao' && (c.statusFollowUp as string) === 'perdido_negociacao') return true
       return false
     })
@@ -446,7 +513,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       )
     }
     return base
-  }, [clientesFiltradosVendedor, search])
+  }, [clientesFiltradosVendedor, search, rootByCardId])
 
   const mapaUltimaProposta = useMemo(
     () => criarMapaUltimaProposta(propostas.length > 0 ? propostas : propostasLoaded),
@@ -888,6 +955,9 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
             const stageClientes = isFollowUp && showFollowUpFinalizados
               ? [...stageClientesAtivos, ...followUpFinalizados]
               : stageClientesAtivos
+            const limiteCol = search.trim() ? stageClientes.length : (colLimits[stage.key] || INITIAL_COL_LIMIT)
+            const stageClientesVisiveis = stageClientes.slice(0, limiteCol)
+            const restantesCol = Math.max(0, stageClientes.length - stageClientesVisiveis.length)
             const stageValor = stageClientesAtivos.reduce((s, c) => s + valorPropostaAtivaCard(c, mapaUltimaProposta), 0)
             const isProposta = stage.key === 'proposta'
             const novoCicloCount = isProposta ? clientesNovoCiclo.length : 0
@@ -900,7 +970,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                 onDrop={(e) => onDrop(e, stage.key)}
               >
                 {/* Column header */}
-                <div className="px-3.5 py-3 bg-white/75 dark:bg-[#1C1C1E]/85 backdrop-blur-md border-b border-black/[0.05] dark:border-white/[0.07] flex-shrink-0">
+                <div className="px-3.5 py-3 bg-[#FBFBFD] dark:bg-[#1C1C1E] border-b border-black/[0.05] dark:border-white/[0.07] flex-shrink-0">
                   <div className="flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${(stage as any).dot || 'bg-gray-400'}`} />
@@ -935,9 +1005,18 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                   </div>
                 </div>
 
-                {/* Cards area */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {stageClientes.map((cliente) => {
+                {/* Cards area (renderização progressiva para resposta instantânea) */}
+                <div
+                  className="flex-1 overflow-y-auto p-2 space-y-2"
+                  onScroll={(e) => {
+                    if (restantesCol <= 0) return
+                    const el = e.currentTarget
+                    if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+                      setColLimits(prev => ({ ...prev, [stage.key]: (prev[stage.key] || INITIAL_COL_LIMIT) + 60 }))
+                    }
+                  }}
+                >
+                  {stageClientesVisiveis.map((cliente) => {
                     const urgencia = getCardUrgencia(cliente)
                     const nextAction = getNextAction(cliente)
                     const vendedor = cliente.vendedorId ? vendedorMap.get(cliente.vendedorId) : undefined
@@ -1143,6 +1222,15 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                       </div>
                     )
                   })}
+                  {restantesCol > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setColLimits(prev => ({ ...prev, [stage.key]: (prev[stage.key] || INITIAL_COL_LIMIT) + 80 }))}
+                      className="w-full py-2 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-white/70 dark:bg-[#1C1C1E] rounded-xl border border-black/[0.05] dark:border-white/[0.07] transition-colors cursor-pointer"
+                    >
+                      Mostrar mais ({restantesCol} restantes)
+                    </button>
+                  )}
                   {stageClientes.length === 0 && !showNovosCiclos && !search.trim() && <div className="p-6 text-center text-gray-400 dark:text-gray-600 text-xs">Arraste clientes aqui</div>}
 
                   {/* Novos ciclos: todos juntos, ocultos por padrão, botão 🔄 no header para mostrar — auto-mostrar quando pesquisa encontra */}

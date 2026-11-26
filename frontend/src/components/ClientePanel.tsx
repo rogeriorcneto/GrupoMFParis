@@ -120,6 +120,8 @@ interface ClientePanelProps {
   onReativarCliente?: (c: Cliente) => void | Promise<void>
 }
 
+let _auditoriasIACache: { ts: number; map: Map<string, RegistroAuditoriaIA> } | null = null
+
 const STATUS_CLIENTE_BADGE: Record<string, { label: string; cls: string; title?: string }> = {
   prospecto: { label: 'Prospecto', cls: 'bg-blue-100 text-blue-700 border-blue-200', title: 'Lead até homologar o produto' },
   ativo: { label: 'Ativo', cls: 'bg-green-100 text-green-700 border-green-200', title: 'Compra dentro de 30 dias' },
@@ -204,19 +206,33 @@ export default function ClientePanel({
   const [produtoPendenteKg, setProdutoPendenteKg] = useState('')
   const [showCadastroCompleto, setShowCadastroCompleto] = useState(false)
   const [showInfoSituacaoCompra, setShowInfoSituacaoCompra] = useState(false)
-  const [auditoriasIA, setAuditoriasIA] = useState<Map<string, RegistroAuditoriaIA>>(new Map())
+  const [mapReady, setMapReady] = useState(false)
+  const [auditoriasIA, setAuditoriasIA] = useState<Map<string, RegistroAuditoriaIA>>(
+    () => (_auditoriasIACache && Date.now() - _auditoriasIACache.ts < 60_000 ? _auditoriasIACache.map : new Map())
+  )
+
+  useEffect(() => {
+    setMapReady(false)
+    const t = window.setTimeout(() => setMapReady(true), 220)
+    return () => window.clearTimeout(t)
+  }, [c.id])
 
   useEffect(() => {
     if (!isGerente) {
       setAuditoriasIA(new Map())
       return
     }
+    if (_auditoriasIACache && Date.now() - _auditoriasIACache.ts < 60_000) {
+      setAuditoriasIA(_auditoriasIACache.map)
+      return
+    }
     fetchAuditoriaIARegistros().then(lista => {
       const m = new Map<string, RegistroAuditoriaIA>()
       for (const r of lista) m.set(r.chave, r)
+      _auditoriasIACache = { ts: Date.now(), map: m }
       setAuditoriasIA(m)
     }).catch(() => {})
-  }, [c.id, isGerente])
+  }, [isGerente])
 
   const obterClassificacaoTarefaIA = useCallback((tarefa: Tarefa): { classificacao: 'OK' | 'Fraco' | 'Incoerente'; motivo: string } | null => {
     if (!isGerente || tarefa.status !== 'concluida' || !tarefa.conclusao) return null
@@ -312,13 +328,13 @@ export default function ClientePanel({
     return m
   }, [familiaEmpresa])
 
-  const clientesParaCalculo = React.useMemo(() => (todosClientes && todosClientes.length > 0 ? todosClientes : [c]), [todosClientes, c])
+  const clientesParaCalculo = familiaEmpresa
   const situacaoCompraInfo = React.useMemo(() =>
-    obterSituacaoCompraCliente(c, clientesParaCalculo, todosPedidos || [])
-  , [c, clientesParaCalculo, todosPedidos])
+    obterSituacaoCompraCliente(c, familiaEmpresa, todosPedidos || [])
+  , [c, familiaEmpresa, todosPedidos])
   const avaliacaoCadastro = React.useMemo(() =>
-    avaliarCadastroCliente(c, clientesParaCalculo, (parametros.camposCadastroObrigatorios || []) as any)
-  , [c, clientesParaCalculo, parametros.camposCadastroObrigatorios])
+    avaliarCadastroCliente(c, familiaEmpresa, (parametros.camposCadastroObrigatorios || []) as any)
+  , [c, familiaEmpresa, parametros.camposCadastroObrigatorios])
 
   const salvarCadastroCompleto = useCallback(async (changes: Partial<Cliente>) => {
     // O cadastro pertence à empresa, não a um ciclo específico. Replica nos cards
@@ -593,9 +609,30 @@ export default function ClientePanel({
   const clienteTarefasBase = React.useMemo(() => {
     const vistas = new Set<number>()
     const out: Tarefa[] = []
+    const codigosFamilia = new Set(familiaEmpresa.map(cl => (cl.agendorCodigo || '').trim()).filter(Boolean))
+    const nomesFamilia = familiaEmpresa.flatMap(cl => [
+      normalizarEmpresa(cl.razaoSocial),
+      cl.nomeFantasia ? normalizarEmpresa(cl.nomeFantasia) : '',
+    ]).filter(Boolean)
     for (const t of tarefas) {
       if (vistas.has(t.id)) continue
-      if ((t.clienteId && familiaEmpresaIds.has(t.clienteId)) || familiaEmpresa.some(cl => tarefaPertenceCliente(t, cl))) {
+      if (t.clienteId) {
+        if (familiaEmpresaIds.has(t.clienteId)) {
+          vistas.add(t.id)
+          out.push(t)
+        }
+        continue
+      }
+      const { nome, codigo } = extrairEmpresaImportada(t)
+      if (codigo && codigosFamilia.has(codigo)) {
+        vistas.add(t.id)
+        out.push(t)
+        continue
+      }
+      if (!nome) continue
+      const nomeNorm = normalizarEmpresa(nome)
+      if (!nomeNorm) continue
+      if (nomesFamilia.some(nf => nf === nomeNorm || (nomeNorm.length >= 4 && nf.length >= 4 && (nf.includes(nomeNorm) || nomeNorm.includes(nf))))) {
         vistas.add(t.id)
         out.push(t)
       }
@@ -750,7 +787,7 @@ export default function ClientePanel({
 
   // Consolida produtos de interesse + kg/mês entre todos os cards da empresa para não perder dados de ciclos anteriores
   const consumoUnificado = React.useMemo(() => {
-    const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
+    const familia = familiaEmpresa
     const nomes = new Set<string>(c.produtosInteresse || [])
     const mapa: ProdutosConsumoMap = {}
     // Ordem crescente de id para que o mais recente / card atual prevaleça
@@ -2133,7 +2170,7 @@ export default function ClientePanel({
               <p className="text-xs text-gray-500">Endereço</p>
               <p className="text-sm text-gray-900">{enderecoPrincipal || c.endereco || c.localizacao || 'Não informado'}</p>
             </div>
-            {mapQuery && (
+            {mapQuery && mapReady && (
               <div className="rounded-apple border border-gray-200 overflow-hidden">
                 <iframe
                   title={`Mapa ${c.razaoSocial}`}
@@ -2161,8 +2198,8 @@ export default function ClientePanel({
 
           {/* === PRODUTOS HOMOLOGADOS === */}
           {(() => {
-            const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
-            const familiaIds = new Set(familia.map(cl => cl.id))
+            const familia = familiaEmpresa
+            const familiaIds = familiaEmpresaIds
             const denegadosUnificados = new Set<string>(c.produtosDenegados || [])
             familia.forEach(cl => (cl.produtosDenegados || []).forEach(nome => denegadosUnificados.add(nome)))
             const pedidosCliente = (todosPedidos || []).filter(p => familiaIds.has(p.clienteId))
@@ -2200,7 +2237,7 @@ export default function ClientePanel({
 
           {/* === PRODUTOS REPROVADOS === */}
           {(() => {
-            const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => mesmaEmpresaNoFunil(cl, c))
+            const familia = familiaEmpresa
             const denegadosSet = new Set<string>(c.produtosDenegados || [])
             const motivoMap: Record<string, string> = {}
             familia.forEach(cl => {

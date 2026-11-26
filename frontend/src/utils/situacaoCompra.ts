@@ -36,7 +36,7 @@ export function diasDesdeData(dataISO: string, agora: Date = new Date()): number
   return Math.max(0, Math.floor((a.getTime() - b.getTime()) / 86400000))
 }
 
-function pedidoContaComoVenda(p: Pedido): boolean {
+export function pedidoContaComoVenda(p: Pedido): boolean {
   return p.status === 'confirmado'
     && (p.tipo || 'venda') === 'venda'
     && !!(p.omieCodigo || p.omieNumero || p.dataEnvioOmie)
