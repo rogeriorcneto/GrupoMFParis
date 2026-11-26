@@ -10,7 +10,7 @@ import * as db from './lib/database'
 import { useNotificacoes } from './hooks/useNotificacoes'
 import { useRealtimeSubscription } from './hooks/useRealtimeSubscription'
 import { useVersionCheck } from './hooks/useVersionCheck'
-import ClientePanel from './components/ClientePanel'
+import ClientePanel, { type ClientePanelFocus } from './components/ClientePanel'
 import { useAutoRules } from './hooks/useAutoRules'
 import { useDarkMode } from './hooks/useDarkMode'
 import { useClienteForm } from './hooks/useClienteForm'
@@ -38,13 +38,18 @@ import FloatingAIAssistant from './components/FloatingAIAssistant'
 
 let _activeTimerId: number | null = null
 let _activeVendedorId: number | null = null
+let _lastInteractionAt: number = Date.now()
+let _isPausedByIdle = false
+const IDLE_PAUSE_MS = 10 * 60 * 1000 // Item 4.18: pausa automática após 10 minutos sem interação
 
-function _flushSegment(id: number) {
+function _flushSegment(id: number, capEndMs?: number) {
   const segKey = `crm_segment_start_${id}`
   const secsKey = `crm_active_secs_${id}`
   const segStart = localStorage.getItem(segKey)
   if (segStart) {
-    const elapsed = Math.floor((Date.now() - new Date(segStart).getTime()) / 1000)
+    const startMs = new Date(segStart).getTime()
+    const endMs = capEndMs !== undefined ? Math.min(Date.now(), capEndMs) : Date.now()
+    const elapsed = Math.max(0, Math.floor((endMs - startMs) / 1000))
     const prev = parseInt(localStorage.getItem(secsKey) || '0', 10)
     localStorage.setItem(secsKey, String(prev + elapsed))
     localStorage.removeItem(segKey)
@@ -52,35 +57,44 @@ function _flushSegment(id: number) {
 }
 
 function _startSegment(id: number) {
-  localStorage.setItem(`crm_segment_start_${id}`, new Date().toISOString())
+  if (!localStorage.getItem(`crm_segment_start_${id}`)) {
+    localStorage.setItem(`crm_segment_start_${id}`, new Date().toISOString())
+  }
 }
 
-async function _syncToBackend(id: number) {
+async function _syncToBackend(id: number, resumeAfterSync = true, capEndMs?: number) {
   const segKey = `crm_segment_start_${id}`
   const secsKey = `crm_active_secs_${id}`
   const segStart = localStorage.getItem(segKey)
+  const endMs = capEndMs !== undefined ? Math.min(Date.now(), capEndMs) : Date.now()
   const segDur = segStart
-    ? Math.max(0, Math.floor((Date.now() - new Date(segStart).getTime()) / 1000))
+    ? Math.max(0, Math.floor((endMs - new Date(segStart).getTime()) / 1000))
     : 0
   const prevSecs = parseInt(localStorage.getItem(secsKey) || '0', 10)
   const duracaoSegundos = prevSecs + segDur
-  if (duracaoSegundos <= 0) return
-  const fim = new Date().toISOString()
-  const inicio = new Date(Date.now() - duracaoSegundos * 1000).toISOString()
   localStorage.removeItem(segKey)
   localStorage.removeItem(secsKey)
+  if (duracaoSegundos <= 0) {
+    if (resumeAfterSync && !document.hidden && !_isPausedByIdle) _startSegment(id)
+    return
+  }
+  const fim = new Date(endMs).toISOString()
+  const inicio = new Date(endMs - duracaoSegundos * 1000).toISOString()
   try {
     await sendTempoTelaBeat(id, inicio, fim, duracaoSegundos)
-    _startSegment(id)
+    if (resumeAfterSync && !document.hidden && !_isPausedByIdle) _startSegment(id)
   } catch {
     // se falhar, reacumula para tentar no próximo batimento
     localStorage.setItem(secsKey, String(duracaoSegundos))
+    if (resumeAfterSync && !document.hidden && !_isPausedByIdle) _startSegment(id)
   }
 }
 
 function startActiveTimer(vendedorId: number) {
   if (_activeTimerId !== null) stopActiveTimer()
   _activeVendedorId = vendedorId
+  _lastInteractionAt = Date.now()
+  _isPausedByIdle = false
 
   // Reset daily if needed (clear if last reset was a different calendar day)
   const dayKey = `crm_active_day_${vendedorId}`
@@ -94,28 +108,56 @@ function startActiveTimer(vendedorId: number) {
   // Start first segment if page is currently visible
   if (!document.hidden) _startSegment(vendedorId)
 
+  let lastThrottle = 0
+  const onUserActivity = () => {
+    const now = Date.now()
+    if (now - lastThrottle < 2000 && !_isPausedByIdle) return
+    lastThrottle = now
+    _lastInteractionAt = now
+    if (_isPausedByIdle && _activeVendedorId && !document.hidden) {
+      _isPausedByIdle = false
+      _startSegment(_activeVendedorId)
+    }
+  }
+
+  const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'] as const
+  activityEvents.forEach(ev => window.addEventListener(ev, onUserActivity, { passive: true }))
+
   const onVisibility = () => {
     if (!_activeVendedorId) return
-    if (document.hidden) _syncToBackend(_activeVendedorId)
-    else _startSegment(_activeVendedorId)
+    if (document.hidden) {
+      _syncToBackend(_activeVendedorId, false)
+    } else {
+      _lastInteractionAt = Date.now()
+      _isPausedByIdle = false
+      _startSegment(_activeVendedorId)
+    }
   }
   document.addEventListener('visibilitychange', onVisibility)
 
-  // Send heartbeat every 1 minute while the CRM is visible
+  // Send heartbeat every 1 minute while the CRM is visible AND active within last 10 minutes
   _activeTimerId = window.setInterval(() => {
-    if (_activeVendedorId && !document.hidden) {
-      _syncToBackend(_activeVendedorId)
+    if (!_activeVendedorId || document.hidden) return
+    const now = Date.now()
+    if (now - _lastInteractionAt > IDLE_PAUSE_MS) {
+      if (!_isPausedByIdle) {
+        _isPausedByIdle = true
+        _syncToBackend(_activeVendedorId, false, _lastInteractionAt + IDLE_PAUSE_MS)
+      }
+      return
     }
+    _syncToBackend(_activeVendedorId, true)
   }, 60_000)
 
   // Store cleanup so stopActiveTimer can remove the listener
   ;(startActiveTimer as any)._cleanup = () => {
     document.removeEventListener('visibilitychange', onVisibility)
+    activityEvents.forEach(ev => window.removeEventListener(ev, onUserActivity))
   }
 }
 
 function stopActiveTimer() {
-  if (_activeVendedorId) _syncToBackend(_activeVendedorId)
+  if (_activeVendedorId) _syncToBackend(_activeVendedorId, false)
   if (_activeTimerId !== null) { clearInterval(_activeTimerId); _activeTimerId = null }
   if (typeof (startActiveTimer as any)._cleanup === 'function') {
     ;(startActiveTimer as any)._cleanup()
@@ -155,6 +197,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   const [showNotifications, setShowNotifications] = useState(false)
   const [showGlobalSearch, setShowGlobalSearch] = useState(false)
   const [highlightTarefaId, setHighlightTarefaId] = useState<number | undefined>(undefined)
+  const [clientePanelFocus, setClientePanelFocus] = useState<ClientePanelFocus | null>(null)
   const [showChat, setShowChat] = useState(false)
   const [chatUnreadTotal, setChatUnreadTotal] = useState(0)
   const [dbNotificacoes, setDbNotificacoes] = useState<Notificacao[]>([])
@@ -611,7 +654,11 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
                 handleEditCliente={handleEditCliente}
                 handleDragStart={handleDragStart} handleDragOver={handleDragOver} handleDrop={handleDrop}
                 requestStageMove={requestStageMove}
-                handleQuickAction={handleQuickAction} setSelectedClientePanel={setSelectedClientePanel}
+                handleQuickAction={handleQuickAction}
+                setSelectedClientePanel={(cli, focus) => {
+                  setClientePanelFocus(focus || null)
+                  setSelectedClientePanel(cli)
+                }}
                 moverCliente={moverCliente} criarNovoCiclo={criarNovoCiclo}
                 startCampanha={startCampanha} runJobNow={runJobNow} addNotificacao={addNotificacao}
                 onNovoCiclo={handleNovoCiclo}
@@ -701,6 +748,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
         {selectedClientePanel && (
           <ClientePanel
             cliente={clientes.find(x => x.id === selectedClientePanel.id) || selectedClientePanel}
+            initialFocus={clientePanelFocus}
             todosClientes={clientes}
             onSelectCardCiclo={(card) => setSelectedClientePanel(card)}
             onCriarNovoCiclo={criarNovoCiclo}
@@ -710,7 +758,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
             tarefas={tarefas}
             vendedores={vendedores}
             loggedUser={loggedUser}
-            onClose={() => setSelectedClientePanel(null)}
+            onClose={() => { setSelectedClientePanel(null); setClientePanelFocus(null) }}
             onEditCliente={handleEditCliente}
             onMoverCliente={moverCliente}
             onTriggerAmostra={(c) => { const fakeE = { preventDefault: () => {}, dataTransfer: { effectAllowed: 'move' } } as any; setDraggedItem({ cliente: c, fromStage: c.etapa }); setPendingDrop({ e: fakeE, toStage: 'amostra' }); setModalAmostraData(new Date().toISOString().split('T')[0]); setShowModalAmostra(true) }}

@@ -26,6 +26,10 @@ import { calcularIndicadoresComerciais, calcularIndicadoresOperacionais, criarIn
 import { fetchAllPropostas } from '../../lib/database'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
+import { useParametrosListas } from '../../lib/parametrosListas'
+import { consolidarEmpresasFase2 } from '../../utils/relatoriosFase2'
+import { situacaoContaNaCarteiraAte180 } from '../../utils/situacaoCompra'
+import type { ClientePanelFocus } from '../ClientePanel'
 import type { Cliente, Vendedor, Interacao, Atividade, Produto, Tarefa, Pedido, DashboardMetrics, Missao, PropostaHistorico, ViewType } from '../../types'
 
 interface Props {
@@ -39,6 +43,7 @@ interface Props {
   pedidos: Pedido[]
   loggedUser: Vendedor | null
   onNavigate?: (view: ViewType) => void
+  onOpenCliente?: (cliente: Cliente, focus?: ClientePanelFocus) => void
 }
 
 const fmtBRL = (v: number) =>
@@ -154,9 +159,11 @@ export default function DashboardVendedorView({
   pedidos,
   loggedUser,
   onNavigate,
+  onOpenCliente,
 }: Props) {
   const userId = loggedUser?.id
   const isGerente = loggedUser?.cargo === 'gerente'
+  const { parametros } = useParametrosListas()
 
   // ─── Filtro de período ────────────────────────────────────────────────────────
   const hoje = new Date()
@@ -186,6 +193,39 @@ export default function DashboardVendedorView({
 
   // ─── Tempo de tela + academia (gerente) + propostas ativas ──────────────────
   const [tempoTelaData, setTempoTelaData] = useState<{ nome: string; totalSegundos: number }[]>([])
+
+  // Item 7: "Minha carteira hoje" — vermelhos → amarelos → sem tarefa aberta → cadastro incompleto vencido + tarefas do dia
+  const minhaCarteiraHoje = useMemo(() => {
+    if (!userId) return null
+    const { empresas } = consolidarEmpresasFase2(
+      clientes,
+      pedidos,
+      tarefas,
+      parametros.camposCadastroObrigatorios
+    )
+    const minhasEmpresas = empresas.filter(e => e.vendedorId === userId)
+    const carteira180 = minhasEmpresas.filter(e => situacaoContaNaCarteiraAte180(e.situacaoCompra))
+    const vermelhos = [...carteira180.filter(e => e.cadencia === 'vermelho')].sort(
+      (a, b) => (b.diasSemContato ?? 999999) - (a.diasSemContato ?? 999999)
+    )
+    const amarelos = [...carteira180.filter(e => e.cadencia === 'amarelo')].sort(
+      (a, b) => (b.diasSemContato ?? 0) - (a.diasSemContato ?? 0)
+    )
+    const semTarefaAberta = carteira180.filter(e => !e.temTarefaAberta)
+    const cadastroIncompletoVencido = minhasEmpresas.filter(e => e.situacaoCadastro === 'incompleto_vencido')
+    const tarefasDoDia = tarefas
+      .filter(t => t.vendedorId === userId && t.status === 'pendente' && !!t.data && t.data <= hojeISO)
+      .sort((a, b) => a.data.localeCompare(b.data) || (a.hora || '').localeCompare(b.hora || ''))
+    return {
+      possuiCarteira: minhasEmpresas.length > 0,
+      vermelhos,
+      amarelos,
+      semTarefaAberta,
+      cadastroIncompletoVencido,
+      tarefasDoDia,
+    }
+  }, [userId, clientes, pedidos, tarefas, parametros.camposCadastroObrigatorios, hojeISO])
+  const [abaPrioridadeHoje, setAbaPrioridadeHoje] = useState<'vermelhos' | 'amarelos' | 'sem_tarefa' | 'cadastro_vencido' | 'tarefas_dia'>('vermelhos')
   const [academiaData, setAcademiaData] = useState<{ nome: string; treinos: number; minutos: number; notaMedia: number }[]>([])
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
 
@@ -529,7 +569,7 @@ export default function DashboardVendedorView({
       kpis.push(`Ranking equipe: ${ranking.map((v, i) => `${i + 1}º ${v.nome} ${fmtBRL(v.valor)}`).join(', ')}`)
     }
     if (isGerente && tempoTelaData.length > 0) {
-      kpis.push(`Tempo de tela CRM: ${tempoTelaData.map(d => `${d.nome}: ${Math.floor(d.totalSegundos / 3600)}h${String(Math.floor((d.totalSegundos % 3600) / 60)).padStart(2, '0')}m`).join(', ')}`)
+      kpis.push(`Tempo ativo no CRM: ${tempoTelaData.map(d => `${d.nome}: ${Math.floor(d.totalSegundos / 3600)}h${String(Math.floor((d.totalSegundos % 3600) / 60)).padStart(2, '0')}m`).join(', ')}`)
     }
     if (isGerente && academiaData.some(d => d.treinos > 0)) {
       kpis.push(`Academia de vendas: ${academiaData.filter(d => d.treinos > 0).map(d => `${d.nome}: ${d.treinos} treinos, ${d.minutos}min, nota ${d.notaMedia.toFixed(1)}`).join(', ')}`)
@@ -710,6 +750,100 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             </button>
           </div>
         </div>
+
+        {/* Item 7: Tela inicial "Minha carteira hoje" (vermelhos → amarelos → sem tarefa aberta → cadastro incompleto vencido + tarefas do dia) */}
+        {minhaCarteiraHoje && (!isGerente || minhaCarteiraHoje.possuiCarteira) && (
+          <div className="bg-white rounded-apple border border-gray-200 shadow-apple-sm p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-gray-900">Minha carteira hoje</h2>
+                <p className="text-xs text-gray-500">Ordem de prioridade diária: vencidos, atenção, sem tarefa aberta, cadastro vencido e tarefas do dia.</p>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { id: 'vermelhos', label: `1. Vermelhos (${minhaCarteiraHoje.vermelhos.length})`, cls: 'bg-red-100 text-red-800 border-red-200' },
+                  { id: 'amarelos', label: `2. Amarelos (${minhaCarteiraHoje.amarelos.length})`, cls: 'bg-amber-100 text-amber-800 border-amber-200' },
+                  { id: 'sem_tarefa', label: `3. Sem tarefa (${minhaCarteiraHoje.semTarefaAberta.length})`, cls: 'bg-rose-100 text-rose-800 border-rose-200' },
+                  { id: 'cadastro_vencido', label: `4. Cad. vencido (${minhaCarteiraHoje.cadastroIncompletoVencido.length})`, cls: 'bg-orange-100 text-orange-800 border-orange-200' },
+                  { id: 'tarefas_dia', label: `5. Tarefas hoje/atras. (${minhaCarteiraHoje.tarefasDoDia.length})`, cls: 'bg-blue-100 text-blue-800 border-blue-200' },
+                ] as const).map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setAbaPrioridadeHoje(tab.id)}
+                    className={`px-2.5 py-1 rounded-full border text-xs font-bold cursor-pointer ${tab.cls} ${abaPrioridadeHoje === tab.id ? 'ring-2 ring-primary-500' : 'opacity-80'}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {abaPrioridadeHoje === 'tarefas_dia' ? (
+              <div className="divide-y divide-gray-100 text-xs max-h-64 overflow-y-auto">
+                {minhaCarteiraHoje.tarefasDoDia.slice(0, 20).map(t => {
+                  const cli = t.clienteId ? clientes.find(c => c.id === t.clienteId) : undefined
+                  const atrasada = t.data < hojeISO
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => cli && onOpenCliente ? onOpenCliente(cli, { section: 'tarefas', tarefaId: t.id }) : onNavigate?.('tarefas')}
+                      className="w-full text-left py-2 px-2 hover:bg-primary-50/50 flex items-center justify-between gap-2 cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{t.titulo}</p>
+                        <p className="text-gray-500 truncate">{cli?.razaoSocial || 'Sem cliente vinculado'}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${atrasada ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {atrasada ? `Atrasada (${t.data.split('-').reverse().join('/')})` : `Hoje${t.hora ? ` ${t.hora.slice(0, 5)}` : ''}`}
+                      </span>
+                    </button>
+                  )
+                })}
+                {minhaCarteiraHoje.tarefasDoDia.length === 0 && (
+                  <p className="text-xs text-gray-400 py-4 text-center">Nenhuma tarefa pendente para hoje.</p>
+                )}
+              </div>
+            ) : (() => {
+              const lista =
+                abaPrioridadeHoje === 'vermelhos' ? minhaCarteiraHoje.vermelhos
+                  : abaPrioridadeHoje === 'amarelos' ? minhaCarteiraHoje.amarelos
+                    : abaPrioridadeHoje === 'sem_tarefa' ? minhaCarteiraHoje.semTarefaAberta
+                      : minhaCarteiraHoje.cadastroIncompletoVencido
+              const focus = abaPrioridadeHoje === 'cadastro_vencido' ? ({ section: 'cadastro' } as const) : ({ section: 'tarefas' } as const)
+              return (
+                <div className="divide-y divide-gray-100 text-xs max-h-64 overflow-y-auto">
+                  {lista.slice(0, 20).map(emp => (
+                    <button
+                      key={emp.chave}
+                      type="button"
+                      onClick={() => onOpenCliente ? onOpenCliente(emp.cardPrincipal, focus) : onNavigate?.('clientes')}
+                      className="w-full text-left py-2 px-2 hover:bg-primary-50/50 flex items-center justify-between gap-2 cursor-pointer"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{emp.cardPrincipal.razaoSocial}</p>
+                        <p className="text-gray-500 truncate">
+                          {abaPrioridadeHoje === 'cadastro_vencido'
+                            ? `${emp.camposFaltantes.length} campo(s) pendente(s)`
+                            : emp.proximaTarefa
+                              ? `Próx.: ${emp.proximaTarefa.titulo} (${emp.proximaTarefa.data.split('-').reverse().join('/')})`
+                              : 'Sem tarefa aberta'}
+                        </p>
+                      </div>
+                      <span className="font-bold text-gray-700 whitespace-nowrap">
+                        {emp.diasSemContato == null ? 'Sem contato' : `${emp.diasSemContato}d s/ contato`}
+                      </span>
+                    </button>
+                  ))}
+                  {lista.length === 0 && (
+                    <p className="text-xs text-emerald-700 py-4 text-center font-medium">Tudo em dia nesta lista.</p>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -893,10 +1027,11 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
             <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5">
               <div className="flex items-center gap-2 mb-4">
                 <ComputerDesktopIcon className="h-5 w-5 text-primary-600" />
-                <h2 className="text-lg font-bold text-gray-900">Tempo de tela CRM</h2>
+                <h2 className="text-lg font-bold text-gray-900">Tempo ativo no CRM</h2>
+                <span className="text-[11px] text-gray-400">(pausa após 10 min sem interação)</span>
               </div>
               {tempoTelaData.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">Sem dados de tempo de tela no período.</p>
+                <p className="text-sm text-gray-400 py-4 text-center">Sem dados de tempo ativo no período.</p>
               ) : (
                 <div className="space-y-2">
                   {[...tempoTelaData].sort((a, b) => b.totalSegundos - a.totalSegundos).map((d, i) => {

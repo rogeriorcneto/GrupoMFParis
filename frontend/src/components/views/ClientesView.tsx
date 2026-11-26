@@ -934,15 +934,17 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
           <span>Colunas</span>
         </button>
 
-        {/* Item 9: Botão direto Exportar (.xlsx Cadastro e Tarefas) */}
-        <button
-          onClick={() => setShowExportModal(true)}
-          className="px-3 py-2 rounded-apple border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors flex-shrink-0 flex items-center gap-1.5 text-sm font-medium"
-          title="Exportar Cadastro Completo ou Tarefas + Auditoria (.xlsx)"
-        >
-          <ArrowDownTrayIcon className="h-4 w-4" />
-          <span>Exportar</span>
-        </button>
+        {/* Item 7/9: Botão Exportar (.xlsx Cadastro e Tarefas) — restrito ao gestor */}
+        {isGerente && (
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="px-3 py-2 rounded-apple border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition-colors flex-shrink-0 flex items-center gap-1.5 text-sm font-medium"
+            title="Exportar Cadastro Completo ou Tarefas + Auditoria (.xlsx)"
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            <span>Exportar</span>
+          </button>
+        )}
 
         <div className="relative flex-shrink-0">
           <button onClick={() => setShowMenu(!showMenu)} className="p-2 rounded-apple border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 transition-colors" title="Mais opções">
@@ -955,9 +957,11 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                 <button onClick={() => { importRef.current?.click(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
                   <span className="text-base">📥</span> Importar CSV
                 </button>
-                <button onClick={() => { setShowExportModal(true); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
-                  <span className="text-base">📊</span> Exportar (.xlsx)
-                </button>
+                {isGerente && (
+                  <button onClick={() => { setShowExportModal(true); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
+                    <span className="text-base">📊</span> Exportar (.xlsx)
+                  </button>
+                )}
                 <button onClick={() => { handleDownloadModelo(); setShowMenu(false) }} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left">
                   <span className="text-base">📋</span> Baixar modelo CSV
                 </button>
@@ -979,13 +983,15 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
       {showFilters && (
         <div className="bg-white rounded-apple border border-gray-200 p-4">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Vendedor</label>
-              <select value={draftVendedor} onChange={(e) => setDraftVendedor(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">Todos</option>
-                {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-              </select>
-            </div>
+            {isGerente && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Vendedor</label>
+                <select value={draftVendedor} onChange={(e) => setDraftVendedor(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  <option value="">Todos</option>
+                  {vendedores.filter(v => v.ativo).map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Situação de compra / Status</label>
               <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className="w-full px-3 py-1.5 border border-gray-200 rounded-apple text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500">
@@ -1122,7 +1128,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
               <tr className="border-b border-gray-100">
                 <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
                 {visibleCols.cnpj && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">CNPJ / CPF</th>}
-                {visibleCols.vendedor && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Vendedor</th>}
+                {isGerente && visibleCols.vendedor && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Vendedor</th>}
                 {visibleCols.email && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Email</th>}
                 {visibleCols.telefone && <th className="text-left py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Telefone</th>}
                 {visibleCols.valor && <th className="text-right py-2.5 px-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Valor</th>}
@@ -1162,7 +1168,7 @@ const ClientesView: React.FC<ClientesViewProps> = ({ clientes, vendedores, logge
                     {visibleCols.cnpj && (
                       <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">{cliente.cnpj || cliente.cpf || <span className="text-gray-300">—</span>}</td>
                     )}
-                    {visibleCols.vendedor && (
+                    {isGerente && visibleCols.vendedor && (
                       <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                         {editingVendedor === cliente.id ? (
                           <select

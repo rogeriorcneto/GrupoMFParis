@@ -18,7 +18,7 @@ import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
 import { requireAuth, requireGerente } from './middleware/auth.js'
-import { processarJobsPendentes, avaliarAutomacoes, executarAutomacaoManual } from './cron.js'
+import { processarJobsPendentes, avaliarAutomacoes, executarAutomacaoManual, garantirSnapshotEvolucaoSemanal } from './cron.js'
 import { startBulkDispatch, getBatchStatus, getAllBatches, getBatchesByVendedor, cancelBatch } from './bulk-dispatch.js'
 import { omieRouter, omieDocsRouter } from './routes/omie.js'
 import { placesRouter } from './routes/places.js'
@@ -1089,30 +1089,43 @@ app.post('/api/tempo-tela/beat', requireAuth, rateLimit(120, 60_000), async (req
   }
 })
 
-app.get('/api/tempo-tela/relatorio', requireAuth, requireGerente, async (req, res) => {
+app.get('/api/tempo-tela/relatorio', requireAuth, async (req, res) => {
   try {
     const { fetchTempoTelaPorPeriodo, fetchVendedores } = await import('./database.js')
     const hoje = new Date().toISOString().slice(0, 10)
     const dataInicio = String(req.query.dataInicio || hoje)
     const dataFim = String(req.query.dataFim || hoje)
+    const isGerente = reqIsGerente(req)
+    const callerVend = reqVendedor(req)
     const [vendedores, batidas] = await Promise.all([
       fetchVendedores(),
       fetchTempoTelaPorPeriodo(dataInicio, dataFim),
     ])
     const map = new Map<number, number>()
+    const porDiaMap = new Map<string, number>()
     for (const b of batidas) {
+      if (!isGerente && callerVend && b.vendedor_id !== callerVend.id) continue
       const total = map.get(b.vendedor_id) || 0
       map.set(b.vendedor_id, total + b.duracao_segundos)
+      const dia = String(b.inicio || '').slice(0, 10)
+      if (dia) {
+        const k = `${b.vendedor_id}|${dia}`
+        porDiaMap.set(k, (porDiaMap.get(k) || 0) + b.duracao_segundos)
+      }
     }
     const relatorio = vendedores
-      .filter(v => v.ativo !== false)
+      .filter(v => isGerente ? v.ativo !== false : (callerVend ? v.id === callerVend.id : false))
       .map(v => ({
         vendedorId: v.id,
         nome: v.nome,
         totalSegundos: map.get(v.id) || 0,
       }))
       .sort((a, b) => b.totalSegundos - a.totalSegundos)
-    res.json({ periodo: { dataInicio, dataFim }, relatorio })
+    const porDia = Array.from(porDiaMap.entries()).map(([k, seg]) => {
+      const [vId, dia] = k.split('|')
+      return { vendedorId: Number(vId), data: dia, totalSegundos: seg }
+    })
+    res.json({ periodo: { dataInicio, dataFim }, relatorio, porDia })
   } catch (err: any) {
     log.error({ err }, 'Erro ao buscar relatório de tempo de tela')
     res.status(500).json({ error: err?.message || 'Erro ao buscar relatório' })
@@ -1973,10 +1986,10 @@ app.post('/api/maps/importar', requireAuth, async (req, res) => {
 // (migrations pendentes). Persiste o payload JSON em `atividades.descricao`
 // com tipo = 'store:<collection>' — funciona até o schema real existir.
 const STORE_COLLECTIONS = new Set([
-  'automacoes', 'automacoes_execucoes', 'ia_contexto', 'classes_clientes', 'documentos', 'parametros_listas', 'tarefas_excluidas',
+  'automacoes', 'automacoes_execucoes', 'ia_contexto', 'classes_clientes', 'documentos', 'parametros_listas', 'tarefas_excluidas', 'evolucao_semanal',
 ])
 // Escrita restrita ao gerente (configurações sensíveis do CRM)
-const STORE_GERENTE_WRITE = new Set(['parametros_listas', 'automacoes', 'ia_contexto', 'classes_clientes'])
+const STORE_GERENTE_WRITE = new Set(['parametros_listas', 'automacoes', 'ia_contexto', 'classes_clientes', 'evolucao_semanal'])
 // Auditoria: registros só podem ser criados — nunca editados ou apagados
 const STORE_APPEND_ONLY = new Set(['tarefas_excluidas'])
 const storeTipo = (c: string) => `store:${c}`
@@ -2202,7 +2215,7 @@ async function start() {
   setInterval(async () => {
     if (cronRunning) return
     cronRunning = true
-    try { await avaliarAutomacoes(); await processarJobsPendentes() } finally { cronRunning = false }
+    try { await avaliarAutomacoes(); await processarJobsPendentes(); await garantirSnapshotEvolucaoSemanal() } finally { cronRunning = false }
   }, 5 * 60 * 1000)
   log.info('⏰ Scheduler de jobs: a cada 5 minutos')
 

@@ -12,6 +12,7 @@ import {
   ConfiguracaoTarefasView, ConfiguracaoMensagensView,
   MissaoView
 } from './views'
+import type { ClientePanelFocus } from './ClientePanel'
 import * as db from '../lib/database'
 import { logger } from '../utils/logger'
 import { existeCardAtivoNoFunil } from '../utils/funil-logic'
@@ -60,7 +61,7 @@ interface AppRouterProps {
   handleDrop: (e: React.DragEvent, toStage: string) => void
   requestStageMove: (cliente: Cliente, fromStage: string, toStage: string) => void
   handleQuickAction: (cliente: Cliente, canal: Interacao['tipo'], tipo: 'propaganda' | 'contato') => void
-  setSelectedClientePanel: (c: Cliente | null) => void
+  setSelectedClientePanel: (c: Cliente | null, focus?: ClientePanelFocus | null) => void
   moverCliente: (clienteId: number, toStage: string, extras?: Partial<Cliente>) => Promise<boolean | undefined>
   criarNovoCiclo: (cliente: Cliente, extras?: Partial<Cliente>, etapa?: string) => Promise<Cliente>
   startCampanha: (id: number) => void
@@ -107,7 +108,21 @@ export default function AppRouter({
 
   switch (activeView) {
     case 'dashboard':
-      return <DashboardVendedorView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} onNavigate={onNavigate} />
+      return (
+        <DashboardVendedorView
+          clientes={clientes}
+          metrics={dashboardMetrics}
+          vendedores={vendedores}
+          atividades={atividades}
+          interacoes={interacoes}
+          produtos={produtos}
+          tarefas={tarefas}
+          pedidos={pedidos}
+          loggedUser={loggedUser}
+          onNavigate={onNavigate}
+          onOpenCliente={(c, focus) => setSelectedClientePanel(c, focus || null)}
+        />
+      )
     case 'aprovacao':
       return <AprovacaoView
         pedidos={pedidos}
@@ -781,7 +796,23 @@ export default function AppRouter({
         }}
       />
     case 'relatorios':
-      return <RelatoriosView clientes={clientes} vendedores={vendedores} interacoes={interacoes} produtos={produtos} pedidos={pedidos} tarefas={tarefas} atividades={atividades} />
+      return (
+        <RelatoriosView
+          clientes={clientes}
+          vendedores={vendedores}
+          interacoes={interacoes}
+          produtos={produtos}
+          pedidos={pedidos}
+          tarefas={tarefas}
+          atividades={atividades}
+          loggedUser={loggedUser}
+          onOpenCliente={(c, focus) => setSelectedClientePanel(c, focus || null)}
+          setClientes={setClientes}
+          setTarefas={setTarefas}
+          setInteracoes={setInteracoes}
+          showToast={showToast}
+        />
+      )
     case 'protocolos':
       return <ProtocolosView loggedUser={loggedUser} showToast={showToast} />
     case 'sac':

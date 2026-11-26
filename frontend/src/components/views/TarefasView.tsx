@@ -1511,14 +1511,16 @@ const TarefasView: React.FC<{
                 <RocketLaunchIcon className="h-5 w-5" />
               </button>
 
-              <button
-                onClick={handleExportTarefas}
-                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700 rounded-xl transition-all text-xs font-medium"
-                title="Exportar CSV"
-              >
-                <ArrowDownTrayIcon className="h-4 w-4" />
-                Exportar
-              </button>
+              {isGerente && (
+                <button
+                  onClick={handleExportTarefas}
+                  className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700 rounded-xl transition-all text-xs font-medium"
+                  title="Exportar CSV"
+                >
+                  <ArrowDownTrayIcon className="h-4 w-4" />
+                  Exportar
+                </button>
+              )}
 
               {onImportTarefas && (
                 <label className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all text-xs font-medium" title="Importar Agendor">

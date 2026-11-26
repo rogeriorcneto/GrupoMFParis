@@ -1175,6 +1175,151 @@ export async function criarTarefasAutomaticasNovoCliente(
   return criarTarefasAutomaticasNovosClientes([cliente], todosClientes)
 }
 
+export interface EvolucaoSemanalSnapshot {
+  id?: number
+  semanaInicio: string
+  registradoEm: string
+  pontos: {
+    vendedorId: number
+    vendedorNome: string
+    carteira180: number
+    verdes: number
+    pctCarteiraEmDia: number
+    semTarefaAberta: number
+    pctCoberturaMes?: number
+    pctCadastrosCompletos?: number
+  }[]
+}
+
+export async function fetchEvolucaoSemanal(): Promise<EvolucaoSemanalSnapshot[]> {
+  const { data, error } = await supabase
+    .from('atividades')
+    .select('id, descricao, created_at')
+    .eq('tipo', 'store:evolucao_semanal')
+    .order('id', { ascending: true })
+    .limit(200)
+  if (error || !data) return []
+  const byWeek = new Map<string, EvolucaoSemanalSnapshot>()
+  for (const row of data) {
+    try {
+      const parsed = JSON.parse(row.descricao || '{}')
+      if (parsed?.semanaInicio && Array.isArray(parsed.pontos)) {
+        byWeek.set(parsed.semanaInicio, {
+          id: row.id,
+          semanaInicio: parsed.semanaInicio,
+          registradoEm: parsed.registradoEm || row.created_at,
+          pontos: parsed.pontos,
+        })
+      }
+    } catch { /* ignore */ }
+  }
+  return Array.from(byWeek.values()).sort((a, b) => a.semanaInicio.localeCompare(b.semanaInicio))
+}
+
+export async function salvarSnapshotEvolucaoSemanal(
+  snapshot: Omit<EvolucaoSemanalSnapshot, 'id'>,
+  autorNome = 'Gestor',
+): Promise<void> {
+  await supabase.from('atividades').insert({
+    tipo: 'store:evolucao_semanal',
+    descricao: JSON.stringify(snapshot),
+    vendedor_nome: autorNome,
+  })
+}
+
+export async function moverEmpresasEntreCarteiras(params: {
+  empresas: {
+    cardPrincipal: Cliente
+    cards: Cliente[]
+    vendedorId: number | null
+    situacaoCompra: string
+  }[]
+  destino: { tipo: 'vendedor'; vendedorId: number } | { tipo: 'banco' }
+  vendedores: Vendedor[]
+  gestor: Vendedor
+  todasTarefas: Tarefa[]
+  todosClientes: Cliente[]
+}): Promise<{
+  cardsAtualizadosIds: number[]
+  novoVendedorId: number | null
+  interacoesCriadas: Interacao[]
+  tarefasAtualizadasIds: number[]
+   novoVendedorTarefasId: number
+  tarefasCriadas: Tarefa[]
+}> {
+  if (params.gestor.cargo !== 'gerente') {
+    throw new Error('Apenas o gestor pode mover clientes entre bancos e vendedores.')
+  }
+  const vendNome = (id: number | null | undefined, situacaoCompra: string) => {
+    if (!id) return situacaoCompra === 'prospecto' ? 'Banco de Prospectos' : 'Banco de Clientes'
+    return params.vendedores.find(v => v.id === id)?.nome || `Vendedor #${id}`
+  }
+
+  const novoVendedorId = params.destino.tipo === 'vendedor' ? params.destino.vendedorId : null
+  const responsavelTarefasId = novoVendedorId ?? params.gestor.id
+  const agoraISO = new Date().toISOString()
+  const dataFmt = new Date(agoraISO).toLocaleString('pt-BR')
+
+  const cardsAtualizadosIds: number[] = []
+  const interacoesCriadas: Interacao[] = []
+  const tarefasAtualizadasIds: number[] = []
+  const tarefasCriadas: Tarefa[] = []
+
+  for (const emp of params.empresas) {
+    const cardsAtivos = emp.cards.filter(c => !c.arquivadoDuplicata)
+    if (cardsAtivos.length === 0) continue
+    const idsCards = cardsAtivos.map(c => c.id)
+    const origemNome = vendNome(emp.vendedorId, emp.situacaoCompra)
+    const destinoNome = vendNome(novoVendedorId, emp.situacaoCompra)
+
+    // 1) Atualiza vendedor_id em todos os ciclos da empresa sem alterar created_at
+    const { error: updErr } = await supabase
+      .from('clientes')
+      .update({ vendedor_id: novoVendedorId })
+      .in('id', idsCards)
+    if (updErr) throw updErr
+    cardsAtualizadosIds.push(...idsCards)
+
+    // 2) Registra a movimentação no histórico do cliente
+    const inter = await insertInteracao({
+      clienteId: emp.cardPrincipal.id,
+      tipo: 'nota',
+      data: agoraISO,
+      assunto: 'Movimentação de carteira',
+      descricao: `[MOVIMENTACAO_CARTEIRA] De: ${origemNome} → Para: ${destinoNome} | Data: ${dataFmt} | Responsável: ${params.gestor.nome}`,
+      automatico: true,
+    })
+    interacoesCriadas.push(inter)
+
+    // 3) Transfere tarefas pendentes para o novo vendedor (ou gestor quando em banco)
+    const idSet = new Set(idsCards)
+    const pendentesEmpresa = params.todasTarefas.filter(t => t.status === 'pendente' && t.clienteId != null && idSet.has(t.clienteId))
+    if (pendentesEmpresa.length > 0) {
+      const pIds = pendentesEmpresa.map(t => t.id)
+      const { error: tErr } = await supabase
+        .from('tarefas')
+        .update({ vendedor_id: responsavelTarefasId })
+        .in('id', pIds)
+      if (tErr) throw tErr
+      tarefasAtualizadasIds.push(...pIds)
+    } else if (novoVendedorId != null) {
+      // Ao receber o cliente, o vendedor precisa ter pelo menos uma tarefa aberta (regra do item 2 e item 10)
+      const cardAtualizado: Cliente = { ...emp.cardPrincipal, vendedorId: novoVendedorId }
+      const criadas = await criarTarefasAutomaticasNovoCliente(cardAtualizado, params.todosClientes)
+      tarefasCriadas.push(...criadas)
+    }
+  }
+
+  return {
+    cardsAtualizadosIds,
+    novoVendedorId,
+    interacoesCriadas,
+    tarefasAtualizadasIds,
+    novoVendedorTarefasId: responsavelTarefasId,
+    tarefasCriadas,
+  }
+}
+
 // ============================================
 // PRODUTOS
 // ============================================

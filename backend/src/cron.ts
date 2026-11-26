@@ -216,3 +216,132 @@ export async function executarAutomacaoManual(id: string, clienteId: number | nu
   await marcarExecutada(a as AutomacaoRow)
   return { ok: true }
 }
+
+let _lastWeeklySnapshotCheck = 0
+
+/**
+ * Item 8: Registro automático semanal dos indicadores por vendedor (store:evolucao_semanal).
+ */
+export async function garantirSnapshotEvolucaoSemanal(): Promise<void> {
+  if (Date.now() - _lastWeeklySnapshotCheck < 6 * 3600 * 1000) return
+  _lastWeeklySnapshotCheck = Date.now()
+  try {
+    const { supabase } = await import('./supabase.js')
+    const agora = new Date()
+    const diaSemana = agora.getDay() // 0 dom .. 6 sab
+    const diffSegunda = diaSemana === 0 ? -6 : 1 - diaSemana
+    const segunda = new Date(agora)
+    segunda.setDate(agora.getDate() + diffSegunda)
+    const semanaISO = `${segunda.getFullYear()}-${String(segunda.getMonth() + 1).padStart(2, '0')}-${String(segunda.getDate()).padStart(2, '0')}`
+    const hojeISO = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`
+
+    const { data: existentes } = await supabase
+      .from('atividades')
+      .select('id, descricao')
+      .eq('tipo', 'store:evolucao_semanal')
+      .order('id', { ascending: false })
+      .limit(50)
+
+    const jaTemSemana = (existentes || []).some((r: any) => {
+      try { return JSON.parse(r.descricao || '{}')?.semanaInicio === semanaISO } catch { return false }
+    })
+    if (jaTemSemana) return
+
+    const [vendedoresRes, clientesRes, pedidosRes, tarefasRes] = await Promise.all([
+      supabase.from('vendedores').select('id, nome, ativo').eq('ativo', true),
+      supabase.from('clientes').select('id, razao_social, cnpj, cpf, empresa_funil_id, omie_codigo, vendedor_id, data_ultima_venda, arquivado_duplicata'),
+      supabase.from('pedidos').select('id, cliente_id, status, tipo, omie_codigo, omie_numero, data_envio_omie, data_aprovacao, data_envio'),
+      supabase.from('tarefas').select('id, cliente_id, vendedor_id, status, data, concluida_em, justificativa_prazo_longo'),
+    ])
+    const vendedores = vendedoresRes.data || []
+    const clientes = (clientesRes.data || []).filter((c: any) => !c.arquivado_duplicata)
+    const pedidos = pedidosRes.data || []
+    const tarefas = tarefasRes.data || []
+
+    const parent = new Map<number, number>(clientes.map((c: any) => [c.id, c.id]))
+    const find = (x: number): number => { let cur = x; while (parent.get(cur) !== cur) { const p = parent.get(cur)!; parent.set(cur, parent.get(p)!); cur = p } return cur }
+    const seen = new Map<string, number>()
+    for (const c of clientes) {
+      const keys: string[] = []
+      if (c.empresa_funil_id) keys.push(`ef:${c.empresa_funil_id}`)
+      const doc = String(c.cnpj || c.cpf || '').replace(/\D/g, '')
+      if (doc) keys.push(`doc:${doc}`)
+      if (c.omie_codigo) keys.push(`om:${c.omie_codigo}`)
+      const nm = String(c.razao_social || '').trim().toLowerCase()
+      if (nm) keys.push(`nm:${nm}`)
+      for (const k of keys) { if (seen.has(k)) { const ra = find(c.id), rb = find(seen.get(k)!); if (ra !== rb) parent.set(rb, ra) } else seen.set(k, c.id) }
+    }
+    const fams = new Map<number, any[]>()
+    const rootByCard = new Map<number, number>()
+    for (const c of clientes) { const r = find(c.id); rootByCard.set(c.id, r); if (!fams.has(r)) fams.set(r, []); fams.get(r)!.push(c) }
+
+    const ultimaVendaPorRoot = new Map<number, string>()
+    const setUltima = (r: number | undefined, d?: string) => {
+      if (!r || !d) return
+      const iso = d.slice(0, 10)
+      const prev = ultimaVendaPorRoot.get(r)
+      if (!prev || iso > prev) ultimaVendaPorRoot.set(r, iso)
+    }
+    for (const p of pedidos) {
+      if (p.status === 'confirmado' && (p.tipo || 'venda') === 'venda' && (p.omie_codigo || p.omie_numero || p.data_envio_omie)) {
+        setUltima(rootByCard.get(p.cliente_id), p.data_envio_omie || p.data_aprovacao || p.data_envio)
+      }
+    }
+    for (const c of clientes) setUltima(rootByCard.get(c.id), c.data_ultima_venda)
+
+    const tarefasPorRoot = new Map<number, any[]>()
+    for (const t of tarefas) {
+      if (!t.cliente_id) continue
+      const r = rootByCard.get(t.cliente_id)
+      if (!r) continue
+      if (!tarefasPorRoot.has(r)) tarefasPorRoot.set(r, [])
+      tarefasPorRoot.get(r)!.push(t)
+    }
+
+    const pontos: any[] = []
+    for (const v of vendedores) {
+      let carteira180 = 0
+      let verdes = 0
+      let semAberta = 0
+      for (const [root, cards] of fams) {
+        const vendId = cards.find(c => c.vendedor_id)?.vendedor_id
+        if (vendId !== v.id) continue
+        const ult = ultimaVendaPorRoot.get(root)
+        if (!ult) continue
+        const diasCompra = Math.floor((Date.parse(hojeISO) - Date.parse(ult)) / 86400000)
+        if (diasCompra > 180) continue
+        carteira180++
+        const ts = tarefasPorRoot.get(root) || []
+        const pendentes = ts.filter(t => t.status === 'pendente')
+        if (pendentes.length === 0) semAberta++
+        const temJustFutura = pendentes.some(t => t.justificativa_prazo_longo && t.data >= hojeISO)
+        if (temJustFutura) continue
+        const conc = ts.filter(t => t.status === 'concluida' && (t.concluida_em || t.data)).sort((a, b) => String(b.concluida_em || b.data).localeCompare(String(a.concluida_em || a.data)))
+        if (conc[0]) {
+          const diasCont = Math.floor((Date.parse(hojeISO) - Date.parse(String(conc[0].concluida_em || conc[0].data).slice(0, 10))) / 86400000)
+          if (diasCont <= 10) verdes++
+        }
+      }
+      if (carteira180 === 0) continue
+      pontos.push({
+        vendedorId: v.id,
+        vendedorNome: v.nome,
+        carteira180,
+        verdes,
+        pctCarteiraEmDia: Math.round((verdes / carteira180) * 1000) / 10,
+        semTarefaAberta: semAberta,
+      })
+    }
+
+    if (pontos.length > 0) {
+      await supabase.from('atividades').insert({
+        tipo: 'store:evolucao_semanal',
+        descricao: JSON.stringify({ semanaInicio: semanaISO, registradoEm: agora.toISOString(), pontos }),
+        vendedor_nome: 'Sistema',
+      })
+      log.info({ semanaISO, vendedores: pontos.length }, '📈 Snapshot semanal de evolução registrado')
+    }
+  } catch (err) {
+    log.warn({ err }, 'Falha ao garantir snapshot semanal de evolução')
+  }
+}

@@ -71,8 +71,15 @@ function tarefaPertenceCliente(tarefa: Tarefa, cliente: Cliente) {
     (nomeNorm.length >= 4 && fantasiaNorm.length >= 4 && (fantasiaNorm.includes(nomeNorm) || nomeNorm.includes(fantasiaNorm)))
 }
 
+export interface ClientePanelFocus {
+  section?: 'cadastro' | 'pedidos' | 'tarefas' | 'historico'
+  tarefaId?: number
+  pedidoId?: number
+}
+
 interface ClientePanelProps {
   cliente: Cliente
+  initialFocus?: ClientePanelFocus | null
   todosClientes?: Cliente[]
   onSelectCardCiclo?: (card: Cliente) => void
   onCriarNovoCiclo?: (cliente: Cliente, extras?: Partial<Cliente>, etapa?: string) => Promise<Cliente>
@@ -179,7 +186,7 @@ function composeNotasEmpresa(setor: string, info: string): string {
 }
 
 export default function ClientePanel({
-  cliente: c, todosClientes, onSelectCardCiclo, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, atividades, tarefas, vendedores, loggedUser,
+  cliente: c, initialFocus, todosClientes, onSelectCardCiclo, onCriarNovoCiclo, onTriggerSatisfacao, interacoes, atividades, tarefas, vendedores, loggedUser,
   onClose, onEditCliente, onMoverCliente,
   onTriggerAmostra, onTriggerNegociacao, onNovoCiclo, onTriggerPerda, onDeleteTarefa,
   setInteracoes, setClientes, setTarefas, addNotificacao, showToast,
@@ -207,6 +214,21 @@ export default function ClientePanel({
   const [excluirConfirmText, setExcluirConfirmText] = useState('')
   // Abas do perfil (referência Agendor): Histórico (default) | Negócios
   const [activeTab, setActiveTab] = useState<'historico' | 'negocios' | 'whatsapp'>('historico')
+
+  useEffect(() => {
+    if (!initialFocus) return
+    if (initialFocus.section === 'cadastro') {
+      setShowCadastroCompleto(true)
+    } else if (initialFocus.section === 'pedidos') {
+      setActiveTab('negocios')
+    } else if (initialFocus.section === 'tarefas') {
+      setActiveTab('historico')
+      if (initialFocus.tarefaId) {
+        const alvo = tarefas.find(t => t.id === initialFocus.tarefaId)
+        if (alvo?.titulo) setTaskHistorySearch(alvo.titulo)
+      }
+    }
+  }, [c.id, initialFocus?.section, initialFocus?.tarefaId, initialFocus?.pedidoId])
   const notasEmpresa = React.useMemo(() => parseNotasEmpresa(c.notas), [c.notas])
   const [panelAtividadeTipo, setPanelAtividadeTipo] = useState<Interacao['tipo'] | 'proposta' | 'visita' | ''>('')
   const [panelAtividadeDesc, setPanelAtividadeDesc] = useState('')
