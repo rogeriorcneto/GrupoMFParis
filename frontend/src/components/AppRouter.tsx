@@ -10,7 +10,7 @@ import {
   IntegracoesView, VendedoresView, RelatoriosView, TemplatesView, ProtocolosView, SacView, TabelaPrecosView, ParametrosView,
   ProdutosView, AssistenteIAView, IAContextoView, CriarAutomacaoView, OmieView, TrafegoPagoView, BaseLeadsView, LicitacoesView, TreinamentoView,
   ConfiguracaoTarefasView, ConfiguracaoMensagensView,
-  MissaoView
+  MissaoView, EmailView
 } from './views'
 import type { ClientePanelFocus } from './ClientePanel'
 import * as db from '../lib/database'
@@ -72,6 +72,7 @@ interface AppRouterProps {
   onNavigate?: (view: ViewType) => void
   highlightTarefaId?: number
   onColetarSatisfacao: (cliente: Cliente) => Promise<void>
+  onEmailUnreadChange?: (count: number) => void
   dataLoading?: boolean
 }
 
@@ -93,7 +94,7 @@ export default function AppRouter({
   setTemplatesMsgs, setCampanhas, setProdutos, setPedidos,
   showToast, openModal, openModalComDados, handleEditCliente,
   handleDragStart, handleDragOver, handleDrop, requestStageMove, handleQuickAction,
-  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, onNavigate, highlightTarefaId, onColetarSatisfacao
+  setSelectedClientePanel, moverCliente, criarNovoCiclo, startCampanha, runJobNow, addNotificacao, onNovoCiclo, onVerNoFunil, onNavigate, highlightTarefaId, onColetarSatisfacao, onEmailUnreadChange
 }: AppRouterProps) {
   // Refresh data callback for AI agent actions
   const refreshData = async () => {
@@ -125,6 +126,8 @@ export default function AppRouter({
           onOpenCliente={(c, focus) => setSelectedClientePanel(c, focus || null)}
         />
       )
+    case 'email':
+      return <EmailView loggedUser={loggedUser} clientes={clientes} showToast={showToast} onUnreadChange={onEmailUnreadChange} />
     case 'aprovacao':
       return <AprovacaoView
         pedidos={pedidos}

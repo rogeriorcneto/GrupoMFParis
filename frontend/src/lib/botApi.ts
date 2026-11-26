@@ -106,6 +106,176 @@ export async function transcribeCallRecording(callId: number): Promise<{ success
   }
 }
 
+export interface UserEmailStatusInfo {
+  connected: boolean
+  email?: string
+  displayName?: string
+  smtpHost?: string
+  smtpPort?: number
+  imapHost?: string
+  imapPort?: number
+  unreadCount: number
+  outboxCount: number
+  error?: string
+}
+
+export interface UserMailItem {
+  id: string
+  uid?: number
+  folder: 'inbox' | 'sent' | 'outbox'
+  from: string
+  fromEmail: string
+  to: string
+  cc?: string
+  subject: string
+  date: string
+  snippet: string
+  bodyText?: string
+  bodyHtml?: string
+  unread: boolean
+  status?: 'queued' | 'sending' | 'failed' | 'draft' | 'sent'
+  error?: string
+  messageId?: string
+  hasAttachments?: boolean
+  attachments?: { filename: string; contentBase64: string; contentType?: string; part?: string; size?: number }[]
+}
+
+export async function inferUserEmailServers(email: string): Promise<{
+  smtpHost: string; smtpPort: number; smtpSecure: boolean; imapHost: string; imapPort: number; imapSecure: boolean
+}> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/infer-servers?email=${encodeURIComponent(email)}`)
+    return await res.json()
+  } catch {
+    return { smtpHost: '', smtpPort: 465, smtpSecure: true, imapHost: '', imapPort: 993, imapSecure: true }
+  }
+}
+
+export async function getUserEmailStatus(force = false): Promise<UserEmailStatusInfo> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/status${force ? '?force=1' : ''}`)
+    return await res.json()
+  } catch {
+    return { connected: false, unreadCount: 0, outboxCount: 0 }
+  }
+}
+
+export async function connectUserEmailAccount(payload: {
+  email: string
+  displayName?: string
+  password: string
+  smtpHost?: string
+  smtpPort?: number
+  smtpSecure?: boolean
+  imapHost?: string
+  imapPort?: number
+  imapSecure?: boolean
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function disconnectUserEmailAccount(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/disconnect`, { method: 'POST' })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function fetchUserFolderEmails(params: {
+  folder: 'inbox' | 'sent' | 'outbox'
+  search?: string
+  clienteEmail?: string
+  limit?: number
+}): Promise<{ success: boolean; items: UserMailItem[]; unreadCount?: number; error?: string }> {
+  try {
+    const q = new URLSearchParams({ folder: params.folder })
+    if (params.search) q.set('search', params.search)
+    if (params.clienteEmail) q.set('clienteEmail', params.clienteEmail)
+    if (params.limit) q.set('limit', String(params.limit))
+    const res = await authFetch(`${BOT_URL}/api/email/user/messages?${q.toString()}`)
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, items: [], error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function fetchUserEmailDetail(params: {
+  id: string
+  uid?: number
+  folder: 'inbox' | 'sent' | 'outbox'
+}): Promise<{ success: boolean; item?: UserMailItem; error?: string }> {
+  try {
+    const q = new URLSearchParams({ id: params.id, folder: params.folder })
+    if (params.uid) q.set('uid', String(params.uid))
+    const res = await authFetch(`${BOT_URL}/api/email/user/message-detail?${q.toString()}`)
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function saveUserEmailOutbox(payload: {
+  id?: string
+  to: string
+  cc?: string
+  subject: string
+  body: string
+  attachments?: { filename: string; contentBase64: string; contentType?: string }[]
+}): Promise<{ success: boolean; item?: UserMailItem; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/outbox`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
+export async function deleteUserEmailOutbox(id: string): Promise<{ success: boolean }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/outbox/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    return await res.json()
+  } catch {
+    return { success: false }
+  }
+}
+
+export async function sendUserPersonalEmailApi(payload: {
+  outboxId?: string
+  to: string
+  cc?: string
+  subject: string
+  body: string
+  inReplyTo?: string
+  clienteId?: number
+  attachments?: { filename: string; contentBase64: string; contentType?: string }[]
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const res = await authFetch(`${BOT_URL}/api/email/user/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return await res.json()
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro de conexão' }
+  }
+}
+
 /** Send an email via backend */
 export async function sendEmailViaBot(to: string, subject: string, body: string, clienteId?: number, vendedorNome?: string): Promise<{ success: boolean; error?: string }> {
   try {

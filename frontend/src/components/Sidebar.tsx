@@ -21,6 +21,7 @@ import {
   Cog6ToothIcon,
   CogIcon,
   ChatBubbleLeftIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline'
 import type { ViewType, Vendedor } from '../types'
 
@@ -34,18 +35,20 @@ interface SidebarProps {
   onSignOut: () => void
   onVoltarPortal?: () => void
   pendingAprovacoes?: number
+  emailUnreadCount?: number
 }
 
 const viewsPermitidas: Record<Vendedor['cargo'], ViewType[]> = {
-  gerente: ['dashboard', 'aprovacao', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos', 'sac', 'tabela-precos', 'parametros'],
-  vendedor: ['dashboard', 'ia', 'funil', 'clientes', 'relatorios', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento', 'protocolos', 'tabela-precos'],
-  sdr: ['ia', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'protocolos', 'tabela-precos'],
+  gerente: ['dashboard', 'aprovacao', 'email', 'funil', 'clientes', 'automacoes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'missao', 'social', 'integracoes', 'equipe', 'relatorios', 'omie', 'trafico', 'licitacoes', 'templates', 'treinamento', 'produtos', 'ia', 'ia-contexto', 'criar-automacao', 'configuracao-tarefas', 'configuracao-mensagens', 'protocolos', 'sac', 'tabela-precos', 'parametros'],
+  vendedor: ['dashboard', 'ia', 'email', 'funil', 'clientes', 'relatorios', 'tarefas', 'missao', 'mapa', 'templates', 'treinamento', 'protocolos', 'tabela-precos'],
+  sdr: ['ia', 'email', 'funil', 'clientes', 'mapa', 'prospeccao', 'baseleads', 'tarefas', 'templates', 'treinamento', 'protocolos', 'tabela-precos'],
 }
 
 // Item 8.2 e 8.3 (Rodada 3): sem emojis nos nomes (ícones SVG mantidos) e na ordem oficial 1 a 29
 const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
   { id: 'dashboard', icon: HomeIcon, label: 'Dashboard' },
   { id: 'aprovacao', icon: ClipboardDocumentCheckIcon, label: 'Aprovação de Pedidos' },
+  { id: 'email', icon: EnvelopeIcon, label: 'Caixa de E-mail' },
   { id: 'funil', icon: FunnelIcon, label: 'Funil Comercial' },
   { id: 'tarefas', icon: ChartBarIcon, label: 'Tarefas' },
   { id: 'clientes', icon: UserGroupIcon, label: 'Clientes' },
@@ -78,7 +81,7 @@ const navItems: { id: ViewType; icon: React.ElementType; label: string }[] = [
 export { viewsPermitidas }
 
 export default function Sidebar({
-  activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, onVoltarPortal, pendingAprovacoes = 0
+  activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, onVoltarPortal, pendingAprovacoes = 0, emailUnreadCount = 0
 }: SidebarProps) {
   return (
     <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border-black/[0.07] dark:border-white/[0.08] border-r flex flex-col shadow-2xl`}>
@@ -116,6 +119,11 @@ export default function Sidebar({
               {item.id === 'aprovacao' && pendingAprovacoes > 0 && (
                 <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {pendingAprovacoes}
+                </span>
+              )}
+              {item.id === 'email' && emailUnreadCount > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {emailUnreadCount > 99 ? '99+' : emailUnreadCount}
                 </span>
               )}
             </button>

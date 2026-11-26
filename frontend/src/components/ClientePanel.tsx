@@ -13,12 +13,12 @@ import { parseRedesSociaisMap } from '../utils/socialLinks'
 import WhatsAppUserPanel, { WhatsAppImageLightbox, WhatsAppMediaGallery, extrairItensGaleriaWhatsApp } from './WhatsAppUserPanel'
 import OcorrenciasPedido from './OcorrenciasPedido'
 import CallRecorder from './CallRecorder'
-import EmailCenterPanel from './EmailCenterPanel'
 import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from './TimePicker5Min'
 import { DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 import { useParametrosListas } from '../lib/parametrosListas'
 import CadastroCompletoModal from './CadastroCompletoModal'
 import FinalizarTarefaInline from './FinalizarTarefaInline'
+import EmailView from './views/EmailView'
 import { avaliarCadastroCliente, SITUACAO_CADASTRO_CONFIG, temJustificativaAtiva } from '../utils/cadastroCompleto'
 import { obterSituacaoCompraCliente, SITUACAO_COMPRA_CONFIG } from '../utils/situacaoCompra'
 import {
@@ -1314,14 +1314,8 @@ export default function ClientePanel({
                         <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    {c.contatoEmail && (
-                      <button type="button" onClick={() => {
-                        if (isMobileDevice()) {
-                          window.location.href = `mailto:${c.contatoEmail}`
-                        } else {
-                          setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
-                        }
-                      }}
+                    {(c.contatoEmail || c.emailBoleto) && (
+                      <button type="button" onClick={() => setShowEmail(true)}
                         className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] transition-colors"
                         title="E-mail">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
@@ -3751,22 +3745,7 @@ export default function ClientePanel({
 
           {/* === TIMELINE (collapsible) === */}
 
-          {/* === EMAIL (collapsible) === */}
-          <div ref={emailRef} className="bg-gray-50 rounded-apple border border-gray-200">
-            <button onClick={() => setShowEmail(!showEmail)} className="w-full flex items-center justify-between p-4 text-sm font-semibold text-gray-900 hover:bg-gray-100 transition-colors rounded-apple">
-              <span>📧 Email</span>
-              <span>{showEmail ? '▲' : '▼'}</span>
-            </button>
-            {showEmail && (
-              <div className="px-4 pb-4">
-                <EmailCenterPanel
-                  cliente={c}
-                  vendedorNome={loggedUser?.nome}
-                  showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'Email' : 'Erro Email', texto, c.id)}
-                />
-              </div>
-            )}
-          </div>
+
 
           </>}{/* fim aba Histórico */}
 
@@ -3807,6 +3786,41 @@ export default function ClientePanel({
               </div>
             </div>
           )}
+
+          {/* === EMAIL MODAL (caixa pessoal filtrada para este cliente) === */}
+          {showEmail && (
+            <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowEmail(false)}>
+              <div
+                ref={emailRef}
+                className="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl border border-black/[0.08] dark:border-white/[0.10] w-full max-w-5xl h-[88vh] flex flex-col overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.08] bg-white/95 dark:bg-[#1C1C1E]/95">
+                  <div>
+                    <p className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-100">E-mail — {c.razaoSocial}</p>
+                    {c.contatoEmail && <p className="text-xs text-gray-500 dark:text-gray-400">{c.contatoEmail}</p>}
+                  </div>
+                  <button
+                    onClick={() => setShowEmail(false)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.08] text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                    title="Fechar"
+                  >
+                    <XMarkIcon className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <EmailView
+                    loggedUser={loggedUser}
+                    clientes={todosClientes || [c]}
+                    cliente={c}
+                    compact
+                    showToast={(tipo, texto) => addNotificacao(tipo === 'success' ? 'success' : 'error', tipo === 'success' ? 'Email' : 'Erro Email', texto, c.id)}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {waLightbox && (
             <WhatsAppImageLightbox
               mediaUrl={waLightbox.url}

@@ -1,11 +1,12 @@
 import React from 'react'
-import { BellIcon, MagnifyingGlassIcon, WifiIcon, MoonIcon, SunIcon } from '@heroicons/react/24/outline'
+import { BellIcon, MagnifyingGlassIcon, WifiIcon, MoonIcon, SunIcon, EnvelopeIcon } from '@heroicons/react/24/outline'
 import type { ViewType, Notificacao } from '../types'
 import { useNetworkStatus } from '../hooks/useNetworkStatus'
 
 const viewTitles: Record<ViewType, string> = {
   dashboard: 'Dashboard',
   aprovacao: 'Aprovação de Pedidos',
+  email: 'Caixa de E-mail',
   funil: 'Funil Comercial',
   clientes: 'Clientes',
   automacoes: 'Automações',
@@ -47,12 +48,14 @@ interface TopBarProps {
   onOpenSearch?: () => void
   dark?: boolean
   onToggleDark?: () => void
+  emailUnreadCount?: number
+  onOpenEmail?: () => void
 }
 
 export default function TopBar({
   activeView, setSidebarOpen, notificacoes,
   showNotifications, setShowNotifications, markAllRead, markRead, onClickNotificacao, onOpenSearch,
-  dark, onToggleDark
+  dark, onToggleDark, emailUnreadCount = 0, onOpenEmail
 }: TopBarProps) {
   const unreadCount = notificacoes.filter(n => !n.lida).length
   const isOnline = useNetworkStatus()
@@ -119,6 +122,20 @@ export default function TopBar({
             <MagnifyingGlassIcon className="h-5 w-5" />
           </button>
         )}
+        {onOpenEmail && (
+          <button
+            onClick={onOpenEmail}
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors rounded-apple hover:bg-gray-100 dark:hover:bg-white/[0.08] relative"
+            title="Caixa de e-mail"
+          >
+            <EnvelopeIcon className="h-5 w-5" />
+            {emailUnreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {emailUnreadCount > 99 ? '99+' : emailUnreadCount}
+              </span>
+            )}
+          </button>
+        )}
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
@@ -147,7 +164,7 @@ export default function TopBar({
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-900 truncate">{n.titulo}</p>
                         <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{n.mensagem}</p>
-                        {(n.acao || n.clienteId) && <p className="text-[10px] text-primary-500 mt-1 font-medium">Clique para ver →</p>}
+                        {(n.acao || n.clienteId || n.titulo.toLowerCase().includes('e-mail')) && <p className="text-[10px] text-primary-500 mt-1 font-medium">Clique para ver →</p>}
                       </div>
                     </div>
                   </div>

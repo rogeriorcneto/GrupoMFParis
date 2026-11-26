@@ -17,6 +17,17 @@ import {
   ensureAndAttachSellerWavoip, attachWavoipBridgeToSession, attachWavoipAllConnectedSessions,
 } from './whatsapp-multi.js'
 import { initEmail, reloadEmail, getEmailStatus, sendEmail, sendTemplateEmail, testEmailConnection, fetchInboxEmails } from './email.js'
+import {
+  inferEmailServers,
+  connectAndSaveUserEmail,
+  disconnectUserEmail,
+  getUserEmailStatus,
+  listUserFolderEmails,
+  readUserEmailDetail,
+  saveUserDraftOrOutbox,
+  deleteUserOutboxItem,
+  sendUserPersonalEmail,
+} from './email-multi.js'
 import { getActiveSessions } from './session.js'
 import { loadConfig, saveConfig } from './config-store.js'
 import { supabase } from './supabase.js'
@@ -1586,6 +1597,142 @@ app.post('/api/config', requireAuth, requireGerente, rateLimit(10, 60_000), asyn
 })
 
 // ─── Email Routes (protegidos por auth) ───
+
+// ─── Caixa de E-mail Pessoal por Vendedor/Gerente (IMAP + SMTP individual criptografado) ───
+app.get('/api/email/user/infer-servers', requireAuth, (req, res) => {
+  const email = String(req.query.email || '').trim()
+  res.json(inferEmailServers(email))
+})
+
+app.get('/api/email/user/status', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ connected: false, unreadCount: 0, outboxCount: 0 }); return }
+    const force = req.query.force === '1'
+    const status = await getUserEmailStatus(me.id, force)
+    res.json(status)
+  } catch (err: any) {
+    res.status(500).json({ connected: false, unreadCount: 0, outboxCount: 0, error: err?.message })
+  }
+})
+
+app.post('/api/email/user/connect', requireAuth, rateLimit(10, 60_000), async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    const { email, displayName, password, smtpHost, smtpPort, smtpSecure, imapHost, imapPort, imapSecure } = req.body || {}
+    const result = await connectAndSaveUserEmail(me.id, {
+      email,
+      displayName: displayName || me.nome,
+      password,
+      smtpHost,
+      smtpPort: smtpPort ? Number(smtpPort) : undefined,
+      smtpSecure,
+      imapHost,
+      imapPort: imapPort ? Number(imapPort) : undefined,
+      imapSecure,
+    })
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao conectar conta de e-mail' })
+  }
+})
+
+app.post('/api/email/user/disconnect', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Vendedor não encontrado' }); return }
+    await disconnectUserEmail(me.id)
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao desconectar e-mail' })
+  }
+})
+
+app.get('/api/email/user/messages', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, items: [] }); return }
+    const folderRaw = String(req.query.folder || 'inbox')
+    const folder = (folderRaw === 'sent' || folderRaw === 'outbox' ? folderRaw : 'inbox') as 'inbox' | 'sent' | 'outbox'
+    const result = await listUserFolderEmails(me.id, {
+      folder,
+      search: req.query.search ? String(req.query.search) : undefined,
+      clienteEmail: req.query.clienteEmail ? String(req.query.clienteEmail) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : 40,
+    })
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, items: [], error: err?.message || 'Erro ao listar e-mails' })
+  }
+})
+
+app.get('/api/email/user/message-detail', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const folderRaw = String(req.query.folder || 'inbox')
+    const folder = (folderRaw === 'sent' || folderRaw === 'outbox' ? folderRaw : 'inbox') as 'inbox' | 'sent' | 'outbox'
+    const id = String(req.query.id || '')
+    const uid = req.query.uid ? Number(req.query.uid) : undefined
+    const result = await readUserEmailDetail(me.id, { id, uid, folder })
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao abrir e-mail' })
+  }
+})
+
+app.post('/api/email/user/outbox', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const { id, to, cc, subject, body, attachments } = req.body || {}
+    const item = await saveUserDraftOrOutbox(me.id, {
+      id,
+      to: String(to || ''),
+      cc: cc ? String(cc) : undefined,
+      subject: String(subject || ''),
+      bodyText: String(body || ''),
+      status: 'draft',
+      attachments: Array.isArray(attachments) ? attachments : undefined,
+    })
+    res.json({ success: true, item })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao salvar na Caixa de Saída' })
+  }
+})
+
+app.delete('/api/email/user/outbox/:id', requireAuth, async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    await deleteUserOutboxItem(me.id, req.params.id)
+    res.json({ success: true })
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao remover item' })
+  }
+})
+
+app.post('/api/email/user/send', requireAuth, rateLimit(20, 60_000), async (req, res) => {
+  try {
+    const me = reqVendedor(req)
+    if (!me) { res.status(403).json({ success: false, error: 'Acesso negado' }); return }
+    const { outboxId, to, cc, subject, body, inReplyTo, clienteId, attachments } = req.body || {}
+    const result = await sendUserPersonalEmail(me.id, {
+      outboxId,
+      to: String(to || ''),
+      cc: cc ? String(cc) : undefined,
+      subject: String(subject || ''),
+      body: String(body || ''),
+      inReplyTo: inReplyTo ? String(inReplyTo) : undefined,
+      clienteId: clienteId ? Number(clienteId) : undefined,
+      attachments: Array.isArray(attachments) ? attachments : undefined,
+    })
+    res.json(result)
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err?.message || 'Erro ao enviar e-mail' })
+  }
+})
 
 app.get('/api/email/status', requireAuth, (_req, res) => {
   res.json(getEmailStatus())

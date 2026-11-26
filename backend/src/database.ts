@@ -1133,20 +1133,7 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100, vendedo
     return []
   }
   const cleanNum = formatBrazilianPhone(digits)
-  // Para celulares brasileiros (8 dígitos locais iniciando em 6-9), unifica com/sem 9º dígito
-  // (ex.: card com 5531996693699 e WhatsApp real 553196693699 são a mesma linha!).
-  const allNums = generateBrazilianPhoneVariations(cleanNum)
-  let q = supabase
-    .from('whatsapp_messages')
-    .select('*')
-    .in('numero', allNums)
-    .order('created_at', { ascending: true })
-    .limit(limit)
-  if (vendedorId) q = q.eq('vendedor_id', vendedorId)
-  const res = await q
-  if (res.error) throw res.error
-  const data = res.data
-  return attachMediaFromKV((data || []).map((row: any) => ({
+  const mapRows = async (rows: any[] | null) => attachMediaFromKV((rows || []).map((row: any) => ({
     id: row.id,
     numero: row.numero,
     clienteId: row.cliente_id,
@@ -1159,6 +1146,32 @@ export async function fetchWhatsAppMessages(numero: string, limit = 100, vendedo
     mimetype: row.mimetype || undefined,
     createdAt: row.created_at,
   })))
+
+  // Busca primeiro o número exato. Variações com/sem 9º dígito entram só como fallback
+  // para nunca misturar conversas quando números diferentes colidem na normalização.
+  let exactQ = supabase
+    .from('whatsapp_messages')
+    .select('*')
+    .eq('numero', cleanNum)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (vendedorId) exactQ = exactQ.eq('vendedor_id', vendedorId)
+  const exactRes = await exactQ
+  if (exactRes.error) throw exactRes.error
+  if ((exactRes.data || []).length > 0) return mapRows(exactRes.data)
+
+  const fallbackNums = generateBrazilianPhoneVariations(cleanNum).filter(n => n !== cleanNum)
+  if (fallbackNums.length === 0) return []
+  let fallbackQ = supabase
+    .from('whatsapp_messages')
+    .select('*')
+    .in('numero', fallbackNums)
+    .order('created_at', { ascending: true })
+    .limit(limit)
+  if (vendedorId) fallbackQ = fallbackQ.eq('vendedor_id', vendedorId)
+  const fallbackRes = await fallbackQ
+  if (fallbackRes.error) throw fallbackRes.error
+  return mapRows(fallbackRes.data)
 }
 
 export async function fetchWhatsAppMessagesByCliente(clienteId: number, limit = 100): Promise<WhatsAppMessage[]> {

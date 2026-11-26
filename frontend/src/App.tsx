@@ -18,7 +18,7 @@ import { useFunilActions } from './hooks/useFunilActions'
 import { mesmaEmpresaNoFunil } from './utils/funil-logic'
 import { registrarTarefaExcluida } from './utils/exportacaoAuditoria'
 import { logger } from './utils/logger'
-import { disconnectUserWhatsApp, sendTempoTelaBeat, getUserWavoipToken, syncWavoipWebphone } from './lib/botApi'
+import { disconnectUserWhatsApp, sendTempoTelaBeat, getUserWavoipToken, syncWavoipWebphone, getUserEmailStatus } from './lib/botApi'
 import LoginScreen from './components/LoginScreen'
 import Sidebar, { viewsPermitidas } from './components/Sidebar'
 import TopBar from './components/TopBar'
@@ -200,6 +200,8 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   const [clientePanelFocus, setClientePanelFocus] = useState<ClientePanelFocus | null>(null)
   const [showChat, setShowChat] = useState(false)
   const [chatUnreadTotal, setChatUnreadTotal] = useState(0)
+  const [emailUnreadCount, setEmailUnreadCount] = useState(0)
+  const emailUnreadPrevRef = useRef<number | null>(null)
   const [dbNotificacoes, setDbNotificacoes] = useState<Notificacao[]>([])
   const [atividades, setAtividades] = useState<Atividade[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -446,6 +448,32 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
   // Notification system — hook handles auto-generation + Supabase persistence
   const { notificacoes, addNotificacao, markAllRead, markRead } = useNotificacoes(clientes, tarefas, vendedores, loggedUser, dbNotificacoes)
 
+  // Badge e notificações de novos e-mails da caixa pessoal
+  useEffect(() => {
+    if (!loggedUser) {
+      setEmailUnreadCount(0)
+      emailUnreadPrevRef.current = null
+      return
+    }
+    let cancelled = false
+    const poll = async (force = false) => {
+      try {
+        const status = await getUserEmailStatus(force)
+        if (cancelled) return
+        const count = status.connected ? Math.max(0, status.unreadCount || 0) : 0
+        const prev = emailUnreadPrevRef.current
+        if (prev !== null && count > prev) {
+          addNotificacao('info', '📧 Novo e-mail recebido', count === 1 ? 'Você tem 1 e-mail não lido na Caixa de E-mail.' : `Você tem ${count} e-mails não lidos na Caixa de E-mail.`)
+        }
+        emailUnreadPrevRef.current = count
+        setEmailUnreadCount(count)
+      } catch { /* polling silencioso */ }
+    }
+    poll(true)
+    const interval = window.setInterval(() => poll(true), 45000)
+    return () => { cancelled = true; window.clearInterval(interval) }
+  }, [loggedUser?.id, addNotificacao])
+
   useRealtimeSubscription<any>('pedidos', useCallback((payload) => {
     if (payload.eventType === 'INSERT') {
       const newP = db.pedidoFromDb(payload.new)
@@ -620,6 +648,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
           }, 0)
         }}
         pendingAprovacoes={loggedUser.cargo === 'gerente' ? pedidos.filter(p => p.status === 'enviado' || p.status === 'cancelamento_solicitado').length : 0}
+        emailUnreadCount={emailUnreadCount}
         onVoltarPortal={onVoltarPortal}
       />
 
@@ -631,7 +660,9 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
           notificacoes={notificacoes} showNotifications={showNotifications}
           setShowNotifications={setShowNotifications} markAllRead={markAllRead} markRead={markRead}
           onClickNotificacao={(n) => {
-            if (n.acao === 'abrir_tarefa' && n.tarefaId) {
+            if (n.titulo.toLowerCase().includes('e-mail')) {
+              setActiveView('email')
+            } else if (n.acao === 'abrir_tarefa' && n.tarefaId) {
               setHighlightTarefaId(n.tarefaId)
               setActiveView('tarefas')
             } else if (n.acao === 'abrir_tarefa') {
@@ -647,6 +678,8 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
             }
           }}
           onOpenSearch={() => setShowGlobalSearch(true)}
+          emailUnreadCount={emailUnreadCount}
+          onOpenEmail={() => setActiveView('email')}
           dark={dark} onToggleDark={toggleDark}
         />
 
@@ -707,6 +740,7 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
                   setHighlightTarefaId(tarefa.id)
                   setActiveView('tarefas')
                 }}
+                onEmailUnreadChange={(count) => { emailUnreadPrevRef.current = count; setEmailUnreadCount(count) }}
                 onVerNoFunil={(c) => { setActiveView('funil'); setSelectedClientePanel(c) }}
                 onNavigate={setActiveView}
                 highlightTarefaId={highlightTarefaId}
