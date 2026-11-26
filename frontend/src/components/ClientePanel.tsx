@@ -1197,14 +1197,14 @@ export default function ClientePanel({
   }, [pedidoTipo])
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-0 sm:p-[5vh_5vw]">
-      <div className="absolute inset-0 bg-black bg-opacity-40" onClick={onClose} />
-      <div className="relative w-full h-[100dvh] sm:w-[90vw] sm:h-[90vh] bg-white shadow-2xl rounded-none sm:rounded-2xl overflow-hidden">
-        {/* Header — Perfil do Cliente (referência: Agendor) */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 z-10 px-4 sm:px-6 py-4 flex items-start justify-between gap-3">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-0 sm:p-[4vh_4vw]">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative w-full h-[100dvh] sm:w-[92vw] sm:h-[92vh] bg-[#F5F5F7] dark:bg-[#141416] shadow-[0_24px_64px_rgba(0,0,0,0.28)] border border-black/[0.08] dark:border-white/[0.10] rounded-none sm:rounded-2xl overflow-hidden">
+        {/* Header — Perfil do Cliente (Apple macOS Sonoma Sheet Header) */}
+        <div className="sticky top-0 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.08] z-10 px-4 sm:px-6 py-3.5 flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-bold text-gray-900 truncate">{c.razaoSocial}</h2>
+              <h2 className="text-[17px] font-semibold tracking-tight text-gray-900 truncate">{c.razaoSocial}</h2>
               {/* Tag Status do Cliente */}
               {(() => {
                 const stb = SITUACAO_COMPRA_CONFIG[situacaoCompraInfo.situacao]
@@ -1213,15 +1213,16 @@ export default function ClientePanel({
                   : `${situacaoCompraInfo.dias} dia${situacaoCompraInfo.dias === 1 ? '' : 's'} desde a última venda enviada ao Omie`
                 return (
                   <span className="relative inline-flex">
-                    <button type="button" onClick={() => setShowInfoSituacaoCompra(v => !v)} className={`px-2 py-0.5 text-[10px] font-bold rounded-full border cursor-help ${stb.cor}`} title={titulo}>
+                    <button type="button" onClick={() => setShowInfoSituacaoCompra(v => !v)} className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-medium rounded-full border cursor-help tabular-nums ${stb.cor}`} title={titulo}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${stb.corDot}`} />
                       {stb.label}{situacaoCompraInfo.dias != null ? ` · ${situacaoCompraInfo.dias}d` : ''}
                     </button>
-                    {showInfoSituacaoCompra && <span className="absolute left-0 top-6 z-30 w-48 rounded-lg border border-gray-200 bg-white p-2 text-[10px] font-normal text-gray-700 shadow-xl">{titulo}</span>}
+                    {showInfoSituacaoCompra && <span className="absolute left-0 top-7 z-30 w-52 rounded-xl border border-gray-200 bg-white p-2.5 text-[11px] font-normal text-gray-700 shadow-xl">{titulo}</span>}
                   </span>
                 )
               })()}
               {(['inativado', 'descartado', 'bloqueado'] as const).includes(c.statusCliente as any) && (
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full border bg-red-100 text-red-700 border-red-200" title="Status manual excepcional do cadastro">
+                <span className="px-2 py-0.5 text-[11px] font-medium rounded-full border bg-red-50 text-red-700 border-red-200" title="Status manual excepcional do cadastro">
                   {STATUS_CLIENTE_BADGE[c.statusCliente as string]?.label || c.statusCliente}
                 </span>
               )}
@@ -1236,21 +1237,21 @@ export default function ClientePanel({
                       ? `Incompleto vencido (${qtd} campo${qtd === 1 ? '' : 's'})`
                       : `Cadastro incompleto (${qtd} campo${qtd === 1 ? '' : 's'})`
                 return (
-                  <button type="button" onClick={() => setShowCadastroCompleto(true)} className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${cfg.cor} hover:brightness-95`} title="Ver campos pendentes e completar cadastro">
+                  <button type="button" onClick={() => setShowCadastroCompleto(true)} className={`px-2.5 py-0.5 text-[11px] font-medium rounded-full border ${cfg.cor} hover:brightness-95`} title="Ver campos pendentes e completar cadastro">
                     {texto}
                   </button>
                 )
               })()}
-              {/* Atalhos rápidos inline: Ligação | WhatsApp | E-mail */}
+              {/* Atalhos rápidos inline: Ligação | WhatsApp | E-mail (botões neutros estilo macOS) */}
               {(() => {
                 const fone = (c.contatoCelular || c.contatoTelefone || c.whatsapp || '').replace(/\D/g, '')
                 return (
                   <div className="flex items-center gap-1">
                     {fone && (
                       <button type="button" onClick={() => setShowCallRecorder(true)}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] transition-colors"
                         title="Ligar">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                       </button>
                     )}
                     {fone && (
@@ -1261,7 +1262,7 @@ export default function ClientePanel({
                           setShowWhatsApp(true)
                         }
                       }}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] transition-colors"
                         title="WhatsApp">
                         <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
                       </button>
@@ -1274,35 +1275,33 @@ export default function ClientePanel({
                           setShowEmail(true); setTimeout(() => emailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
                         }
                       }}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 hover:bg-black/[0.08] transition-colors"
                         title="E-mail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                       </button>
                     )}
                   </div>
                 )
               })()}
-              {/* Última Amostra (global entre todos os ciclos) */}
               {ultimaAmostraExibicaoISO && (
-                <span className="text-[11px] text-gray-500">
-                  🧪 Última amostra: <strong className="text-gray-700">{new Date(ultimaAmostraExibicaoISO).toLocaleDateString('pt-BR')}</strong>
+                <span className="text-[11px] text-gray-500 tabular-nums">
+                  Última amostra: <strong className="font-medium text-gray-800">{new Date(ultimaAmostraExibicaoISO).toLocaleDateString('pt-BR')}</strong>
                 </span>
               )}
-              {/* Última Venda (global entre todos os ciclos) */}
               {ultimaVendaExibicaoISO && (
-                <span className="text-[11px] text-gray-500">
-                  🛒 Última venda: <strong className="text-gray-700">{new Date(ultimaVendaExibicaoISO).toLocaleDateString('pt-BR')}</strong>
+                <span className="text-[11px] text-gray-500 tabular-nums">
+                  Última venda: <strong className="font-medium text-gray-800">{new Date(ultimaVendaExibicaoISO).toLocaleDateString('pt-BR')}</strong>
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${etapaCores[c.etapa] || 'bg-gray-100 text-gray-800'}`}>{etapaLabels[c.etapa] || c.etapa}</span>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-full bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-800 dark:text-gray-200">{etapaLabels[c.etapa] || c.etapa}</span>
               {c.etapa === 'negociacao' && pedidoAguardandoAprovacao && (
-                <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                  ⏳ Aguardando aprovação
+                <span className="px-2.5 py-0.5 text-[11px] font-medium rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                  Aguardando aprovação
                 </span>
               )}
-              <span className="text-xs text-gray-500">Há {diasNaEtapa}d nesta etapa</span>
+              <span className="text-xs text-gray-500 tabular-nums">Há {diasNaEtapa}d nesta etapa</span>
               {(() => {
                 const vend = vendedores.find(v => v.id === c.vendedorId)
                 return (
@@ -1356,53 +1355,49 @@ export default function ClientePanel({
           </div>
 
           {/* Ações no canto direito do header */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* VER TAREFAS */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {onVerTarefas && (
               <button
                 onClick={() => { onVerTarefas(); onClose() }}
-                className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 rounded-apple hover:bg-orange-100 transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 rounded-lg hover:bg-black/[0.08] transition-colors"
                 title="Ir para a página de Tarefas"
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                 Tarefas
               </button>
             )}
-            {/* VER NO FUNIL */}
             {onVerNoFunil && (
               <button
                 onClick={() => { onVerNoFunil(c); onClose() }}
-                className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-700 border border-primary-200 rounded-apple hover:bg-primary-100 transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 rounded-lg hover:bg-black/[0.08] transition-colors"
                 title="Abrir o card deste cliente no Funil"
               >
-                🎯 Ver no Funil
+                Ver no Funil
               </button>
             )}
-            {/* Menu Mais Opções */}
             <div className="relative">
               <button
                 onClick={() => setShowMaisOpcoesHeader(v => !v)}
-                className="px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-apple hover:bg-gray-50"
+                className="px-2.5 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 bg-[#EFEFF4] dark:bg-[#2C2C30] rounded-lg hover:bg-black/[0.08] transition-colors"
                 title="Mais opções"
               >
-                Mais opções ▾
+                Opções ▾
               </button>
               {showMaisOpcoesHeader && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowMaisOpcoesHeader(false)} />
-                  <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-apple shadow-lg border border-gray-200 z-40 py-1">
+                  <div className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-[#2C2C30] rounded-xl shadow-xl border border-gray-200 z-40 py-1">
                     <button
                       onClick={() => { setShowMaisOpcoesHeader(false); onEditCliente(c); onClose() }}
-                      className="w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
+                      className="w-full px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
                     >
-                      ✏️ Editar Empresa
+                      Editar empresa
                     </button>
                     {onVerNoFunil && (
                       <button
                         onClick={() => { setShowMaisOpcoesHeader(false); onVerNoFunil(c); onClose() }}
-                        className="sm:hidden w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
+                        className="sm:hidden w-full px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 text-left flex items-center gap-2"
                       >
-                        🎯 Ver no Funil
+                        Ver no Funil
                       </button>
                     )}
                     {isGerente && (
@@ -1495,53 +1490,53 @@ export default function ClientePanel({
                 </p>
               </div>
             )}
-            <h3 className="text-sm font-semibold text-gray-900">⚡ Ações Rápidas</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Ações da etapa</h3>
             <div className="flex flex-wrap gap-1.5">
               {c.etapa === 'negociacao' && ultimaProposta && (
                 <button
                   onClick={abrirEdicaoProposta}
-                  className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-apple hover:bg-indigo-100"
+                  className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-800 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]"
                   title={`Editar proposta ${ultimaProposta.numero}`}
                 >
-                  📝 Editar Proposta
+                  Editar proposta
                 </button>
               )}
               {ultimaProposta && (isGerente || c.etapa === 'follow_up') && (
                 <button
                   onClick={() => gerarPropostaPDF(c, ultimaProposta.itens, ultimaProposta.observacoes, ultimaProposta.vendedorNome, ultimaProposta.numero, { tipoFrete: (ultimaProposta.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: ultimaProposta.pagamento, dataLancamento: ultimaProposta.criadoEm })}
-                  className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white border border-indigo-200 rounded-apple hover:bg-indigo-700"
+                  className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-800 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]"
                   title={`Baixar PDF da ${ultimaProposta.numero}`}
                 >
-                  📄 Baixar PDF
+                  Baixar PDF
                 </button>
               )}
               {todasPropostas.length > 1 && (
                 <div className="relative">
                   <button
                     onClick={() => setShowPropostasAnteriores(v => !v)}
-                    className="px-3 py-1.5 text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200 rounded-apple hover:bg-gray-100"
+                    className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]"
                     title="Ver histórico de propostas"
                   >
-                    📋 Anteriores ({todasPropostas.length - 1})
+                    Anteriores ({todasPropostas.length - 1})
                   </button>
                   {showPropostasAnteriores && (
-                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[260px] max-h-72 overflow-y-auto">
+                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl min-w-[260px] max-h-72 overflow-y-auto">
                       <div className="px-3 py-2 border-b border-gray-100">
-                        <p className="text-[11px] font-semibold text-gray-700">Histórico de Propostas</p>
+                        <p className="text-[11px] font-semibold text-gray-700">Histórico de propostas</p>
                       </div>
                       {todasPropostas.map((p, i) => (
-                        <div key={p.id} className={`flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 ${i === 0 ? 'bg-indigo-50' : ''}`}>
+                        <div key={p.id} className={`flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 ${i === 0 ? 'bg-gray-50' : ''}`}>
                           <div className="min-w-0">
-                            <p className="text-[11px] font-medium text-gray-800 truncate">{p.numero} {i === 0 ? <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">atual</span> : ''}</p>
-                            <p className="text-[10px] text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR')} · R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                            <p className="text-[11px] font-medium text-gray-800 truncate">{p.numero} {i === 0 ? <span className="text-[9px] bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded">atual</span> : ''}</p>
+                            <p className="text-[10px] text-gray-500 tabular-nums">{new Date(p.criadoEm).toLocaleDateString('pt-BR')} · R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                             {p.pagamento && <p className="text-[9px] text-gray-400">{p.pagamento}</p>}
                           </div>
                           <button
                             onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento, dataLancamento: p.criadoEm })}
-                            className="flex-shrink-0 px-2 py-1 text-[10px] bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            className="flex-shrink-0 px-2.5 py-1 text-[10px] font-medium bg-primary-700 text-white rounded-md hover:bg-primary-800"
                             title="Baixar PDF"
                           >
-                            📄 PDF
+                            PDF
                           </button>
                         </div>
                       ))}
@@ -1551,8 +1546,8 @@ export default function ClientePanel({
               )}
               {c.etapa === 'prospecção' && (
                 <>
-                  <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-yellow-600 text-white rounded-apple hover:bg-yellow-700">📦 Enviar Amostra</button>
-                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { etapaAnterior: 'prospecção', dataEntradaEtapa: new Date().toISOString() }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-apple hover:bg-indigo-700">📋 Ir para Proposta</button>
+                  <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-800 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]">Enviar amostra</button>
+                  <button onClick={() => { onMoverCliente(c.id, 'proposta', { etapaAnterior: 'prospecção', dataEntradaEtapa: new Date().toISOString() }); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-primary-700 text-white rounded-lg hover:bg-primary-800 shadow-apple-sm">Ir para proposta</button>
                 </>
               )}
               {c.etapa === 'amostra' && (
@@ -1567,8 +1562,8 @@ export default function ClientePanel({
                           setAvaliacaoItens(initMap)
                           setShowAvaliarAmostra(true)
                         }}
-                        className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-apple hover:bg-green-700"
-                      >🧪 Resultado da Amostra</button>
+                        className="px-3 py-1.5 text-xs font-medium bg-primary-700 text-white rounded-lg hover:bg-primary-800 shadow-apple-sm"
+                      >Resultado da amostra</button>
                       <button
                         onClick={() => {
                           onMoverCliente(c.id, 'amostra_perdida', {
@@ -1578,21 +1573,21 @@ export default function ClientePanel({
                           })
                           onClose()
                         }}
-                        className="px-3 py-1.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-apple hover:bg-orange-100"
+                        className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]"
                         title="Cliente não recebeu, esqueceu ou perdeu a amostra (permite 2º envio)"
-                      >📦 Amostra Perdida</button>
+                      >Amostra não recebida</button>
                     </>
                   )}
                   {c.statusAmostra === 'cancelamento_pendente' && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-apple p-2.5 space-y-2">
-                      <p className="text-xs text-amber-800 font-medium">⏳ Cancelamento aguardando aprovação do gerente.</p>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-2">
+                      <p className="text-xs text-amber-800 font-medium">Cancelamento aguardando aprovação do gerente.</p>
                       {isGerente && (
-                        <button onClick={async () => { if (confirm(`Aprovar cancelamento da amostra de ${c.razaoSocial}?`)) { await onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="w-full px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">✅ Aprovar Cancelamento</button>
+                        <button onClick={async () => { if (confirm(`Aprovar cancelamento da amostra de ${c.razaoSocial}?`)) { await onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="w-full px-3 py-1.5 text-xs font-medium bg-primary-700 text-white rounded-lg hover:bg-primary-800">Aprovar cancelamento</button>
                       )}
                     </div>
                   )}
                   {c.statusAmostra !== 'cancelamento_pendente' && !['aprovada', 'reprovada', 'faturado', 'expedido', 'entregue'].includes(c.statusAmostra || '') && (
-                    <button onClick={async () => { if (confirm(`Solicitar cancelamento do envio de amostra para ${c.razaoSocial}?`)) { try { await db.updateCliente(c.id, { statusAmostra: 'cancelamento_pendente' }); setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusAmostra: 'cancelamento_pendente' } : cl)); addNotificacao('warning', 'Cancelamento solicitado', `${c.razaoSocial}: aguardando aprovação do gerente`, c.id); onClose() } catch { addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento', c.id) } } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">❌ Cancelar Envio</button>
+                    <button onClick={async () => { if (confirm(`Solicitar cancelamento do envio de amostra para ${c.razaoSocial}?`)) { try { await db.updateCliente(c.id, { statusAmostra: 'cancelamento_pendente' }); setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusAmostra: 'cancelamento_pendente' } : cl)); addNotificacao('warning', 'Cancelamento solicitado', `${c.razaoSocial}: aguardando aprovação do gerente`, c.id); onClose() } catch { addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento', c.id) } } }} className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg">Cancelar envio</button>
                   )}
                 </>
               )}
@@ -1601,26 +1596,26 @@ export default function ClientePanel({
                   {(c.tentativaAmostra || 1) < 2 && !c.resultadoAmostra && (
                     <button
                       onClick={() => { onTriggerAmostra(c); onClose() }}
-                      className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700"
-                    >🔄 Reenviar Amostra (2º envio)</button>
+                      className="px-3 py-1.5 text-xs font-medium bg-primary-700 text-white rounded-lg hover:bg-primary-800"
+                    >Reenviar amostra (2º envio)</button>
                   )}
                   {c.statusAmostra === 'cancelamento_pendente' && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-apple p-2.5 space-y-2">
-                      <p className="text-xs text-amber-800 font-medium">⏳ Cancelamento aguardando aprovação do gerente.</p>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-2">
+                      <p className="text-xs text-amber-800 font-medium">Cancelamento aguardando aprovação do gerente.</p>
                       {isGerente && (
-                        <button onClick={async () => { if (confirm(`Aprovar cancelamento da amostra de ${c.razaoSocial}?`)) { await onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="w-full px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">✅ Aprovar Cancelamento</button>
+                        <button onClick={async () => { if (confirm(`Aprovar cancelamento da amostra de ${c.razaoSocial}?`)) { await onMoverCliente(c.id, 'prospecção', { statusAmostra: undefined, dataEnvioAmostra: undefined, resultadoAmostra: undefined, dataResultadoAmostra: undefined }); onClose() } }} className="w-full px-3 py-1.5 text-xs font-medium bg-primary-700 text-white rounded-lg hover:bg-primary-800">Aprovar cancelamento</button>
                       )}
                     </div>
                   )}
                   {c.statusAmostra !== 'cancelamento_pendente' && (
-                    <button onClick={async () => { if (confirm(`Solicitar cancelamento do envio de amostra para ${c.razaoSocial}?`)) { try { await db.updateCliente(c.id, { statusAmostra: 'cancelamento_pendente' }); setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusAmostra: 'cancelamento_pendente' } : cl)); addNotificacao('warning', 'Cancelamento solicitado', `${c.razaoSocial}: aguardando aprovação do gerente`, c.id); onClose() } catch { addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento', c.id) } } }} className="px-3 py-1.5 text-xs font-medium bg-red-50 text-red-700 border border-red-200 rounded-apple hover:bg-red-100">🚫 Cancelar Envio</button>
+                    <button onClick={async () => { if (confirm(`Solicitar cancelamento do envio de amostra para ${c.razaoSocial}?`)) { try { await db.updateCliente(c.id, { statusAmostra: 'cancelamento_pendente' }); setClientes(prev => prev.map(cl => cl.id === c.id ? { ...cl, statusAmostra: 'cancelamento_pendente' } : cl)); addNotificacao('warning', 'Cancelamento solicitado', `${c.razaoSocial}: aguardando aprovação do gerente`, c.id); onClose() } catch { addNotificacao('error', 'Erro', 'Falha ao solicitar cancelamento', c.id) } } }} className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg">Cancelar envio</button>
                   )}
                 </>
               )}
               {c.etapa === 'proposta' && (
                 <>
-                  <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-amber-600 text-white rounded-apple hover:bg-amber-700">📦 Enviar Amostra</button>
-                  <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-apple hover:bg-purple-700">Criar Proposta</button>
+                  <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-800 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]">Enviar amostra</button>
+                  <button onClick={() => { onTriggerNegociacao(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-primary-700 text-white rounded-lg hover:bg-primary-800 shadow-apple-sm">Criar proposta</button>
                 </>
               )}
               {c.etapa === 'negociacao' && (
@@ -2423,34 +2418,34 @@ export default function ClientePanel({
 
           <div className="space-y-4 lg:col-span-7 xl:col-span-8 lg:overflow-y-auto lg:pl-1">
 
-          {/* === ABAS: Histórico | Negócios === */}
-          <div className="sticky top-0 z-[5] bg-white border-b border-gray-200 -mx-1 px-1 pb-0 mb-2">
-            <div className="flex gap-1">
+          {/* === ABAS: Histórico | Negócios | WhatsApp (Apple Segmented Control) === */}
+          <div className="sticky top-0 z-[5] bg-[#F5F5F7]/90 dark:bg-[#141416]/90 backdrop-blur-md py-1.5 mb-2">
+            <div className="inline-flex p-1 rounded-xl bg-[#E5E5EA]/80 dark:bg-[#242428]">
               <button
                 type="button"
                 onClick={() => setActiveTab('historico')}
-                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'historico' ? 'text-primary-700 border-primary-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'historico' ? 'bg-white dark:bg-[#323236] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
               >
-                Ver histórico
+                Histórico
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('negocios')}
-                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'negocios' ? 'text-primary-700 border-primary-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'negocios' ? 'bg-white dark:bg-[#323236] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
               >
-                Ver negócios
+                Negócios
                 {(() => {
                   const count = (todosPedidos || []).filter(p => p.clienteId === c.id && p.status !== 'cancelado').length
-                  return count > 0 ? <span className="bg-gray-200 text-gray-700 text-[10px] font-bold rounded-full px-1.5">{count}</span> : null
+                  return count > 0 ? <span className="bg-black/[0.06] dark:bg-white/[0.12] text-gray-700 dark:text-gray-200 text-[10px] font-bold rounded-full px-1.5 tabular-nums">{count}</span> : null
                 })()}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('whatsapp')}
-                className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'whatsapp' ? 'text-green-700 border-green-600' : 'text-gray-500 border-transparent hover:text-gray-700'}`}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${activeTab === 'whatsapp' ? 'bg-white dark:bg-[#323236] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}
               >
-                <WhatsAppIcon variant="outline" className="h-4 w-4" />
-                Ver WhatsApp
+                <WhatsAppIcon variant="outline" className="h-3.5 w-3.5" />
+                WhatsApp
               </button>
             </div>
           </div>
@@ -3220,7 +3215,7 @@ export default function ClientePanel({
                       const tarefaVinculada = isTaskItem ? clienteTarefas.find(t => t.id === Math.abs(inter.id)) : interacaoTarefaMap.get(inter.id)
                       const cor = isTaskItem ? { bg: 'bg-orange-50', border: 'border-orange-200', dot: 'bg-orange-500' } : (tipoInteracaoCor[tipo] || { bg: 'bg-gray-50', border: 'border-gray-200', dot: 'bg-gray-400' })
                       const criador = inter.automatico ? 'Automação' : (vendedor?.nome?.split(' ')[0] || '—')
-                      const criadorIniciais = inter.automatico ? '⚡' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
+                      const criadorIniciais = inter.automatico ? 'A' : (vendedor?.nome?.charAt(0) || '?').toUpperCase()
                       const responsavelVendedor = tarefaVinculada?.vendedorId
                         ? (vendedores.find(v => v.id === tarefaVinculada.vendedorId) || vendedor)
                         : vendedor
@@ -3263,64 +3258,62 @@ export default function ClientePanel({
                         return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}${horaTxt}`
                       })()
                       return (
-                        <div key={inter.id} className={`group rounded-apple border overflow-hidden ${isPinned ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'} hover:border-gray-300 transition-colors`}>
+                        <div key={inter.id} className={`group rounded-2xl border overflow-hidden bg-white dark:bg-[#1C1C1E] shadow-apple-sm ${isPinned ? 'border-amber-300 ring-1 ring-amber-200/60' : 'border-gray-200'} hover:border-gray-300 transition-colors`}>
 
-                          {/* CABEÇALHO: ícone + nome + tipo + badge + data criação */}
-                          <div className={`flex items-center justify-between gap-2 px-3 py-2.5 ${isPinned ? 'bg-amber-50' : 'bg-primary-50'} border-b ${isPinned ? 'border-amber-100' : 'border-primary-100'}`}>
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <div className={`flex-shrink-0 w-8 h-8 rounded-full bg-white border ${cor.border} flex items-center justify-center text-sm shadow-sm`}>
-                                {isTaskItem ? '📋' : (tipoInteracaoIcon[tipo] || '📋')}
+                          {/* CABEÇALHO LIMPO APPLE: indicador + tipo + ciclo + prazo */}
+                          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-[#F5F5F7] dark:bg-[#2C2C30] flex items-center justify-center">
+                                <span className={`w-2 h-2 rounded-full ${cor.dot}`} />
                               </div>
                               <div className="min-w-0">
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-primary-500 truncate leading-none mb-0.5">{c.razaoSocial}</p>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-semibold text-gray-700">{labelReal}</span>
-                                  <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[13px] font-semibold text-gray-900">{labelReal}</span>
+                                  <span className="px-1.5 py-0.5 text-[10px] font-medium bg-[#F5F5F7] dark:bg-[#2C2C30] text-gray-600 dark:text-gray-300 rounded-md tabular-nums">
                                     Ciclo {(inter as any).cicloOrigem || cicloPorCardId.get(inter.clienteId) || 1}
                                   </span>
                                   {inter.automatico && (
-                                    <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-purple-100 text-purple-700 border border-purple-200 rounded-full">⚡ Auto</span>
+                                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-[#F5F5F7] dark:bg-[#2C2C30] text-gray-500 rounded-md">Automático</span>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-gray-500">Criada {fmtRelativo(inter.data)}</p>
+                                <p className="text-[11px] text-gray-400">Criada {fmtRelativo(inter.data)}</p>
                               </div>
                             </div>
                             {fmtPrazo && labelReal !== 'Nota' && (
                               <div className="flex-shrink-0 flex flex-col items-end gap-0.5">
-                                <span className="text-[9px] uppercase tracking-wide text-gray-400 font-semibold">Prazo</span>
                                 <span
-                                  className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${
+                                  className={`px-2.5 py-1 text-[11px] font-medium rounded-full border tabular-nums ${
                                     tarefaVinculada?.status === 'concluida'
-                                      ? 'bg-white/70 text-gray-400 border-gray-200 line-through'
+                                      ? 'bg-gray-50 text-gray-400 border-gray-200 line-through'
                                       : prazoVencido
-                                      ? 'bg-red-100 text-red-700 border-red-300'
-                                      : 'bg-amber-400 text-white border-amber-500'
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : 'bg-[#F5F5F7] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 border-transparent'
                                   }`}
                                   title={tarefaVinculada?.status === 'concluida' ? 'Tarefa concluída' : prazoVencido ? 'Vencida' : 'Prazo'}
                                 >
-                                  📅 {fmtPrazo}
+                                  {fmtPrazo}
                                 </span>
                               </div>
                             )}
                           </div>
 
-                          {/* Descrição + Anexos embutidos (Item 8) */}
+                          {/* Descrição + Anexos embutidos */}
                           {(inter.descricao || tarefaVinculada?.conclusao || tarefaVinculada?.justificativaPrazoLongo || tarefaVinculada?.objetivo || tarefaVinculada?.canalUsado) && (
-                            <div className="px-3 py-1.5 space-y-2">
+                            <div className="px-4 py-3 space-y-2">
                               {tarefaVinculada && (tarefaVinculada.objetivo || tarefaVinculada.canalUsado || tarefaVinculada.origem) && (
-                                <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                                <div className="flex flex-wrap gap-1.5 text-[11px] font-medium text-gray-600">
                                   {tarefaVinculada.objetivo && (
-                                    <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                      Objetivo: {OBJETIVO_LABEL[tarefaVinculada.objetivo] || tarefaVinculada.objetivo}
+                                    <span className="px-2 py-0.5 rounded-md bg-[#F5F5F7] dark:bg-[#2C2C30]">
+                                      {OBJETIVO_LABEL[tarefaVinculada.objetivo] || tarefaVinculada.objetivo}
                                     </span>
                                   )}
                                   {tarefaVinculada.canalUsado && (
-                                    <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">
-                                      Canal usado: {CANAL_LABEL[tarefaVinculada.canalUsado] || tarefaVinculada.canalUsado}
+                                    <span className="px-2 py-0.5 rounded-md bg-[#F5F5F7] dark:bg-[#2C2C30]">
+                                      Canal: {CANAL_LABEL[tarefaVinculada.canalUsado] || tarefaVinculada.canalUsado}
                                     </span>
                                   )}
-                                  <span className={`px-2 py-0.5 rounded-full border ${inferirOrigemTarefa(tarefaVinculada) === 'automatica' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                    Origem: {inferirOrigemTarefa(tarefaVinculada) === 'automatica' ? 'Automática' : 'Manual'}
+                                  <span className="px-2 py-0.5 rounded-md bg-[#F5F5F7] dark:bg-[#2C2C30] text-gray-500">
+                                    {inferirOrigemTarefa(tarefaVinculada) === 'automatica' ? 'Automática' : 'Manual'}
                                   </span>
                                 </div>
                               )}
@@ -3330,7 +3323,7 @@ export default function ClientePanel({
                                 )
                                 return (
                                   <>
-                                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
+                                    <p className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
                                     {urls.length > 0 && (
                                       <div className="flex flex-wrap gap-1.5 pt-1">
                                         {urls.map((u, idx) => (
@@ -3339,9 +3332,9 @@ export default function ClientePanel({
                                             href={u}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100"
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-[#F5F5F7] text-primary-700 rounded-lg hover:bg-gray-200"
                                           >
-                                            📎 Abrir anexo {urls.length > 1 ? idx + 1 : ''}
+                                            Abrir anexo {urls.length > 1 ? idx + 1 : ''}
                                           </a>
                                         ))}
                                       </div>
@@ -3350,17 +3343,17 @@ export default function ClientePanel({
                                 )
                               })()}
                               {tarefaVinculada?.justificativaPrazoLongo && (
-                                <div className="rounded-lg border border-orange-100 bg-orange-50 px-3 py-2">
-                                  <p className="text-[10px] font-bold uppercase tracking-wide text-orange-700 mb-0.5">Justificativa de prazo longo</p>
-                                  <p className="text-xs text-orange-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.justificativaPrazoLongo}</p>
+                                <div className="rounded-lg border-l-2 border-l-orange-400 bg-orange-50/50 dark:bg-orange-500/10 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-700 mb-0.5">Justificativa de prazo longo</p>
+                                  <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.justificativaPrazoLongo}</p>
                                 </div>
                               )}
                               {tarefaVinculada?.conclusao && (
-                                <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2">
-                                  <p className="text-[10px] font-bold uppercase tracking-wide text-green-700 mb-1">Conclusão</p>
-                                  <p className="text-sm text-green-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.conclusao}</p>
+                                <div className="rounded-lg border-l-2 border-l-emerald-500 bg-[#F7F9F8] dark:bg-emerald-500/10 px-3 py-2">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">Conclusão</p>
+                                  <p className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-line">{tarefaVinculada.conclusao}</p>
                                   {tarefaVinculada.concluidaEm && (
-                                    <p className="mt-1 text-[10px] font-semibold text-green-700">Concluída em {new Date(tarefaVinculada.concluidaEm).toLocaleString('pt-BR')}{tarefaVinculada.concluidaPor ? ` por ${tarefaVinculada.concluidaPor}` : ''}</p>
+                                    <p className="mt-1 text-[10px] font-medium text-gray-500 tabular-nums">Concluída em {new Date(tarefaVinculada.concluidaEm).toLocaleString('pt-BR')}{tarefaVinculada.concluidaPor ? ` por ${tarefaVinculada.concluidaPor}` : ''}</p>
                                   )}
                                   {(() => {
                                     const iaInfo = obterClassificacaoTarefaIA(tarefaVinculada)

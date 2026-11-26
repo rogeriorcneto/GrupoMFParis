@@ -4,12 +4,12 @@ import { mesmaEmpresaNoFunil } from './funil-logic'
 export type SituacaoCompra = 'prospecto' | 'ativo' | 'em_atencao' | 'em_risco' | 'inativo_recente' | 'inativo_antigo'
 
 export const SITUACAO_COMPRA_CONFIG: Record<SituacaoCompra, { label: string; cor: string; corDot: string; ordem: number }> = {
-  ativo: { label: 'Ativo', cor: 'bg-blue-100 text-blue-800 border-blue-200', corDot: 'bg-blue-500', ordem: 1 },
-  em_atencao: { label: 'Em atenção', cor: 'bg-orange-100 text-orange-700 border-orange-200', corDot: 'bg-orange-400', ordem: 2 },
-  em_risco: { label: 'Em risco', cor: 'bg-orange-200 text-orange-900 border-orange-300', corDot: 'bg-orange-700', ordem: 3 },
-  inativo_recente: { label: 'Inativo recente', cor: 'bg-gray-400 text-white border-gray-500', corDot: 'bg-gray-500', ordem: 4 },
-  inativo_antigo: { label: 'Inativo antigo', cor: 'bg-gray-600 text-white border-gray-700', corDot: 'bg-gray-700', ordem: 5 },
-  prospecto: { label: 'Prospecto', cor: 'bg-purple-100 text-purple-800 border-purple-200', corDot: 'bg-purple-500', ordem: 0 },
+  ativo: { label: 'Ativo', cor: 'bg-blue-50/90 text-blue-700 border-blue-200/80', corDot: 'bg-blue-500', ordem: 1 },
+  em_atencao: { label: 'Em atenção', cor: 'bg-orange-50/90 text-orange-700 border-orange-200/80', corDot: 'bg-orange-400', ordem: 2 },
+  em_risco: { label: 'Em risco', cor: 'bg-orange-100/90 text-orange-900 border-orange-300/80', corDot: 'bg-orange-700', ordem: 3 },
+  inativo_recente: { label: 'Inativo recente', cor: 'bg-slate-500 text-white border-slate-500', corDot: 'bg-slate-500', ordem: 4 },
+  inativo_antigo: { label: 'Inativo antigo', cor: 'bg-slate-700 text-white border-slate-700', corDot: 'bg-slate-700', ordem: 5 },
+  prospecto: { label: 'Prospecto', cor: 'bg-purple-50/90 text-purple-700 border-purple-200/80', corDot: 'bg-purple-500', ordem: 0 },
 }
 
 function parseDateValue(v?: string): Date | null {

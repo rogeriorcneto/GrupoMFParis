@@ -1023,18 +1023,18 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                     return (
                       <div
                         key={cliente.id}
-                        className={`relative p-3 rounded-xl bg-white dark:bg-[#222226] ${isGerente ? 'cursor-move' : 'cursor-pointer'} shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0_6px_18px_rgba(0,0,0,0.07)] transition-all duration-150 group ${
-                          urgencia === 'critico' ? 'border-l-[3px] border-l-red-500 border border-black/[0.06] dark:border-white/[0.08]' :
-                          urgencia === 'atencao' ? 'border-l-[3px] border-l-amber-400 border border-black/[0.06] dark:border-white/[0.08]' :
-                          'border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.16]'
+                        className={`relative p-3.5 rounded-2xl bg-white dark:bg-[#1E1E22] ${isGerente ? 'cursor-move' : 'cursor-pointer'} shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] hover:-translate-y-[1px] transition-all duration-150 group ${
+                          urgencia === 'critico' ? 'ring-1 ring-red-500/30 border border-red-200/80 dark:border-red-500/30' :
+                          urgencia === 'atencao' ? 'ring-1 ring-amber-400/35 border border-amber-200/80 dark:border-amber-500/30' :
+                          'border border-black/[0.05] dark:border-white/[0.07] hover:border-black/[0.11] dark:hover:border-white/[0.14]'
                         }`}
                         draggable={isGerente}
                         onDragStart={(e) => isGerente ? onDragStart(e, cliente, stage.key) : e.preventDefault()}
                         onClick={() => { if (moveMenuCliente === cliente.id) { setMoveMenuCliente(null); return } onClickCliente?.(cliente) }}
                       >
-                        <div className="flex items-start justify-between gap-1.5">
-                          <h4 className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 leading-snug line-clamp-2 tracking-[-0.01em]">{cliente.razaoSocial}</h4>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="font-semibold text-[13px] text-gray-900 dark:text-gray-100 leading-[1.35] line-clamp-2 tracking-[-0.012em]">{cliente.razaoSocial}</h4>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
                             {onMoveCliente && (isGerente || (transicoesPermitidas[stage.key] || []).length > 0) && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setMoveMenuCliente(moveMenuCliente === cliente.id ? null : cliente.id) }}
@@ -1045,7 +1045,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             {urgencia !== 'normal' && (
                               <span className={`w-2 h-2 rounded-full ${urgencia === 'critico' ? 'bg-red-500' : 'bg-amber-400'}`} title={urgencia === 'critico' ? 'Urgência crítica' : 'Atenção'} />
                             )}
-                            {cliente.score !== undefined && <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 bg-black/[0.04] dark:bg-white/[0.07] px-1.5 py-0.5 rounded-md tabular-nums">{cliente.score}</span>}
+                            {cliente.score !== undefined && <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 tabular-nums">{cliente.score}</span>}
                           </div>
                         </div>
                         {moveMenuCliente === cliente.id && onMoveCliente && (
@@ -1067,35 +1067,41 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             ))}
                           </div>
                         )}
-                        <div className="flex items-center justify-between mt-1.5 gap-1">
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-black/[0.04] dark:bg-white/[0.06] text-gray-600 dark:text-gray-300 rounded-md tabular-nums">
-                            Ciclo {cliente.cicloNumero || 1}
-                          </span>
-                          {vendedor && <span className="text-[10px] text-gray-600 dark:text-gray-300 font-medium flex-shrink-0 bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full">{vendedor.nome.split(' ')[0]}</span>}
+                        <div className="flex items-center justify-between mt-2 gap-1.5 flex-wrap">
+                          {(() => {
+                            const info = situacaoCompraDoCard(cliente)
+                            const cfg = SITUACAO_COMPRA_CONFIG[info.situacao]
+                            const titulo = info.dias == null ? 'Nunca comprou' : `${info.dias} dia${info.dias === 1 ? '' : 's'} desde a última venda enviada ao Omie`
+                            const aberto = seloSituacaoAberto === cliente.id
+                            return (
+                              <div className="relative inline-flex">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setSeloSituacaoAberto(aberto ? null : cliente.id) }}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full border cursor-help tabular-nums ${cfg.cor}`}
+                                  title={titulo}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${cfg.corDot}`} />
+                                  {cfg.label}{info.dias != null ? ` · ${info.dias}d` : ''}
+                                </button>
+                                {aberto && (
+                                  <div className="absolute left-0 top-6 z-30 w-48 rounded-xl border border-black/[0.08] bg-white dark:bg-[#2C2C30] p-2.5 text-[10px] text-gray-700 dark:text-gray-200 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                                    {titulo}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                          <div className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500 font-medium tabular-nums ml-auto">
+                            <span>C{cliente.cicloNumero || 1}</span>
+                            {vendedor && (
+                              <>
+                                <span>·</span>
+                                <span className="text-gray-600 dark:text-gray-300">{vendedor.nome.split(' ')[0]}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        {(() => {
-                          const info = situacaoCompraDoCard(cliente)
-                          const cfg = SITUACAO_COMPRA_CONFIG[info.situacao]
-                          const titulo = info.dias == null ? 'Nunca comprou' : `${info.dias} dia${info.dias === 1 ? '' : 's'} desde a última venda enviada ao Omie`
-                          const aberto = seloSituacaoAberto === cliente.id
-                          return (
-                            <div className="mt-1.5 relative">
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setSeloSituacaoAberto(aberto ? null : cliente.id) }}
-                                className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full border cursor-help tabular-nums ${cfg.cor}`}
-                                title={titulo}
-                              >
-                                {cfg.label}{info.dias != null ? ` · ${info.dias}d` : ''}
-                              </button>
-                              {aberto && (
-                                <div className="absolute left-0 top-6 z-30 w-48 rounded-xl border border-black/[0.08] bg-white dark:bg-[#2C2C30] p-2.5 text-[10px] text-gray-700 dark:text-gray-200 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                                  {titulo}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })()}
                         {(cliente.etapa === 'amostra' || cliente.etapa === 'amostra_perdida') && (
                           <div className="flex gap-1 mt-2 flex-wrap">
                             {cliente.etapa === 'amostra' && (
