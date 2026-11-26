@@ -1787,7 +1787,7 @@ export default function ClientePanel({
 
           {/* === CONTATO === */}
           <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-2">
-            <h3 className="text-sm font-semibold text-gray-900">🏢 Dados básicos da empresa</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Dados básicos da empresa</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
               <div><p className="text-xs text-gray-500">Razão social</p><p className="font-medium text-gray-900">{c.razaoSocial}</p></div>
               <div><p className="text-xs text-gray-500">{c.cpf && !c.cnpj ? 'CPF' : 'CNPJ'}</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || c.cpf || '-'}</p></div>
@@ -1829,11 +1829,14 @@ export default function ClientePanel({
             )}
           </div>
 
-          {/* === ITEM 6: PRODUTOS DE INTERESSE + CONSUMO MENSAL (kg/mês) EM DESTAQUE === */}
-          <div className="bg-indigo-50/50 rounded-apple border border-indigo-200 p-4 space-y-3">
+          {/* === ITEM 6: PRODUTOS DE INTERESSE + CONSUMO MENSAL (kg/mês) === */}
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-apple border border-gray-200 p-4 space-y-3 shadow-apple-sm">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-indigo-950">📦 Produtos de interesse</h3>
-              <span className="text-[11px] font-medium text-indigo-700">Consumo mensal (kg)</span>
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-primary-600" />
+                Produtos de interesse
+              </h3>
+              <span className="text-[11px] font-medium text-gray-500">Consumo mensal (kg)</span>
             </div>
             {consumoUnificado.lista.length > 0 ? (
               <div className="space-y-2">
@@ -2097,25 +2100,25 @@ export default function ClientePanel({
           })()}
 
           {/* === CONTATO E LOCALIZAÇÃO === */}
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-900">📇 Informações para contato</h3>
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-apple border border-gray-200 p-4 space-y-3 shadow-apple-sm">
+            <h3 className="text-sm font-semibold text-gray-900">Informações para contato</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm">
-              <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">🛒 Contato Comprador</p>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-2.5">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Contato Comprador</p>
                 <p className="font-medium text-gray-900 mt-0.5">{c.contatoComprasNome || c.contatoNome || '—'}</p>
-                <p className="text-xs text-gray-600">{c.contatoComprasTelefone || c.contatoCelular || c.contatoTelefone || '—'}</p>
+                <p className="text-xs text-gray-600 tabular-nums">{c.contatoComprasTelefone || c.contatoCelular || c.contatoTelefone || '—'}</p>
                 <p className="text-[11px] text-gray-400">Setor: {c.contatoComprasSetor || 'Compras'}</p>
               </div>
-              <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">💰 Contato Financeiro</p>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-2.5">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Contato Financeiro</p>
                 <p className="font-medium text-gray-900 mt-0.5">{c.contatoFinanceiroNome || '—'}</p>
-                <p className="text-xs text-gray-600">{c.contatoFinanceiroTelefone || '—'}</p>
+                <p className="text-xs text-gray-600 tabular-nums">{c.contatoFinanceiroTelefone || '—'}</p>
                 <p className="text-[11px] text-gray-400">Setor: {c.contatoFinanceiroSetor || 'Financeiro'}</p>
               </div>
               <div><p className="text-xs text-gray-500">Telefone da empresa</p>
                 {(c.contatoTelefone || c.contatoCelular) ? (
-                  <button onClick={() => setShowCallRecorder(true)} className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer flex items-center gap-1" title="Ligar com gravação">
-                    📞 {c.contatoCelular || c.contatoTelefone}
+                  <button onClick={() => setShowCallRecorder(true)} className="font-medium text-primary-700 hover:underline cursor-pointer flex items-center gap-1 tabular-nums" title="Ligar com gravação">
+                    {c.contatoCelular || c.contatoTelefone}
                   </button>
                 ) : (
                   <p className="font-medium text-gray-900">{c.contatoTelefone || '-'}</p>
@@ -2177,16 +2180,19 @@ export default function ClientePanel({
             }
             const lista = Array.from(nomesHomologados)
             return (
-              <div className="bg-green-50 rounded-apple border border-green-200 p-4 space-y-2">
-                <h3 className="text-sm font-semibold text-green-900">✅ Produtos Homologados</h3>
+              <div className="bg-white dark:bg-[#1C1C1E] rounded-apple border border-gray-200 p-4 space-y-2 shadow-apple-sm">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Produtos homologados
+                </h3>
                 {lista.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1.5">
                     {lista.map(nome => (
-                      <span key={nome} className="px-2 py-0.5 text-xs bg-green-100 text-green-800 rounded-full border border-green-300 font-medium">{nome}</span>
+                      <span key={nome} className="px-2.5 py-0.5 text-xs bg-emerald-50 text-emerald-800 rounded-full border border-emerald-200 font-medium">{nome}</span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-green-700 opacity-70">Nenhum produto homologado ainda.</p>
+                  <p className="text-xs text-gray-400">Nenhum produto homologado ainda.</p>
                 )}
               </div>
             )
@@ -2210,27 +2216,30 @@ export default function ClientePanel({
             })
             const lista = Array.from(denegadosSet)
             return (
-              <div className="bg-red-50 rounded-apple border border-red-200 p-4 space-y-2">
-                <h3 className="text-sm font-semibold text-red-900">🚫 Produtos Reprovados</h3>
+              <div className="bg-white dark:bg-[#1C1C1E] rounded-apple border border-gray-200 p-4 space-y-2 shadow-apple-sm">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  Produtos reprovados
+                </h3>
                 {lista.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {lista.map(nome => (
-                      <div key={nome} className="inline-flex flex-col px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded border border-red-300">
+                      <div key={nome} className="inline-flex flex-col px-2.5 py-1 text-xs bg-red-50 text-red-800 rounded-lg border border-red-200">
                         <span className="font-medium">{nome}</span>
                         {motivoMap[nome] && <span className="text-[10px] text-red-600 font-normal">Motivo: {motivoMap[nome]}</span>}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-red-700 opacity-70">Nenhum produto reprovado registrado.</p>
+                  <p className="text-xs text-gray-400">Nenhum produto reprovado registrado.</p>
                 )}
               </div>
             )
           })()}
 
-          <div className="bg-gray-50 rounded-apple border border-gray-200 p-4 space-y-3">
+          <div className="bg-white dark:bg-[#1C1C1E] rounded-apple border border-gray-200 p-4 space-y-3 shadow-apple-sm">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">📋 Histórico de tarefas ({clienteTarefas.length})</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Histórico de tarefas ({clienteTarefas.length})</h3>
               {filteredTaskHistory.length > visibleTaskHistory.length && <span className="text-[11px] text-gray-500">{visibleTaskHistory.length}/{filteredTaskHistory.length}</span>}
             </div>
             {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <>

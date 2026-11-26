@@ -81,20 +81,20 @@ export default function Sidebar({
   activeView, setActiveView, loggedUser, sidebarOpen, setSidebarOpen, onOpenAI, onSignOut, onVoltarPortal, pendingAprovacoes = 0
 }: SidebarProps) {
   return (
-    <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-r flex flex-col shadow-xl`}>
+    <div className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border-black/[0.07] dark:border-white/[0.08] border-r flex flex-col shadow-2xl`}>
       {/* Logo */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2">
-          <img src="/Logo_MFParis.png" alt="GMF Paris" className="h-10 w-10 rounded-full object-cover" />
-          <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Grupo MF Paris</h1>
+      <div className="h-14 flex items-center justify-between px-4 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <div className="flex items-center gap-2.5">
+          <img src="/Logo_MFParis.png" alt="GMF Paris" className="h-8 w-8 rounded-lg object-cover ring-1 ring-black/[0.06]" />
+          <h1 className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">Grupo MF Paris</h1>
         </div>
-        <button onClick={() => setSidebarOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded-apple" title="Fechar menu">
+        <button onClick={() => setSidebarOpen(false)} className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg" title="Fechar menu">
           <XMarkIcon className="h-5 w-5" />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 min-h-0 px-4 py-6 space-y-1 overflow-y-auto">
+      <nav className="flex-1 min-h-0 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems
           .filter(item => viewsPermitidas[loggedUser.cargo].includes(item.id))
           .map(item => (
@@ -102,19 +102,19 @@ export default function Sidebar({
               key={item.id}
               onClick={() => { setActiveView(item.id); setSidebarOpen(false) }}
               className={`
-                w-full flex items-center px-3 py-2.5 text-sm font-medium rounded-apple transition-all duration-200
+                w-full flex items-center px-3 py-2 text-[13px] font-medium rounded-xl transition-all duration-150
                 ${activeView === item.id
-                  ? 'bg-primary-50 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
+                  ? 'bg-[#E8ECF4] dark:bg-white/[0.11] text-primary-700 dark:text-white font-semibold'
                   : item.id === 'aprovacao' && pendingAprovacoes > 0
-                  ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-300 dark:bg-amber-900/30'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                  ? 'text-amber-700 bg-amber-50/80 hover:bg-amber-100 dark:text-amber-300 dark:bg-amber-500/10'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-gray-100'
                 }
               `}
             >
-              <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
-              <span className="flex-1 text-left">{item.label}</span>
+              <item.icon className="mr-2.5 h-4 w-4 flex-shrink-0 stroke-[1.75]" />
+              <span className="flex-1 text-left truncate">{item.label}</span>
               {item.id === 'aprovacao' && pendingAprovacoes > 0 && (
-                <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">
+                <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {pendingAprovacoes}
                 </span>
               )}

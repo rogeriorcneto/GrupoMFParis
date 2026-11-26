@@ -65,39 +65,49 @@ export default function TopBar({
         Sem conexão — dados podem estar desatualizados. Verifique sua internet.
       </div>
     )}
-    <div className="h-14 sm:h-16 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 border-b flex items-center justify-between px-3 sm:px-6">
-      <div className="flex items-center gap-3">
+    <div className="h-14 bg-white/80 dark:bg-[#1C1C1E]/85 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between px-3 sm:px-6 sticky top-0 z-30">
+      <div className="flex items-center gap-2.5">
         <button
           onClick={() => setSidebarOpen(true)}
-          className="p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-apple transition-colors"
+          className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-black/[0.05] dark:hover:bg-white/[0.08] rounded-lg transition-colors"
           title="Abrir menu"
         >
-          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
         </button>
-        <h2 className="text-base sm:text-lg font-semibold truncate text-gray-900 dark:text-gray-100">
+        <h2 className="text-[15px] sm:text-base font-semibold tracking-tight truncate text-gray-900 dark:text-gray-100">
           {viewTitles[activeView] || 'Visão Geral'}
         </h2>
       </div>
       
-      <div className="flex items-center space-x-1 sm:space-x-3">
+      <div className="flex items-center gap-1.5 sm:gap-2.5">
         {onToggleDark && (
           <button
             onClick={onToggleDark}
-            className="p-2 rounded-xl transition-all text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-            title={dark ? 'Modo claro' : 'Modo escuro'}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[#EFEFF4] dark:bg-[#2C2C30] hover:bg-black/[0.08] dark:hover:bg-white/[0.14] text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors"
+            title={dark ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
           >
-            {dark ? <SunIcon className="h-5 w-5 text-amber-400" /> : <MoonIcon className="h-5 w-5" />}
+            {dark ? (
+              <>
+                <SunIcon className="h-4 w-4 text-amber-400" />
+                <span className="hidden sm:inline">Escuro</span>
+              </>
+            ) : (
+              <>
+                <MoonIcon className="h-4 w-4 text-gray-600" />
+                <span className="hidden sm:inline">Claro</span>
+              </>
+            )}
           </button>
         )}
         {onOpenSearch && (
           <button
             onClick={onOpenSearch}
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 bg-gray-100 hover:bg-gray-200 rounded-apple transition-colors"
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400 bg-[#EFEFF4] dark:bg-[#2C2C30] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] rounded-full transition-colors"
             title="Busca global (Ctrl+K)"
           >
-            <MagnifyingGlassIcon className="h-4 w-4" />
-            <span className="text-xs">Buscar...</span>
-            <kbd className="hidden md:inline text-[10px] bg-white border border-gray-300 rounded px-1 py-0.5 text-gray-500">Ctrl K</kbd>
+            <MagnifyingGlassIcon className="h-3.5 w-3.5" />
+            <span className="text-xs">Buscar</span>
+            <kbd className="hidden md:inline text-[10px] bg-white dark:bg-[#1C1C1E] border border-black/[0.08] dark:border-white/[0.10] rounded px-1.5 py-0.5 text-gray-500 dark:text-gray-400">⌘K</kbd>
           </button>
         )}
         {onOpenSearch && (

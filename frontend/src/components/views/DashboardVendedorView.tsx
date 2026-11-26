@@ -722,31 +722,33 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Bom dia, {loggedUser?.nome?.split(' ')[0] || 'Vendedor'}! 👋</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Aqui está o seu resumo de hoje.</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Bom dia, {loggedUser?.nome?.split(' ')[0] || 'Vendedor'}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Visão geral da operação e prioridades de hoje.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {(['hoje', 'semana', 'mes'] as PeriodoPreset[]).map(p => (
-              <button key={p} onClick={() => handlePreset(p)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${periodoPreset === p ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                {p === 'hoje' ? 'Hoje' : p === 'semana' ? 'Semana' : 'Mês'}
-              </button>
-            ))}
+            <div className="inline-flex p-0.5 rounded-lg bg-[#EFEFF4] dark:bg-[#2C2C30]">
+              {(['hoje', 'semana', 'mes'] as PeriodoPreset[]).map(p => (
+                <button key={p} onClick={() => handlePreset(p)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${periodoPreset === p ? 'bg-white dark:bg-[#1C1C1E] text-gray-900 dark:text-white shadow-sm' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'}`}>
+                  {p === 'hoje' ? 'Hoje' : p === 'semana' ? 'Semana' : 'Mês'}
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-1.5">
               <CalendarDaysIcon className="h-4 w-4 text-gray-400" />
               <input type="date" value={periodoInicio} onChange={e => { setPeriodoInicio(e.target.value); setPeriodoPreset('custom') }}
-                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:outline-none" />
+                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/25 focus:outline-none" />
               <span className="text-xs text-gray-400">até</span>
               <input type="date" value={periodoFim} onChange={e => { setPeriodoFim(e.target.value); setPeriodoPreset('custom') }}
-                className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:outline-none" />
+                className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/25 focus:outline-none" />
             </div>
             <button
               onClick={gerarRelatorioIA}
               disabled={relatorioLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-violet-600 to-primary-600 text-white hover:from-violet-700 hover:to-primary-700 transition-all shadow-sm disabled:opacity-60"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 transition-all shadow-apple-sm disabled:opacity-60"
             >
               <ArrowTrendingUpIcon className="h-4 w-4" />
-              {relatorioLoading ? 'Gerando...' : 'Relatório IA'}
+              {relatorioLoading ? 'Gerando...' : 'Análise executiva'}
             </button>
           </div>
         </div>

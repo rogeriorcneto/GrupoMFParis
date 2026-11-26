@@ -71,15 +71,15 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"', '"Inter"', '"Segoe UI"', 'sans-serif'],
       },
       boxShadow: {
-        'apple': '0 4px 16px 0 rgba(0, 0, 0, 0.08)',
-        'apple-sm': '0 2px 8px 0 rgba(0, 0, 0, 0.04)',
+        'apple': '0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 1px 3px 0 rgba(0, 0, 0, 0.04)',
+        'apple-sm': '0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.03)',
       },
       borderRadius: {
-        'apple': '12px',
-        'apple-sm': '8px',
+        'apple': '14px',
+        'apple-sm': '10px',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-in-out',
