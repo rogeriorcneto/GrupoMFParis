@@ -318,7 +318,20 @@ export async function connectAndSaveUserEmail(
   try {
     await transporter.verify()
   } catch (err: any) {
-    return { success: false, error: `Falha no servidor de envio (SMTP ${smtpHost}:${smtpPort}): ${err?.message || 'credenciais recusadas'}` }
+    const msg = String(err?.message || '')
+    const ehTimeout = /timeout|ETIMEDOUT|ESOCKET/i.test(msg) || /timeout/i.test(String(err?.code || ''))
+    if (ehTimeout) {
+      // Item 5 spec CRM 1.0: orientar o usuario, nao so o erro tecnico.
+      // Timeout de TCP = a conexao nem chegou no servidor de e-mail. Na maioria dos casos e
+      // bloqueio de SMTP de saida na hospedagem do CRM (Railway bloqueia portas 465/587 fora do plano Pro),
+      // NAO senha errada — a senha nem chega a ser testada nesse caso.
+      return { success: false, error: 'Nao foi possivel nem alcancar o servidor de e-mail (timeout de conexao). Isso NAO e senha errada — a senha nem chega a ser testada. A hospedagem do CRM pode estar bloqueando o envio direto de e-mail. Avise o administrador do sistema para verificar a liberacao de SMTP ou a configuracao alternativa de envio.' }
+    }
+    const ehAuth = /auth|credencial|password|535|534/i.test(msg) || /EAUTH/i.test(String(err?.code || ''))
+    if (ehAuth) {
+      return { success: false, error: 'Servidor de e-mail alcancado, mas o login foi recusado. Verifique a senha — se o seu e-mail usa verificacao em duas etapas, crie uma "senha de aplicativo" no painel do seu provedor e use ela aqui no lugar da senha normal.' }
+    }
+    return { success: false, error: `Falha no servidor de envio (SMTP ${smtpHost}:${smtpPort}): ${msg || 'verifique host e porta com quem administra seu e-mail'}` }
   }
 
   // 2) Validar IMAP
@@ -336,7 +349,14 @@ export async function connectAndSaveUserEmail(
     await client.mailboxOpen('INBOX')
     await client.logout().catch(() => {})
   } catch (err: any) {
-    return { success: false, error: `Falha no servidor de entrada (IMAP ${imapHost}:${imapPort}): ${err?.message || 'verifique host/porta ou habilite IMAP'}` }
+    const msgI = String(err?.message || '')
+    if (/timeout|ETIMEDOUT|ESOCKET/i.test(msgI)) {
+      return { success: false, error: 'Nao foi possivel alcancar o servidor de entrada de e-mails (timeout). Verifique com quem administra seu e-mail se ha bloqueio de acesso por IP, ou se o IMAP esta habilitado na sua conta.' }
+    }
+    if (/auth|credencial|password|AUTHENTICATIONFAILED/i.test(msgI)) {
+      return { success: false, error: 'Login IMAP recusado. Verifique a senha (ou senha de aplicativo, se houver verificacao em duas etapas).' }
+    }
+    return { success: false, error: `Falha no servidor de entrada (IMAP ${imapHost}:${imapPort}): ${msgI || 'verifique host/porta ou habilite IMAP'}` }
   }
 
   const payload = {
