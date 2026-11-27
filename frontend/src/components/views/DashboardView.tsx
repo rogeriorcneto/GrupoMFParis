@@ -95,6 +95,7 @@ interface DashboardViewFullProps {
   loggedUser: Vendedor | null
   pedidos?: Pedido[]
   onRefresh?: () => void
+  dataLoading?: boolean
 }
 
 const DashboardView: React.FC<DashboardViewFullProps> = ({ clientes: clientesProp, vendedores, interacoes, produtos, tarefas, loggedUser, pedidos = [], atividades, onRefresh }) => {

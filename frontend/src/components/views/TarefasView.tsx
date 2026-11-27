@@ -454,8 +454,9 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                   </>
                 )}
               </div>
-              {!done && (
+              {(!done || (isGerente && onDeleteTarefa)) && (
               <div className="flex items-center gap-1">
+                {!done && (
                 <button
                   onClick={() => setExpanded(e => !e)}
                   className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -463,6 +464,7 @@ const TarefaCard: React.FC<TarefaCardProps> = ({
                 >
                   <PencilIcon className="h-4 w-4" />
                 </button>
+                )}
                 {isGerente && onDeleteTarefa && (
                   <button
                     onClick={() => { if (confirm('Tem certeza que deseja excluir esta tarefa?')) onDeleteTarefa(tarefa) }}

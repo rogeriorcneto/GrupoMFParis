@@ -108,6 +108,21 @@ export default function AppRouter({
     } catch { /* non-critical */ }
   }
 
+  // Itens 1-2 da spec CRM 1.0: Dashboard e Relatorios NUNCA exibem numero provisorio.
+  // Enquanto o nucleo (clientes+tarefas+pedidos+vendedores+atividades+produtos) nao terminou,
+  // a tela inteira mostra apenas Carregando — inclusive os blocos Funil de Vendas e Bancos.
+  const viewEhIndicadores = activeView === 'dashboard' || activeView === 'relatorios'
+  if (dataLoading && viewEhIndicadores) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
+
   switch (activeView) {
     case 'dashboard':
       return (
@@ -916,7 +931,7 @@ export default function AppRouter({
     case 'missao':
       return <MissaoView clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} showToast={showToast} />
     default:
-      return <DashboardView clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
+      return <DashboardView dataLoading={dataLoading} clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
   }
 }
 
