@@ -15,7 +15,8 @@ import {
 } from '@heroicons/react/24/outline'
 import type { Cliente, Vendedor, Interacao, Pedido, FunilViewProps, PropostaHistorico } from '../../types'
 import { diasDesde, getCardUrgencia, getNextAction, mapEtapaAgendor, mapCategoriaPerdaAgendor, sortCards, prazosEtapa } from '../../utils/funil-logic'
-import { stageLabels, subStatusAmostraLabels, subStatusFollowUpLabels, labelOmieEtapa, transicoesPermitidas } from '../../utils/constants'
+import { stageLabels, subStatusAmostraLabels, transicoesPermitidas } from '../../utils/constants'
+import { getOmieStatusDisplay } from '../../utils/omieStatus'
 import { getAmostraLocked, getFollowUpLocked } from '../../utils/business-rules'
 import { PESO_PIPELINE, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import { extractValidSocialLinks } from '../../utils/socialLinks'
@@ -668,12 +669,6 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
         const aguardandoAprov = cliente.statusFollowUp === 'aguardando_aprovacao_gerente' || infoPedNeg?.latest?.status === 'enviado'
         return (
           <div className="mt-2 space-y-1">
-            {aguardandoAprov && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md bg-amber-50 text-amber-800 border border-amber-200/70">
-                <ClockIcon className="h-3 w-3" /> Aguardando aprovação
-              </span>
-            )}
-            {cliente.valorProposta && <p className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 tabular-nums">R$ {cliente.valorProposta.toLocaleString('pt-BR')}</p>}
             <div className="flex items-center justify-between text-[10px] tabular-nums">
               <span className={`font-medium ${diasNeg > 3 && !aguardandoAprov ? 'text-amber-700 dark:text-amber-400' : 'text-gray-500 dark:text-gray-400'}`}>Na etapa: {diasNeg}d</span>
               <span className={`font-semibold ${diasRestam <= 0 ? 'text-red-600' : diasRestam <= 10 ? 'text-amber-600' : 'text-gray-400'}`}>{diasRestam > 0 ? `${diasRestam}d rest.` : 'Vencido'}</span>
@@ -692,28 +687,21 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
       case 'arquivado':
       case 'follow_up': {
         const ehFinalizado = isFollowUpFinalizado(cliente)
-        const subLabel = ehFinalizado ? 'Finalizado' : (cliente.statusFollowUp ? subStatusFollowUpLabels[cliente.statusFollowUp] || cliente.statusFollowUp : 'Aguardando')
         const subIdx = ehFinalizado ? 7 : (cliente.statusFollowUp ? ['aguardando_aprovacao_gerente', 'pedido_aprovado', 'em_producao', 'faturado', 'expedido', 'entregue', 'satisfacao_pendente', 'concluido'].indexOf(cliente.statusFollowUp) : 0)
         const pctSub = Math.min(((subIdx + 1) / 8) * 100, 100)
-        const subBadgeColor = cliente.statusFollowUp === 'cancelado' ? 'bg-red-50 text-red-700' :
-          ehFinalizado ? 'bg-emerald-50 text-emerald-700' :
-          cliente.statusFollowUp === 'entregue' ? 'bg-emerald-50 text-emerald-700' :
-          cliente.statusFollowUp === 'expedido' ? 'bg-sky-50 text-sky-700' :
-          cliente.statusFollowUp === 'faturado' ? 'bg-indigo-50 text-indigo-700' :
-          cliente.statusFollowUp === 'aguardando_aprovacao_gerente' ? 'bg-amber-50 text-amber-700' :
-          'bg-blue-50 text-blue-700'
+        const semQuadroPedido = !getClientePedidoInfo(cliente)
+        const omieFallback = semQuadroPedido && cliente.omieStatusLogistico ? getOmieStatusDisplay(cliente.omieStatusLogistico) : null
         return (
           <div className="mt-2 space-y-1">
             <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 tabular-nums">
               <span className="font-medium">Na etapa: {dias}d</span>
               <span>{Math.max(60 - dias, 0)}d rest.</span>
             </div>
-            <div className="flex items-center gap-1 flex-wrap">
-              <span className={`inline-block px-1.5 py-0.5 text-[9px] font-semibold rounded-md ${subBadgeColor}`}>{subLabel}</span>
-              {cliente.omieStatusLogistico && (
-                <span className="inline-block px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded-md">Omie: {labelOmieEtapa(cliente.omieStatusLogistico)}</span>
-              )}
-            </div>
+            {omieFallback && (
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className={`inline-block px-1.5 py-0.5 text-[9px] font-semibold rounded-md ${omieFallback.classes}`} title={`Status bruto: ${omieFallback.raw}`}>Omie: {omieFallback.label}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1">
               <div className="flex-1 bg-black/[0.06] dark:bg-white/[0.08] rounded-full h-1"><div className="h-1 rounded-full transition-all bg-blue-500" style={{ width: `${pctSub}%` }} /></div>
             </div>
@@ -1117,51 +1105,117 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                           </div>
                         )}
 
-                        {/* Histórico de Propostas (negociação) — superfície neutra limpa estilo Apple */}
+                        {/* Proposta em aprovação / histórico de propostas — superfície neutra limpa estilo Apple */}
                         {(() => {
                           const historico = propostasPorCliente.get(cliente.id)
                           if (!historico || historico.length === 0) return null
-                          const ultima = historico[0]
+
+                          if (cliente.etapa !== 'negociacao') {
+                            const ultima = historico[0]
+                            return (
+                              <div className="mt-2 p-2 bg-[#F5F5F7] dark:bg-[#2C2C30] rounded-lg border border-black/[0.05] dark:border-white/[0.06]">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-200">Propostas ({historico.length})</span>
+                                </div>
+                                <div className="space-y-0.5 tabular-nums">
+                                  {historico.slice(0, 2).map((p, i) => (
+                                    <div key={p.id || i} className="flex items-center justify-between text-[10px]">
+                                      <span className="text-gray-500 dark:text-gray-400 truncate max-w-[76px]">{p.numero}</span>
+                                      <span className="font-semibold text-gray-900 dark:text-gray-100">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
+                                      <span className="text-gray-400 dark:text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                                    </div>
+                                  ))}
+                                  {historico.length > 2 && <p className="text-[9px] text-gray-500 text-center">+{historico.length - 2} mais</p>}
+                                </div>
+                                {ultima.frete && <p className="text-[9px] text-gray-500 dark:text-gray-400 mt-1">Frete: {ultima.frete}</p>}
+                              </div>
+                            )
+                          }
+
+                          const proposta = historico[0]
                           return (
-                            <div className="mt-2 p-2 bg-[#F5F5F7] dark:bg-[#2C2C30] rounded-lg border border-black/[0.05] dark:border-white/[0.06]">
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] font-semibold text-gray-700 dark:text-gray-200">Propostas ({historico.length})</span>
+                            <div className="mt-2 p-2 bg-[#F5F5F7] dark:bg-[#2C2C30] rounded-lg border border-black/[0.05] dark:border-white/[0.06] space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200">
+                                  PROPOSTA
+                                </span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-md bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                                  <ClockIcon className="h-3 w-3" /> Aguardando aprovação
+                                </span>
                               </div>
-                              <div className="space-y-0.5 tabular-nums">
-                                {historico.slice(0, 2).map((p, i) => (
-                                  <div key={p.id || i} className="flex items-center justify-between text-[10px]">
-                                    <span className="text-gray-500 dark:text-gray-400 truncate max-w-[76px]">{p.numero}</span>
-                                    <span className="font-semibold text-gray-900 dark:text-gray-100">R$ {p.totalValor.toLocaleString('pt-BR')}</span>
-                                    <span className="text-gray-400 dark:text-gray-500">{new Date(p.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                              <p className="text-[13px] font-bold text-gray-900 dark:text-gray-100 tracking-tight tabular-nums">#{proposta.numero}</p>
+                              {proposta.itens && proposta.itens.length > 0 && (
+                                <div className="space-y-0.5 tabular-nums">
+                                  {proposta.itens.map((item, idx) => (
+                                    <div key={idx} className="text-[10px]">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-gray-700 dark:text-gray-300 font-medium leading-tight" title={item.nomeProduto}>
+                                          {abreviarProduto(item.nomeProduto)}
+                                        </span>
+                                        <span className="font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap flex-shrink-0">
+                                          {item.quantidade} kg
+                                        </span>
+                                      </div>
+                                      <div className="text-gray-500 dark:text-gray-400 text-[9px]">
+                                        {(item.preco * item.quantidade).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="flex items-center justify-between pt-1 mt-1 border-t border-black/[0.06] dark:border-white/[0.08]">
+                                    <span className="text-[9px] text-gray-500 dark:text-gray-400">
+                                      {proposta.itens.reduce((s, i) => s + i.quantidade, 0)} kg
+                                    </span>
+                                    <span className="text-[11px] font-semibold text-gray-900 dark:text-gray-100">
+                                      {proposta.totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
                                   </div>
-                                ))}
-                                {historico.length > 2 && <p className="text-[9px] text-gray-500 text-center">+{historico.length - 2} mais</p>}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {proposta.frete && (
+                                  <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded-md bg-white dark:bg-[#1C1C1E] text-gray-700 dark:text-gray-300 border border-black/[0.06]">Frete: {proposta.frete}</span>
+                                )}
+                                {proposta.pagamento && (
+                                  <span className="px-1.5 py-0.5 text-[9px] rounded-md bg-white dark:bg-[#1C1C1E] text-gray-600 dark:text-gray-300 border border-black/[0.06] truncate max-w-[140px]">Prazo: {proposta.pagamento}</span>
+                                )}
                               </div>
-                              {ultima.frete && <p className="text-[9px] text-gray-500 dark:text-gray-400 mt-1">Frete: {ultima.frete}</p>}
                             </div>
                           )
                         })()}
 
-                        {cliente.valorEstimado ? <p className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 mt-1.5 tabular-nums">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
+                        {cliente.valorEstimado && cliente.etapa !== 'negociacao' ? <p className="text-[11px] font-semibold text-gray-900 dark:text-gray-100 mt-1.5 tabular-nums">R$ {cliente.valorEstimado.toLocaleString('pt-BR')}</p> : null}
                         {renderCardInfo(cliente)}
                         {/* Logistics mini-info from pedidos */}
                         {(() => {
+                          if (cliente.etapa === 'negociacao') return null
                           const info = getClientePedidoInfo(cliente)
                           if (!info) return null
                           const p = info.latest
+                          const isFollowUpCard = cliente.etapa === 'follow_up' || cliente.etapa === 'arquivado'
+                          const omieRaw = cliente.omieStatusLogistico || p.omieStatus
+                          const omie = getOmieStatusDisplay(omieRaw)
                           const statusLabel: Record<string, string> = { rascunho: 'Rascunho', enviado: 'Aguardando aprovação', confirmado: 'Confirmado', cancelado: 'Não aprovado' }
                           return (
                             <div className="mt-2 p-2 bg-[#F5F5F7] dark:bg-[#2C2C30] rounded-lg border border-black/[0.05] dark:border-white/[0.06] space-y-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold rounded-md ${p.tipo === 'bonificacao' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
-                                  {p.tipo === 'bonificacao' ? (p.numero?.toUpperCase().startsWith('BON-') ? 'Bonificação' : 'Amostra') : 'Venda'}
+                                  {p.tipo === 'bonificacao' ? (p.numero?.toUpperCase().startsWith('BON-') ? 'Bonificação' : 'Amostra') : (isFollowUpCard ? 'VENDA' : 'Venda')}
                                 </span>
-                                <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-md ${p.status === 'confirmado' ? 'bg-emerald-100 text-emerald-800' : p.status === 'enviado' ? 'bg-amber-100 text-amber-800' : p.status === 'cancelado' ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-700'}`}>
-                                  {statusLabel[p.status] || p.status}
-                                </span>
+                                {!isFollowUpCard && (
+                                  <span className={`px-1.5 py-0.5 text-[9px] font-medium rounded-md ${p.status === 'confirmado' ? 'bg-emerald-100 text-emerald-800' : p.status === 'enviado' ? 'bg-amber-100 text-amber-800' : p.status === 'cancelado' ? 'bg-red-100 text-red-800' : 'bg-gray-200 text-gray-700'}`}>
+                                    {statusLabel[p.status] || p.status}
+                                  </span>
+                                )}
+                                {isFollowUpCard && (
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold rounded-md ${omie.classes}`} title={omie.recognized ? `Status bruto: ${omie.raw}` : `Status Omie não reconhecido: ${omie.raw || 'ausente'}`}>
+                                    Omie: {omie.label}
+                                  </span>
+                                )}
                                 {info.total > 1 && <span className="text-[9px] text-gray-400">{info.total} pedidos</span>}
                               </div>
-                              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium tabular-nums">#{p.omieNumero || p.numero}</p>
+                              <p className={`${isFollowUpCard ? 'text-[13px] font-bold text-gray-900 dark:text-gray-100 tracking-tight' : 'text-[10px] text-gray-500 dark:text-gray-400 font-medium'} tabular-nums`}>
+                                {p.omieNumero ? `Omie #${p.omieNumero}` : `#${p.numero}`}
+                              </p>
                               {p.itens && p.itens.length > 0 && (
                                 <div className="space-y-0.5 tabular-nums">
                                   {p.itens.map((item, idx) => (
@@ -1197,7 +1251,7 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                                   <span className="px-1.5 py-0.5 text-[9px] rounded-md bg-white dark:bg-[#1C1C1E] text-gray-600 dark:text-gray-300 border border-black/[0.06] truncate max-w-[120px]">{p.formaPagamento}</span>
                                 )}
                               </div>
-                              {p.omieStatus && <p className="text-[9px] text-gray-400 dark:text-gray-500">Omie: {labelOmieEtapa(p.omieStatus)}</p>}
+                              {!isFollowUpCard && omieRaw && <p className="text-[9px] text-gray-400 dark:text-gray-500">Omie: {omie.label}</p>}
                               {p.omieErro && <p className="text-[9px] text-red-600 dark:text-red-400 leading-tight mt-0.5" title={p.omieErro}>{p.omieErro.slice(0, 80)}{p.omieErro.length > 80 ? '…' : ''}</p>}
                               {p.motivoRecusa && (
                                 <div className="mt-1 p-1.5 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200/70 dark:border-red-800/30">
@@ -1208,15 +1262,15 @@ function FunilView({ clientes, vendedores, interacoes, pedidos = [], propostas =
                             </div>
                           )
                         })()}
-                        {nextAction && <p className={`text-[10px] font-medium mt-1.5 leading-snug ${nextAction.color}`}>{nextAction.text}</p>}
-                        {cliente.produtosInteresse && cliente.produtosInteresse.length > 0 && (
+                        {nextAction && cliente.etapa !== 'follow_up' && cliente.etapa !== 'arquivado' && <p className={`text-[10px] font-medium mt-1.5 leading-snug ${nextAction.color}`}>{nextAction.text}</p>}
+                        {cliente.produtosInteresse && cliente.produtosInteresse.length > 0 && cliente.etapa !== 'follow_up' && cliente.etapa !== 'arquivado' && (
                           <div className="flex flex-wrap gap-1 mt-1.5">
                             {cliente.produtosInteresse.slice(0, 3).map(p => (<span key={p} className="px-1.5 py-0.5 text-[9px] bg-black/[0.04] dark:bg-white/[0.06] text-gray-700 dark:text-gray-300 rounded-md truncate max-w-[104px]">{p}</span>))}
                             {cliente.produtosInteresse.length > 3 && <span className="text-[9px] text-gray-400">+{cliente.produtosInteresse.length - 3}</span>}
                           </div>
                         )}
                         {(() => {
-                          const socials = extractValidSocialLinks(cliente)
+                          const socials = extractValidSocialLinks(cliente).filter(s => !(cliente.etapa === 'follow_up' || cliente.etapa === 'arquivado') || s.key !== 'instagram')
                           return socials.length > 0 ? (
                             <div className="flex gap-1 mt-1">
                               {socials.map((s) => (

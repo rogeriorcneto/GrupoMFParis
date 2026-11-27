@@ -22,9 +22,30 @@ import {
   ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
 import { calcularComissao, fetchComissaoProdutos, fetchComissaoLog, produtosIncompletos, type ComissaoProduto, type ComissaoLogEntry } from '../../lib/comissao'
+import {
+  calcularRitmo,
+  fetchFeriados,
+  fetchMetasMes,
+  intervaloSemanaSegDom,
+  metaSemanaProrrateada,
+  pedidosVendidosPeriodo,
+  somaMetasEquipe,
+  vendidoPedidosPeriodo,
+  volumeKgPedidos,
+  type Feriado,
+  type MetaVendedorMes,
+} from '../../lib/metas'
 import { stageLabels } from '../../utils/constants'
 import { calcularIndicadoresComerciais, calcularIndicadoresOperacionais, criarIndiceEmpresas, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
-import { fetchAllPropostas } from '../../lib/database'
+import {
+  calcularClientesSemNegociacao30d,
+  calcularNegociacoesVendedor,
+  classificarAlertaSaidaCarteira,
+  dataSaidaDaCarteira,
+  decisaoDesarmaAlerta,
+  diasRestantesNaCarteira,
+} from '../../utils/indicadores-negociacao'
+import { fetchAllPropostas, fetchSaidaCarteiraDecisoes, insertInteracao, insertSaidaCarteiraDecisao, type SaidaCarteiraDecisao } from '../../lib/database'
 import { authFetch, BOT_URL, fetchTempoTelaRelatorio, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { callAI } from '../../lib/gemini'
 import { useParametrosListas } from '../../lib/parametrosListas'
@@ -47,6 +68,7 @@ interface Props {
   loggedUser: Vendedor | null
   onNavigate?: (view: ViewType) => void
   onOpenCliente?: (cliente: Cliente, focus?: ClientePanelFocus) => void
+  setInteracoes?: React.Dispatch<React.SetStateAction<Interacao[]>>
 }
 
 const fmtBRL = (v: number) =>
@@ -105,9 +127,10 @@ interface MetricCardProps {
   subtitle?: string
   icon: React.ReactNode
   onClick?: () => void
+  metaLabel?: string
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, color, unit, subtitle, icon, onClick }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, color, unit, subtitle, icon, onClick, metaLabel = 'Meta' }) => {
   const pct = meta > 0 ? Math.min(100, Math.round((total / meta) * 100)) : 0
   return (
     <div className={`bg-white rounded-apple shadow-apple-sm border border-gray-200 p-4 flex flex-col justify-between h-full ${onClick ? 'cursor-pointer hover:shadow-md hover:border-gray-300 transition-all' : ''}`} onClick={onClick}>
@@ -124,7 +147,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, colo
       {meta > 0 && (
       <div className="mt-3">
         <div className="flex justify-between text-xs text-gray-500 mb-1">
-          <span>Meta: {meta.toLocaleString('pt-BR')}</span>
+          <span>{metaLabel}: {meta.toLocaleString('pt-BR')}</span>
           <span>{pct}%</span>
         </div>
         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -167,6 +190,7 @@ export default function DashboardVendedorView({
   loggedUser,
   onNavigate,
   onOpenCliente,
+  setInteracoes,
 }: Props) {
   const userId = loggedUser?.id
   const isGerente = loggedUser?.cargo === 'gerente'
@@ -491,6 +515,136 @@ export default function DashboardVendedorView({
   const comissaoIncompleta = useMemo(() => produtosIncompletos(produtos || [], comissaoRows).length, [produtos, comissaoRows])
   const metaComissao = 0
 
+  // ─── Item 4 — Metas parametrizáveis (tabela metas_vendedor_mes + feriados) ──
+  // A FONTE das metas é a tabela nova; os campos antigos do vendedor seguem
+  // existindo por compatibilidade, mas não alimentam mais os quadros de meta.
+  const [metasMesAtual, setMetasMesAtual] = useState<MetaVendedorMes[]>([])
+  const [feriadosMetas, setFeriadosMetas] = useState<Feriado[]>([])
+  const [metasCarregadas, setMetasCarregadas] = useState(false)
+  useEffect(() => {
+    const agora = new Date()
+    fetchMetasMes(agora.getFullYear(), agora.getMonth() + 1)
+      .then(rows => { setMetasMesAtual(rows); setMetasCarregadas(true) })
+      .catch(() => setMetasCarregadas(true))
+    fetchFeriados().then(setFeriadosMetas).catch(() => {})
+  }, [])
+
+  const anoCorrente = hoje.getFullYear()
+  const mesCorrenteNum = hoje.getMonth() + 1
+  const ultimoDiaMesISO = (() => {
+    const ud = new Date(anoCorrente, mesCorrenteNum, 0).getDate()
+    return `${anoCorrente}-${String(mesCorrenteNum).padStart(2, '0')}-${String(ud).padStart(2, '0')}`
+  })()
+  const nomeMesCorrente = hoje.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+  // Escopo de pedidos idêntico ao usado nos indicadores unificados (fatMes):
+  // gerente → equipe ativa inteira; vendedor → pedidos dele + dos cards da carteira
+  const pedidosEscopoMetas = useMemo(() => {
+    const idsEquipeAtiva = new Set(
+      vendedores
+        .filter(v => v.ativo !== false)
+        .filter(v => isGerente ? true : v.id === userId)
+        .map(v => v.id)
+    )
+    const emps = consolidadoFase2.empresas.filter(e =>
+      isGerente
+        ? (e.vendedorId != null && (idsEquipeAtiva.size === 0 || idsEquipeAtiva.has(e.vendedorId)))
+        : e.vendedorId === userId
+    )
+    const cardIds = new Set(emps.flatMap(e => e.cards.map(c => c.id)))
+    return pedidos.filter(p =>
+      isGerente
+        ? (cardIds.has(p.clienteId) || (p.vendedorId != null && (idsEquipeAtiva.size === 0 || idsEquipeAtiva.has(p.vendedorId))))
+        : (p.vendedorId === userId || cardIds.has(p.clienteId))
+    )
+  }, [vendedores, isGerente, userId, consolidadoFase2, pedidos])
+
+  // Vendido no mês corrente e na semana corrente — SEMPRE no mês/semana,
+  // independente do filtro de período da tela (item 4.1)
+  const vendidoMesCorrente = useMemo(
+    () => vendidoPedidosPeriodo(pedidosEscopoMetas, primeiroDiaMes, ultimoDiaMesISO),
+    [pedidosEscopoMetas, primeiroDiaMes, ultimoDiaMesISO]
+  )
+  const semanaCorrente = useMemo(() => intervaloSemanaSegDom(hojeISO), [hojeISO])
+  const pedidosVendidosMesCorrente = useMemo(
+    () => pedidosVendidosPeriodo(pedidosEscopoMetas, primeiroDiaMes, ultimoDiaMesISO),
+    [pedidosEscopoMetas, primeiroDiaMes, ultimoDiaMesISO]
+  )
+  const pedidosVendidosSemanaCorrente = useMemo(
+    () => pedidosVendidosPeriodo(pedidosEscopoMetas, semanaCorrente.segunda, semanaCorrente.domingo),
+    [pedidosEscopoMetas, semanaCorrente]
+  )
+  const vendidoSemanaCorrente = useMemo(
+    () => Math.round(pedidosVendidosSemanaCorrente.reduce((s, p) => s + (Number(p.totalValor) || 0), 0) * 100) / 100,
+    [pedidosVendidosSemanaCorrente]
+  )
+  const produtosPorId = useMemo(() => new Map((produtos || []).map(p => [p.id, p])), [produtos])
+  const volumeKgMesCorrente = useMemo(() => volumeKgPedidos(pedidosVendidosMesCorrente, produtosPorId), [pedidosVendidosMesCorrente, produtosPorId])
+  const volumeKgSemanaCorrente = useMemo(() => volumeKgPedidos(pedidosVendidosSemanaCorrente, produtosPorId), [pedidosVendidosSemanaCorrente, produtosPorId])
+
+  // Meta do mês: gestor → soma das metas dos vendedores ativos; vendedor → a própria.
+  // Sem fallback: se não houver meta cadastrada, os quadros mostram estado vazio (item 4.5).
+  const metaMinhaRow = useMemo(
+    () => metasMesAtual.find(m => m.vendedorId === userId) || null,
+    [metasMesAtual, userId]
+  )
+  const metaEquipeSoma = useMemo(() => {
+    const idsAtivos = new Set(vendedores.filter(v => v.ativo && v.cargo !== 'gerente').map(v => v.id))
+    return somaMetasEquipe(metasMesAtual.filter(m => idsAtivos.has(m.vendedorId)))
+  }, [metasMesAtual, vendedores])
+  const existeMetaEquipe = useMemo(
+    () => metasMesAtual.some(m => vendedores.some(v => v.id === m.vendedorId && v.ativo && v.cargo !== 'gerente')),
+    [metasMesAtual, vendedores]
+  )
+  // Meta de faturamento do mês usada no quadro principal (item 4.1)
+  const metaFatMesCorrente = isGerente
+    ? (existeMetaEquipe ? metaEquipeSoma.metaFaturamento : 0)
+    : (metaMinhaRow?.metaFaturamento || 0)
+
+  const metaSemanaFat = useMemo(
+    () => metaFatMesCorrente > 0 ? metaSemanaProrrateada(metaFatMesCorrente, hojeISO, feriadosMetas) : 0,
+    [metaFatMesCorrente, hojeISO, feriadosMetas]
+  )
+  const metaSemanaKg = useMemo(
+    () => (metaMinhaRow?.metaVolumeKg || 0) > 0 ? metaSemanaProrrateada(metaMinhaRow?.metaVolumeKg || 0, hojeISO, feriadosMetas) : 0,
+    [metaMinhaRow, hojeISO, feriadosMetas]
+  )
+  const ritmoMeta = useMemo(
+    () => calcularRitmo(metaFatMesCorrente, vendidoMesCorrente, hojeISO, feriadosMetas),
+    [metaFatMesCorrente, vendidoMesCorrente, hojeISO, feriadosMetas]
+  )
+
+  // Contadores do mês corrente (sempre mês cheio até hoje, independente do filtro) para o quadro Minhas metas
+  const noMesCorrente = (d?: string | null) => {
+    const ds = (d || '').slice(0, 10)
+    return !!ds && ds >= primeiroDiaMes && ds <= ultimoDiaMesISO
+  }
+  const visitasMesCorrente = useMemo(
+    () => minhasTarefas.filter(t => (t.tipo === 'reuniao' || t.tipo === 'visita') && t.status === 'concluida' && noMesCorrente(t.concluidaEm || t.data)).length,
+    [minhasTarefas, primeiroDiaMes, ultimoDiaMesISO]
+  )
+  const propostasMesCorrente = useMemo(
+    () => propostasLoaded.length > 0
+      ? propostasLoaded.filter(pr => meusClientesIds.has(pr.clienteId) && noMesCorrente(pr.criadoEm)).length
+      : meusClientes.filter(c => c.dataProposta && noMesCorrente(c.dataProposta)).length,
+    [propostasLoaded, meusClientesIds, meusClientes, primeiroDiaMes, ultimoDiaMesISO]
+  )
+  // Novos clientes no mês: empresas cuja primeira compra confirmada caiu no mês corrente (mesma ideia dos indicadores unificados)
+  const novosClientesMesCorrente = useMemo(() => {
+    const primeiraPorEmpresa = new Map<string, string>()
+    for (const p of pedidosEscopoMetas) {
+      if (p.status !== 'confirmado' || (p.tipo || 'venda') === 'bonificacao') continue
+      const emp = indiceEmpresas.get(p.clienteId) || `cliente:${p.clienteId}`
+      const dt = (p.dataAprovacao || p.dataEnvioOmie || p.dataCriacao || '').slice(0, 10)
+      if (!dt) continue
+      const cur = primeiraPorEmpresa.get(emp)
+      if (!cur || dt < cur) primeiraPorEmpresa.set(emp, dt)
+    }
+    let n = 0
+    primeiraPorEmpresa.forEach(dt => { if (dt >= primeiroDiaMes && dt <= ultimoDiaMesISO) n++ })
+    return n
+  }, [pedidosEscopoMetas, indiceEmpresas, primeiroDiaMes, ultimoDiaMesISO])
+
   // Indicadores operacionais (spec PDF vendedor): sem-compra, pipeline ponderado, ticket médio
   const indOps = useMemo(() => calcularIndicadoresOperacionais(
     clientes, pedidos,
@@ -500,6 +654,179 @@ export default function DashboardVendedorView({
   ), [clientes, pedidos, periodoValidoInicio, periodoValidoFim, hojeISO, isGerente, userId, propostasLoaded])
   const ticketMedio = indCom.ticketMedioPedido || 0
   const topProdutosVendedor = [...indOps.porProduto.entries()].sort((a, b) => b[1].receita - a[1].receita).slice(0, 5)
+
+  // ─── Itens 17, 18 e 21 — negociações por vendedor, clientes sem negociação
+  // e alertas de saída da carteira. TODOS os números vêm das mesmas funções
+  // puras de utils/indicadores-negociacao.ts usadas em Relatórios (regra de
+  // divergência zero). ───────────────────────────────────────────────────────
+  const [decisoesSaida, setDecisoesSaida] = useState<SaidaCarteiraDecisao[]>([])
+  useEffect(() => {
+    fetchSaidaCarteiraDecisoes().then(setDecisoesSaida).catch(() => {})
+  }, [])
+
+  // Escopo de vendedores idêntico ao usado em Relatórios: ativos não-gestores
+  const vendedoresEscopoNeg = useMemo(
+    () => vendedores.filter(v => v.ativo !== false && v.cargo !== 'gerente' && (isGerente || v.id === userId)),
+    [vendedores, isGerente, userId]
+  )
+
+  // Item 17 — negociações por vendedor (mesma função pura do Relatórios)
+  const negociacaoPorVendedor = useMemo(() => {
+    return vendedoresEscopoNeg.map(v => ({
+      vendedor: v,
+      resumo: calcularNegociacoesVendedor(clientes, pedidos, { inicio: periodoValidoInicio, fim: periodoValidoFim }, v.id),
+    }))
+  }, [vendedoresEscopoNeg, clientes, pedidos, periodoValidoInicio, periodoValidoFim])
+
+  // Item 18 — clientes da carteira sem negociação há +30 dias (mesma função pura do Relatórios)
+  const semNegociacao30PorVendedor = useMemo(() => {
+    const mapa = new Map<number, ReturnType<typeof calcularClientesSemNegociacao30d>>()
+    for (const v of vendedoresEscopoNeg) {
+      const emps = consolidadoFase2.empresas
+        .filter(e => e.vendedorId === v.id)
+        .map(e => ({
+          chave: e.chave,
+          vendedorId: e.vendedorId,
+          naCarteira: situacaoContaNaCarteiraAte180(e.situacaoCompra),
+          cardPrincipalId: e.cardPrincipal.id,
+          cards: e.cards,
+        }))
+      mapa.set(v.id, calcularClientesSemNegociacao30d(emps, hojeISO))
+    }
+    return mapa
+  }, [vendedoresEscopoNeg, consolidadoFase2, hojeISO])
+
+  // Item 21 — alertas de saída da carteira (150–180d e saídos sem decisão do gestor)
+  const alertasSaidaCarteira = useMemo(() => {
+    const idsEquipeAtiva = new Set(
+      vendedores
+        .filter(v => v.ativo !== false)
+        .filter(v => isGerente ? true : v.id === userId)
+        .map(v => v.id)
+    )
+    const emps = consolidadoFase2.empresas.filter(e =>
+      e.vendedorId != null && (isGerente ? idsEquipeAtiva.has(e.vendedorId) : e.vendedorId === userId)
+    )
+    const pre: { emp: typeof emps[number]; diasRestantes: number }[] = []
+    const saiu: { emp: typeof emps[number]; dataSaida: string; diasFora: number }[] = []
+    const decisoesInput = decisoesSaida.map(d => ({ cliente_id: d.clienteId, registrado_em: d.registradoEm }))
+    for (const e of emps) {
+      const tipo = classificarAlertaSaidaCarteira(e.diasSemCompra)
+      if (tipo === 'pre_alerta' && e.diasSemCompra != null) {
+        pre.push({ emp: e, diasRestantes: diasRestantesNaCarteira(e.diasSemCompra) })
+      } else if (tipo === 'saiu' && e.ultimaVendaISO) {
+        const ds = dataSaidaDaCarteira(e.ultimaVendaISO)
+        if (!decisaoDesarmaAlerta(decisoesInput, e.cardPrincipal.id, ds)) {
+          saiu.push({ emp: e, dataSaida: ds, diasFora: Math.max(0, (e.diasSemCompra || 0) - 180) })
+        }
+      }
+    }
+    pre.sort((a, b) => a.diasRestantes - b.diasRestantes || a.emp.chave.localeCompare(b.emp.chave))
+    saiu.sort((a, b) => b.dataSaida.localeCompare(a.dataSaida) || a.emp.chave.localeCompare(b.emp.chave))
+    return { pre, saiu }
+  }, [consolidadoFase2, decisoesSaida, vendedores, isGerente, userId])
+
+  // Drill-down unificado dos itens 17/18/21: número → lista → card do cliente
+  type DrillNegItem = {
+    key: string
+    cliente?: Cliente
+    razao: string
+    extra: string
+    acaoSaida?: { dataSaida: string }
+  }
+  const [drillNeg, setDrillNeg] = useState<{ titulo: string; itens: DrillNegItem[] } | null>(null)
+  const [drillNegPage, setDrillNegPage] = useState(1)
+  const abrirDrillNeg = (titulo: string, itens: DrillNegItem[]) => {
+    setDrillNegPage(1)
+    setDrillNeg({ titulo, itens })
+  }
+
+  // Modal de decisão do gestor (Item 21) — NADA é movido automaticamente
+  const [decisaoModal, setDecisaoModal] = useState<{ emp: typeof alertasSaidaCarteira.saiu[number]['emp']; dataSaida: string } | null>(null)
+  const [decisaoTipo, setDecisaoTipo] = useState<'manter_vendedor' | 'mover_banco' | 'outra'>('manter_vendedor')
+  const [decisaoPrazo, setDecisaoPrazo] = useState('')
+  const [decisaoTexto, setDecisaoTexto] = useState('')
+  const [decisaoSalvando, setDecisaoSalvando] = useState(false)
+  const [decisaoErro, setDecisaoErro] = useState('')
+
+  const abrirDecisaoModal = (emp: typeof alertasSaidaCarteira.saiu[number]['emp'], dataSaida: string) => {
+    setDecisaoTipo('manter_vendedor')
+    setDecisaoPrazo('')
+    setDecisaoTexto('')
+    setDecisaoErro('')
+    setDecisaoModal({ emp, dataSaida })
+  }
+
+  const salvarDecisaoSaida = async () => {
+    if (!decisaoModal) return
+    if (decisaoTipo === 'manter_vendedor' && !decisaoPrazo) {
+      setDecisaoErro('Informe o prazo do plano de reativação.')
+      return
+    }
+    if (decisaoTipo === 'outra' && !decisaoTexto.trim()) {
+      setDecisaoErro('Descreva a ação a ser tomada.')
+      return
+    }
+    setDecisaoSalvando(true)
+    setDecisaoErro('')
+    const cli = decisaoModal.emp.cardPrincipal
+    const rotulo = decisaoTipo === 'manter_vendedor'
+      ? 'Manter com o vendedor com plano de reativação'
+      : decisaoTipo === 'mover_banco'
+        ? 'Mover para o Banco de Clientes'
+        : 'Outra ação'
+    const detalhe = decisaoTipo === 'manter_vendedor'
+      ? `Prazo: ${decisaoPrazo.split('-').reverse().join('/')}${decisaoTexto.trim() ? ` — ${decisaoTexto.trim()}` : ''}`
+      : decisaoTexto.trim() || null
+    try {
+      await insertSaidaCarteiraDecisao({
+        clienteId: cli.id,
+        decisao: decisaoTipo,
+        detalhe,
+        prazo: decisaoTipo === 'manter_vendedor' ? decisaoPrazo : null,
+        registradoPor: loggedUser?.nome || null,
+      })
+      // Registro no histórico do cliente (tabela interacoes — a que de fato
+      // aparece na ficha; a tabela atividades não tem cliente_id)
+      const interacaoSalva = await insertInteracao({
+        clienteId: cli.id,
+        tipo: 'nota',
+        assunto: 'Decisão de saída da carteira',
+        descricao: `Cliente saiu da carteira em ${decisaoModal.dataSaida.split('-').reverse().join('/')}. Decisão do gestor (${loggedUser?.nome || '—'}): ${rotulo}${detalhe ? ` — ${detalhe}` : ''}.${decisaoTipo === 'mover_banco' ? ' A movimentação para o Banco NÃO é automática: o gestor deve mover o cliente manualmente.' : ''}`,
+        automatico: false,
+        data: new Date().toISOString(),
+      })
+      setInteracoes?.(prev => [interacaoSalva, ...prev])
+      const novas = await fetchSaidaCarteiraDecisoes().catch(() => null)
+      if (novas) setDecisoesSaida(novas)
+      setDecisaoModal(null)
+      setDrillNeg(null)
+    } catch (err: any) {
+      setDecisaoErro(`Falha ao registrar a decisão: ${err?.message || 'tente novamente'}`)
+    } finally {
+      setDecisaoSalvando(false)
+    }
+  }
+
+  const clicarItemDrillNeg = (item: DrillNegItem) => {
+    if (item.acaoSaida && isGerente) {
+      const emp = consolidadoFase2.empresas.find(e => e.cardPrincipal.id === item.cliente?.id)
+      if (emp) {
+        abrirDecisaoModal(emp, item.acaoSaida.dataSaida)
+        return
+      }
+    }
+    if (item.cliente) onOpenCliente?.(item.cliente)
+  }
+
+  // Item 12 — Follow-up sem satisfação há mais de 15 dias (a partir de dataEntradaEtapa; nenhum ciclo encerrado automaticamente)
+  const followUpSemSatisfacao15d = useMemo(() => {
+    const diasDesdeISO = (d?: string) => d ? Math.max(0, Math.floor((Date.parse(hojeISO) - Date.parse(d.slice(0, 10))) / 86400000)) : 0
+    return meusClientes
+      .filter(c => c.etapa === 'follow_up' && c.statusFollowUp !== 'concluido' && c.notaSatisfacao == null && diasDesdeISO(c.dataEntradaEtapa) > 15)
+      .map(c => ({ cliente: c, dias: diasDesdeISO(c.dataEntradaEtapa) }))
+      .sort((a, b) => b.dias - a.dias)
+  }, [meusClientes, hojeISO])
 
   // Gargalos comerciais acionáveis (situação de hoje + recorte do período — unificados 100% com Relatórios!)
   const gargalos = useMemo(() => {
@@ -713,6 +1040,86 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
         </div>
       )}
 
+      {/* ── Modal decisão de saída da carteira (Item 21 — somente gestor) ── */}
+      {decisaoModal && isGerente && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !decisaoSalvando && setDecisaoModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-900">Decisão — saída da carteira</h3>
+              <button onClick={() => !decisaoSalvando && setDecisaoModal(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+                <p className="text-sm font-semibold text-red-900">{decisaoModal.emp.cardPrincipal.razaoSocial}</p>
+                <p className="text-[11px] text-red-700">
+                  Saiu da carteira em {decisaoModal.dataSaida.split('-').reverse().join('/')} · {decisaoModal.emp.diasSemCompra} dias sem compra
+                </p>
+              </div>
+              <p className="text-[11px] text-gray-500">
+                Registre a decisão para desarmar o alerta. <strong>Nada é movido automaticamente</strong> — mesmo quando a decisão
+                for mover para o Banco de Clientes, a movimentação deve ser feita manualmente depois.
+              </p>
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="decisao-saida" checked={decisaoTipo === 'manter_vendedor'} onChange={() => setDecisaoTipo('manter_vendedor')} className="mt-0.5" />
+                  <span className="text-sm text-gray-800">
+                    <span className="font-medium">Manter com o vendedor</span> com plano de reativação e prazo
+                  </span>
+                </label>
+                {decisaoTipo === 'manter_vendedor' && (
+                  <div className="ml-6 space-y-1.5">
+                    <label className="block text-[11px] font-medium text-gray-500">Prazo do plano de reativação</label>
+                    <input type="date" value={decisaoPrazo} onChange={e => setDecisaoPrazo(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/25 focus:outline-none" />
+                  </div>
+                )}
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="decisao-saida" checked={decisaoTipo === 'mover_banco'} onChange={() => setDecisaoTipo('mover_banco')} className="mt-0.5" />
+                  <span className="text-sm text-gray-800">
+                    <span className="font-medium">Mover para o Banco de Clientes</span>
+                    <span className="block text-[11px] text-gray-500">A decisão fica registrada; a movimentação é manual (nada é movido automaticamente).</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="decisao-saida" checked={decisaoTipo === 'outra'} onChange={() => setDecisaoTipo('outra')} className="mt-0.5" />
+                  <span className="text-sm text-gray-800"><span className="font-medium">Outra ação</span></span>
+                </label>
+                {(decisaoTipo === 'outra' || decisaoTipo === 'manter_vendedor') && (
+                  <div className="ml-6">
+                    <textarea
+                      value={decisaoTexto}
+                      onChange={e => setDecisaoTexto(e.target.value)}
+                      rows={2}
+                      placeholder={decisaoTipo === 'outra' ? 'Descreva a ação a ser tomada...' : 'Detalhes do plano (opcional)'}
+                      className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500/25 focus:outline-none resize-none"
+                    />
+                  </div>
+                )}
+              </div>
+              {decisaoErro && <p className="text-xs font-medium text-red-600">{decisaoErro}</p>}
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-2 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setDecisaoModal(null)}
+                disabled={decisaoSalvando}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={salvarDecisaoSaida}
+                disabled={decisaoSalvando}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-50"
+              >
+                {decisaoSalvando ? 'Registrando...' : 'Registrar decisão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Modal Relatório IA ── */}
       {relatorioOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRelatorioOpen(false)}>
@@ -846,6 +1253,58 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
               </div>
             </div>
 
+            {/* Item 21 — topo de "Minha carteira hoje": pré-alerta (150–180d) e alerta máximo (saiu da carteira) */}
+            {(alertasSaidaCarteira.saiu.length > 0 || alertasSaidaCarteira.pre.length > 0) && (
+              <div className="space-y-1.5">
+                {alertasSaidaCarteira.saiu.slice(0, 5).map(s => (
+                  <button
+                    key={`saiu-top-${s.emp.chave}`}
+                    type="button"
+                    onClick={() => isGerente ? abrirDecisaoModal(s.emp, s.dataSaida) : onOpenCliente?.(s.emp.cardPrincipal)}
+                    className="w-full text-left flex items-center justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 hover:bg-red-100 cursor-pointer"
+                  >
+                    <span className="text-xs font-semibold text-red-900 truncate">{s.emp.cardPrincipal.razaoSocial}</span>
+                    <span className="text-[11px] font-bold text-red-700 whitespace-nowrap">
+                      Saiu da carteira{isGerente ? ' · registrar decisão' : ''}
+                    </span>
+                  </button>
+                ))}
+                {alertasSaidaCarteira.pre.slice(0, 5).map(p => (
+                  <button
+                    key={`pre-top-${p.emp.chave}`}
+                    type="button"
+                    onClick={() => onOpenCliente?.(p.emp.cardPrincipal)}
+                    className="w-full text-left flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 hover:bg-amber-100 cursor-pointer"
+                  >
+                    <span className="text-xs font-semibold text-amber-900 truncate">{p.emp.cardPrincipal.razaoSocial}</span>
+                    <span className="text-[11px] font-bold text-amber-700 whitespace-nowrap">
+                      sai da carteira em {p.diasRestantes} dia{p.diasRestantes === 1 ? '' : 's'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {followUpSemSatisfacao15d.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 flex items-center justify-between gap-2">
+                <span className="text-xs text-amber-900">
+                  <span className="font-semibold">Follow-up sem satisfação há mais de 15 dias:</span> {followUpSemSatisfacao15d.length} cliente(s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => abrirDrillNeg('Follow-up sem satisfação há mais de 15 dias', followUpSemSatisfacao15d.map(f => ({
+                    key: `fup-${f.cliente.id}`,
+                    cliente: f.cliente,
+                    razao: f.cliente.razaoSocial,
+                    extra: `${f.dias} dias em Follow-up sem satisfação registrada`,
+                  })))}
+                  className="text-xs font-semibold text-amber-900 underline hover:no-underline whitespace-nowrap cursor-pointer"
+                >
+                  Ver lista
+                </button>
+              </div>
+            )}
+
             {abaPrioridadeHoje === 'tarefas_dia' ? (
               <div className="divide-y divide-gray-100 text-xs max-h-64 overflow-y-auto">
                 {minhaCarteiraHoje.tarefasDoDia.slice(0, 20).map(t => {
@@ -937,8 +1396,9 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                 label={`Faturamento (${periodoNome})`}
                 value={L(fmtBRL(fatMes))}
                 subtitle={dataLoading ? undefined : `${indUnificado.pedidosConfirmadosPeriodo.length} pedido(s) confirmado(s) ${periodoNome}`}
-                meta={metaVendas}
-                total={dataLoading ? 0 : fatMes}
+                meta={metaFatMesCorrente}
+                total={dataLoading ? 0 : vendidoMesCorrente}
+                metaLabel="Meta do mês"
                 color="#22C55E"
                 icon={<CurrencyDollarIcon className="h-5 w-5" style={{ color: '#22C55E' }} />}
                 onClick={isGerente ? () => setDetailOpen('faturamento') : undefined}
@@ -1047,6 +1507,113 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                 icon={<MapPinIcon className="h-5 w-5" style={{ color: '#8B5CF6' }} />}
                 onClick={isGerente ? () => setDetailOpen('visitasMissao') : undefined}
               />
+            </div>
+          )
+        })()}
+
+        {/* Item 4.5 — Quadro "Minhas metas": mês e semana com ritmo necessário (vendedor vê as próprias) */}
+        {(!isGerente || metaMinhaRow) && (() => {
+          const pctNum = (v: number, m: number) => m > 0 ? Math.min(100, Math.round((v / m) * 100)) : 0
+          const fmtKg = (v: number) => `${v.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} kg`
+          const LinhaMeta = ({ titulo, vendido, meta, fmt }: { titulo: string; vendido: number; meta: number; fmt: (v: number) => string }) => (
+            <div className="space-y-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-medium text-gray-500">{titulo}</span>
+                <span className="text-xs text-gray-400">{pctNum(vendido, meta)}%</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="font-bold text-gray-900">{fmt(vendido)}</span>
+                <span className="text-xs text-gray-500">meta {fmt(meta)}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full bg-primary-600 transition-all" style={{ width: `${pctNum(vendido, meta)}%` }} />
+              </div>
+              <p className="text-[11px] text-gray-500">
+                {meta - vendido > 0 ? `falta ${fmt(Math.round((meta - vendido) * 100) / 100)}` : 'meta atingida'}
+              </p>
+            </div>
+          )
+          const semanaLabel = `${semanaCorrente.segunda.split('-').reverse().slice(0, 2).join('/')} a ${semanaCorrente.domingo.split('-').reverse().slice(0, 2).join('/')}`
+          return (
+            <div className="bg-white rounded-apple border border-gray-200 shadow-apple-sm p-4 sm:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Minhas metas <span className="text-[11px] font-normal text-gray-400">· {nomeMesCorrente}</span></h2>
+                  <p className="text-xs text-gray-500">Vendido = pedidos confirmados. A meta da semana é a meta do mês prorrateada pelos dias úteis (seg-sex exceto feriados).</p>
+                </div>
+              </div>
+
+              {!metasCarregadas ? (
+                <p className="text-xs text-gray-400 py-4 text-center">Carregando metas...</p>
+              ) : !metaMinhaRow ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center">
+                  <p className="text-sm font-medium text-gray-600">Nenhuma meta cadastrada para você neste mês.</p>
+                  <p className="text-xs text-gray-400 mt-1">Peça ao gestor para cadastrar em Parâmetros &gt; Metas. O sistema não assume nenhum valor por conta própria.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Mês */}
+                    <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Mês</p>
+                      <LinhaMeta titulo="Faturamento" vendido={vendidoMesCorrente} meta={metaMinhaRow.metaFaturamento || 0} fmt={fmtBRL} />
+                      {(metaMinhaRow.metaVolumeKg || 0) > 0 && (
+                        <LinhaMeta titulo="Volume" vendido={volumeKgMesCorrente} meta={metaMinhaRow.metaVolumeKg || 0} fmt={fmtKg} />
+                      )}
+                      <div className="grid grid-cols-3 gap-2 pt-1">
+                        {([
+                          { label: 'Visitas', meta: metaMinhaRow.metaVisitas, vendido: visitasMesCorrente },
+                          { label: 'Propostas', meta: metaMinhaRow.metaPropostas, vendido: propostasMesCorrente },
+                          { label: 'Novos clientes', meta: metaMinhaRow.metaNovosClientes, vendido: novosClientesMesCorrente },
+                        ]).map(x => (
+                          <div key={x.label} className="rounded-lg bg-white border border-gray-100 px-2.5 py-2 text-center">
+                            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{x.label}</p>
+                            {x.meta != null ? (
+                              <>
+                                <p className="text-sm font-bold text-gray-900">
+                                  {x.vendido}<span className="text-[10px] font-normal text-gray-400"> / {x.meta}</span>
+                                </p>
+                                <p className="text-[10px] text-gray-400">
+                                  {pctNum(x.vendido, x.meta)}%{x.meta - x.vendido > 0 ? ` · falta ${x.meta - x.vendido}` : ' · atingida'}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-sm font-bold text-gray-400">—</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Semana */}
+                    <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 space-y-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Semana <span className="font-normal normal-case text-gray-400">({semanaLabel})</span></p>
+                      <LinhaMeta titulo="Faturamento" vendido={vendidoSemanaCorrente} meta={metaSemanaFat} fmt={fmtBRL} />
+                      {(metaMinhaRow.metaVolumeKg || 0) > 0 && (
+                        <LinhaMeta titulo="Volume" vendido={volumeKgSemanaCorrente} meta={metaSemanaKg} fmt={fmtKg} />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ritmo necessário (item 4.4) */}
+                  {(metaMinhaRow.metaFaturamento || 0) > 0 && (
+                    <div className="rounded-xl border border-primary-100 bg-primary-50/50 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">
+                      {ritmoMeta.noRitmo ? (
+                        <p className="text-sm font-semibold text-emerald-700">No ritmo — a meta do mês já foi atingida.</p>
+                      ) : (
+                        <>
+                          <p className="text-sm text-gray-700">
+                            Para bater o mês: <span className="font-bold text-gray-900">{fmtBRL(ritmoMeta.ritmoNecessario)} por dia útil</span>
+                            <span className="text-xs text-gray-400"> ({ritmoMeta.diasUteisRestantesMes} dia(s) útil(eis) restantes)</span>
+                          </p>
+                          <p className="text-sm text-gray-700">
+                            Nesta semana você precisa vender <span className="font-bold text-gray-900">{fmtBRL(ritmoMeta.paraEstaSemana)}</span>
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )
         })()}
@@ -1351,7 +1918,211 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
               </p>
               <p className="text-[11px] text-gray-400">situação de hoje · sem compra há 61+ dias</p>
             </button>
+            {/* Item 12 — Follow-up sem satisfação há mais de 15 dias */}
+            <button
+              type="button"
+              onClick={() => abrirDrillNeg('Follow-up sem satisfação há mais de 15 dias', followUpSemSatisfacao15d.map(f => ({
+                key: `fup-${f.cliente.id}`,
+                cliente: f.cliente,
+                razao: f.cliente.razaoSocial,
+                extra: `${f.dias} dias em Follow-up sem satisfação registrada`,
+              })))}
+              className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Follow-up sem satisfação &gt; 15d</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && followUpSemSatisfacao15d.length > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : followUpSemSatisfacao15d.length}
+              </p>
+              <p className="text-[11px] text-gray-400">situação de hoje · registrar satisfação</p>
+            </button>
+            {/* Item 21 — pré-alerta: clientes entre 150 e 180 dias sem compra */}
+            <button
+              type="button"
+              onClick={() => abrirDrillNeg('Saindo da carteira (150–180 dias sem compra)', alertasSaidaCarteira.pre.map(p => ({
+                key: `pre-${p.emp.chave}`,
+                cliente: p.emp.cardPrincipal,
+                razao: p.emp.cardPrincipal.razaoSocial,
+                extra: `sai da carteira em ${p.diasRestantes} dia${p.diasRestantes === 1 ? '' : 's'} · ${p.emp.diasSemCompra}d sem compra`,
+              })))}
+              className="text-left bg-white hover:bg-amber-50 border border-amber-200 rounded-xl p-3 transition-colors"
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Saindo da carteira · hoje</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && alertasSaidaCarteira.pre.length > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : alertasSaidaCarteira.pre.length}
+              </p>
+              <p className="text-[11px] text-gray-400">150–180 dias sem compra · saem em breve</p>
+            </button>
+            {/* Item 21 — alerta máximo: saiu da carteira e aguarda decisão do gestor */}
+            <button
+              type="button"
+              onClick={() => abrirDrillNeg('Saiu da carteira — aguardando decisão do gestor', alertasSaidaCarteira.saiu.map(s => ({
+                key: `saiu-${s.emp.chave}`,
+                cliente: s.emp.cardPrincipal,
+                razao: s.emp.cardPrincipal.razaoSocial,
+                extra: `saiu em ${s.dataSaida.split('-').reverse().join('/')}${isGerente ? ' · clique para registrar a decisão' : ''}`,
+                acaoSaida: { dataSaida: s.dataSaida },
+              })))}
+              className={`text-left border rounded-xl p-3 transition-colors ${alertasSaidaCarteira.saiu.length > 0 ? 'bg-red-50 hover:bg-red-100 border-red-300' : 'bg-white hover:bg-amber-50 border-amber-200'}`}
+            >
+              <p className="text-[11px] font-medium text-gray-500 uppercase">Saiu da carteira · alerta máximo</p>
+              <p className={`text-xl font-bold mt-0.5 ${!dataLoading && alertasSaidaCarteira.saiu.length > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                {dataLoading ? 'Carregando...' : alertasSaidaCarteira.saiu.length}
+              </p>
+              <p className="text-[11px] text-gray-400">passou de 180 dias · permanece até o gestor registrar a decisão</p>
+            </button>
           </div>
+        </div>
+
+        {/* Drill-down: número → lista → card do cliente (itens 17/18/21) */}
+          {drillNeg && (
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-xs font-bold text-gray-900">{drillNeg.titulo} ({drillNeg.itens.length})</h3>
+                <button type="button" onClick={() => setDrillNeg(null)} className="text-xs text-gray-400 hover:text-gray-700 cursor-pointer">Fechar lista</button>
+              </div>
+              {drillNeg.itens.length === 0 ? (
+                <p className="text-xs text-gray-400 py-3 text-center">Nenhum registro.</p>
+              ) : (
+                <>
+                  <div className="divide-y divide-gray-100 text-xs max-h-72 overflow-y-auto bg-white rounded-lg border border-gray-100">
+                    {drillNeg.itens.slice((drillNegPage - 1) * 20, drillNegPage * 20).map(item => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => clicarItemDrillNeg(item)}
+                        className="w-full text-left py-2 px-2.5 hover:bg-primary-50/50 flex items-center justify-between gap-2 cursor-pointer"
+                      >
+                        <span className="font-semibold text-gray-900 truncate">{item.razao}</span>
+                        <span className="text-[11px] text-gray-500 truncate text-right">{item.extra}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {drillNeg.itens.length > 20 && (
+                    <div className="flex items-center justify-between text-[11px] text-gray-500">
+                      <span>Pág. {drillNegPage}/{Math.ceil(drillNeg.itens.length / 20)}</span>
+                      <div className="flex gap-1">
+                        <button type="button" disabled={drillNegPage <= 1} onClick={() => setDrillNegPage(p => p - 1)} className="px-2 py-0.5 border rounded disabled:opacity-40 cursor-pointer">Anterior</button>
+                        <button type="button" disabled={drillNegPage >= Math.ceil(drillNeg.itens.length / 20)} onClick={() => setDrillNegPage(p => p + 1)} className="px-2 py-0.5 border rounded disabled:opacity-40 cursor-pointer">Próxima</button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+        {/* Itens 17 e 18 — Negociações por vendedor e clientes sem negociação há +30 dias.
+            Números calculados pelas mesmas funções puras usadas em Relatórios (zero divergência).
+            Cada número abre a lista, e cada item da lista abre o card do cliente. */}
+        <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-5 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Negociações por vendedor</h2>
+              <p className="text-xs text-gray-500">
+                Abertas e sem negociação são a situação de hoje; ganhas e perdidas respeitam o filtro de período.
+              </p>
+            </div>
+          </div>
+          {dataLoading ? (
+            <p className="text-xs text-gray-400 py-4 text-center">Carregando...</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 text-gray-500">
+                    <th className="text-left py-1.5 px-2">Vendedor</th>
+                    <th className="text-center py-1.5 px-2">Abertas · hoje</th>
+                    <th className="text-center py-1.5 px-2">Ganhas · período</th>
+                    <th className="text-center py-1.5 px-2">Perdidas · período</th>
+                    <th className="text-left py-1.5 px-2">Motivos de perda · período</th>
+                    <th className="text-center py-1.5 px-2">Sem negociação +30d · hoje</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {negociacaoPorVendedor.map(({ vendedor: v, resumo: r }) => {
+                    const semNeg = semNegociacao30PorVendedor.get(v.id) || []
+                    const cellBtn = (qtd: number, onClick: () => void, cor: string) => (
+                      <button
+                        type="button"
+                        onClick={onClick}
+                        className={`font-bold text-sm ${cor} ${qtd > 0 ? 'hover:underline cursor-pointer' : 'cursor-default'}`}
+                      >
+                        {qtd}
+                      </button>
+                    )
+                    return (
+                      <tr key={v.id} className="hover:bg-gray-50/60">
+                        <td className="py-2 px-2 font-semibold text-gray-900 whitespace-nowrap">{v.nome}</td>
+                        <td className="py-2 px-2 text-center">
+                          {cellBtn(r.abertas.length, () => r.abertas.length > 0 && abrirDrillNeg(
+                            `Negociações abertas · ${v.nome}`,
+                            r.abertas.map(c => ({ key: `ab-${c.id}`, cliente: c, razao: c.razaoSocial, extra: 'Em negociação agora' }))
+                          ), 'text-purple-700')}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {cellBtn(r.ganhas.length, () => r.ganhas.length > 0 && abrirDrillNeg(
+                            `Negociações ganhas no período · ${v.nome}`,
+                            r.ganhas.map(p => {
+                              const cli = clientes.find(c => c.id === p.clienteId)
+                              return { key: `ga-${p.id}`, cliente: cli, razao: cli?.razaoSocial || `Pedido ${p.numero}`, extra: `${p.numero} · ${fmtBRL(p.totalValor)}` }
+                            })
+                          ), 'text-emerald-700')}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {cellBtn(r.perdidas.length, () => r.perdidas.length > 0 && abrirDrillNeg(
+                            `Negociações perdidas no período · ${v.nome}`,
+                            r.perdidas.map(c => ({ key: `pe-${c.id}`, cliente: c, razao: c.razaoSocial, extra: c.motivoPerda || c.categoriaPerda || 'Motivo não informado' }))
+                          ), 'text-red-700')}
+                        </td>
+                        <td className="py-2 px-2">
+                          {r.motivosPerda.length === 0 ? (
+                            <span className="text-gray-300">—</span>
+                          ) : (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {r.motivosPerda.map(m => (
+                                <button
+                                  key={m.key}
+                                  type="button"
+                                  onClick={() => abrirDrillNeg(
+                                    `Perdas por ${m.label} no período · ${v.nome}`,
+                                    m.cards.map(c => ({ key: `mp-${m.key}-${c.id}`, cliente: c, razao: c.razaoSocial, extra: c.motivoPerda || m.label }))
+                                  )}
+                                  className="px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-[11px] font-medium text-red-800 hover:bg-red-100 cursor-pointer"
+                                >
+                                  {m.label}: <strong>{m.cards.length}</strong>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {cellBtn(semNeg.length, () => semNeg.length > 0 && abrirDrillNeg(
+                            `Clientes da carteira sem negociação há +30 dias · ${v.nome}`,
+                            semNeg.map(x => {
+                              const emp = consolidadoFase2.empresas.find(e => e.chave === x.chave)
+                              const cli = emp?.cardPrincipal || clientes.find(c => c.id === x.cardPrincipalId)
+                              return {
+                                key: `sn-${x.chave}`,
+                                cliente: cli,
+                                razao: cli?.razaoSocial || 'Cliente',
+                                extra: x.ultimaNegociacao
+                                  ? `última negociação em ${x.ultimaNegociacao.split('-').reverse().join('/')} (${x.diasSemNegociacao}d)`
+                                  : 'nunca esteve em negociação',
+                              }
+                            })
+                          ), 'text-orange-700')}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {negociacaoPorVendedor.length === 0 && (
+                    <tr><td colSpan={6} className="py-4 text-center text-gray-400">Nenhum vendedor no escopo.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
         </div>
 
         {/* Volume por produto (spec vendedor: volume vendido por produto em kg) */}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import type { Produto, Vendedor } from '../../types'
 import ParametrosComissao from '../ParametrosComissao'
+import ParametrosMetas from '../ParametrosMetas'
 import {
   LISTA_META,
   ListaParametroKey,
@@ -22,11 +23,12 @@ interface Props {
   loggedUser: Vendedor
   showToast: (tipo: 'success' | 'error', texto: string) => void
   produtos?: Produto[]
+  vendedores?: Vendedor[]
 }
 
-export default function ParametrosView({ loggedUser, showToast, produtos = [] }: Props) {
+export default function ParametrosView({ loggedUser, showToast, produtos = [], vendedores = [] }: Props) {
   const { parametros } = useParametrosListas()
-  const [abaAtiva, setAbaAtiva] = useState<ListaParametroKey | 'comissao'>('segmento_cliente')
+  const [abaAtiva, setAbaAtiva] = useState<ListaParametroKey | 'comissao' | 'metas'>('segmento_cliente')
   const [novoTexto, setNovoTexto] = useState('')
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [editandoLabel, setEditandoLabel] = useState('')
@@ -69,7 +71,7 @@ export default function ParametrosView({ loggedUser, showToast, produtos = [] }:
           camposCadastroObrigatorios: parametros.camposCadastroObrigatorios,
           tarefasPadraoCadastro: parametros.tarefasPadraoCadastro,
           auditoria: [
-            { data: agora, usuario, lista: abaAtiva, acao, detalhe },
+            { data: agora, usuario, lista: abaAtiva as ListaParametroKey, acao, detalhe },
             ...(parametros.auditoria || []),
           ].slice(0, 300),
         },
@@ -258,12 +260,24 @@ export default function ParametrosView({ loggedUser, showToast, produtos = [] }:
         >
           <span>Comissão</span>
         </button>
+        <button
+          type="button"
+          onClick={() => { setAbaAtiva('metas'); setEditandoId(null); setNovoTexto('') }}
+          className={`px-3.5 py-2 rounded-apple text-xs sm:text-sm font-semibold transition-colors flex items-center gap-2 ${abaAtiva === 'metas' ? 'bg-primary-600 text-white shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50'}`}
+        >
+          <span>Metas</span>
+        </button>
       </div>
 
       {/* Item 3 — aba Comissão: percentuais por produto/tabela/tipo de vendedor */}
       {abaAtiva === 'comissao' ? (
         <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 shadow-apple-sm p-4 sm:p-6">
           <ParametrosComissao produtos={produtos} loggedUser={loggedUser} showToast={showToast} />
+        </div>
+      ) : abaAtiva === 'metas' ? (
+        /* Item 4 — aba Metas: grade mensal por vendedor + feriados (dias úteis) */
+        <div className="bg-white dark:bg-gray-900 rounded-apple border border-gray-200 dark:border-gray-700 shadow-apple-sm p-4 sm:p-6">
+          <ParametrosMetas vendedores={vendedores} loggedUser={loggedUser} showToast={showToast} />
         </div>
       ) : (
       <>

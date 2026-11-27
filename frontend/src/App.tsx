@@ -240,13 +240,13 @@ function App({ preloadedUser, onVoltarPortal }: { preloadedUser?: Vendedor | nul
     // Extras do nucleo: produtos, atividades (visitas/indicadores do dashboard dependem delas!) e notificacoes.
     // O coreDataLoading so desliga quando TUDO terminou — nunca exibe numero provisorio (itens 1-2 da spec CRM 1.0)
     const extrasP = Promise.all([
-      db.fetchProdutos().then(setProdutos).catch(err => logger.error('produtos:', err)),
-      db.fetchAtividades().then(d => { setAtividades(d); secondaryLoaded.current.add('atividades') }).catch(err => logger.error('atividades:', err)),
-      db.fetchNotificacoes(usuario?.cargo === 'gerente' ? undefined : usuario?.id).then(setDbNotificacoes).catch(err => logger.error('notificacoes:', err)),
+      Promise.resolve().then(() => db.fetchProdutos()).then(d => d && setProdutos(d)).catch(err => logger.error('produtos:', err)),
+      Promise.resolve().then(() => db.fetchAtividades()).then(d => { if (d) setAtividades(d); secondaryLoaded.current.add('atividades') }).catch(err => logger.error('atividades:', err)),
+      Promise.resolve().then(() => db.fetchNotificacoes(usuario?.cargo === 'gerente' ? undefined : usuario?.id)).then(d => d && setDbNotificacoes(d)).catch(err => logger.error('notificacoes:', err)),
     ])
     try {
       // Tenta primeiro o bootstrap comprimido (gzip) no servidor (~1s para 9.300+ tarefas + clientes + pedidos)
-      const boot = await db.fetchCrmBootstrap()
+      const boot = typeof db.fetchCrmBootstrap === 'function' ? await db.fetchCrmBootstrap() : null
       if (boot) {
         setVendedores(boot.vendedores)
         setClientes(boot.clientes)

@@ -139,6 +139,7 @@ export default function AppRouter({
           loggedUser={loggedUser}
           onNavigate={onNavigate}
           onOpenCliente={(c, focus) => setSelectedClientePanel(c, focus || null)}
+          setInteracoes={setInteracoes}
         />
       )
     case 'email':
@@ -844,7 +845,7 @@ export default function AppRouter({
     case 'tabela-precos':
       return <TabelaPrecosView loggedUser={loggedUser} showToast={showToast} />
     case 'parametros':
-      return loggedUser ? <ParametrosView loggedUser={loggedUser} showToast={showToast} produtos={produtos} /> : null
+      return loggedUser ? <ParametrosView loggedUser={loggedUser} showToast={showToast} produtos={produtos} vendedores={vendedores} /> : null
     case 'templates':
       return <TemplatesView templates={templates}
         onAdd={async (t) => {

@@ -23,6 +23,9 @@ vi.mock('../lib/gemini', () => ({
 
 // Mock botApi
 vi.mock('../lib/botApi', () => ({
+  syncWavoipWebphone: vi.fn().mockResolvedValue(null),
+  getUserWavoipToken: vi.fn().mockResolvedValue(null),
+  getUserEmailStatus: vi.fn().mockResolvedValue({ data: {} }),
   sendUserWhatsApp: vi.fn().mockResolvedValue({ success: true }),
   getUserWhatsAppStatus: vi.fn().mockResolvedValue({ connected: false, status: 'disconnected' }),
   sendEmailViaBot: vi.fn().mockResolvedValue({ success: true }),

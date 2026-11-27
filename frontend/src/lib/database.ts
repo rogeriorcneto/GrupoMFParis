@@ -886,6 +886,8 @@ export async function restaurarDuplicataFunil(cardId: number): Promise<Cliente[]
 }
 
 export async function insertHistoricoEtapa(clienteId: number, h: HistoricoEtapa): Promise<void> {
+  // Item 10: não registrar mudança de etapa quando a etapa não muda
+  if (h.de && h.de === h.etapa) return
   const { error } = await supabase.from('historico_etapas').insert({
     cliente_id: clienteId,
     etapa: h.etapa,
@@ -2998,4 +3000,60 @@ export async function registrarExecucaoAutomacao(
     console.error('Erro ao registrar execução de automação:', err)
     return null
   }
+}
+
+// ============================================
+// SAÍDA DE CARTEIRA — decisões do gestor (Item 21)
+// Tabela saida_carteira_decisoes: id, cliente_id bigint, decisao text,
+// detalhe text, prazo date, registrado_por text, registrado_em timestamptz
+// ============================================
+
+export interface SaidaCarteiraDecisao {
+  id: number
+  clienteId: number
+  decisao: string
+  detalhe: string | null
+  prazo: string | null
+  registradoPor: string | null
+  registradoEm: string
+}
+
+function saidaCarteiraDecisaoFromDb(row: any): SaidaCarteiraDecisao {
+  return {
+    id: Number(row.id),
+    clienteId: Number(row.cliente_id),
+    decisao: row.decisao || '',
+    detalhe: row.detalhe ?? null,
+    prazo: row.prazo ?? null,
+    registradoPor: row.registrado_por ?? null,
+    registradoEm: row.registrado_em || '',
+  }
+}
+
+export async function fetchSaidaCarteiraDecisoes(): Promise<SaidaCarteiraDecisao[]> {
+  const { data, error } = await supabase
+    .from('saida_carteira_decisoes')
+    .select('*')
+    .order('registrado_em', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+  return (data || []).map(saidaCarteiraDecisaoFromDb)
+}
+
+export async function insertSaidaCarteiraDecisao(input: {
+  clienteId: number
+  decisao: string
+  detalhe?: string | null
+  prazo?: string | null
+  registradoPor?: string | null
+}): Promise<void> {
+  const { error } = await supabase.from('saida_carteira_decisoes').insert({
+    cliente_id: input.clienteId,
+    decisao: input.decisao,
+    detalhe: input.detalhe || null,
+    prazo: input.prazo || null,
+    registrado_por: input.registradoPor || null,
+    registrado_em: new Date().toISOString(),
+  })
+  if (error) throw error
 }

@@ -16,6 +16,7 @@ import CallRecorder from './CallRecorder'
 import TimePicker5Min, { isDataHoraNoPassado, arredondarHora5Min } from './TimePicker5Min'
 import { DEFAULT_PAYMENT_TERM } from '../constants/paymentTerms'
 import { useParametrosListas } from '../lib/parametrosListas'
+import { getOmieStatusDisplay } from '../utils/omieStatus'
 import CadastroCompletoModal from './CadastroCompletoModal'
 import FinalizarTarefaInline from './FinalizarTarefaInline'
 import EmailView from './views/EmailView'
@@ -165,6 +166,13 @@ const tipoInteracaoCor: Record<string, { bg: string; border: string; dot: string
   nota: { bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500' },
 }
 
+// Item 7/15 — selo colorido do status do pedido no Omie (mesmas cores do item 15)
+function omieSeloPedido(p: Pedido): { label: string; cls: string } | null {
+  const display = getOmieStatusDisplay(p.omieStatus)
+  if (!display) return null
+  return { label: display.label, cls: display.classes }
+}
+
 function currentTimeHHMM(): string {
   const now = new Date()
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -271,7 +279,7 @@ export default function ClientePanel({
       setActiveTab('historico')
       if (initialFocus.tarefaId) {
         const alvo = tarefas.find(t => t.id === initialFocus.tarefaId)
-        if (alvo?.titulo) setTaskHistorySearch(alvo.titulo)
+        if (alvo) scrollToHistItem(-alvo.id)
       }
     }
   }, [c.id, initialFocus?.section, initialFocus?.tarefaId, initialFocus?.pedidoId])
@@ -482,6 +490,10 @@ export default function ClientePanel({
   const [expandedHistoricoGroups, setExpandedHistoricoGroups] = useState<Record<string, boolean>>({})
   const [historicoItemCount, setHistoricoItemCount] = useState<Record<string, number>>({})
   const [historicoTab, setHistoricoTab] = useState<'todas' | 'fixadas'>('todas')
+  const [histFiltroTipo, setHistFiltroTipo] = useState<string>('todos')
+  const [histFiltroCiclo, setHistFiltroCiclo] = useState<string>('todos')
+  const [showCiclosNegocios, setShowCiclosNegocios] = useState(false)
+  const [showPedidosNegocios, setShowPedidosNegocios] = useState(false)
 
   // Editar Proposta
   const [showEditProposta, setShowEditProposta] = useState(false)
@@ -523,7 +535,6 @@ export default function ClientePanel({
   // Carregar propostas e histórico de mudanças de etapa de TODOS os ciclos da empresa (Item 3 + Item 8)
   const [todasPropostas, setTodasPropostas] = useState<PropostaHistorico[]>([])
   const [historicoEtapasGlobal, setHistoricoEtapasGlobal] = useState<Array<{ id: number; cliente_id: number; etapa: string; etapa_anterior?: string; data: string; observacao?: string }>>([])
-  const [showPropostasAnteriores, setShowPropostasAnteriores] = useState(false)
   const [propostasExpandidas, setPropostasExpandidas] = useState<Set<number>>(new Set())
   const togglePropostaExpandida = (id: number) => setPropostasExpandidas(prev => {
     const next = new Set(prev)
@@ -702,6 +713,7 @@ export default function ClientePanel({
   const AMOSTRA_ID_OFFSET = 30_000_000
   const ETAPA_ID_OFFSET = 40_000_000
   const ATIVIDADE_ID_OFFSET = 50_000_000
+  const PEDIDO_ID_OFFSET = 60_000_000
 
   const razaoNormUpper = (c.razaoSocial || '').trim().toUpperCase()
   const atividadesDoCliente = React.useMemo(() => {
@@ -714,6 +726,11 @@ export default function ClientePanel({
 
   const amostrasDaEmpresa = React.useMemo(
     () => (todosPedidos || []).filter(p => familiaEmpresaIds.has(p.clienteId) && p.tipo === 'bonificacao'),
+    [todosPedidos, familiaEmpresaIds]
+  )
+
+  const pedidosVendaDaEmpresa = React.useMemo(
+    () => (todosPedidos || []).filter(p => familiaEmpresaIds.has(p.clienteId) && p.tipo !== 'bonificacao'),
     [todosPedidos, familiaEmpresaIds]
   )
 
@@ -778,6 +795,16 @@ export default function ClientePanel({
       descricao: `${am.numero?.toUpperCase().startsWith('BON-') ? 'Bonificação comercial' : 'Envio de amostra'} ${am.numero} (${am.status})${(am.itens || []).length > 0 ? ` — ${am.itens.map(it => `${it.nomeProduto} (${it.quantidade} kg)`).join(', ')}` : ''}`,
       data: am.dataCriacao,
       automatico: false,
+    } as InteracaoGlobal)),
+    ...pedidosVendaDaEmpresa.map(pd => ({
+      id: -(pd.id + PEDIDO_ID_OFFSET),
+      clienteId: pd.clienteId,
+      cicloOrigem: cicloPorCardId.get(pd.clienteId) || 1,
+      tipo: 'nota' as Interacao['tipo'],
+      assunto: `Pedido - ${pd.numero}`,
+      descricao: `Pedido ${pd.numero} — R$ ${(pd.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · ${(pd.itens || []).reduce((s, it) => s + (it.quantidade || 0), 0)} kg · Status: ${pd.status}${pd.omieStatus ? ` · Omie: ${pd.omieStatus}` : ''}${(pd.itens || []).length > 0 ? `\n${pd.itens.map(it => `${it.nomeProduto} (${it.quantidade} kg)`).join(', ')}` : ''}`,
+      data: pd.dataCriacao,
+      automatico: true,
     } as InteracaoGlobal)),
     ...historicoEtapasGlobal.map(h => ({
       id: -(h.id + ETAPA_ID_OFFSET),
@@ -1086,6 +1113,20 @@ export default function ClientePanel({
       } : cl))
       addNotificacao('success', 'Dados atualizados', `Informações de ${c.razaoSocial} atualizadas.`, c.id)
     } catch (err) { logger.error('Erro ao salvar nota:', err) }
+  }
+
+  const scrollToHistItem = (histId: number) => {
+    setActiveTab('historico')
+    setHistoricoTab('todas')
+    setHistFiltroTipo('todos')
+    setHistFiltroCiclo('todos')
+    window.setTimeout(() => {
+      const el = document.getElementById(`hist-item-${histId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-primary-400')
+      window.setTimeout(() => el.classList.remove('ring-2', 'ring-primary-400'), 2200)
+    }, 150)
   }
 
   const handleTogglePinInteracao = (interacaoId: number) => {
@@ -1551,40 +1592,6 @@ export default function ClientePanel({
                   Baixar PDF
                 </button>
               )}
-              {todasPropostas.length > 1 && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowPropostasAnteriores(v => !v)}
-                    className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-700 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]"
-                    title="Ver histórico de propostas"
-                  >
-                    Anteriores ({todasPropostas.length - 1})
-                  </button>
-                  {showPropostasAnteriores && (
-                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl min-w-[260px] max-h-72 overflow-y-auto">
-                      <div className="px-3 py-2 border-b border-gray-100">
-                        <p className="text-[11px] font-semibold text-gray-700">Histórico de propostas</p>
-                      </div>
-                      {todasPropostas.map((p, i) => (
-                        <div key={p.id} className={`flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 ${i === 0 ? 'bg-gray-50' : ''}`}>
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-medium text-gray-800 truncate">{p.numero} {i === 0 ? <span className="text-[9px] bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded">atual</span> : ''}</p>
-                            <p className="text-[10px] text-gray-500 tabular-nums">{new Date(p.criadoEm).toLocaleDateString('pt-BR')} · R$ {p.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            {p.pagamento && <p className="text-[9px] text-gray-400">{p.pagamento}</p>}
-                          </div>
-                          <button
-                            onClick={() => gerarPropostaPDF(c, p.itens, p.observacoes, p.vendedorNome, p.numero, { tipoFrete: (p.frete as 'CIF' | 'FOB' | '') || '', formaPagamento: p.pagamento, dataLancamento: p.criadoEm })}
-                            className="flex-shrink-0 px-2.5 py-1 text-[10px] font-medium bg-primary-700 text-white rounded-md hover:bg-primary-800"
-                            title="Baixar PDF"
-                          >
-                            PDF
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               {c.etapa === 'prospecção' && (
                 <>
                   <button onClick={() => { onTriggerAmostra(c); onClose() }} className="px-3 py-1.5 text-xs font-medium bg-[#EFEFF4] dark:bg-[#2C2C30] text-gray-800 dark:text-gray-200 rounded-lg hover:bg-black/[0.08]">Enviar amostra</button>
@@ -1865,34 +1872,7 @@ export default function ClientePanel({
               <div><p className="text-xs text-gray-500">Razão social</p><p className="font-medium text-gray-900">{c.razaoSocial}</p></div>
               <div><p className="text-xs text-gray-500">{c.cpf && !c.cnpj ? 'CPF' : 'CNPJ'}</p><p className="font-medium text-gray-900">{formatCNPJ(c.cnpj || '') || c.cpf || '-'}</p></div>
               <div><p className="text-xs text-gray-500">Nome fantasia</p><p className="font-medium text-gray-900">{c.nomeFantasia || '-'}</p></div>
-              <div>
-                <p className="text-xs text-gray-500">Segmento</p>
-                <select
-                  aria-label="Segmento do cliente"
-                  value={c.segmento || ''}
-                  onChange={async (e) => {
-                    const novoSeg = e.target.value
-                    try {
-                      const familia = (todosClientes && todosClientes.length > 0 ? todosClientes : [c]).filter(cl => !cl.arquivadoDuplicata && mesmaEmpresaNoFunil(cl, c))
-                      const ids = familia.length > 0 ? familia.map(cl => cl.id) : [c.id]
-                      await Promise.all(ids.map(id => db.updateCliente(id, { segmento: novoSeg || undefined })))
-                      const idSet = new Set(ids)
-                      setClientes(prev => prev.map(cl => idSet.has(cl.id) ? { ...cl, segmento: novoSeg || undefined } : cl))
-                    } catch (err) {
-                      logger.error('Erro ao salvar segmento:', err)
-                    }
-                  }}
-                  className="w-full px-2 py-1 border border-gray-300 rounded-apple text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Selecionar...</option>
-                  {c.segmento && !segmentosAtivos.some(s => s.valor === c.segmento) && (
-                    <option value={c.segmento}>{c.segmento} (desativado)</option>
-                  )}
-                  {segmentosAtivos.map(s => (
-                    <option key={s.id} value={s.valor}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
+              <div><p className="text-xs text-gray-500">Segmento</p><p className="font-medium text-gray-900">{c.segmento || '-'}</p></div>
             </div>
             {c.descricao && (
               <div className="mt-2">
@@ -2310,61 +2290,6 @@ export default function ClientePanel({
             )
           })()}
 
-          <div className="bg-white dark:bg-[#1C1C1E] rounded-apple border border-gray-200 p-4 space-y-3 shadow-apple-sm">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">Histórico de tarefas ({clienteTarefas.length})</h3>
-              {filteredTaskHistory.length > visibleTaskHistory.length && <span className="text-[11px] text-gray-500">{visibleTaskHistory.length}/{filteredTaskHistory.length}</span>}
-            </div>
-            {clienteTarefas.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa registrada para este cliente.</p> : <>
-              <input value={taskHistorySearch} onChange={e => { setTaskHistorySearch(e.target.value); setTaskHistoryLimit(5) }} placeholder="Buscar tarefa por palavra-chave..." className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary-400" />
-              {filteredTaskHistory.length === 0 ? <p className="text-xs text-gray-500">Nenhuma tarefa encontrada.</p> : <div className="space-y-2 max-h-96 overflow-y-auto pr-1">{visibleTaskHistory.map(tarefa => {
-                const cicloTar = (tarefa.clienteId ? cicloPorCardId.get(tarefa.clienteId) : undefined) || 1
-                const origTar = inferirOrigemTarefa(tarefa)
-                return (
-                  <button key={tarefa.id} onClick={() => setTaskHistorySearch(tarefa.titulo)} className="w-full text-left rounded-apple border border-gray-200 bg-white px-3 py-2 hover:border-primary-300 transition-colors">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">Ciclo {cicloTar}</span>
-                          <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded border ${origTar === 'automatica' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                            {origTar === 'automatica' ? 'Automática' : 'Manual'}
-                          </span>
-                          {tarefa.objetivo && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200 rounded">
-                              {OBJETIVO_LABEL[tarefa.objetivo] || tarefa.objetivo}
-                            </span>
-                          )}
-                          {tarefa.canalUsado && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200 rounded">
-                              Canal: {CANAL_LABEL[tarefa.canalUsado] || tarefa.canalUsado}
-                            </span>
-                          )}
-                          <p className="text-sm font-medium text-gray-900">{tarefa.titulo}</p>
-                        </div>
-                      </div>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${tarefa.status === 'concluida' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{tarefa.status === 'concluida' ? 'Concluída' : 'Pendente'}</span>
-                    </div>
-                    {tarefa.descricao && <p className="mt-1 text-xs text-gray-600 whitespace-pre-line">{tarefa.descricao}</p>}
-                    {tarefa.conclusao && <p className="mt-1 text-xs text-green-800 bg-green-50 border border-green-100 rounded px-2 py-1"><strong>Conclusão:</strong> {tarefa.conclusao}</p>}
-                    {(() => {
-                      const iaInfo = obterClassificacaoTarefaIA(tarefa)
-                      if (!iaInfo) return null
-                      const cfgIA = CLASSIFICACAO_IA_CONFIG[iaInfo.classificacao]
-                      return (
-                        <p className={`mt-1 text-[11px] border rounded px-2 py-1 ${cfgIA.cor}`}>
-                          <strong>{cfgIA.label}:</strong> {iaInfo.motivo}
-                        </p>
-                      )
-                    })()}
-                    {tarefa.justificativaPrazoLongo && <p className="mt-1 text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded px-2 py-1"><strong>Justificativa de prazo longo:</strong> {tarefa.justificativaPrazoLongo}</p>}
-                    <p className="mt-1 text-[11px] text-gray-500">Prazo: {new Date(`${tarefa.data}T${tarefa.hora || '00:00'}`).toLocaleString('pt-BR')}{tarefa.criadoEm ? ` · Criada em ${new Date(tarefa.criadoEm).toLocaleString('pt-BR')}` : ''}{tarefa.concluidaEm ? ` · Concluída em ${new Date(tarefa.concluidaEm).toLocaleString('pt-BR')}` : ''}</p>
-                  </button>
-                )
-              })}</div>}
-              {filteredTaskHistory.length > visibleTaskHistory.length && <button onClick={() => setTaskHistoryLimit(limit => limit + 5)} className="w-full py-2 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded-xl">Mostrar mais 5</button>}
-            </>}
-          </div>
-
           {/* === REDES E INFO ADICIONAIS === */}
           {/* Mini-modal de rede social */}
           {socialModalOpen && (() => {
@@ -2698,11 +2623,16 @@ export default function ClientePanel({
                 {/* Item 5: Ciclos de venda (cards ligados a este cadastro único) */}
                 {familiaCiclos.length > 0 && (
                   <div className="bg-white rounded-apple border border-gray-200">
-                    <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
+                    <button
+                      type="button"
+                      onClick={() => setShowCiclosNegocios(v => !v)}
+                      className="w-full px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2 hover:bg-gray-100 transition-colors"
+                    >
                       <p className="text-sm font-semibold text-gray-900">Ciclos de venda no funil ({familiaCiclos.length})</p>
-                    </div>
+                      <span className="text-[11px] text-gray-500 font-medium">{showCiclosNegocios ? '▲ Recolher' : '▼ Ver anteriores'}</span>
+                    </button>
                     <div className="divide-y divide-gray-100">
-                      {familiaCiclos.map(cardCiclo => {
+                      {(showCiclosNegocios ? familiaCiclos : familiaCiclos.filter(cl => cl.id === c.id || ['proposta', 'negociacao'].includes(cl.etapa))).map(cardCiclo => {
                         const isAtual = cardCiclo.id === c.id
                         return (
                           <div key={cardCiclo.id} className={`px-4 py-2.5 flex items-center justify-between gap-2 ${isAtual ? 'bg-primary-50/40' : 'hover:bg-gray-50'}`}>
@@ -2739,10 +2669,15 @@ export default function ClientePanel({
 
                 {/* Lista de Pedidos */}
                 <div className="bg-white rounded-apple border border-gray-200">
-                  <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50">
-                    <p className="text-sm font-semibold text-gray-900">Pedidos do cliente</p>
-                  </div>
-                  {pedidosCli.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPedidosNegocios(v => !v)}
+                    className="w-full px-4 py-2.5 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-2 hover:bg-gray-100 transition-colors"
+                  >
+                    <p className="text-sm font-semibold text-gray-900">Pedidos do cliente ({pedidosCli.length})</p>
+                    <span className="text-[11px] text-gray-500 font-medium">{showPedidosNegocios ? '▲ Recolher' : '▼ Expandir'}</span>
+                  </button>
+                  {!showPedidosNegocios ? null : pedidosCli.length === 0 ? (
                     <p className="text-sm text-gray-400 p-4 text-center">Nenhum pedido registrado ainda.</p>
                   ) : (
                     <div className="divide-y divide-gray-100">
@@ -2765,6 +2700,11 @@ export default function ClientePanel({
                             <div className="text-right flex-shrink-0 space-y-1">
                               <p className="text-sm font-bold text-gray-900">{p.tipo === 'bonificacao' ? '—' : `R$ ${(p.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p>
                               <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${statusBadge[p.status] || 'bg-gray-100 text-gray-700'}`}>{statusLabel[p.status] || p.status}</span>
+                              {(() => {
+                                const selo = omieSeloPedido(p)
+                                if (!selo) return null
+                                return <span className={`inline-block px-1.5 py-0.5 text-[10px] font-semibold rounded-full border ${selo.cls}`} title={`Status do pedido no Omie: ${selo.label}`}>Omie: {selo.label}</span>
+                              })()}
                               {p.omieCodigo && (
                                 <div>
                                   <button
@@ -2967,6 +2907,104 @@ export default function ClientePanel({
 
           {/* ===== ABA HISTÓRICO (default) ===== */}
           {activeTab === 'historico' && <>
+
+          {/* === LINHA DO TEMPO (marcos do cliente) === */}
+          {(() => {
+            type Marco = { key: string; data: string; rotulo: string; detalhe?: string; corDot: string; alvoHistId?: number; abreCadastro?: boolean }
+            const marcos: Marco[] = []
+            const criacaoBase = familiaEmpresa.map(f => f.criadoEm).filter(Boolean).sort()[0] as string | undefined
+            if (criacaoBase) marcos.push({ key: 'cadastro', data: criacaoBase, rotulo: 'Cadastro do cliente', corDot: 'bg-gray-400', abreCadastro: true })
+            const interAsc = [...clienteInteracoes].sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+            const primeiroContato = interAsc.find(i => !i.automatico && i.id > 0) || interAsc.find(i => i.id > 0)
+            if (primeiroContato) marcos.push({ key: 'primeiro-contato', data: primeiroContato.data, rotulo: 'Primeiro contato', detalhe: primeiroContato.assunto || undefined, corDot: 'bg-sky-500', alvoHistId: primeiroContato.id })
+            for (const am of amostrasDaEmpresa) {
+              marcos.push({ key: `amostra-${am.id}`, data: am.dataCriacao, rotulo: 'Envio de amostra', detalhe: am.numero, corDot: 'bg-amber-500', alvoHistId: -(am.id + AMOSTRA_ID_OFFSET) })
+            }
+            familiaEmpresa.forEach(cl => {
+              if (cl.dataResultadoAmostra && cl.resultadoAmostra) {
+                marcos.push({
+                  key: `resultado-amostra-${cl.id}`,
+                  data: cl.dataResultadoAmostra,
+                  rotulo: cl.resultadoAmostra === 'aprovada' ? 'Amostra aprovada' : 'Amostra reprovada',
+                  corDot: cl.resultadoAmostra === 'aprovada' ? 'bg-green-500' : 'bg-red-400',
+                })
+              }
+            })
+            for (const pr of todasPropostas) {
+              marcos.push({
+                key: `proposta-${pr.id}`,
+                data: pr.criadoEm,
+                rotulo: `Proposta ${pr.numero}`,
+                detalhe: `R$ ${(pr.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+                corDot: 'bg-indigo-500',
+                alvoHistId: -(pr.id + PROPOSTA_ID_OFFSET),
+              })
+            }
+            for (const pd of pedidosVendaDaEmpresa) {
+              const kg = (pd.itens || []).reduce((s, it) => s + (it.quantidade || 0), 0)
+              marcos.push({
+                key: `pedido-${pd.id}`,
+                data: pd.dataCriacao,
+                rotulo: `Pedido ${pd.numero}`,
+                detalhe: `R$ ${(pd.totalValor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · ${kg} kg`,
+                corDot: 'bg-emerald-500',
+                alvoHistId: -(pd.id + PEDIDO_ID_OFFSET),
+              })
+            }
+            familiaEmpresa.forEach(cl => {
+              if (cl.dataPerda) {
+                const histPerda = historicoEtapasGlobal.find(h => h.cliente_id === cl.id && h.etapa === 'perdido')
+                marcos.push({
+                  key: `perda-${cl.id}`,
+                  data: cl.dataPerda,
+                  rotulo: 'Venda perdida',
+                  detalhe: cl.motivoPerda || undefined,
+                  corDot: 'bg-red-500',
+                  alvoHistId: histPerda ? -(histPerda.id + ETAPA_ID_OFFSET) : undefined,
+                })
+              }
+            })
+            // Troca de vendedor / entrada e saída do Banco: derivado apenas de registros existentes
+            for (const inter of clienteInteracoesBase) {
+              const texto = `${inter.assunto || ''} ${inter.descricao || ''}`
+              if (inter.automatico && /troc(a|ou) de vendedor|respons[aá]vel alterado|vendedor alterado|banco de clientes|banco de prospectos/i.test(texto)) {
+                marcos.push({ key: `vendedor-${inter.id}`, data: inter.data, rotulo: 'Troca de vendedor / Banco', detalhe: inter.descricao || undefined, corDot: 'bg-purple-400', alvoHistId: inter.id })
+              }
+            }
+            marcos.sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime())
+            if (marcos.length === 0) return null
+            return (
+              <div className="bg-white rounded-apple border border-gray-200 shadow-sm p-4">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Linha do tempo</h3>
+                <div className="relative max-h-64 overflow-y-auto pr-1">
+                  <div className="absolute left-[5px] top-1 bottom-1 w-px bg-gray-200" />
+                  <div className="space-y-2.5">
+                    {marcos.map(m => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => {
+                          if (m.abreCadastro) { setShowCadastroCompleto(true); return }
+                          if (m.alvoHistId != null) scrollToHistItem(m.alvoHistId)
+                        }}
+                        className="relative w-full text-left flex items-start gap-2.5 pl-4 group"
+                        title="Ver no histórico"
+                      >
+                        <span className={`absolute left-0 top-[5px] w-[11px] h-[11px] rounded-full ${m.corDot} ring-2 ring-white`} />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline gap-2 flex-wrap">
+                            <span className="text-xs font-semibold text-gray-900 group-hover:text-primary-700 transition-colors">{m.rotulo}</span>
+                            <span className="text-[10px] text-gray-400 tabular-nums">{new Date(m.data).toLocaleDateString('pt-BR')}</span>
+                          </span>
+                          {m.detalhe && <span className="block text-[11px] text-gray-500 truncate">{m.detalhe}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* === REGISTRAR ATIVIDADE === */}
           {(() => {
@@ -3313,6 +3351,44 @@ export default function ClientePanel({
                   </button>
                 </div>
 
+                {/* Filtros do histórico unificado: tipo + ciclo */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {([
+                    ['todos', 'Todos'],
+                    ['tarefa', 'Tarefas'],
+                    ['etapa', 'Mudança de etapa'],
+                    ['pedido', 'Pedidos'],
+                    ['proposta', 'Propostas'],
+                    ['amostra', 'Amostras'],
+                    ['whatsapp', 'WhatsApp'],
+                    ['email', 'E-mail'],
+                  ] as const).map(([val, lab]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setHistFiltroTipo(val)}
+                      className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
+                        histFiltroTipo === val
+                          ? 'bg-gray-800 text-white border-gray-800'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                      }`}
+                    >
+                      {lab}
+                    </button>
+                  ))}
+                  <select
+                    value={histFiltroCiclo}
+                    onChange={e => setHistFiltroCiclo(e.target.value)}
+                    aria-label="Filtrar por ciclo"
+                    className="ml-auto px-2 py-1 text-[11px] font-medium border border-gray-200 rounded-lg bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-400"
+                  >
+                    <option value="todos">Todos os ciclos</option>
+                    {Array.from(new Set(clienteInteracoes.map(i => (i as any).cicloOrigem || cicloPorCardId.get(i.clienteId) || 1))).sort((a, b) => a - b).map(n => (
+                      <option key={n} value={String(n)}>Ciclo {n}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Lista de cards */}
                 {itens.length === 0 ? (
                   <div className="text-center py-8 text-sm text-gray-400">
@@ -3335,7 +3411,24 @@ export default function ClientePanel({
                         })
                         if (t) { interacaoTarefaMap.set(inter.id, t); usedTaskIds.add(t.id) }
                       }
-                      return itens.map(inter => {
+                      // Item 11: classificador de tipo para o filtro do histórico unificado
+                      const tipoDoItemHist = (inter: typeof itens[0]): string => {
+                        const ass = inter.assunto || ''
+                        if (ass === 'Mudança de etapa') return 'etapa'
+                        if (ass.startsWith('Pedido - ')) return 'pedido'
+                        if (ass.startsWith('Proposta - ')) return 'proposta'
+                        if (ass.startsWith('Amostra - ') || ass.startsWith('Bonificação - ')) return 'amostra'
+                        if ((inter.id < 0 && inter.id > -10_000_000) || interacaoTarefaMap.has(inter.id)) return 'tarefa'
+                        if (inter.tipo === 'whatsapp') return 'whatsapp'
+                        if (inter.tipo === 'email') return 'email'
+                        return 'outros'
+                      }
+                      const itensFiltrados = itens.filter(inter => {
+                        if (histFiltroCiclo !== 'todos' && String((inter as any).cicloOrigem || cicloPorCardId.get(inter.clienteId) || 1) !== histFiltroCiclo) return false
+                        if (histFiltroTipo === 'todos') return true
+                        return tipoDoItemHist(inter) === histFiltroTipo
+                      })
+                      return itensFiltrados.map(inter => {
                       const tipo = inter.tipo || 'nota'
                       const isPinned = pinnedInteracoes.includes(inter.id)
                       const isTaskItem = inter.id < 0 && inter.id > -10_000_000
@@ -3352,6 +3445,8 @@ export default function ClientePanel({
                       const labelReal = (() => {
                         if (isTaskItem) return 'Tarefa'
                         if (inter.assunto === 'Mudança de etapa') return 'Mudança de etapa'
+                        if (inter.assunto?.startsWith('Pedido - ')) return 'Pedido'
+                        if (inter.assunto?.startsWith('Proposta - ')) return 'Proposta'
                         if (inter.assunto?.startsWith('Amostra - ')) return 'Amostra'
                         if (inter.assunto?.startsWith('Bonificação - ')) return 'Bonificação'
                         if (inter.assunto?.startsWith('Atividade (')) return 'Atividade'
@@ -3385,7 +3480,7 @@ export default function ClientePanel({
                         return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '')}${horaTxt}`
                       })()
                       return (
-                        <div key={inter.id} className={`group rounded-2xl border overflow-hidden bg-white dark:bg-[#1C1C1E] shadow-apple-sm ${isPinned ? 'border-amber-300 ring-1 ring-amber-200/60' : 'border-gray-200'} hover:border-gray-300 transition-colors`}>
+                        <div key={inter.id} id={`hist-item-${inter.id}`} className={`group rounded-2xl border overflow-hidden bg-white dark:bg-[#1C1C1E] shadow-apple-sm ${isPinned ? 'border-amber-300 ring-1 ring-amber-200/60' : 'border-gray-200'} hover:border-gray-300 transition-colors`}>
 
                           {/* CABEÇALHO LIMPO APPLE: indicador + tipo + ciclo + prazo */}
                           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
@@ -3425,8 +3520,11 @@ export default function ClientePanel({
                           </div>
 
                           {/* Descrição + Anexos embutidos */}
-                          {(inter.descricao || tarefaVinculada?.conclusao || tarefaVinculada?.justificativaPrazoLongo || tarefaVinculada?.objetivo || tarefaVinculada?.canalUsado) && (
+                          {(inter.descricao || tarefaVinculada?.conclusao || tarefaVinculada?.justificativaPrazoLongo || tarefaVinculada?.objetivo || tarefaVinculada?.canalUsado || (isTaskItem && tarefaVinculada?.titulo)) && (
                             <div className="px-4 py-3 space-y-2">
+                              {isTaskItem && tarefaVinculada?.titulo && (
+                                <p className="text-[13px] font-semibold text-gray-900">{tarefaVinculada.titulo}</p>
+                              )}
                               {tarefaVinculada && (tarefaVinculada.objetivo || tarefaVinculada.canalUsado || tarefaVinculada.origem) && (
                                 <div className="flex flex-wrap gap-1.5 text-[11px] font-medium text-gray-600">
                                   {tarefaVinculada.objetivo && (

@@ -770,6 +770,7 @@ const TarefasView: React.FC<{
   const [dateRange, setDateRange] = useState<{start: string, end: string} | null>(null)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
+  const [showMoreActions, setShowMoreActions] = useState(false)
 
   // Quando uma tarefa é destacada via notificação, mostrar todas as datas para garantir visibilidade
   useEffect(() => {
@@ -1505,39 +1506,46 @@ const TarefasView: React.FC<{
                 <option value="follow-up">Follow-ups</option>
               </select>
 
-              <button
-                onClick={() => setShowWhatsApp(prev => !prev)}
-                className={`p-2 rounded-xl transition-all ${showWhatsApp ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600'}`}
-                title="Meu WhatsApp"
-              >
-                <WhatsAppIcon variant={showWhatsApp ? 'outline' : 'filled'} className="h-5 w-5" />
-              </button>
-
-              <button
-                onClick={() => { setShowWorkspace(true); setWsCliente(null) }}
-                className="p-2 bg-primary-700 hover:bg-primary-800 text-white rounded-xl shadow-sm transition-all"
-                title="Workspace"
-              >
-                <RocketLaunchIcon className="h-5 w-5" />
-              </button>
-
-              {isGerente && (
-                <button
-                  onClick={handleExportTarefas}
-                  className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700 rounded-xl transition-all text-xs font-medium"
-                  title="Exportar CSV"
-                >
-                  <ArrowDownTrayIcon className="h-4 w-4" />
-                  Exportar
-                </button>
-              )}
-
-              {onImportTarefas && (
-                <label className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl cursor-pointer transition-all text-xs font-medium" title="Importar Agendor">
-                  <input type="file" accept=".csv,.txt,.xls,.xlsx" className="hidden" onChange={handleImportTarefas} />
-                  <ArrowUpTrayIcon className="h-4 w-4" />
-                  Agendor
-                </label>
+              {(isGerente || onImportTarefas) && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreActions(v => !v)}
+                    className="p-2 bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800 rounded-xl transition-all"
+                    title="Mais opções"
+                    aria-label="Mais opções"
+                  >
+                    <EllipsisHorizontalIcon className="h-5 w-5" />
+                  </button>
+                  {showMoreActions && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setShowMoreActions(false)} />
+                      <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-gray-200 z-40 py-1 overflow-hidden">
+                        {isGerente && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowMoreActions(false); handleExportTarefas() }}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                          >
+                            <ArrowDownTrayIcon className="h-4 w-4 text-gray-400" />
+                            Exportar
+                          </button>
+                        )}
+                        {onImportTarefas && (
+                          <label
+                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left cursor-pointer"
+                            onClick={() => setShowMoreActions(false)}
+                            title="Importar tarefas"
+                          >
+                            <input type="file" accept=".csv,.txt,.xls,.xlsx" className="hidden" onChange={handleImportTarefas} />
+                            <ArrowUpTrayIcon className="h-4 w-4 text-gray-400" />
+                            Upload
+                          </label>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
 
             </div>
@@ -2313,6 +2321,16 @@ const TarefasView: React.FC<{
           </div>
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={() => { setShowWorkspace(true); setWsCliente(null) }}
+        className="fixed bottom-24 right-3.5 z-30 w-9 h-9 rounded-full bg-white/90 dark:bg-[#242428]/90 backdrop-blur-xl border border-black/[0.10] dark:border-white/[0.14] text-gray-700 dark:text-gray-200 hover:text-primary-700 dark:hover:text-white shadow-apple flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95"
+        title="Workspace"
+        aria-label="Workspace"
+      >
+        <RocketLaunchIcon className="h-4 w-4" />
+      </button>
 
       {showWorkspace && (
         <Workspace

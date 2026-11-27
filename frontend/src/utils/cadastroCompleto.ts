@@ -121,7 +121,14 @@ export function avaliarCadastroCliente(
   if (faltantes.length === 0) {
     return { situacao: justificados.length > 0 ? 'completo_com_justificativa' : 'completo', faltantes, justificados, totalObrigatorios: camposObrigatorios.length }
   }
-  const baseCriacao = cliente.criadoEm || cliente.dataEntradaEtapa
+  // Item 9: o selo é do CADASTRO do cliente, não do card/ciclo — a data base é a
+  // criação mais antiga da família de cards, garantindo selo idêntico em todos eles.
+  const familia = familiaCadastro(cliente, clientes)
+  const basesTime = familia
+    .map(f => new Date(f.criadoEm || f.dataEntradaEtapa || '').getTime())
+    .filter(t => Number.isFinite(t))
+  const baseMaisAntiga = basesTime.length > 0 ? new Date(Math.min(...basesTime)).toISOString() : undefined
+  const baseCriacao = baseMaisAntiga || cliente.criadoEm || cliente.dataEntradaEtapa
   let vencido = false
   if (baseCriacao) {
     const d = new Date(baseCriacao)

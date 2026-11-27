@@ -45,10 +45,22 @@ import {
   salvarSnapshotEvolucaoSemanal,
 } from '../../lib/database'
 import { useParametrosListas } from '../../lib/parametrosListas'
+import {
+  calcularRitmo,
+  fetchFeriados,
+  fetchMetasMes,
+  intervaloSemanaSegDom,
+  metaSemanaProrrateada,
+  pedidosVendidosPeriodo,
+  volumeKgPedidos,
+  type Feriado,
+  type MetaVendedorMes,
+} from '../../lib/metas'
 import { CADASTRO_CAMPO_LABEL, SITUACAO_CADASTRO_CONFIG, SituacaoCadastro } from '../../utils/cadastroCompleto'
 import { stageLabels } from '../../utils/constants'
 import { diasEtapaAtual } from '../../utils/etapas'
 import { criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
+import { calcularClientesSemNegociacao30d, calcularNegociacoesVendedor } from '../../utils/indicadores-negociacao'
 import {
   BlocoBancoResumo,
   CADENCIA_CONFIG,
@@ -70,10 +82,10 @@ import {
   ObjetivoRelatorio,
   StatusCadencia,
 } from '../../utils/relatoriosFase2'
-import { SITUACAO_COMPRA_CONFIG, SituacaoCompra } from '../../utils/situacaoCompra'
+import { SITUACAO_COMPRA_CONFIG, SituacaoCompra, situacaoContaNaCarteiraAte180 } from '../../utils/situacaoCompra'
 import { inferirOrigemTarefa } from '../../utils/tarefaFluxo'
 
-type AbaRelatorio = 'visao_geral' | 'tarefas_cadencia' | 'cadastros' | 'funil_vendas' | 'bancos' | 'missoes'
+type AbaRelatorio = 'visao_geral' | 'tarefas_cadencia' | 'cadastros' | 'funil_vendas' | 'bancos' | 'missoes' | 'metas'
 
 interface DrilldownRow {
   key: string
@@ -168,6 +180,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
   clientes: clientesProp,
   vendedores,
   interacoes = [],
+  produtos = [],
   pedidos = [],
   tarefas = [],
   loggedUser = null,
@@ -209,6 +222,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
   const [movendoLote, setMovendoLote] = useState(false)
 
   const [propostasLoaded, setPropostasLoaded] = useState<PropostaHistorico[]>([])
+  // Item 4 — metas parametrizáveis do mês corrente + feriados (aba Metas, só gestor)
+  const [metasMesRel, setMetasMesRel] = useState<MetaVendedorMes[]>([])
+  const [feriadosRel, setFeriadosRel] = useState<Feriado[]>([])
   const [missoes, setMissoes] = useState<Missao[]>([])
   const [ttRelatorio, setTtRelatorio] = useState<TempoTelaRelatorioItem[]>([])
   const [evolucaoSemanal, setEvolucaoSemanal] = useState<EvolucaoSemanalSnapshot[]>([])
@@ -236,6 +252,9 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
       .then(r => r.json())
       .then(r => setMissoes(r.data || []))
       .catch(() => {})
+    const agora = new Date()
+    fetchMetasMes(agora.getFullYear(), agora.getMonth() + 1).then(setMetasMesRel).catch(() => {})
+    fetchFeriados().then(setFeriadosRel).catch(() => {})
   }, [])
 
   const { inicioISO, fimISO } = useMemo(() => intervaloDatasFiltro(filtros), [filtros.periodo, filtros.dataInicio, filtros.dataFim])
@@ -920,6 +939,38 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
       .sort((a, b) => b.dias - a.dias)
   }, [cardsVisiveisSemBancos, empresaPorCardId, vendedores])
 
+  // ─── Itens 17 e 18 — Negociações por vendedor e clientes sem negociação há +30 dias.
+  // MESMAS funções puras do Dashboard (utils/indicadores-negociacao.ts): mesma base
+  // (todos os cards não arquivados com vendedor + todos os pedidos), mesmo escopo de
+  // vendedores (ativos não-gestores) — os números não podem divergir entre as telas.
+  const vendedoresEscopoNegRel = useMemo(
+    () => vendedores.filter(v => v.ativo !== false && v.cargo !== 'gerente' && (isGerente || v.id === loggedUser?.id)),
+    [vendedores, isGerente, loggedUser?.id]
+  )
+  const negociacaoPorVendedorRel = useMemo(() => {
+    return vendedoresEscopoNegRel.map(v => ({
+      vendedor: v,
+      resumo: calcularNegociacoesVendedor(clientesProp, pedidos, { inicio: inicioISO, fim: fimISO }, v.id),
+    }))
+  }, [vendedoresEscopoNegRel, clientesProp, pedidos, inicioISO, fimISO])
+  const semNegociacao30Rel = useMemo(() => {
+    const hojeISO = new Date().toISOString().slice(0, 10)
+    const mapa = new Map<number, ReturnType<typeof calcularClientesSemNegociacao30d>>()
+    for (const v of vendedoresEscopoNegRel) {
+      const emps = todasEmpresasBrutas
+        .filter(e => e.vendedorId === v.id)
+        .map(e => ({
+          chave: e.chave,
+          vendedorId: e.vendedorId,
+          naCarteira: situacaoContaNaCarteiraAte180(e.situacaoCompra),
+          cardPrincipalId: e.cardPrincipal.id,
+          cards: e.cards,
+        }))
+      mapa.set(v.id, calcularClientesSemNegociacao30d(emps, hojeISO))
+    }
+    return mapa
+  }, [vendedoresEscopoNegRel, todasEmpresasBrutas])
+
   // Gráficos compactos da Visão Geral (3 por linha, ≤ 250px)
   const dadosGraficoSituacaoPorVendedor = useMemo(() => {
     return linhasVendedores.filter(l => l.somaNosTotais).map(l => ({
@@ -994,6 +1045,7 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
         { id: 'cadastros', label: 'Cadastros' },
         { id: 'funil_vendas', label: 'Funil e vendas' },
         { id: 'bancos', label: `Bancos (${linhaBancoClientes.totalEmpresas + linhaBancoProspectos.totalEmpresas})` },
+        { id: 'metas', label: 'Metas' },
         { id: 'missoes', label: 'Missões' },
       ]
     : [
@@ -2229,6 +2281,113 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
             ))}
           </div>
 
+          {/* Itens 17 e 18 — Negociações por vendedor e clientes sem negociação há +30 dias.
+              Mesmas funções puras do Dashboard (zero divergência). Cada número abre a lista,
+              e cada item da lista abre o card do cliente. */}
+          <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+            <div>
+              <h4 className="text-xs font-bold text-gray-800">Negociações por vendedor</h4>
+              <p className="text-[11px] text-gray-400">Abertas e sem negociação são a situação de hoje; ganhas e perdidas respeitam o filtro de período.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 text-gray-500">
+                    <th className="text-left py-1.5 px-2">Vendedor</th>
+                    <th className="text-center py-1.5 px-2">Abertas · hoje</th>
+                    <th className="text-center py-1.5 px-2">Ganhas · período</th>
+                    <th className="text-center py-1.5 px-2">Perdidas · período</th>
+                    <th className="text-left py-1.5 px-2">Motivos de perda · período</th>
+                    <th className="text-center py-1.5 px-2">Sem negociação +30d · hoje</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {negociacaoPorVendedorRel.map(({ vendedor: v, resumo: r }) => {
+                    const semNeg = semNegociacao30Rel.get(v.id) || []
+                    const tdNum = (qtd: number, onClick: () => void, cor: string) => (
+                      <button
+                        type="button"
+                        onClick={onClick}
+                        className={`font-bold text-sm ${cor} ${qtd > 0 ? 'hover:underline cursor-pointer' : 'cursor-default'}`}
+                      >
+                        {qtd}
+                      </button>
+                    )
+                    return (
+                      <tr key={v.id} className="hover:bg-gray-50/60">
+                        <td className="py-2 px-2 font-semibold text-gray-900 whitespace-nowrap">{v.nome}</td>
+                        <td className="py-2 px-2 text-center">
+                          {tdNum(r.abertas.length, () => r.abertas.length > 0 && abrirListaCustom(
+                            `Negociações abertas · ${v.nome}`,
+                            r.abertas.map(c => ({ key: `ab-${c.id}`, empresa: empresaPorCardId.get(c.id), clienteCard: c, extraInfo: 'Em negociação agora' })),
+                            'cards'
+                          ), 'text-purple-700')}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {tdNum(r.ganhas.length, () => r.ganhas.length > 0 && abrirListaCustom(
+                            `Negociações ganhas no período · ${v.nome}`,
+                            r.ganhas.map(p => ({ key: `ga-${p.id}`, empresa: empresaPorCardId.get(p.clienteId), focus: { section: 'pedidos', pedidoId: p.id }, extraInfo: `${p.numero} · ${fmtMoeda(p.totalValor)}` })),
+                            'pedidos'
+                          ), 'text-emerald-700')}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {tdNum(r.perdidas.length, () => r.perdidas.length > 0 && abrirListaCustom(
+                            `Negociações perdidas no período · ${v.nome}`,
+                            r.perdidas.map(c => ({ key: `pe-${c.id}`, empresa: empresaPorCardId.get(c.id), clienteCard: c, extraInfo: c.motivoPerda || c.categoriaPerda || 'Motivo não informado' })),
+                            'cards'
+                          ), 'text-red-700')}
+                        </td>
+                        <td className="py-2 px-2">
+                          {r.motivosPerda.length === 0 ? (
+                            <span className="text-gray-300">—</span>
+                          ) : (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {r.motivosPerda.map(m => (
+                                <button
+                                  key={m.key}
+                                  type="button"
+                                  onClick={() => abrirListaCustom(
+                                    `Perdas por ${m.label} no período · ${v.nome}`,
+                                    m.cards.map(c => ({ key: `mp-${m.key}-${c.id}`, empresa: empresaPorCardId.get(c.id), clienteCard: c, extraInfo: c.motivoPerda || m.label })),
+                                    'cards'
+                                  )}
+                                  className="px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-[11px] font-medium text-red-800 hover:bg-red-100 cursor-pointer"
+                                >
+                                  {m.label}: <strong>{m.cards.length}</strong>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          {tdNum(semNeg.length, () => semNeg.length > 0 && abrirListaCustom(
+                            `Clientes da carteira sem negociação há +30 dias · ${v.nome}`,
+                            semNeg.map(x => {
+                              const emp = todasEmpresasBrutas.find(e => e.chave === x.chave)
+                              return {
+                                key: `sn-${x.chave}`,
+                                empresa: emp,
+                                clienteCard: emp?.cardPrincipal,
+                                extraInfo: x.ultimaNegociacao
+                                  ? `última negociação em ${fmtDataCurta(x.ultimaNegociacao)} (${x.diasSemNegociacao}d)`
+                                  : 'nunca esteve em negociação',
+                                diasOrdenacao: x.diasSemNegociacao == null ? 999999 : x.diasSemNegociacao,
+                              }
+                            }),
+                            'clientes'
+                          ), 'text-orange-700')}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {negociacaoPorVendedorRel.length === 0 && (
+                    <tr><td colSpan={6} className="py-4 text-center text-gray-400">Nenhum vendedor no escopo.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Cartões de situação e ritmo (situação de hoje + recorte do período) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
             {[
@@ -2637,6 +2796,117 @@ const RelatoriosView: React.FC<RelatoriosViewProps> = ({
                 </div>
               </div>
             )}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ==================== ABA METAS (Item 4 — acompanhamento por vendedor, só gestor) ==================== */}
+      {aba === 'metas' && isGerente && (() => {
+        const agora = new Date()
+        const hojeISO = agora.toISOString().slice(0, 10)
+        const ano = agora.getFullYear()
+        const mes = agora.getMonth() + 1
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const primeiroDia = `${ano}-${pad(mes)}-01`
+        const ultimoDia = `${ano}-${pad(mes)}-${pad(new Date(ano, mes, 0).getDate())}`
+        const semana = intervaloSemanaSegDom(hojeISO)
+        const prodPorId = new Map(produtos.map(p => [p.id, p]))
+        const vends = vendedores.filter(v => v.ativo && v.cargo !== 'gerente').sort((a, b) => a.nome.localeCompare(b.nome))
+        const pctOf = (v: number, m: number) => m > 0 ? Math.min(100, Math.round((v / m) * 100)) : 0
+        const nomeMes = agora.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+
+        const linhasMetas = vends.map(v => {
+          const empsV = todasEmpresasBrutas.filter(e => e.vendedorId === v.id)
+          const cardIds = new Set(empsV.flatMap(e => e.cards.map(c => c.id)))
+          const vp = pedidos.filter(p => p.vendedorId === v.id || cardIds.has(p.clienteId))
+          const pedMes = pedidosVendidosPeriodo(vp, primeiroDia, ultimoDia)
+          const vendMes = Math.round(pedMes.reduce((s, p) => s + (Number(p.totalValor) || 0), 0) * 100) / 100
+          const pedSem = pedidosVendidosPeriodo(vp, semana.segunda, semana.domingo)
+          const vendSem = Math.round(pedSem.reduce((s, p) => s + (Number(p.totalValor) || 0), 0) * 100) / 100
+          const kgMes = volumeKgPedidos(pedMes, prodPorId)
+          const meta = metasMesRel.find(x => x.vendedorId === v.id) || null
+          const metaFat = meta?.metaFaturamento || 0
+          const metaKg = meta?.metaVolumeKg || 0
+          const metaSem = metaFat > 0 ? metaSemanaProrrateada(metaFat, hojeISO, feriadosRel) : 0
+          const ritmo = calcularRitmo(metaFat, vendMes, hojeISO, feriadosRel)
+          return { v, meta, metaFat, metaKg, vendMes, vendSem, kgMes, metaSem, ritmo }
+        })
+
+        const algumaMeta = linhasMetas.some(l => l.meta)
+
+        return (
+          <div className="space-y-3">
+            <div className="bg-white dark:bg-[#1C1C1E] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-apple-sm p-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Metas por vendedor <span className="text-[11px] font-normal text-gray-400">· {nomeMes}</span></h3>
+                <p className="text-xs text-gray-500">
+                  Vendido = pedidos confirmados no mês/semana correntes. Meta da semana = meta do mês × dias úteis da semana ÷ dias úteis do mês (seg-sex exceto feriados).
+                  Cadastro e edição em Parâmetros &gt; Metas.
+                </p>
+              </div>
+              {!algumaMeta ? (
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center">
+                  <p className="text-sm font-medium text-gray-600">Nenhuma meta cadastrada para este mês.</p>
+                  <p className="text-xs text-gray-400 mt-1">Cadastre as metas da equipe em Parâmetros &gt; Metas. O sistema não assume nenhum valor por conta própria.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                  <table className="min-w-full text-xs tabular-nums">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+                        <th className="px-3 py-2 text-left font-semibold" rowSpan={2}>Vendedor</th>
+                        <th className="px-3 py-2 text-center font-semibold border-l border-gray-100" colSpan={4}>Mês — faturamento</th>
+                        <th className="px-3 py-2 text-center font-semibold border-l border-gray-100" colSpan={4}>Semana — faturamento</th>
+                        <th className="px-3 py-2 text-center font-semibold border-l border-gray-100" colSpan={2}>Volume (kg) no mês</th>
+                        <th className="px-3 py-2 text-center font-semibold border-l border-gray-100" rowSpan={2}>Ritmo necessário</th>
+                      </tr>
+                      <tr className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]">
+                        <th className="px-3 py-1.5 text-right border-l border-gray-100">Meta</th>
+                        <th className="px-3 py-1.5 text-right">Vendido</th>
+                        <th className="px-3 py-1.5 text-right">%</th>
+                        <th className="px-3 py-1.5 text-right">Falta</th>
+                        <th className="px-3 py-1.5 text-right border-l border-gray-100">Meta</th>
+                        <th className="px-3 py-1.5 text-right">Vendido</th>
+                        <th className="px-3 py-1.5 text-right">%</th>
+                        <th className="px-3 py-1.5 text-right">Falta</th>
+                        <th className="px-3 py-1.5 text-right border-l border-gray-100">Vendido</th>
+                        <th className="px-3 py-1.5 text-right">Meta</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {linhasMetas.map(l => (
+                        <tr key={l.v.id} className="bg-white hover:bg-gray-50/60">
+                          <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{l.v.nome}</td>
+                          {!l.meta ? (
+                            <td className="px-3 py-2 text-gray-400 border-l border-gray-100" colSpan={11}>
+                              Sem meta cadastrada — cadastre em Parâmetros &gt; Metas
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-3 py-2 text-right border-l border-gray-100">{fmtMoeda(l.metaFat)}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmtMoeda(l.vendMes)}</td>
+                              <td className="px-3 py-2 text-right">{pctOf(l.vendMes, l.metaFat)}%</td>
+                              <td className="px-3 py-2 text-right">{l.metaFat - l.vendMes > 0 ? fmtMoeda(l.metaFat - l.vendMes) : 'atingida'}</td>
+                              <td className="px-3 py-2 text-right border-l border-gray-100">{fmtMoeda(l.metaSem)}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-gray-900">{fmtMoeda(l.vendSem)}</td>
+                              <td className="px-3 py-2 text-right">{pctOf(l.vendSem, l.metaSem)}%</td>
+                              <td className="px-3 py-2 text-right">{l.metaSem - l.vendSem > 0 ? fmtMoeda(Math.round((l.metaSem - l.vendSem) * 100) / 100) : 'atingida'}</td>
+                              <td className="px-3 py-2 text-right border-l border-gray-100">{l.kgMes.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                              <td className="px-3 py-2 text-right">{l.metaKg > 0 ? l.metaKg.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '—'}</td>
+                              <td className="px-3 py-2 text-right border-l border-gray-100 whitespace-nowrap">
+                                {l.ritmo.noRitmo
+                                  ? <span className="font-semibold text-emerald-700">no ritmo</span>
+                                  : <span>{fmtMoeda(l.ritmo.ritmoNecessario)}/dia útil · {fmtMoeda(l.ritmo.paraEstaSemana)} na semana</span>}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )

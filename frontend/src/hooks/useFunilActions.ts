@@ -267,8 +267,10 @@ export function useFunilActions({
     // Update local state immediately (optimistic)
     setClientes(prev => prev.map(c => {
       if (c.id !== clienteId) return c
+      // Item 10: não registrar mudança de etapa quando a etapa não muda
       const hist: HistoricoEtapa = { etapa: toStage, data: now, de: c.etapa }
-      return { ...c, etapa: toStage, etapaAnterior: c.etapa, dataEntradaEtapa: now, historicoEtapas: [...(c.historicoEtapas || []), hist], ...extras }
+      const historicoNovo = c.etapa === toStage ? (c.historicoEtapas || []) : [...(c.historicoEtapas || []), hist]
+      return { ...c, etapa: toStage, etapaAnterior: c.etapa, dataEntradaEtapa: now, historicoEtapas: historicoNovo, ...extras }
     }))
 
     // Persist to Supabase atomicamente (se falhar, faz rollback para evitar inconsistência de funil)
@@ -288,11 +290,14 @@ export function useFunilActions({
     }
 
     // Atividade é importante, mas não deve invalidar a transição já persistida
+    // Item 10: não registrar movimento quando a etapa não muda de fato
+    if (fromStage !== toStage) {
     try {
       const savedAtiv = await db.insertAtividade({ tipo: 'moveu', descricao: `${cliente.razaoSocial} movido para ${stageLabels[toStage] || toStage}`, vendedorNome: loggedUser?.nome || 'Sistema', timestamp: now })
       setAtividades(prev => [savedAtiv, ...prev])
     } catch (err) {
       logger.error('Erro ao registrar atividade de movimento:', err)
+    }
     }
 
     // Item 3: Tarefas automáticas ao mover etapa (usando regras do banco)

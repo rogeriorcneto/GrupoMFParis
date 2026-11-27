@@ -62,6 +62,9 @@ vi.mock('../utils/logger', () => ({
 
 // Mock botApi
 vi.mock('../lib/botApi', () => ({
+  syncWavoipWebphone: vi.fn().mockResolvedValue(null),
+  getUserWavoipToken: vi.fn().mockResolvedValue(null),
+  getUserEmailStatus: vi.fn().mockResolvedValue({ data: {} }),
   sendEmailViaBot: vi.fn().mockResolvedValue({ success: true }),
   sendWhatsApp: vi.fn().mockResolvedValue({ success: true }),
   disconnectUserWhatsApp: vi.fn().mockResolvedValue({ success: true }),
