@@ -29,7 +29,7 @@ export interface OpcaoParametro {
 export interface LogParametro {
   data: string
   usuario: string
-  lista: ListaParametroKey
+  lista: ListaParametroKey | 'comissao'
   acao: 'adicionar' | 'renomear' | 'reordenar' | 'ativar' | 'desativar'
   detalhe: string
 }

@@ -844,7 +844,7 @@ export default function AppRouter({
     case 'tabela-precos':
       return <TabelaPrecosView loggedUser={loggedUser} showToast={showToast} />
     case 'parametros':
-      return loggedUser ? <ParametrosView loggedUser={loggedUser} showToast={showToast} /> : null
+      return loggedUser ? <ParametrosView loggedUser={loggedUser} showToast={showToast} produtos={produtos} /> : null
     case 'templates':
       return <TemplatesView templates={templates}
         onAdd={async (t) => {

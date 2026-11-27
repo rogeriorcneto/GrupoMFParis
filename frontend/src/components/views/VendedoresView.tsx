@@ -68,6 +68,7 @@ const VendedoresView: React.FC<{
   const [newEmail, setNewEmail] = React.useState('')
   const [newTelefone, setNewTelefone] = React.useState('')
   const [newCargo, setNewCargo] = React.useState<Vendedor['cargo']>('vendedor')
+  const [newTipoComissao, setNewTipoComissao] = React.useState<'clt' | 'rca' | ''>('')
   const [newMetaVendas, setNewMetaVendas] = React.useState('150000')
   const [newMetaLeads, setNewMetaLeads] = React.useState('10')
   const [newMetaConversao, setNewMetaConversao] = React.useState('15')
@@ -76,6 +77,7 @@ const VendedoresView: React.FC<{
   const [isAdding, setIsAdding] = React.useState(false)
 
   const [editingMetas, setEditingMetas] = React.useState(false)
+  const [editTipoComissao, setEditTipoComissao] = React.useState<'clt' | 'rca' | ''>('')
   const [editMetaVendas, setEditMetaVendas] = React.useState('')
   const [editMetaLeads, setEditMetaLeads] = React.useState('')
   const [editMetaConversao, setEditMetaConversao] = React.useState('')
@@ -137,6 +139,7 @@ const VendedoresView: React.FC<{
 
   const handleAddVendedor = async () => {
     if (!newNome.trim() || !newEmail.trim() || !newSenha.trim()) return
+    if (!newTipoComissao) { setAddError('Selecione o Tipo do vendedor: CLT ou RCA') ; return }
     if (newSenha.trim().length < 6) { setAddError('Senha deve ter pelo menos 6 caracteres'); return }
     setAddError('')
     setIsAdding(true)
@@ -144,7 +147,7 @@ const VendedoresView: React.FC<{
       const initials = newNome.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
       await onAddVendedor(newEmail.trim(), newSenha.trim(), {
         nome: newNome.trim(), email: newEmail.trim(), telefone: newTelefone.trim(),
-        cargo: newCargo, avatar: initials,
+        cargo: newCargo, avatar: initials, tipoComissao: newTipoComissao || null,
         metaVendas: Number(newMetaVendas) || 150000, metaLeads: Number(newMetaLeads) || 10,
         metaConversao: Number(newMetaConversao) || 15, ativo: true
       })
@@ -162,7 +165,8 @@ const VendedoresView: React.FC<{
       ...selectedVendedor,
       metaVendas: Number(editMetaVendas) || selectedVendedor.metaVendas,
       metaLeads: Number(editMetaLeads) || selectedVendedor.metaLeads,
-      metaConversao: Number(editMetaConversao) || selectedVendedor.metaConversao
+      metaConversao: Number(editMetaConversao) || selectedVendedor.metaConversao,
+      tipoComissao: (editTipoComissao || selectedVendedor.tipoComissao || null) as 'clt' | 'rca' | null
     })
     setEditingMetas(false)
   }
@@ -311,7 +315,7 @@ const VendedoresView: React.FC<{
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Metas Individuais</h3>
             {!editingMetas ? (
-              <button onClick={() => { setEditingMetas(true); setEditMetaVendas(String(selectedVendedor.metaVendas)); setEditMetaLeads(String(selectedVendedor.metaLeads)); setEditMetaConversao(String(selectedVendedor.metaConversao)) }} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"><span className="inline-flex items-center gap-1.5"><PencilIcon className="h-3.5 w-3.5" /> Editar Metas</span></button>
+              <button onClick={() => { setEditingMetas(true); setEditMetaVendas(String(selectedVendedor.metaVendas)); setEditMetaLeads(String(selectedVendedor.metaLeads)); setEditMetaConversao(String(selectedVendedor.metaConversao)); setEditTipoComissao((selectedVendedor.tipoComissao as any) || '') }} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"><span className="inline-flex items-center gap-1.5"><PencilIcon className="h-3.5 w-3.5" /> Editar Metas</span></button>
             ) : (
               <div className="flex gap-2">
                 <button onClick={() => setEditingMetas(false)} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50">Cancelar</button>
@@ -324,6 +328,7 @@ const VendedoresView: React.FC<{
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Meta Vendas (R$)</label><input type="number" value={editMetaVendas} onChange={(e) => setEditMetaVendas(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Meta Leads</label><input type="number" value={editMetaLeads} onChange={(e) => setEditMetaLeads(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Meta Conversão (%)</label><input type="number" value={editMetaConversao} onChange={(e) => setEditMetaConversao(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Tipo (comissão)</label><select value={editTipoComissao} onChange={(e) => setEditTipoComissao(e.target.value as 'clt' | 'rca')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">Selecione...</option><option value="clt">CLT</option><option value="rca">RCA</option></select></div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -485,6 +490,7 @@ const VendedoresView: React.FC<{
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label><input type="tel" value={newTelefone} onChange={(e) => setNewTelefone(formatTelefone(e.target.value))} placeholder="(00) 99999-0000" maxLength={16} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Cargo</label><select value={newCargo} onChange={(e) => setNewCargo(e.target.value as Vendedor['cargo'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="vendedor">Vendedor</option><option value="sdr">SDR</option><option value="gerente">Gerente</option></select></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Tipo (comissão) <span className="text-red-500">*</span></label><select value={newTipoComissao} onChange={(e) => setNewTipoComissao(e.target.value as 'clt' | 'rca')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">Selecione...</option><option value="clt">CLT</option><option value="rca">RCA</option></select></div>
               <div className="border-t border-gray-200 pt-4">
                 <p className="text-sm font-semibold text-gray-700 mb-3">Credenciais de Acesso</p>
                 <p className="text-xs text-gray-500 mb-3">O email acima será o login. Defina a senha abaixo (mínimo 6 caracteres).</p>

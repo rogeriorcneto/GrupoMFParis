@@ -434,6 +434,8 @@ export interface Vendedor {
   metaLeads: number
   metaConversao: number
   ativo: boolean
+  /** Item 3: tipo de comissão do vendedor — clt ou rca (define a coluna de percentual aplicada) */
+  tipoComissao?: 'clt' | 'rca' | null
 }
 
 export interface ItemPedido {

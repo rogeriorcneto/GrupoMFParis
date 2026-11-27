@@ -21,6 +21,7 @@ import {
   AcademicCapIcon,
   ComputerDesktopIcon,
 } from '@heroicons/react/24/outline'
+import { calcularComissao, fetchComissaoProdutos, fetchComissaoLog, produtosIncompletos, type ComissaoProduto, type ComissaoLogEntry } from '../../lib/comissao'
 import { stageLabels } from '../../utils/constants'
 import { calcularIndicadoresComerciais, calcularIndicadoresOperacionais, criarIndiceEmpresas, criarMapaUltimaProposta, valorPropostaAtivaCard } from '../../utils/indicadores-comerciais'
 import { fetchAllPropostas } from '../../lib/database'
@@ -120,6 +121,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, colo
         </p>
         {subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
+      {meta > 0 && (
       <div className="mt-3">
         <div className="flex justify-between text-xs text-gray-500 mb-1">
           <span>Meta: {meta.toLocaleString('pt-BR')}</span>
@@ -129,6 +131,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ label, value, meta, total, colo
           <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
         </div>
       </div>
+      )}
     </div>
   )
 }
@@ -160,6 +163,7 @@ export default function DashboardVendedorView({
   atividades,
   tarefas,
   pedidos,
+  produtos,
   loggedUser,
   onNavigate,
   onOpenCliente,
@@ -468,10 +472,24 @@ export default function DashboardVendedorView({
     prospeccao: meusClientes.filter(c => !c.novoCiclo && isHoje(c.criadoEm)).length,
   }), [interacoesUsuario, meusClientes])
 
+  const [comissaoRows, setComissaoRows] = useState<ComissaoProduto[]>([])
+  const [comissaoLog, setComissaoLog] = useState<ComissaoLogEntry[]>([])
+  useEffect(() => {
+    fetchComissaoProdutos().then(setComissaoRows).catch(() => {})
+    fetchComissaoLog().then(setComissaoLog).catch(() => {})
+  }, [])
+
   const pctMeta = metaVendas > 0 ? Math.min(100, Math.round((fatMes / metaVendas) * 100)) : 0
-  const comissaoRate = isGerente ? 0.005 : 0.01
-  const comissao = fatMes * comissaoRate
-  const metaComissao = metaVendas * comissaoRate
+  // Item 3 — comissão por algoritmo: item a item dos pedidos confirmados no período,
+  // valor × percentual do produto conforme tabela do pedido (A/B) e tipo do vendedor (CLT/RCA)
+  const comissaoEscopo = useMemo(() => isGerente ? pedidos : pedidos.filter(p => p.vendedorId === userId), [pedidos, isGerente, userId])
+  const comissaoRes = useMemo(() => calcularComissao(
+    comissaoEscopo, vendedores, comissaoRows, comissaoLog,
+    new Date(periodoValidoInicio + 'T00:00:00'), new Date(periodoValidoFim + 'T23:59:59'),
+  ), [comissaoEscopo, vendedores, comissaoRows, comissaoLog, periodoValidoInicio, periodoValidoFim])
+  const comissao = comissaoRes.total
+  const comissaoIncompleta = useMemo(() => produtosIncompletos(produtos || [], comissaoRows).length, [produtos, comissaoRows])
+  const metaComissao = 0
 
   // Indicadores operacionais (spec PDF vendedor): sem-compra, pipeline ponderado, ticket médio
   const indOps = useMemo(() => calcularIndicadoresOperacionais(
@@ -891,6 +909,21 @@ Seja direto, use dados concretos, não invente números. Use formatação Markdo
                 </div>
               )
             })()}
+          </div>
+        )}
+
+        {/* Item 3 — aviso de comissão incompleta enquanto houver produto sem percentual */}
+        {!dataLoading && comissaoIncompleta > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-apple border border-amber-300 bg-amber-50 px-4 py-2.5 mb-1">
+            <div className="flex items-center gap-2">
+              <ExclamationCircleIcon className="h-5 w-5 text-amber-600 shrink-0" />
+              <p className="text-sm text-amber-800">
+                <span className="font-semibold">Comissão incompleta:</span> há {comissaoIncompleta} produto(s) sem percentual de comissão. Itens desses produtos entram no cálculo como 0% até o preenchimento.
+              </p>
+            </div>
+            {isGerente && (
+              <button onClick={() => onNavigate?.('parametros')} className="text-xs font-semibold text-amber-900 bg-amber-200 hover:bg-amber-300 px-3 py-1.5 rounded-lg whitespace-nowrap">Configurar em Parâmetros</button>
+            )}
           </div>
         )}
 

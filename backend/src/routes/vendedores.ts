@@ -49,6 +49,7 @@ vendedoresRouter.post('/', async (req, res) => {
         meta_leads: vendedorData.metaLeads || null,
         meta_conversao: vendedorData.metaConversao || null,
         ativo: vendedorData.ativo !== undefined ? vendedorData.ativo : true,
+        tipo_comissao: vendedorData.tipoComissao || null,
       })
       .select()
       .single()

@@ -1,0 +1,229 @@
+RELATORIO ITEM 20 — clientes e ciclos alterados (27/11/2026)
+
+■ CCM INDUSTRIA E COMERCIO DE ALIMENTOS LTDA
+  pedido PED-474545 (card #18383 -> #23733 ciclo 2)
+  ciclo 2 card #23733: perdido -> follow_up concluido (venda PED-474545)
+■ SILVANIA SILVEIRA SOARES 97999679615
+  pedido PED-767729 (card #23732 -> #23725 ciclo 3)
+  ciclo 3 card #23725: perdido -> follow_up concluido (venda PED-767729)
+■ BASTO MESQUITA DISTRIBUICAO E LOGISTICA LTDA
+  pedido PED-072102 (card #24122 -> #23416 ciclo 1)
+■ SUMMERLAND INDUSTRIA E COMERCIO LTDA
+  pedido PED-322614 (card #22423 -> #23730 ciclo 2)
+  pedido PED-079667 (card #22423 -> #23914 ciclo 3)
+  ciclo 2 card #23730: perdido -> follow_up concluido (venda PED-322614)
+  ciclo 3 card #23914: perdido -> follow_up concluido (venda PED-079667)
+■ FORNALHA DE MINAS LTDA
+  pedido PED-245715 (card #23580 -> #24103 ciclo 2)
+  ciclo 2 card #24103: perdido -> follow_up concluido (venda PED-245715)
+■ QUICK PAN COMERCIO DE ALIMENTOS LTDA
+  pedido PED-281277 (card #18770 -> #22846 ciclo 2)
+■ DISTRIBUIDORA DE AMIZADE LTDA
+  pedido PED-766392 (card #18438 -> #23266 ciclo 2)
+  pedido PED-596625 (card #18438 -> #23266 ciclo 2)
+■ 56.010.916 ANDERSON OLIVEIRA LOPES
+  pedido PED-621376 (card #24137 -> #22682 ciclo 2)
+  pedido PED-736221 (card #22682 -> #24136 ciclo 4)
+  pedido PED-876360 (card #22682 -> #23931 ciclo 3)
+  ciclo 3 card #23931: perdido -> follow_up concluido (venda PED-876360)
+  ciclo 4 card #24136: perdido -> follow_up concluido (venda PED-736221)
+■ MAX COMERCIO E DISTRIBUIDORA DE ACAI LTDA
+  pedido PED-990396 (card #23957 -> #23963 ciclo 2)
+■ CAMILA RODRIGUES DA SILVA 11509889671
+  pedido PED-037365 (card #23862 -> #23858 ciclo 2)
+  ciclo 2 card #23858: perdido -> follow_up concluido (venda PED-037365)
+■ CAZARINE & BELLUZZO INDUSTRIA E COMERCIO DE DOCES LTDA
+  pedido PED-719845 (card #18713 -> #22765 ciclo 2)
+  pedido PED-257502 (card #18713 -> #22765 ciclo 2)
+  pedido PED-407171 (card #18713 -> #22765 ciclo 2)
+  pedido PED-459972 (card #18713 -> #22765 ciclo 2)
+  ciclo 2 card #22765: perdido -> follow_up concluido (venda PED-407171)
+■ VIVA PALETERIA LANCHONETE E SORVETERIA LTDA
+  pedido PED-838287 (card #24161 -> #24160 ciclo 1)
+■ VALEX COMERCIAL LTDA
+  pedido PED-012414 (card #24007 -> #24003 ciclo 2)
+  ciclo 2 card #24003: perdido -> follow_up concluido (venda PED-012414)
+■ LUCIANA DA SILVA PINHO MEDEIROS 07538385754
+  pedido PED-284701 (card #23398 -> #23996 ciclo 2)
+  ciclo 2 card #23996: perdido -> follow_up concluido (venda PED-284701)
+■ SORVETERIA GELO FRUTAS LTDA
+  pedido PED-019621 (card #24093 -> #23288 ciclo 1)
+  pedido PED-883310 (card #24093 -> #23288 ciclo 1)
+  pedido PED-334845 (card #24093 -> #23288 ciclo 1)
+  ciclo 1 card #23288: perdido -> follow_up concluido (venda PED-334845)
+■ DELICIUS INDUSTRIA DE ALIMENTOS LTDA
+  pedido PED-074126 (card #24090 -> #23427 ciclo 1)
+  pedido PED-509471 (card #24090 -> #23427 ciclo 1)
+  ciclo 1 card #23427: perdido -> follow_up concluido (venda PED-074126)
+■ ITAVALE DISTRIBUIDORA LTDA
+  pedido PED-928893 (card #22471 -> #23756 ciclo 4)
+  pedido PED-546150 (card #22471 -> #23744 ciclo 3)
+  pedido PED-336378 (card #22471 -> #23740 ciclo 2)
+  ciclo 2 card #23740: perdido -> follow_up concluido (venda PED-336378)
+  ciclo 3 card #23744: perdido -> follow_up concluido (venda PED-546150)
+  ciclo 4 card #23756: perdido -> follow_up concluido (venda PED-928893)
+■ ASTRAL-INDUSTRIA E COMERCIO DE PAES E MASSAS ESPECIAIS LTDA
+  pedido PED-517130 (card #22639 -> #23964 ciclo 2)
+  pedido PED-863521 (card #22639 -> #23993 ciclo 3)
+  ciclo 2 card #23964: perdido -> follow_up concluido (venda PED-517130)
+  ciclo 3 card #23993: perdido -> follow_up concluido (venda PED-863521)
+■ GOMES & PEREIRA PICOLES E SORVETES LTDA
+  pedido PED-484281 (card #22842 -> #23842 ciclo 2)
+  pedido PED-082024 (card #22842 -> #23842 ciclo 2)
+  ciclo 2 card #23842: perdido -> follow_up concluido (venda PED-484281)
+■ DOCES REZENDA LTDA
+  pedido PED-967687 (card #24175 -> #24106 ciclo 2)
+  pedido PED-260471 (card #18755 -> #24106 ciclo 2)
+  ciclo 2 card #24106: perdido -> follow_up concluido (venda PED-260471)
+■ BRITO & SIQUEIRA LTDA
+  pedido PED-886516 (card #23498 -> #23869 ciclo 2)
+  ciclo 2 card #23869: perdido -> follow_up concluido (venda PED-886516)
+■ GH INDUSTRIA E COMERCIO LTDA
+  pedido PED-038502 (card #24108 -> #23770 ciclo 1)
+  pedido PED-283235 (card #23770 -> #24104 ciclo 2)
+  ciclo 2 card #24104: perdido -> follow_up concluido (venda PED-283235)
+■ ERLAN S/A - EM RECUPERACAO JUDICIAL EM RECUPERACAO JUDICIAL
+  pedido PED-308083 (card #23581 -> #23973 ciclo 2)
+  pedido PED-169959 (card #23581 -> #23973 ciclo 2)
+  ciclo 2 card #23973: perdido -> follow_up concluido (venda PED-308083)
+■ C G SANTANA DE OLIVEIRA FILHO
+  pedido PED-039101 (card #24010 -> #23976 ciclo 2)
+  pedido PED-357125 (card #24010 -> #23976 ciclo 2)
+  ciclo 2 card #23976: perdido -> follow_up concluido (venda PED-357125)
+  ciclo 3 card #24010: perdido -> follow_up concluido (venda PED-693942)
+■ GENIVAL BATISTA DA SILVA
+  pedido PED-541442 (card #23965 -> #23780 ciclo 2)
+■ SUPRA ACAI DISTRIBUIDORA
+  pedido PED-358397 (card #22631 -> #23721 ciclo 2)
+  ciclo 2 card #23721: perdido -> follow_up concluido (venda PED-358397)
+■ L. PESSOA SARAIVA
+  pedido PED-530194 (card #22562 -> #23866 ciclo 2)
+  ciclo 2 card #23866: perdido -> follow_up concluido (venda PED-530194)
+■ LUCILIO DE ALMEIDA FILHO
+  pedido PED-060206 (card #24146 -> #22503 ciclo 1)
+■ SAO JOSE ALIMENTOS LTDA
+  pedido PED-213092 (card #22429 -> #24129 ciclo 2)
+  ciclo 2 card #24129: perdido -> follow_up concluido (venda PED-213092)
+■ 54.625.527 LUAN VIEIRA MOREIRA DOS SANTOS
+  pedido PED-259771 (card #22296 -> #23605 ciclo 2)
+  pedido PED-051227 (card #22296 -> #23605 ciclo 2)
+■ 44.852.892 JOARLEY SOARES FERREIRA
+  pedido PED-098044 (card #22424 -> #22856 ciclo 2)
+  pedido PED-927424 (card #22424 -> #22856 ciclo 2)
+■ 60.842.398 DARLAN HUMBERTO GONCALVES SOUSA
+  pedido PED-119802 (card #22291 -> #23609 ciclo 2)
+■ SOULMUSCLE COMERCIO E INDUSTRIA LTDA
+  pedido PED-237391 (card #18638 -> #22763 ciclo 2)
+  ciclo 2 card #22763: perdido -> follow_up concluido (venda PED-237391)
+■ MAIS AMOR ALIMENTOS CONGELADOS LTDA.
+  pedido PED-710969 (card #18373 -> #22692 ciclo 2)
+  pedido PED-539413 (card #18373 -> #22692 ciclo 2)
+  pedido PED-213129 (card #18373 -> #22730 ciclo 3)
+  pedido PED-789592 (card #18373 -> #22730 ciclo 3)
+  ciclo 3 card #22730: perdido -> follow_up concluido (venda PED-789592)
+■ AÇAI DIVINO SABOR  EIRELLI
+  pedido PED-473718 (card #23478 -> #22855 ciclo 2)
+  pedido PED-905932 (card #18716 -> #23478 ciclo 4)
+  pedido PED-828993 (card #23478 -> #22857 ciclo 3)
+  pedido PED-923236 (card #18716 -> #23478 ciclo 4)
+  ciclo 2 card #22855: perdido -> follow_up concluido (venda PED-473718)
+  ciclo 3 card #22857: perdido -> follow_up concluido (venda PED-828993)
+  ciclo 4 card #23478: perdido -> follow_up concluido (venda PED-905932)
+■ ATLANTICA ACAI LTDA
+  pedido PED-963376 (card #18634 -> #22760 ciclo 2)
+  pedido PED-965053 (card #18634 -> #22760 ciclo 2)
+  pedido PED-001467 (card #18634 -> #22760 ciclo 2)
+  pedido PED-764429 (card #18634 -> #23841 ciclo 3)
+  ciclo 2 card #22760: perdido -> follow_up concluido (venda PED-963376)
+  ciclo 3 card #23841: perdido -> follow_up concluido (venda PED-764429)
+■ DISTRIPANI COMERCIO DE ALIMENTOS LTDA
+  pedido PED-313202 (card #18479 -> #23490 ciclo 2)
+  ciclo 2 card #23490: perdido -> follow_up concluido (venda PED-313202)
+■ SORVETES OCRE LTDA
+  pedido PED-876444 (card #24176 -> #23942 ciclo 3)
+  pedido PED-602417 (card #24176 -> #22743 ciclo 1)
+  pedido PED-395833 (card #24176 -> #24098 ciclo 4)
+  pedido PED-026810 (card #24176 -> #22743 ciclo 1)
+  pedido PED-389612 (card #24176 -> #22743 ciclo 1)
+  pedido PED-162199 (card #24176 -> #22743 ciclo 1)
+  pedido PED-133645 (card #24176 -> #22743 ciclo 1)
+  pedido PED-569289 (card #24176 -> #24099 ciclo 5)
+  ciclo 3 card #23942: perdido -> follow_up concluido (venda PED-876444)
+  ciclo 5 card #24099: perdido -> follow_up concluido (venda PED-569289)
+■ FLORENCO AMORIM COSTA
+  pedido PED-459820 (card #22299 -> #23652 ciclo 2)
+■ ALVIM ALVIM SORVETES LTDA
+  pedido PED-400933 (card #23130 -> #24019 ciclo 2)
+  ciclo 2 card #24019: perdido -> follow_up concluido (venda PED-400933)
+■ COMERCIAL OBA OBA MINAS LTDA
+  pedido PED-437877 (card #23232 -> #23927 ciclo 2)
+  ciclo 2 card #23927: perdido -> follow_up concluido (venda PED-437877)
+■ J. C. M. Fagundes Santana
+  pedido PED-977168 (card #23735 -> #22486 ciclo 1)
+  ciclo 1 card #22486: perdido -> follow_up concluido (venda PED-977168)
+■ SORVETES SORVEMILK LTDA
+  pedido PED-240858 (card #24177 -> #24172 ciclo 1)
+■ RDP FOODS LTDA
+  pedido PED-398544 (card #18561 -> #22847 ciclo 2)
+■ H.D. HAMASAKI ARTIGOS PARA PANIFICACAO E CONFEITARIA LTDA
+  pedido PED-542648 (card #18768 -> #22841 ciclo 2)
+■ SORVETERIA SIMOES LTDA
+  pedido PED-218235 (card #22741 -> #23639 ciclo 2)
+  pedido PED-588690 (card #18597 -> #22741 ciclo 2)
+■ KAIQUE MARTINS MARQUES 02085279660
+  pedido PED-572091 (card #22312 -> #23473 ciclo 2)
+  pedido PED-770413 (card #22312 -> #23473 ciclo 2)
+  ciclo 2 card #23473: perdido -> follow_up concluido (venda PED-770413)
+■ ANA LUCIA LATORRE DE AZEVEDO
+  pedido PED-616883 (card #23587 -> #18712 ciclo 1)
+  ciclo 1 card #18712: perdido -> follow_up concluido (venda PED-616883)
+■ INDUSTRIA E COMERCIO DE SORVETES E PICOLES LTDA
+  pedido PED-374107 (card #24102 -> #23504 ciclo 1)
+■ DMS INDUSTRIA DE ALIMENTOS LTDA
+  pedido TESTE-VND-284206 (card #18594 -> #18765 ciclo 5)
+  pedido TESTE-VND-536745 (card #18594 -> #18765 ciclo 5)
+  pedido TESTE-BON-553219 (card #18594 -> #18765 ciclo 5)
+■ SORVETERIA PRESTIGIO LTDA
+  pedido PED-327184 (card #24171 -> #24170 ciclo 1)
+■ ELECIO INDUSTRIA E COMERCIO DE SORVETES LTDA
+  pedido PED-502896 (card #18601 -> #23836 ciclo 3)
+  pedido PED-133168 (card #18601 -> #23401 ciclo 2)
+  pedido PED-450686 (card #18601 -> #23836 ciclo 3)
+  pedido PED-855211 (card #18601 -> #23836 ciclo 3)
+  ciclo 2 card #23401: perdido -> follow_up concluido (venda PED-133168)
+  ciclo 3 card #23836: perdido -> follow_up concluido (venda PED-450686)
+■ MARQUES & SOBREIRO COMERCIO DE ALIMENTOS E SORVETERIA LTDA
+  pedido PED-419116 (card #24169 -> #24168 ciclo 1)
+■ GRIFUS ACAI DISTRIBUIDORA
+  pedido PED-454607 (card #24110 -> #24086 ciclo 1)
+  ciclo 1 card #24086: perdido -> follow_up concluido (venda PED-454607)
+■ ALS COMERCIO ATACADISTA VAREJISTA DE ALIMENTOS E EMBALAGENS LTDA
+  ciclo 1 card #23434: perdido -> follow_up concluido (venda PED-961892)
+■ OESA COMERCIO E REPRESENTACOES S/A
+  ciclo 1 card #23625: perdido -> follow_up concluido (venda PED-952511)
+■ 41.672.701 LUCAS HENRIQUE CORREA DOS REIS
+  ciclo 1 card #24192: perdido -> follow_up concluido (venda PED-148148)
+■ HYDEKEL MENEZES FREITAS LIMA JUNIOR
+  ciclo 1 card #18363: perdido -> follow_up concluido (venda PED-722187)
+■ CAMPOS COMERCIO DE PRODUTOS ALIMENTICIOS LTDA
+  ciclo 1 card #18587: perdido -> follow_up concluido (venda PED-973510)
+■ E&R COMERCIO E SERVICOS LTDA
+  ciclo 1 card #23618: perdido -> follow_up concluido (venda PED-453717)
+■ PATRICIA MARTINS DE MELO VIEIRA
+  ciclo 1 card #22532: perdido -> follow_up concluido (venda PED-847248)
+■ SORVETE SADIO LTDA
+  ciclo 1 card #23313: perdido -> follow_up concluido (venda PED-270721)
+■ GRUPO THE BEST FRANCHISING LTDA
+  ciclo 1 card #22383: perdido -> follow_up concluido (venda PED-931046)
+■ ACAIZINHO INDUSTRIA E COMERCIO LTDA
+  ciclo 1 card #18339: perdido -> follow_up concluido (venda PED-623875)
+■ 49.733.727 EDUARDO DE SOUZA ABRANTES
+  ciclo 1 card #18615: perdido -> follow_up concluido (venda PED-379151)
+■ ANDREA P. G. L. INDUSTRIA E COMERCIO DE SORVETES LTDA
+  ciclo 1 card #18641: perdido -> follow_up concluido (venda PED-866472)
+■ TATIANE CRISTINA MARCELINO
+  ciclo 1 card #18697: perdido -> follow_up concluido (venda PED-973571)
+■ ACAI D' PARA COMERCIO VAREJISTA DE ACAI LTDA
+  ciclo 1 card #18657: perdido -> follow_up concluido (venda PED-913994)
+
+TOTAL: 97 pedidos remanejados, 60 ciclos corrigidos, 68 empresas

@@ -299,6 +299,7 @@ export function vendedorFromDb(row: any): Vendedor {
     metaConversao: Number(row.meta_conversao) || 0,
     ativo: row.ativo,
     usuario: row.email, // usuario = email no Supabase Auth
+    tipoComissao: row.tipo_comissao || null,
   }
 }
 
@@ -603,7 +604,7 @@ export async function insertVendedor(v: Omit<Vendedor, 'id'>): Promise<Vendedor>
     nome: v.nome, email: v.email, telefone: v.telefone,
     cargo: v.cargo, avatar: v.avatar,
     meta_vendas: v.metaVendas, meta_leads: v.metaLeads, meta_conversao: v.metaConversao,
-    ativo: v.ativo,
+    ativo: v.ativo, tipo_comissao: v.tipoComissao || null,
   }).select().single()
   if (error) throw error
   return vendedorFromDb(data)
@@ -639,6 +640,7 @@ export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<
   if (v.metaLeads !== undefined) row.meta_leads = v.metaLeads
   if (v.metaConversao !== undefined) row.meta_conversao = v.metaConversao
   if (v.ativo !== undefined) row.ativo = v.ativo
+  if (v.tipoComissao !== undefined) row.tipo_comissao = v.tipoComissao
   const { error } = await supabase.from('vendedores').update(row).eq('id', id)
   if (error) throw error
 }
