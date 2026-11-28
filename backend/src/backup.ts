@@ -43,6 +43,8 @@ const TABLES = [
   'leads_rf',
   'mensagens_automacao',
   'missao_despesas',
+  'missao_parametros',
+  'missao_roteiro_visitas',
   'missoes',
   'modulos_treinamento',
   'notificacoes',

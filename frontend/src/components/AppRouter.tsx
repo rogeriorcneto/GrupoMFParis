@@ -930,7 +930,17 @@ export default function AppRouter({
     case 'criar-automacao':
       return <CriarAutomacaoView loggedUser={loggedUser} />
     case 'missao':
-      return <MissaoView clientes={clientes} vendedores={vendedores} loggedUser={loggedUser} showToast={showToast} />
+      return (
+        <MissaoView
+          clientes={clientes}
+          setClientes={setClientes}
+          vendedores={vendedores}
+          loggedUser={loggedUser}
+          onOpenCliente={(c) => setSelectedClientePanel(c)}
+          onNavigateParametros={() => onNavigate('parametros')}
+          showToast={showToast}
+        />
+      )
     default:
       return <DashboardView dataLoading={dataLoading} clientes={clientes} metrics={dashboardMetrics} vendedores={vendedores} atividades={atividades} interacoes={interacoes} produtos={produtos} tarefas={tarefas} pedidos={pedidos} loggedUser={loggedUser} />
   }

@@ -539,6 +539,47 @@ export interface ChatMensagem {
   createdAt: string
 }
 
+export interface MissaoResumoIA {
+  conversado: string
+  produtosInteresse: string
+  objecoes: string
+  proximoPasso: string
+  proximoPrazo: string
+}
+
+export interface MissaoRoteiroVisita {
+  id: number
+  missaoId: number
+  clienteId: number
+  diaNumero: number
+  dataVisita?: string
+  ordem: number
+  planejada: boolean
+  status: 'pendente' | 'visitado' | 'nao_realizada' | 'nao_localizado' | 'removida'
+  checkinEm?: string
+  checkinLat?: number
+  checkinLon?: number
+  clienteLat?: number
+  clienteLon?: number
+  distanciaMetros?: number | null
+  foraDoLocal?: boolean
+  raioAplicadoMetros?: number
+  motivoNaoRealizada?: string
+  decisaoGestorDescarte?: 'pendente' | 'descartado' | 'mantido' | null
+  decisaoGestorPor?: string
+  decisaoGestorEm?: string
+  decisaoGestorObs?: string
+  audioPath?: string
+  audioUrl?: string
+  audioDuracaoSeg?: number
+  transcricao?: string | null
+  resumoIa?: MissaoResumoIA | null
+  resumoConfirmado: boolean
+  resumoConfirmadoEm?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface Missao {
   id: number
   nome: string
@@ -551,6 +592,17 @@ export interface Missao {
   veiculo?: string
   hotel?: string
   status: 'planejada' | 'rascunho' | 'aguardando_aprovacao' | 'aprovada' | 'reprovada' | 'em_andamento' | 'concluida' | 'cancelada'
+  cidadeOrigem?: string
+  cidadeRetorno?: string
+  hospedagemPrevista?: number
+  kmTotal?: number
+  valorKmAplicado?: number
+  valorDiariaAplicado?: number
+  diasViagem?: number
+  custoPrevisto?: number
+  visitasPlanejadasCount?: number
+  visitasRealizadasCount?: number
+  custoRealizadoTotal?: number
   orcamentoPrevisto?: any
   meta?: any
   resultadoEsperado?: string
@@ -575,7 +627,7 @@ export interface MissaoDespesa {
   id: number
   missaoId: number
   vendedorId?: number
-  tipo: 'combustivel' | 'pedagio' | 'hotel' | 'alimentacao' | 'estacionamento' | 'outro'
+  tipo: string
   valor: number
   data: string
   comprovanteUrl?: string

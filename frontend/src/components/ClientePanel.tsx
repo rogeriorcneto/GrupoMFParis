@@ -38,7 +38,7 @@ import {
   validarFinalizacaoTarefa,
 } from '../utils/tarefaFluxo'
 import { supabase } from '../lib/supabase'
-import { transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages, dispararAuditoriaIA, fetchAuditoriaIARegistros } from '../lib/botApi'
+import { authFetch, BOT_URL, transcribeCallRecording, fetchCnpjViaBackend, fetchPedidoDocumentosOmie, downloadXmlNfePedido, PedidoDocumentos, fetchWhatsAppMessages, dispararAuditoriaIA, fetchAuditoriaIARegistros } from '../lib/botApi'
 import { CLASSIFICACAO_IA_CONFIG, classificarRegistroLocal, type RegistroAuditoriaIA } from '../utils/iaAuditoria'
 
 function normalizarEmpresa(s: string) {
@@ -601,6 +601,39 @@ export default function ClientePanel({
         setTranscricoes(trMap)
       })
   }, [c.id, familiaKeyStr])
+
+  // Transcrições de visitas presenciais em Missões — visíveis SOMENTE ao vendedor dono da carteira e ao gestor (Item 5)
+  const [visitasMissaoTransc, setVisitasMissaoTransc] = useState<Record<number, { transcricao: string; audioUrl?: string }>>({})
+  const [visitaTranscAberta, setVisitaTranscAberta] = useState<Record<number, boolean>>({})
+  const podeVerTranscricaoVisita = Boolean(loggedUser && (loggedUser.cargo === 'gerente' || Number(loggedUser.id) === Number(c.vendedorId)))
+  useEffect(() => {
+    if (!podeVerTranscricaoVisita) {
+      setVisitasMissaoTransc({})
+      return
+    }
+    const ids = Array.from(familiaEmpresaIds)
+    if (ids.length === 0) return
+    let cancelado = false
+    void Promise.all(
+      ids.map(cid =>
+        authFetch(`${BOT_URL}/api/missoes/cliente/${cid}/transcricoes`)
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then(listaRes => {
+      if (cancelado) return
+      const map: Record<number, { transcricao: string; audioUrl?: string }> = {}
+      for (const res of listaRes) {
+        for (const v of res?.data || []) {
+          if (v?.id && v.transcricao) {
+            map[Number(v.id)] = { transcricao: v.transcricao, audioUrl: v.audioUrl }
+          }
+        }
+      }
+      setVisitasMissaoTransc(map)
+    })
+    return () => { cancelado = true }
+  }, [c.id, familiaKeyStr, podeVerTranscricaoVisita])
 
   const handleTranscrever = useCallback(async (gravacaoId: number) => {
     setTranscrevendo(prev => ({ ...prev, [gravacaoId]: true }))
@@ -3543,12 +3576,35 @@ export default function ClientePanel({
                                 </div>
                               )}
                               {inter.descricao && (() => {
-                                const urls = (inter.descricao.match(/https?:\/\/[^\s)]+/g) || []).filter(u =>
+                                const matchVisitaMissao = inter.descricao.match(/\[VISITA_MISSAO_ID:(\d+)\]/)
+                                const visitaMissaoId = matchVisitaMissao ? Number(matchVisitaMissao[1]) : null
+                                const descricaoLimpa = inter.descricao.replace(/\n?\[VISITA_MISSAO_ID:\d+\]/g, '').trim()
+                                const urls = (descricaoLimpa.match(/https?:\/\/[^\s)]+/g) || []).filter(u =>
                                   /\.(pdf|png|jpe?g|webp|xlsx?|csv|docx?|zip)(\?|$)/i.test(u) || u.includes('/storage/v1/object/')
                                 )
+                                const dadosTranscVisita = visitaMissaoId && podeVerTranscricaoVisita ? visitasMissaoTransc[visitaMissaoId] : undefined
                                 return (
                                   <>
-                                    <p className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-line">{inter.descricao}</p>
+                                    <p className="text-[13px] text-gray-800 leading-relaxed whitespace-pre-line">{descricaoLimpa}</p>
+                                    {dadosTranscVisita && (
+                                      <div className="pt-1.5 space-y-1.5">
+                                        {dadosTranscVisita.audioUrl && (
+                                          <audio controls src={dadosTranscVisita.audioUrl} className="w-full h-8" />
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => setVisitaTranscAberta(prev => ({ ...prev, [visitaMissaoId!]: !prev[visitaMissaoId!] }))}
+                                          className="text-xs font-semibold text-primary-700 hover:underline"
+                                        >
+                                          {visitaTranscAberta[visitaMissaoId!] ? 'Ocultar transcrição da visita' : 'Ver transcrição da visita'}
+                                        </button>
+                                        {visitaTranscAberta[visitaMissaoId!] && (
+                                          <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-xs text-gray-700 leading-relaxed whitespace-pre-line">
+                                            {dadosTranscVisita.transcricao}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                     {urls.length > 0 && (
                                       <div className="flex flex-wrap gap-1.5 pt-1">
                                         {urls.map((u, idx) => (

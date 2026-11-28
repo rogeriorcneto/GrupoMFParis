@@ -84,7 +84,7 @@ app.use(cors({
   },
   credentials: true,
 }))
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({ limit: '30mb' }))
 // Twilio webhooks postam application/x-www-form-urlencoded (necessário p/ assinatura e handlers)
 app.use('/api/twilio', express.urlencoded({ extended: false, limit: '1mb' }))
 app.use(helmet())
