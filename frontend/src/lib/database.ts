@@ -300,6 +300,15 @@ export function vendedorFromDb(row: any): Vendedor {
     ativo: row.ativo,
     usuario: row.email, // usuario = email no Supabase Auth
     tipoComissao: row.tipo_comissao || null,
+    funcao: row.funcao || null,
+    vinculo: row.vinculo || null,
+    statusVendedor: row.status_vendedor || null,
+    dataEntrada: row.data_entrada || null,
+    gestorId: row.gestor_id || null,
+    tutorId: row.tutor_id || null,
+    academiaFase: row.academia_fase || null,
+    academiaTermoVersao: row.academia_termo_versao || null,
+    academiaTermoAceitoEm: row.academia_termo_aceito_em || null,
   }
 }
 
@@ -605,6 +614,9 @@ export async function insertVendedor(v: Omit<Vendedor, 'id'>): Promise<Vendedor>
     cargo: v.cargo, avatar: v.avatar,
     meta_vendas: v.metaVendas, meta_leads: v.metaLeads, meta_conversao: v.metaConversao,
     ativo: v.ativo, tipo_comissao: v.tipoComissao || null,
+    funcao: v.funcao || 'vendedor_industria', vinculo: v.vinculo || v.tipoComissao || 'clt',
+    status_vendedor: v.statusVendedor || 'em_formacao', data_entrada: v.dataEntrada || null,
+    gestor_id: v.gestorId || null, tutor_id: v.tutorId || null, academia_fase: v.academiaFase || 'formacao',
   }).select().single()
   if (error) throw error
   return vendedorFromDb(data)
@@ -630,6 +642,11 @@ export async function createVendedorViaBackend(
 }
 
 export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<void> {
+  const auditarAcademia = v.funcao !== undefined || v.statusVendedor !== undefined
+  let antes: any = null
+  if (auditarAcademia) {
+    antes = (await supabase.from('vendedores').select('funcao,status_vendedor').eq('id', id).maybeSingle()).data
+  }
   const row: any = {}
   if (v.nome !== undefined) row.nome = v.nome
   if (v.email !== undefined) row.email = v.email
@@ -641,8 +658,41 @@ export async function updateVendedor(id: number, v: Partial<Vendedor>): Promise<
   if (v.metaConversao !== undefined) row.meta_conversao = v.metaConversao
   if (v.ativo !== undefined) row.ativo = v.ativo
   if (v.tipoComissao !== undefined) row.tipo_comissao = v.tipoComissao
+  if (v.funcao !== undefined) row.funcao = v.funcao
+  if (v.vinculo !== undefined) row.vinculo = v.vinculo
+  if (v.statusVendedor !== undefined) row.status_vendedor = v.statusVendedor
+  if (v.dataEntrada !== undefined) row.data_entrada = v.dataEntrada
+  if (v.gestorId !== undefined) row.gestor_id = v.gestorId
+  if (v.tutorId !== undefined) row.tutor_id = v.tutorId
+  if (v.academiaFase !== undefined) row.academia_fase = v.academiaFase
+  if (v.academiaTermoVersao !== undefined) row.academia_termo_versao = v.academiaTermoVersao
+  if (v.academiaTermoAceitoEm !== undefined) row.academia_termo_aceito_em = v.academiaTermoAceitoEm
   const { error } = await supabase.from('vendedores').update(row).eq('id', id)
   if (error) throw error
+  if (auditarAcademia && antes) {
+    try {
+      const { data: auth } = await supabase.auth.getUser()
+      let actorId: number | null = null
+      let actorNome = 'Sistema'
+      if (auth.user?.email) {
+        const actor = (await supabase.from('vendedores').select('id,nome').eq('email', auth.user.email).maybeSingle()).data
+        actorId = actor?.id || null
+        actorNome = actor?.nome || auth.user.email
+      }
+      const mudancas = [
+        ['funcao', antes.funcao, v.funcao],
+        ['status_vendedor', antes.status_vendedor, v.statusVendedor],
+      ].filter(([, anterior, novo]) => novo !== undefined && String(anterior || '') !== String(novo || ''))
+      if (mudancas.length) {
+        await supabase.from('academia_historico').insert(mudancas.map(([campo, anterior, novo]) => ({
+          entidade: 'vendedor', entidade_id: String(id), vendedor_id: id, acao: 'edicao_ficha', campo,
+          valor_anterior: String(anterior || ''), valor_novo: String(novo || ''), alterado_por: actorId, alterado_por_nome: actorNome,
+        })))
+      }
+    } catch (e) {
+      console.warn('Falha ao registrar histórico da Academia na ficha do vendedor', e)
+    }
+  }
 }
 
 // ============================================

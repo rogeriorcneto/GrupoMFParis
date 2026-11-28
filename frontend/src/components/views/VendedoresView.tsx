@@ -3,6 +3,7 @@ import { PlusIcon, XMarkIcon, ClockIcon, EnvelopeIcon, PhoneIcon, PencilIcon, Ch
 import type { Vendedor, Cliente } from '../../types'
 import { fetchVendedorHistorico, updateVendedorCredentials, type VendedorHistoricoItem } from '../../lib/botApi'
 import { formatTelefone } from '../../utils/validators'
+import { fetchAcademiaData, estadoBloco, FASES } from '../../lib/academia'
 
 function getActiveSecs(id: number): number {
   const base = parseInt(localStorage.getItem(`crm_active_secs_${id}`) || '0', 10)
@@ -55,6 +56,35 @@ function useSessionTimer(vendedorId: number | null) {
   return formatSecs(elapsed)
 }
 
+function AcademiaResumoVendedor({ vendedor }: { vendedor: Vendedor }) {
+  const [resumo, setResumo] = React.useState<{ bloco: string; certificacoes: string; termo: string } | null>(null)
+  React.useEffect(() => {
+    let ativo = true
+    fetchAcademiaData(vendedor.id).then(data => {
+      if (!ativo) return
+      const atual = data.blocos.find(b => ['disponivel', 'em_andamento', 'em_reforco'].includes(estadoBloco(data, b))) || data.blocos[data.blocos.length - 1]
+      const concluidos = data.progresso.filter(p => p.estado === 'concluido').length
+      setResumo({
+        bloco: atual ? `${atual.ordem}. ${atual.nome}` : '—',
+        certificacoes: `${concluidos} de ${data.blocos.length} blocos concluídos`,
+        termo: vendedor.academiaTermoVersao || '—',
+      })
+    }).catch(() => setResumo(null))
+    return () => { ativo = false }
+  }, [vendedor.id, vendedor.academiaTermoVersao])
+  return (
+    <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-3">Academia (somente leitura)</h3>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+        <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Fase atual</p><b>{FASES[vendedor.academiaFase || 'reciclagem'] || 'Reciclagem'}</b></div>
+        <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Bloco da trilha</p><b>{resumo?.bloco || 'Carregando...'}</b></div>
+        <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Certificações</p><b>{resumo?.certificacoes || '—'}</b></div>
+        <div className="p-3 bg-gray-50 rounded-apple"><p className="text-xs text-gray-500">Termo</p><b>{resumo?.termo || '—'}</b></div>
+      </div>
+    </div>
+  )
+}
+
 const VendedoresView: React.FC<{
   vendedores: Vendedor[]
   clientes: Cliente[]
@@ -69,6 +99,12 @@ const VendedoresView: React.FC<{
   const [newTelefone, setNewTelefone] = React.useState('')
   const [newCargo, setNewCargo] = React.useState<Vendedor['cargo']>('vendedor')
   const [newTipoComissao, setNewTipoComissao] = React.useState<'clt' | 'rca' | ''>('')
+  const [newFuncao, setNewFuncao] = React.useState('vendedor_industria')
+  const [newVinculo, setNewVinculo] = React.useState<'clt' | 'rca'>('clt')
+  const [newStatusVendedor, setNewStatusVendedor] = React.useState('em_formacao')
+  const [newDataEntrada, setNewDataEntrada] = React.useState('')
+  const [newGestorId, setNewGestorId] = React.useState('')
+  const [newTutorId, setNewTutorId] = React.useState('')
   const [newMetaVendas, setNewMetaVendas] = React.useState('150000')
   const [newMetaLeads, setNewMetaLeads] = React.useState('10')
   const [newMetaConversao, setNewMetaConversao] = React.useState('15')
@@ -81,6 +117,12 @@ const VendedoresView: React.FC<{
   const [editMetaVendas, setEditMetaVendas] = React.useState('')
   const [editMetaLeads, setEditMetaLeads] = React.useState('')
   const [editMetaConversao, setEditMetaConversao] = React.useState('')
+  const [editFuncao, setEditFuncao] = React.useState('vendedor_industria')
+  const [editVinculo, setEditVinculo] = React.useState('clt')
+  const [editStatusVendedor, setEditStatusVendedor] = React.useState('ativo')
+  const [editDataEntrada, setEditDataEntrada] = React.useState('')
+  const [editGestorId, setEditGestorId] = React.useState('')
+  const [editTutorId, setEditTutorId] = React.useState('')
   const [historico, setHistorico] = React.useState<VendedorHistoricoItem[]>([])
   const [historicoLoading, setHistoricoLoading] = React.useState(false)
 
@@ -122,7 +164,8 @@ const VendedoresView: React.FC<{
     return { totalLeads, valorPipeline, conversoes, taxaConversao, clientesVendedor }
   }
 
-  const ranking = [...vendedores]
+  const vendedoresVisiveis = isManager ? vendedores : vendedores.filter(v => v.id === loggedUser?.id)
+  const ranking = [...vendedoresVisiveis]
     .filter(v => v.ativo)
     .map(v => ({ ...v, metrics: getVendedorMetrics(v) }))
     .sort((a, b) => b.metrics.valorPipeline - a.metrics.valorPipeline)
@@ -149,7 +192,8 @@ const VendedoresView: React.FC<{
         nome: newNome.trim(), email: newEmail.trim(), telefone: newTelefone.trim(),
         cargo: newCargo, avatar: initials, tipoComissao: newTipoComissao || null,
         metaVendas: Number(newMetaVendas) || 150000, metaLeads: Number(newMetaLeads) || 10,
-        metaConversao: Number(newMetaConversao) || 15, ativo: true
+        metaConversao: Number(newMetaConversao) || 15, ativo: true,
+        funcao: newFuncao as any, vinculo: newVinculo as any, statusVendedor: newStatusVendedor as any, dataEntrada: newDataEntrada || null, gestorId: newGestorId ? Number(newGestorId) : null, tutorId: newTutorId ? Number(newTutorId) : null, academiaFase: 'formacao'
       })
       setNewNome(''); setNewEmail(''); setNewTelefone(''); setNewSenha(''); setShowModal(false)
     } catch (err: any) {
@@ -161,13 +205,16 @@ const VendedoresView: React.FC<{
 
   const handleSaveMetas = () => {
     if (!selectedVendedor) return
-    onUpdateVendedor({
+    const atualizado = {
       ...selectedVendedor,
       metaVendas: Number(editMetaVendas) || selectedVendedor.metaVendas,
       metaLeads: Number(editMetaLeads) || selectedVendedor.metaLeads,
       metaConversao: Number(editMetaConversao) || selectedVendedor.metaConversao,
-      tipoComissao: (editTipoComissao || selectedVendedor.tipoComissao || null) as 'clt' | 'rca' | null
-    })
+      tipoComissao: (editTipoComissao || selectedVendedor.tipoComissao || null) as 'clt' | 'rca' | null,
+      funcao: editFuncao as any, vinculo: editVinculo as any, statusVendedor: editStatusVendedor as any,
+      dataEntrada: editDataEntrada || null, gestorId: editGestorId ? Number(editGestorId) : null, tutorId: editTutorId ? Number(editTutorId) : null,
+    }
+    onUpdateVendedor(atualizado)
     setEditingMetas(false)
   }
 
@@ -227,9 +274,11 @@ const VendedoresView: React.FC<{
                 <span className="inline-flex items-center gap-1.5"><PhoneIcon className="h-3.5 w-3.5 text-gray-400" /> {selectedVendedor.telefone}</span>
               </div>
             </div>
-            <button onClick={() => onUpdateVendedor({ ...selectedVendedor, ativo: !selectedVendedor.ativo })} className={`px-4 py-2 rounded-apple text-sm font-semibold self-start ${selectedVendedor.ativo ? 'bg-red-50 text-red-700 border-2 border-red-200 hover:bg-red-100' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-              {selectedVendedor.ativo ? 'Desativar' : 'Ativar'}
-            </button>
+            {isManager && (
+              <button onClick={() => onUpdateVendedor({ ...selectedVendedor, ativo: !selectedVendedor.ativo })} className={`px-4 py-2 rounded-apple text-sm font-semibold self-start ${selectedVendedor.ativo ? 'bg-red-50 text-red-700 border-2 border-red-200 hover:bg-red-100' : 'bg-green-600 text-white hover:bg-green-700'}`}>
+                {selectedVendedor.ativo ? 'Desativar' : 'Ativar'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -315,7 +364,7 @@ const VendedoresView: React.FC<{
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Metas Individuais</h3>
             {!editingMetas ? (
-              <button onClick={() => { setEditingMetas(true); setEditMetaVendas(String(selectedVendedor.metaVendas)); setEditMetaLeads(String(selectedVendedor.metaLeads)); setEditMetaConversao(String(selectedVendedor.metaConversao)); setEditTipoComissao((selectedVendedor.tipoComissao as any) || '') }} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"><span className="inline-flex items-center gap-1.5"><PencilIcon className="h-3.5 w-3.5" /> Editar Metas</span></button>
+              isManager && <button onClick={() => { setEditingMetas(true); setEditMetaVendas(String(selectedVendedor.metaVendas)); setEditMetaLeads(String(selectedVendedor.metaLeads)); setEditMetaConversao(String(selectedVendedor.metaConversao)); setEditTipoComissao((selectedVendedor.tipoComissao as any) || ''); setEditFuncao(selectedVendedor.funcao || 'vendedor_industria'); setEditVinculo(selectedVendedor.vinculo || 'clt'); setEditStatusVendedor(selectedVendedor.statusVendedor || 'ativo'); setEditDataEntrada(selectedVendedor.dataEntrada || ''); setEditGestorId(String(selectedVendedor.gestorId || '')); setEditTutorId(String(selectedVendedor.tutorId || '')) }} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50 font-medium"><span className="inline-flex items-center gap-1.5"><PencilIcon className="h-3.5 w-3.5" /> Editar dados</span></button>
             ) : (
               <div className="flex gap-2">
                 <button onClick={() => setEditingMetas(false)} className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-apple hover:bg-gray-50">Cancelar</button>
@@ -328,6 +377,12 @@ const VendedoresView: React.FC<{
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Meta Vendas (R$)</label><input type="number" value={editMetaVendas} onChange={(e) => setEditMetaVendas(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Meta Leads</label><input type="number" value={editMetaLeads} onChange={(e) => setEditMetaLeads(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Meta Conversão (%)</label><input type="number" value={editMetaConversao} onChange={(e) => setEditMetaConversao(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Função</label><select value={editFuncao} onChange={e=>setEditFuncao(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="vendedor_industria">Vendedor de Indústria</option><option value="executiva_contas">Executiva de contas</option><option value="interno">Interno</option><option value="rca">RCA</option></select></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Vínculo</label><select value={editVinculo} onChange={e=>setEditVinculo(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="clt">CLT</option><option value="rca">RCA</option></select></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={editStatusVendedor} onChange={e=>setEditStatusVendedor(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="em_formacao">Em formação</option><option value="ativo">Ativo</option><option value="afastado">Afastado</option><option value="desligado">Desligado</option></select></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Data de entrada</label><input type="date" value={editDataEntrada} onChange={e=>setEditDataEntrada(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"/></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Gestor</label><select value={editGestorId} onChange={e=>setEditGestorId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="">—</option>{vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}</select></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Tutor</label><select value={editTutorId} onChange={e=>setEditTutorId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="">—</option>{vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Tipo (comissão)</label><select value={editTipoComissao} onChange={(e) => setEditTipoComissao(e.target.value as 'clt' | 'rca')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">Selecione...</option><option value="clt">CLT</option><option value="rca">RCA</option></select></div>
             </div>
           ) : (
@@ -350,6 +405,8 @@ const VendedoresView: React.FC<{
             </div>
           )}
         </div>
+
+        <AcademiaResumoVendedor vendedor={selectedVendedor} />
 
         <div className="bg-white rounded-apple shadow-apple-sm border border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200"><h3 className="text-lg font-semibold text-gray-900">Clientes Atribuídos ({m.clientesVendedor.length})</h3></div>
@@ -409,13 +466,15 @@ const VendedoresView: React.FC<{
           <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Equipe de Vendas</h1>
           <p className="mt-1 text-sm text-gray-600">Gerencie sua equipe, acompanhe metas e performance individual</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="px-4 py-2.5 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm flex items-center self-start">
-          <PlusIcon className="h-4 w-4 mr-2" /> Novo Vendedor
-        </button>
+        {isManager && (
+          <button onClick={() => setShowModal(true)} className="px-4 py-2.5 bg-primary-600 text-white rounded-apple hover:bg-primary-700 shadow-apple-sm flex items-center self-start">
+            <PlusIcon className="h-4 w-4 mr-2" /> Novo Vendedor
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {vendedores.map(v => {
+        {vendedoresVisiveis.map(v => {
             const m = getVendedorMetrics(v)
             const pctVendas = Math.min((m.valorPipeline / v.metaVendas) * 100, 100)
             const isOnline = isManager && !!onlineStatus[v.id]
@@ -478,7 +537,7 @@ const VendedoresView: React.FC<{
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6">
+          <div className="bg-white rounded-apple shadow-apple-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Novo Vendedor</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="h-6 w-6" /></button>
@@ -491,6 +550,14 @@ const VendedoresView: React.FC<{
               </div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Cargo</label><select value={newCargo} onChange={(e) => setNewCargo(e.target.value as Vendedor['cargo'])} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="vendedor">Vendedor</option><option value="sdr">SDR</option><option value="gerente">Gerente</option></select></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Tipo (comissão) <span className="text-red-500">*</span></label><select value={newTipoComissao} onChange={(e) => setNewTipoComissao(e.target.value as 'clt' | 'rca')} className="w-full px-3 py-2 border border-gray-300 rounded-apple focus:outline-none focus:ring-2 focus:ring-primary-500"><option value="">Selecione...</option><option value="clt">CLT</option><option value="rca">RCA</option></select></div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Função</label><select value={newFuncao} onChange={e=>setNewFuncao(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="vendedor_industria">Vendedor de Indústria</option><option value="executiva_contas">Executiva de contas</option><option value="interno">Interno</option><option value="rca">RCA</option></select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Vínculo</label><select value={newVinculo} onChange={e=>setNewVinculo(e.target.value as 'clt' | 'rca')} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="clt">CLT</option><option value="rca">RCA</option></select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={newStatusVendedor} onChange={e=>setNewStatusVendedor(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="em_formacao">Em formação</option><option value="ativo">Ativo</option></select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Data de entrada</label><input type="date" value={newDataEntrada} onChange={e=>setNewDataEntrada(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"/></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Gestor</label><select value={newGestorId} onChange={e=>setNewGestorId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="">—</option>{vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}</select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Tutor</label><select value={newTutorId} onChange={e=>setNewTutorId(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-apple"><option value="">—</option>{vendedores.map(v=><option key={v.id} value={v.id}>{v.nome}</option>)}</select></div>
+              </div>
               <div className="border-t border-gray-200 pt-4">
                 <p className="text-sm font-semibold text-gray-700 mb-3">Credenciais de Acesso</p>
                 <p className="text-xs text-gray-500 mb-3">O email acima será o login. Defina a senha abaixo (mínimo 6 caracteres).</p>

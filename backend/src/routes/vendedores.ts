@@ -50,6 +50,13 @@ vendedoresRouter.post('/', async (req, res) => {
         meta_conversao: vendedorData.metaConversao || null,
         ativo: vendedorData.ativo !== undefined ? vendedorData.ativo : true,
         tipo_comissao: vendedorData.tipoComissao || null,
+        funcao: vendedorData.funcao || 'vendedor_industria',
+        vinculo: vendedorData.vinculo || vendedorData.tipoComissao || 'clt',
+        status_vendedor: vendedorData.statusVendedor || 'em_formacao',
+        data_entrada: vendedorData.dataEntrada || null,
+        gestor_id: vendedorData.gestorId || null,
+        tutor_id: vendedorData.tutorId || null,
+        academia_fase: vendedorData.academiaFase || 'formacao',
       })
       .select()
       .single()

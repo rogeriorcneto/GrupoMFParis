@@ -26,10 +26,13 @@ import { callAI } from '../../lib/gemini'
 import type { AIMessage } from '../../lib/gemini'
 import { saveRoleplaySession, fetchRoleplayHistory, fetchRoleplayHistoryGerente } from '../../lib/botApi'
 import { fetchModulosTreinamento, fetchPerfisTreinamento, fetchVendedores } from '../../lib/database'
+import { supabase } from '../../lib/supabase'
 import { CATALOGO_PRODUTOS, MANIFESTO_COMERCIAL_OKEYLAC, REGRAS_MF_PARIS, TEXTO_CATALOGO } from '../../data/aiContext'
 import type { Vendedor, Produto, ModuloTreinamento, PerfilTreinamento } from '../../types'
 import ConfiguracaoAcademiaView from './ConfiguracaoAcademiaView'
 import AcademiaCandidatosPanel from './AcademiaCandidatosPanel'
+import { AcademiaInicio, AcademiaBiblioteca, AcademiaGerenteTrilha, AcademiaConfigRodada1 } from './AcademiaRodada1'
+import { verificarAcessoAcademia } from '../../lib/academia'
 
 interface MsgChat {
   role: 'user' | 'assistant'
@@ -48,7 +51,7 @@ export interface SessaoTreinamento {
   createdAt: string
 }
 
-type Aba = 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config' | 'ligar' | 'candidatos'
+type Aba = 'inicio' | 'home' | 'roleplay' | 'produtos' | 'quiz' | 'historico' | 'gerente' | 'config' | 'ligar' | 'candidatos'
 
 const DEFAULT_MODULES: ModuloTreinamento[] = [
   { id: 1, ordem: 0, ativo: true, titulo: 'Abertura & Conexão', descricao: 'Captar atenção nos primeiros 30s e criar rapport', objetivo: 'Objetivo: o cliente concorda em ouvir a proposta.', emoji: '', dificuldade: 'Iniciante', promptInstrucoes: '', createdAt: '', updatedAt: '' },
@@ -89,7 +92,8 @@ export default function TreinamentoView({
   isGerente: boolean
   produtos?: Produto[]
 }) {
-  const [aba, setAba] = useState<Aba>('home')
+  const [aba, setAba] = useState<Aba>('inicio')
+  const [acessoAcademia, setAcessoAcademia] = useState(true)
   const [modulos, setModulos] = useState<ModuloTreinamento[]>(DEFAULT_MODULES)
   const [perfis, setPerfis] = useState<PerfilTreinamento[]>(DEFAULT_PROFILES)
   const [moduloId, setModuloId] = useState<number | null>(DEFAULT_MODULES[0]?.id ?? null)
@@ -118,9 +122,30 @@ export default function TreinamentoView({
   const [filtroNotaMin, setFiltroNotaMin] = useState('')
   const [filtroNotaMax, setFiltroNotaMax] = useState('')
   const [filtroModuloId, setFiltroModuloId] = useState('')
+  const [bibliotecaIA, setBibliotecaIA] = useState('')
   const chatRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let ativo = true
+    if (vendedor?.id) verificarAcessoAcademia(vendedor).then(x => { if (ativo) setAcessoAcademia(x) }).catch(() => {})
+    return () => { ativo = false }
+  }, [vendedor?.id, vendedor?.funcao])
+
+  useEffect(() => {
+    if (!acessoAcademia && aba !== 'inicio') setAba('inicio')
+  }, [acessoAcademia, aba])
+
+  useEffect(() => {
+    const carregarBibliotecaIA = async () => {
+      try {
+        const { data } = await supabase.from('academia_biblioteca').select('titulo,secao,conteudo,url').eq('status','aprovado')
+        setBibliotecaIA((data||[]).map((x:any)=>`- [${x.secao}] ${x.titulo}: ${x.conteudo||x.url||''}`).join(String.fromCharCode(10)))
+      } catch { setBibliotecaIA('') }
+    }
+    void carregarBibliotecaIA()
+  }, [])
 
   useEffect(() => {
     const mapSessao = (s: any): SessaoTreinamento & { vendedorNome?: string } => ({
@@ -187,10 +212,6 @@ export default function TreinamentoView({
   const sistemaTreinamento = useCallback(() => {
     const modulo = modulos.find(m => m.id === moduloId)
     const perfil = perfis.find(p => p.id === perfilId)
-    const contextoComercial = `${MANIFESTO_COMERCIAL_OKEYLAC}\n\n${REGRAS_MF_PARIS}`
-    const produtosCrmTexto = produtos
-      .map(p => `- ${p.nome} (${p.categoria}) | ${p.descricao || ''} | ${p.preco > 0 ? `R$ ${p.preco.toFixed(2)}/${p.unidade}` : 'preço sob consulta'} | SKU: ${p.sku || '-'} | peso: ${p.pesoKg ?? '-'}kg | ${p.ativo ? 'ativo' : 'inativo'}`)
-      .join('\n')
     const instrucoesModulo = modulo?.promptInstrucoes ? `INSTRUÇÕES ESPECÍFICAS DESTE MÓDULO:\n${modulo.promptInstrucoes}\n` : ''
     const instrucoesPerfil = perfil?.promptInstrucoes ? `INSTRUÇÕES ESPECÍFICAS DESTE PERFIL:\n${perfil.promptInstrucoes}\n` : ''
     return `Você é um CLIENTE em um roleplay de treinamento de vendas para vendedores da MF Paris / Okeylac, distribuidora de alimentos premium.
@@ -202,11 +223,10 @@ DOR PRINCIPAL: ${perfil?.dor}
 MÓDULO DO TREINO: "${modulo?.titulo}"
 ${modulo?.objetivo}
 
-CATÁLOGO DE PRODUTOS MF PARIS / OKEYLAC (você pode mencionar interesse em alguns):
-${TEXTO_CATALOGO}
+CONTEÚDO APROVADO DA BIBLIOTECA DA ACADEMIA (única fonte permitida de fatos):
+${bibliotecaIA || 'Nenhum conteúdo aprovado cadastrado ainda.'}
 
-PRODUTOS CADASTRADOS NO CRM (referência real de todos os produtos):
-${produtosCrmTexto}
+REGRA OBRIGATÓRIA DA ACADEMIA: se uma informação comercial/produto/preço/prazo/composição não estiver no conteúdo aprovado acima, ela é não confirmada. Nunca invente composição, rendimento, preço, prazo ou condição.
 
 REGRAS DO ROLEPLAY:
 1. Fique SEMPRE no personagem. Não quebre o personagem.
@@ -232,12 +252,10 @@ REGRAS PARA A NOTA FINAL:
 - A nota final é uma média PONDERADA dos critérios, com ênfase no que o módulo exige.
 - Você DEVE justificar a nota no "feedback_geral", citando exemplos reais do transcript.
 
-CONTEXTO COMERCIAL E REGRAS QUE OS VENDEDORES SEGUEM (você reage a eles):
-${contextoComercial}
 
 ${instrucoesModulo}${instrucoesPerfil}
 Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor da MF Paris / Okeylac. Responda como se estivesse digitando no celular, de forma natural, objetiva e no ritmo de uma conversa por mensagem.`
-  }, [moduloId, perfilId, modulos, perfis, produtos])
+  }, [moduloId, perfilId, modulos, perfis, bibliotecaIA])
 
   const iniciarSessao = async () => {
     if (!moduloId) return
@@ -324,27 +342,35 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
     setQuizLoading(true)
     setQuizFeedback(null)
     setQuizResp('')
-    const produtosTexto = PRODUTOS_MF_PARIS.map(p =>
-      `${p.nome}: ${p.dif}. Aplicação: ${p.aplicacao}.`
-    ).join('\n')
+    const fonteAprovada = bibliotecaIA
+    if (!fonteAprovada.trim()) {
+      setQuizPergunta('Não posso confirmar: ainda não há conteúdo aprovado na Biblioteca para gerar o quiz.')
+      setQuizLoading(false)
+      return
+    }
     try {
       const resp = await callAI(
-        [{ role: 'user', content: 'Gere UMA pergunta de quiz sobre os produtos MF Paris. Apenas a pergunta, sem resposta.' }],
-        `Você é um treinador de vendas da MF Paris. Catálogo:\n${produtosTexto}\nCrie perguntas práticas sobre aplicações, diferenciais e argumentos de venda.`
+        [{ role: 'user', content: 'Gere UMA pergunta de quiz prática usando somente o conteúdo aprovado enviado. Apenas a pergunta, sem resposta.' }],
+        `Você é um treinador de vendas da MF Paris. Use exclusivamente este conteúdo aprovado da Biblioteca:\n${fonteAprovada}\nCrie perguntas práticas sobre aplicações, diferenciais e argumentos de venda. Se a informação não estiver no conteúdo, diga que não pode confirmar. Nunca invente composição, rendimento, preço, prazo ou condição.`
       )
       setQuizPergunta(resp)
-    } catch { setQuizPergunta('Qual é o diferencial do Composto Lácteo Horizonte para uma sorveteria?') }
+    } catch { setQuizPergunta('Não posso confirmar: não foi possível consultar o conteúdo aprovado da Biblioteca agora.') }
     setQuizLoading(false)
   }
 
   const responderQuiz = async () => {
     if (!quizResp.trim() || quizLoading) return
     setQuizLoading(true)
-    const produtosTexto = PRODUTOS_MF_PARIS.map(p => `${p.nome}: ${p.dif}. Aplicação: ${p.aplicacao}.`).join('\n')
+    const fonteAprovada = bibliotecaIA
+    if (!fonteAprovada.trim()) {
+      setQuizFeedback('Não posso confirmar: ainda não há conteúdo aprovado na Biblioteca para avaliar a resposta.')
+      setQuizLoading(false)
+      return
+    }
     try {
       const resp = await callAI(
         [{ role: 'user', content: `Pergunta: ${quizPergunta}\nResposta do vendedor: ${quizResp}\n\nAvalie a resposta e dê feedback construtivo em 2-3 linhas.` }],
-        `Você é um treinador de vendas da MF Paris. Catálogo:\n${produtosTexto}`
+        `Você é um treinador de vendas da MF Paris. Avalie usando exclusivamente este conteúdo aprovado da Biblioteca:\n${fonteAprovada}\nSe a informação não estiver no conteúdo, diga que não pode confirmar. Nunca invente composição, rendimento, preço, prazo ou condição.`
       )
       setQuizFeedback(resp)
     } catch { setQuizFeedback('Não foi possível avaliar agora.') }
@@ -399,11 +425,12 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {(['home', 'ligar', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'candidatos', 'config'] : [])] as Aba[]).map(a => {
+            {((!acessoAcademia ? ['inicio'] : ['inicio', 'home', 'ligar', 'produtos', 'quiz', 'historico', ...(isGerente ? ['gerente', 'candidatos', 'config'] : [])]) as Aba[]).map(a => {
               const labels: Record<string, { icon: React.ReactNode; label: string }> = {
+                inicio: { icon: <AcademicCapIcon className="h-4 w-4" />, label: 'Início' },
                 home: { icon: <PlayIcon className="h-4 w-4" />, label: 'Treinar' },
                 ligar: { icon: <PhoneIcon className="h-4 w-4" />, label: 'Ligar' },
-                produtos: { icon: <BookOpenIcon className="h-4 w-4" />, label: 'Produtos' },
+                produtos: { icon: <BookOpenIcon className="h-4 w-4" />, label: 'Biblioteca' },
                 quiz: { icon: <SparklesIcon className="h-4 w-4" />, label: 'Quiz IA' },
                 historico: { icon: <ClockIcon className="h-4 w-4" />, label: 'Histórico' },
                 gerente: { icon: <ChartBarIcon className="h-4 w-4" />, label: 'Gerente' },
@@ -421,6 +448,9 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
           </div>
         </div>
       </div>
+
+      {aba === 'inicio' && <AcademiaInicio vendedor={vendedor} irTreinar={() => setAba('home')} totalTreinos={totalTreinos} minutosTotais={minutosTotais} />}
+      {aba === 'produtos' && <AcademiaBiblioteca canEdit={isGerente} />}
 
       {/* ─── HOME ────────────────────────────────────────────── */}
       {aba === 'home' && (
@@ -627,7 +657,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
       )}
 
       {/* ─── CATÁLOGO DE PRODUTOS ─────────────────────────────── */}
-      {aba === 'produtos' && !produtoVer && (
+      {false && aba === 'produtos' && !produtoVer && (
         <div className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Catálogo de Produtos MF Paris</h2>
           <p className="text-sm text-gray-500 mb-5">Conheça cada produto e seus argumentos de venda antes de entrar numa ligação.</p>
@@ -649,7 +679,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
       )}
 
       {/* PRODUTO DETALHE */}
-      {aba === 'produtos' && produtoVer && (
+      {false && aba === 'produtos' && produtoVer && (
         <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-6">
           <button onClick={() => setProdutoVer(null)} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4">
             <ArrowLeftIcon className="h-4 w-4" /> Voltar ao catálogo
@@ -826,7 +856,8 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
           </div>
         </div>
       )}
-      {aba === 'gerente' && (
+      {aba === 'gerente' && <AcademiaGerenteTrilha />}
+      {false && aba === 'gerente' && (
         <div className="flex-1 max-w-6xl mx-auto w-full px-4 py-6 space-y-4">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Histórico de Treinamentos — Visão Gerente</h2>
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -906,13 +937,23 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
       )}
 
       {aba === 'config' && (
-        <ConfiguracaoAcademiaView
-          isGerente={isGerente}
-          modulos={modulos}
-          perfis={perfis}
-          setModulos={setModulos}
-          setPerfis={setPerfis}
-        />
+        <>
+          <AcademiaConfigRodada1 vendedores={gerenteVendedores.length?gerenteVendedores:[vendedor]} />
+          <div className="max-w-7xl mx-auto w-full px-4 pb-6">
+            <details className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <summary className="cursor-pointer font-semibold text-sm text-gray-700 dark:text-gray-200">Configuração legada de roleplay — módulos e perfis usados em Treinar/Ligar</summary>
+              <div className="mt-4">
+                <ConfiguracaoAcademiaView
+                  isGerente={isGerente}
+                  modulos={modulos}
+                  perfis={perfis}
+                  setModulos={setModulos}
+                  setPerfis={setPerfis}
+                />
+              </div>
+            </details>
+          </div>
+        </>
       )}
 
       {/* ─── ABA LIGAR — SIMULAÇÃO DE LIGAÇÃO POR VOZ ──────── */}
@@ -929,6 +970,7 @@ Comece a cena: você acabou de receber uma mensagem no WhatsApp de um vendedor d
             historico={historico}
             setHistorico={setHistorico}
             produtos={produtos}
+            bibliotecaIA={bibliotecaIA}
           />
         </ConversationProvider>
       )}
@@ -941,7 +983,7 @@ const ELEVENLABS_AGENT_ID = import.meta.env.VITE_ELEVENLABS_AGENT_ID || ''
 const VOZ_MASCULINA = 'aU2vcrnwi348Gnc2Y1si'
 const VOZ_FEMININA = 'RGymW84CSmfVugnA5tvA'
 
-export function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId, vendedor, historico, setHistorico, produtos, onSaveSessao }: {
+export function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, setPerfilId, vendedor, historico, setHistorico, produtos, bibliotecaIA = '', onSaveSessao }: {
   modulos: ModuloTreinamento[]
   perfis: PerfilTreinamento[]
   moduloId: number | null
@@ -952,6 +994,7 @@ export function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, se
   historico: SessaoTreinamento[]
   setHistorico: (h: SessaoTreinamento[]) => void
   produtos: Produto[]
+  bibliotecaIA?: string
   onSaveSessao?: (sessao: SessaoTreinamento, perfilNome?: string) => Promise<void>
 }) {
   const [callStatus, setCallStatus] = useState<'idle' | 'connecting' | 'connected' | 'ended' | 'evaluating'>('idle')
@@ -1033,7 +1076,11 @@ export function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, se
         overrides: {
           agent: {
             prompt: {
-              prompt: `SESSÃO ATUAL:\nPERFIL: ${contextoPerfil}\n${contextoModulo}\n\nCOMECE: Atenda o telefone de forma natural como ${perfilAtual?.nome || 'o cliente'} faria.`
+              prompt: `SESSÃO ATUAL:\nPERFIL: ${contextoPerfil}\n${contextoModulo}\n\nCOMECE: Atenda o telefone de forma natural como ${perfilAtual?.nome || 'o cliente'} faria.
+
+CONTEÚDO APROVADO DA BIBLIOTECA (única fonte de fatos):
+${bibliotecaIA.slice(0,6000) || 'Nenhum conteúdo aprovado cadastrado ainda.'}
+Se algo não estiver no conteúdo, trate como não confirmado.`
             },
             firstMessage: perfilAtual?.nome?.includes('João') ? 'Alô? Quem fala?'
               : perfilAtual?.nome?.includes('Carlos') ? 'Alô, pois não?'
@@ -1064,24 +1111,16 @@ export function LigarView({ modulos, perfis, moduloId, perfilId, setModuloId, se
     const transcriptTexto = transcriptFinal.map(m => `${m.role === 'user' ? 'VENDEDOR' : 'CLIENTE'}: ${m.text}`).join('\n')
     const duracaoFinal = Math.max(0, Math.floor((Date.now() - tempoInicio) / 1000))
 
-    const contextoComercial = `${MANIFESTO_COMERCIAL_OKEYLAC}\n\n${REGRAS_MF_PARIS}`
-    const produtosCrmTexto = produtos
-      .map(p => `- ${p.nome} (${p.categoria}) | ${p.descricao || ''} | ${p.preco > 0 ? `R$ ${p.preco.toFixed(2)}/${p.unidade}` : 'preço sob consulta'}`)
-      .join('\n')
 
     const sistemaAvaliacao = `Você é um coach de vendas RIGOROSO da MF Paris / Okeylac. Você vai avaliar a performance de um vendedor em uma LIGAÇÃO TELEFÔNICA simulada.
 
 PERFIL DO CLIENTE: ${perfilAtual?.nome} (${perfilAtual?.negocio}) — Dor: ${perfilAtual?.dor}. Estilo: ${perfilAtual?.estilo}.
 MÓDULO: ${moduloAtual?.titulo} — ${moduloAtual?.objetivo}
 
-CATÁLOGO DE PRODUTOS:
-${TEXTO_CATALOGO}
+CONTEÚDO APROVADO DA BIBLIOTECA DA ACADEMIA (única fonte permitida de fatos):
+${bibliotecaIA || 'Nenhum conteúdo aprovado cadastrado ainda.'}
 
-PRODUTOS CRM:
-${produtosCrmTexto}
-
-CONTEXTO COMERCIAL:
-${contextoComercial}
+REGRA OBRIGATÓRIA: se uma informação comercial/produto/preço/prazo/composição não estiver no conteúdo aprovado acima, considere-a não confirmada e penalize invenção de composição, rendimento, preço, prazo ou condição.
 
 AVALIE e dê um FEEDBACK DETALHADO em JSON com este formato EXATO:
 {"nota": 6, "abertura": 5, "qualificacao": 6, "apresentacao": 7, "objecoes": 5, "fechamento": 6, "pontos_fortes": ["..."], "pontos_melhora": ["..."], "feedback_geral": "..."}

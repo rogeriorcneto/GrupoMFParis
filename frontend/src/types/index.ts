@@ -436,6 +436,15 @@ export interface Vendedor {
   ativo: boolean
   /** Item 3: tipo de comissão do vendedor — clt ou rca (define a coluna de percentual aplicada) */
   tipoComissao?: 'clt' | 'rca' | null
+  funcao?: 'vendedor_industria' | 'executiva_contas' | 'interno' | 'rca' | null
+  vinculo?: 'clt' | 'rca' | null
+  statusVendedor?: 'em_formacao' | 'ativo' | 'afastado' | 'desligado' | null
+  dataEntrada?: string | null
+  gestorId?: number | null
+  tutorId?: number | null
+  academiaFase?: 'reciclagem' | 'formacao' | 'diagnostico' | 'adaptavel' | null
+  academiaTermoVersao?: string | null
+  academiaTermoAceitoEm?: string | null
 }
 
 export interface ItemPedido {
